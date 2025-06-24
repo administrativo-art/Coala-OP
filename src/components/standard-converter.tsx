@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, Scale } from 'lucide-react';
 import { convertValue, getUnitsForCategory } from '@/lib/conversion';
 import { unitCategories, UnitCategory } from '@/types';
 
@@ -47,7 +47,9 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
         <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
         </Button>
-        <CardTitle className="text-center pt-10 font-headline">Conversão Padrão</CardTitle>
+        <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+          <Scale /> Conversão Padrão
+        </CardTitle>
         <CardDescription className="text-center">Converta entre unidades de medida padrão.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 p-6">

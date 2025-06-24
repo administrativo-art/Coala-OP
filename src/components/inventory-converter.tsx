@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, ArrowRight, Settings, PlusCircle, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Settings, PlusCircle, ArrowLeftRight, Boxes } from 'lucide-react';
 
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
@@ -203,7 +203,9 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
           <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
           </Button>
-          <CardTitle className="text-center pt-10 font-headline">Conversão de Inventário</CardTitle>
+          <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+            <Boxes /> Conversão de Inventário
+          </CardTitle>
           <CardDescription className="text-center">Converta o inventário com base em seus produtos cadastrados.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
