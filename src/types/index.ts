@@ -1,4 +1,4 @@
-export const unitCategories = ["Volume", "Mass", "Length"] as const;
+export const unitCategories = ["Volume", "Massa", "Comprimento"] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
 

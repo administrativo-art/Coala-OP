@@ -24,16 +24,16 @@ export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemNa
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the product "{itemName}".
+            Essa ação não pode ser desfeita. Isso excluirá permanentemente o produto "{itemName}".
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
           <AlertDialogAction asChild>
             <Button onClick={onConfirm} variant="destructive">
-                Delete
+                Excluir
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

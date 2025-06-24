@@ -38,17 +38,17 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
     <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
       <CardHeader>
         <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Menu
+          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
         </Button>
-        <CardTitle className="text-center pt-10 font-headline">Standard Conversion</CardTitle>
-        <CardDescription className="text-center">Convert between standard units of measurement.</CardDescription>
+        <CardTitle className="text-center pt-10 font-headline">Conversão Padrão</CardTitle>
+        <CardDescription className="text-center">Converta entre unidades de medida padrão.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 p-6">
         <div className="space-y-2">
-          <Label htmlFor="category">Category</Label>
+          <Label htmlFor="category">Categoria</Label>
           <Select value={category} onValueChange={(val) => setCategory(val as UnitCategory)}>
             <SelectTrigger id="category">
-              <SelectValue placeholder="Select a category" />
+              <SelectValue placeholder="Selecione uma categoria" />
             </SelectTrigger>
             <SelectContent>
               {unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
@@ -58,9 +58,9 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
         
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">
           <div className="space-y-2">
-            <Label htmlFor="from-unit">From</Label>
+            <Label htmlFor="from-unit">De</Label>
             <div className="flex gap-2">
-                <Input id="value" type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Enter value" className="w-2/3" />
+                <Input id="value" type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Digite o valor" className="w-2/3" />
                 <Select value={fromUnit} onValueChange={setFromUnit}>
                     <SelectTrigger id="from-unit" className="w-1/3"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -75,7 +75,7 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="to-unit">To</Label>
+            <Label htmlFor="to-unit">Para</Label>
              <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary">
                 <p className="text-2xl font-bold text-primary font-headline flex-grow">{result}</p>
                  <Select value={toUnit} onValueChange={setToUnit}>

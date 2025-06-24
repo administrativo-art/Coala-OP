@@ -26,10 +26,10 @@ import { units } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const productSchema = z.object({
-  baseName: z.string().min(1, 'Product name is required.'),
+  baseName: z.string().min(1, 'O nome do produto é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'Package size must be positive.'),
-  unit: z.string().min(1, 'Unit is required.'),
+  packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+  unit: z.string().min(1, 'A unidade é obrigatória.'),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -113,21 +113,21 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Manage Products</DialogTitle>
-            <DialogDescription>Add, edit, or delete your inventory products.</DialogDescription>
+            <DialogTitle>Gerenciar Produtos</DialogTitle>
+            <DialogDescription>Adicione, edite ou exclua seus produtos de inventário.</DialogDescription>
           </DialogHeader>
           
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <h3 className="text-lg font-medium">{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+                <h3 className="text-lg font-medium">{editingProduct ? 'Editar Produto' : 'Adicionar Novo Produto'}</h3>
                 <FormField
                   control={form.control}
                   name="baseName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product Name</FormLabel>
-                      <FormControl><Input placeholder="e.g., Whole Milk" {...field} /></FormControl>
+                      <FormLabel>Nome do Produto</FormLabel>
+                      <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -138,9 +138,9 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
                     name="category"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Category</FormLabel>
+                        <FormLabel>Categoria</FormLabel>
                         <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger></FormControl>
                           <SelectContent>
                             {unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                           </SelectContent>
@@ -154,7 +154,7 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
                     name="packageSize"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Package Size</FormLabel>
+                        <FormLabel>Tamanho do Pacote</FormLabel>
                         <FormControl><Input type="number" step="any" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -165,9 +165,9 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
                     name="unit"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unit</FormLabel>
+                        <FormLabel>Unidade</FormLabel>
                          <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select a unit" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
                           <SelectContent>
                              {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
                           </SelectContent>
@@ -178,15 +178,15 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
                   />
                 </div>
                 <DialogFooter className="pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-                  <Button type="submit">{editingProduct ? 'Save Changes' : 'Add Product'}</Button>
+                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                  <Button type="submit">{editingProduct ? 'Salvar Alterações' : 'Adicionar Produto'}</Button>
                 </DialogFooter>
               </form>
             </Form>
           ) : (
             <>
               <Button onClick={handleAddNew} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Product
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Produto
               </Button>
               <Separator className="my-4" />
               <ScrollArea className="h-72">
@@ -200,7 +200,7 @@ export function ProductManagementModal({ open, onOpenChange }: ProductManagement
                       </div>
                     </div>
                   )) : (
-                    <p className="text-center text-muted-foreground py-8">No products yet. Add one to get started!</p>
+                    <p className="text-center text-muted-foreground py-8">Nenhum produto ainda. Adicione um para começar!</p>
                   )}
                 </div>
               </ScrollArea>

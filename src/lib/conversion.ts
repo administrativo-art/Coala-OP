@@ -5,12 +5,12 @@ export const units: ConversionUnits = {
     'L': 1,
     'mL': 0.001,
   },
-  Mass: {
+  Massa: {
     'kg': 1,
     'g': 0.001,
     'mg': 0.000001,
   },
-  Length: {
+  Comprimento: {
     'm': 1,
     'cm': 0.01,
     'mm': 0.001,
