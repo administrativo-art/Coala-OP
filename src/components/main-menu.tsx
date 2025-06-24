@@ -1,4 +1,5 @@
 "use client"
+import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
@@ -10,7 +11,14 @@ type MainMenuProps = {
 export function MainMenu({ onSelect }: MainMenuProps) {
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
-      <CardHeader>
+      <CardHeader className="items-center">
+        <Image
+          src="/logo.png"
+          alt="Coala Shakes Logo"
+          width={150}
+          height={150}
+          className="mb-4"
+        />
         <CardTitle className="text-center text-3xl font-headline">Conversor Inteligente</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-6">
