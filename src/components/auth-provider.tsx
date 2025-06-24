@@ -30,7 +30,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   permissions: PermissionSet;
-  login: (username: string, password: string, kioskId: string) => boolean;
+  login: (username: string, password: string) => boolean;
   logout: () => void;
   addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (user: User) => void;
@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password: 'master',
           role: 'admin',
           permissions: defaultPermissions.admin,
+          kioskId: 'matriz',
         };
         window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([masterUser]));
         return [masterUser];
@@ -101,12 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(newUsers));
   }, []);
   
-  const login = (username: string, password: string, kioskId: string): boolean => {
+  const login = (username: string, password: string): boolean => {
     const userToLogin = users.find(u => u.username === username && u.password === password);
     if (userToLogin) {
-      const loggedInUser = { ...userToLogin, kioskId: kioskId };
-      setCurrentUser(loggedInUser);
-      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(loggedInUser));
+      setCurrentUser(userToLogin);
+      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
       return true;
     }
     return false;

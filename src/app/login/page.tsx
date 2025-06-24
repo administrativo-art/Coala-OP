@@ -6,18 +6,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
-import { useKiosks } from '@/hooks/use-kiosks';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
 
 const loginSchema = z.object({
   username: z.string().min(1, 'O nome de usuário é obrigatório.'),
   password: z.string().min(1, 'A senha é obrigatória.'),
-  kioskId: z.string().min(1, 'Selecione o quiosque.'),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -25,7 +22,6 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
 
   const form = useForm<LoginFormValues>({
@@ -39,7 +35,7 @@ export default function LoginPage() {
   }, [isAuthenticated, authLoading, router]);
 
   const onSubmit = (values: LoginFormValues) => {
-    const success = login(values.username, values.password, values.kioskId);
+    const success = login(values.username, values.password);
     if (success) {
       router.push('/');
     } else {
@@ -52,7 +48,7 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading || kiosksLoading) {
+  if (authLoading) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
   
@@ -88,26 +84,6 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Senha</FormLabel>
                     <FormControl><Input type="password" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="kioskId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Quiosque/Local</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o local de trabalho" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
                     <FormMessage />
                   </FormItem>
                 )}

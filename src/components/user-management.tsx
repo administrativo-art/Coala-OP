@@ -5,6 +5,7 @@ import { useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   password: z.string().optional(),
   role: z.enum(['admin', 'user']),
+  kioskId: z.string({ required_error: 'É obrigatório vincular o usuário a um quiosque.' }).min(1, 'O quiosque é obrigatório.'),
   permissions: z.object({
     products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean() }),
@@ -34,7 +36,7 @@ const userSchema = z.object({
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
   }),
 }).refine(data => {
-    // If we are creating a user (no editingUser) or a password is provided, it must be at least 4 chars
+    // If a password is provided, it must be at least 4 chars
     return !data.password || data.password.length >= 4;
 }, {
     message: "A senha deve ter pelo menos 4 caracteres.",
@@ -45,6 +47,7 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement({ onBack }: UserManagementProps) {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
+  const { kiosks } = useKiosks();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -59,6 +62,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
       username: '',
       password: '',
       role: 'user',
+      kioskId: '',
       permissions: { 
         products: { add: false, edit: false, delete: false },
         lots: { add: true, edit: true, move: true, delete: true },
@@ -76,6 +80,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
       username: user.username,
       password: '', // Password is not shown, only updated if a new one is typed
       role: user.role,
+      kioskId: user.kioskId,
       permissions: user.permissions,
     });
     setShowForm(true);
@@ -95,11 +100,16 @@ export function UserManagement({ onBack }: UserManagementProps) {
 
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
-      const updatedData: User = { ...editingUser, ...values };
-      if (!values.password || values.password.trim() === '') {
-        delete updatedData.password;
+      const updatedUser: User = { 
+          ...editingUser,
+          role: values.role,
+          kioskId: values.kioskId,
+          permissions: values.permissions,
+       };
+      if (values.password && values.password.trim() !== '') {
+        updatedUser.password = values.password;
       }
-      updateUser(updatedData);
+      updateUser(updatedUser);
     } else {
         if (!values.password) {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
@@ -165,7 +175,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
                   <AccordionItem value="credentials">
                     <AccordionTrigger className="text-lg font-semibold"><KeyRound className="mr-2 h-5 w-5" /> Credenciais e Perfil</AccordionTrigger>
                     <AccordionContent className="pt-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
                         <FormField control={form.control} name="username" render={({ field }) => (
                             <FormItem>
                               <FormLabel>Nome de Usuário</FormLabel>
@@ -195,6 +205,26 @@ export function UserManagement({ onBack }: UserManagementProps) {
                               <FormMessage />
                             </FormItem>
                           )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="kioskId"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Quiosque Principal</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o quiosque" />
+                                    </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                    {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
                         />
                       </div>
                     </AccordionContent>
