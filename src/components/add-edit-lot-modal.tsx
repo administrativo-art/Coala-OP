@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Calendar as CalendarIcon, Camera } from 'lucide-react';
-import { type LotEntry, type Location } from '@/types';
+import { type LotEntry, type Kiosk } from '@/types';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -27,7 +27,7 @@ const lotSchema = z.object({
   barcode: z.string().optional(),
   lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
   expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
-  locationId: z.string().min(1, 'A localização é obrigatória.'),
+  kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   quantity: z.coerce.number().min(1, 'A quantidade deve ser de pelo menos 1.'),
 });
 
@@ -37,12 +37,12 @@ type AddEditLotModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lotToEdit: LotEntry | null;
-  locations: Location[];
+  kiosks: Kiosk[];
   addLot: (lot: Omit<LotEntry, 'id'>) => void;
   updateLot: (lot: LotEntry) => void;
 };
 
-export function AddEditLotModal({ open, onOpenChange, lotToEdit, locations, addLot, updateLot }: AddEditLotModalProps) {
+export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const form = useForm<LotFormValues>({
@@ -61,7 +61,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, locations, addL
         barcode: '',
         lotNumber: '',
         expiryDate: undefined,
-        locationId: '',
+        kioskId: '',
         quantity: 1,
       });
     }
@@ -189,18 +189,18 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, locations, addL
                 />
                 <FormField
                   control={form.control}
-                  name="locationId"
+                  name="kioskId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Localização</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={locations.length === 0}>
+                      <FormLabel>Quiosque</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
+                          {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <FormMessage />

@@ -15,10 +15,10 @@ export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
 
-export type Location = {
-  id: string;
-  name: string;
-};
+export type Kiosk = {
+    id: string;
+    name: string;
+}
 
 export type LotEntry = {
   id: string;
@@ -26,14 +26,9 @@ export type LotEntry = {
   barcode: string;
   lotNumber: string;
   expiryDate: string; // ISO String
-  locationId: string;
+  kioskId: string;
   quantity: number;
 };
-
-export type Kiosk = {
-    id: string;
-    name: string;
-}
 
 export type UserRole = 'admin' | 'user';
 

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, PlusCircle, Warehouse, Search, ClipboardCheck, Inbox } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useLocations } from '@/hooks/use-locations';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { type LotEntry } from '@/types';
 import { LotCard, type GroupedLot } from './lot-card';
@@ -22,12 +22,12 @@ type ExpiryControlProps = {
 };
 
 export function ExpiryControl({ onBack }: ExpiryControlProps) {
-  const { permissions } = useAuth();
-  const { locations, addLocation, deleteLocation } = useLocations();
+  const { user, permissions } = useAuth();
+  const { kiosks, addKiosk, deleteKiosk } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
+  const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -35,18 +35,24 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
 
+  const visibleLots = useMemo(() => {
+    if (!user || loading) return [];
+    if (user.kioskId === 'matriz') return lots;
+    return lots.filter(lot => lot.kioskId === user.kioskId);
+  }, [lots, user, loading]);
+
   const groupedLots = useMemo(() => {
-    const filteredLots = lots.filter(lot => {
+    const filteredLots = visibleLots.filter(lot => {
       const search = searchTerm.toLowerCase();
       const expiryDateFormatted = format(parseISO(lot.expiryDate), 'dd/MM/yyyy');
-      const locationName = locations.find(l => l.id === lot.locationId)?.name.toLowerCase() || '';
+      const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
 
       return (
         lot.productName.toLowerCase().includes(search) ||
         lot.lotNumber.toLowerCase().includes(search) ||
         (lot.barcode && lot.barcode.toLowerCase().includes(search)) ||
         expiryDateFormatted.includes(search) ||
-        locationName.includes(search)
+        kioskName.includes(search)
       );
     });
 
@@ -60,19 +66,19 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
           barcode: lot.barcode,
           expiryDate: lot.expiryDate,
           totalQuantity: 0,
-          locations: [],
+          kiosks: [],
         };
       }
       groups[key].totalQuantity += lot.quantity;
-      groups[key].locations.push({
+      groups[key].kiosks.push({
         id: lot.id,
-        locationId: lot.locationId,
+        kioskId: lot.kioskId,
         quantity: lot.quantity,
       });
     });
 
     return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-  }, [lots, searchTerm, locations]);
+  }, [visibleLots, searchTerm, kiosks]);
   
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -111,7 +117,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
     }
   };
 
-  const canManageLocations = permissions.locations.add || permissions.locations.delete;
+  const canManageKiosks = permissions.kiosks.add || permissions.kiosks.delete;
 
   const renderContent = () => {
     if (loading) {
@@ -153,7 +159,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
           <LotCard
             key={`${group.productName}-${group.lotNumber}`}
             groupedLot={group}
-            locations={locations}
+            kiosks={kiosks}
             onEdit={handleEditClick}
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
@@ -183,7 +189,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
             <div className="relative flex-grow">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por produto, lote, data, cód. de barras..."
+                placeholder="Buscar por produto, lote, data, quiosque..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -193,8 +199,8 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
               <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
                 <PlusCircle className="mr-2" /> Adicionar Lote
               </Button>
-              <Button variant="outline" onClick={() => setIsLocationsModalOpen(true)} className="flex-grow" disabled={!canManageLocations}>
-                <Warehouse className="mr-2" /> Gerenciar Locais
+              <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
+                <Warehouse className="mr-2" /> Gerenciar Quiosques
               </Button>
             </div>
           </div>
@@ -203,19 +209,19 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
       </Card>
 
       <LocationManagementModal
-        open={isLocationsModalOpen}
-        onOpenChange={setIsLocationsModalOpen}
-        locations={locations}
-        addLocation={addLocation}
-        deleteLocation={deleteLocation}
-        permissions={permissions.locations}
+        open={isKiosksModalOpen}
+        onOpenChange={setIsKiosksModalOpen}
+        kiosks={kiosks}
+        addKiosk={addKiosk}
+        deleteKiosk={deleteKiosk}
+        permissions={permissions.kiosks}
       />
       
       <AddEditLotModal 
         open={isAddEditModalOpen}
         onOpenChange={setIsAddEditModalOpen}
         lotToEdit={lotToEdit}
-        locations={locations}
+        kiosks={kiosks}
         addLot={addLot}
         updateLot={updateLot}
       />
@@ -225,7 +231,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
             open={isMoveModalOpen}
             onOpenChange={setIsMoveModalOpen}
             lotToMove={lotToMove}
-            locations={locations}
+            kiosks={kiosks}
             onMoveConfirm={moveLot}
         />
       )}

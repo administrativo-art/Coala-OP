@@ -16,8 +16,9 @@ export function useKiosks() {
         setKiosks(JSON.parse(items));
       } else {
         const defaultKiosks: Kiosk[] = [
-            { id: '1', name: 'Quiosque Principal' },
-            { id: '2', name: 'Quiosque Praia' },
+            { id: 'matriz', name: 'Centro de distribuição - Matriz' },
+            { id: 'tirirical', name: 'Quiosque Tirirical' },
+            { id: 'joao-paulo', name: 'Quiosque João Paulo' },
         ];
         setKiosks(defaultKiosks);
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultKiosks));

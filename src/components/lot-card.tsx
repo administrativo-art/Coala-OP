@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Pencil, Trash2, Move, MapPin } from 'lucide-react';
-import { type Location } from '@/types';
+import { type Kiosk } from '@/types';
 
 export type GroupedLot = {
   productName: string;
@@ -15,16 +15,16 @@ export type GroupedLot = {
   barcode: string;
   expiryDate: string;
   totalQuantity: number;
-  locations: {
+  kiosks: {
     id: string; // This is the unique LotEntry ID
-    locationId: string;
+    kioskId: string;
     quantity: number;
   }[];
 };
 
 type LotCardProps = {
   groupedLot: GroupedLot;
-  locations: Location[];
+  kiosks: Kiosk[];
   onEdit: (lotId: string) => void;
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
@@ -33,7 +33,7 @@ type LotCardProps = {
   canDelete: boolean;
 };
 
-export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEdit, canMove, canDelete }: LotCardProps) {
+export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit, canMove, canDelete }: LotCardProps) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const expiry = parseISO(groupedLot.expiryDate);
@@ -52,8 +52,8 @@ export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEd
     status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
   }
 
-  const getLocationName = (id: string) => {
-    return locations.find(l => l.id === id)?.name || 'Local desconhecido';
+  const getKioskName = (id: string) => {
+    return kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   };
 
   return (
@@ -75,27 +75,27 @@ export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEd
         </div>
         <Separator />
         <div className="p-4 space-y-2">
-            {groupedLot.locations.map(loc => (
-                <div key={loc.id} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
+            {groupedLot.kiosks.map(kioskEntry => (
+                <div key={kioskEntry.id} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
                     <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{getLocationName(loc.locationId)}:</span>
-                        <span>{loc.quantity} un.</span>
+                        <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
+                        <span>{kioskEntry.quantity} un.</span>
                     </div>
                     {(canMove || canEdit || canDelete) && (
                       <div className="flex gap-1">
                           {canMove && (
-                            <Button variant="ghost" size="icon" onClick={() => onMove(loc.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
                                 <Move className="h-4 w-4" />
                             </Button>
                           )}
                           {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => onEdit(loc.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(kioskEntry.id)}>
                                 <Pencil className="h-4 w-4" />
                             </Button>
                           )}
                           {canDelete && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(loc.id)}>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(kioskEntry.id)}>
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                           )}

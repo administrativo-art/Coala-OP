@@ -19,10 +19,10 @@ export function useExpiryProducts() {
       } else {
          const today = new Date();
          const dummyLots: LotEntry[] = [
-           { id: generateId(), productName: 'Leite Integral', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), locationId: '1', quantity: 50 },
-           { id: generateId(), productName: 'Leite Integral', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), locationId: '2', quantity: 25 },
-           { id: generateId(), productName: 'Iogurte Natural', barcode: '7899876543210', lotNumber: 'LT456', expiryDate: new Date(new Date().setDate(today.getDate() - 5)).toISOString(), locationId: '1', quantity: 30 },
-           { id: generateId(), productName: 'Queijo Minas', barcode: '7891112223334', lotNumber: 'LT789', expiryDate: new Date(new Date().setDate(today.getDate() + 45)).toISOString(), locationId: '2', quantity: 15 },
+           { id: generateId(), productName: 'Leite Integral', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), kioskId: 'tirirical', quantity: 50 },
+           { id: generateId(), productName: 'Leite Integral', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), kioskId: 'joao-paulo', quantity: 25 },
+           { id: generateId(), productName: 'Iogurte Natural', barcode: '7899876543210', lotNumber: 'LT456', expiryDate: new Date(new Date().setDate(today.getDate() - 5)).toISOString(), kioskId: 'tirirical', quantity: 30 },
+           { id: generateId(), productName: 'Queijo Minas', barcode: '7891112223334', lotNumber: 'LT789', expiryDate: new Date(new Date().setDate(today.getDate() + 45)).toISOString(), kioskId: 'matriz', quantity: 15 },
          ];
          setLots(dummyLots);
          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dummyLots));
@@ -48,7 +48,7 @@ export function useExpiryProducts() {
     const existingLotIndex = lots.findIndex(l => 
         l.productName === lot.productName &&
         l.lotNumber === lot.lotNumber &&
-        l.locationId === lot.locationId
+        l.kioskId === lot.kioskId
     );
 
     if (existingLotIndex > -1) {
@@ -73,9 +73,9 @@ export function useExpiryProducts() {
     saveLots(newLots);
   }, [lots, saveLots]);
 
-  const moveLot = useCallback((lotId: string, toLocationId: string, quantityToMove: number) => {
+  const moveLot = useCallback((lotId: string, toKioskId: string, quantityToMove: number) => {
     const sourceLot = lots.find(l => l.id === lotId);
-    if (!sourceLot || sourceLot.locationId === toLocationId || quantityToMove <= 0) {
+    if (!sourceLot || sourceLot.kioskId === toKioskId || quantityToMove <= 0) {
       return;
     }
 
@@ -85,7 +85,7 @@ export function useExpiryProducts() {
     let destinationLotIndex = newLots.findIndex(l => 
         l.productName === sourceLot.productName &&
         l.lotNumber === sourceLot.lotNumber &&
-        l.locationId === toLocationId
+        l.kioskId === toKioskId
     );
 
     newLots[sourceLotIndex].quantity -= quantityToMove;
@@ -96,7 +96,7 @@ export function useExpiryProducts() {
         const newDestinationEntry: LotEntry = {
             ...sourceLot,
             id: generateId(),
-            locationId: toLocationId,
+            kioskId: toKioskId,
             quantity: quantityToMove,
         };
         newLots.push(newDestinationEntry);

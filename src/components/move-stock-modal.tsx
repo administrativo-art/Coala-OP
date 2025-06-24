@@ -9,24 +9,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { type LotEntry, type Location } from '@/types';
+import { type LotEntry, type Kiosk } from '@/types';
 
 type MoveStockModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lotToMove: LotEntry;
-  locations: Location[];
-  onMoveConfirm: (lotId: string, toLocationId: string, quantity: number) => void;
+  kiosks: Kiosk[];
+  onMoveConfirm: (lotId: string, toKioskId: string, quantity: number) => void;
 };
 
-export function MoveStockModal({ open, onOpenChange, lotToMove, locations, onMoveConfirm }: MoveStockModalProps) {
-  const availableLocations = locations.filter(l => l.id !== lotToMove.locationId);
+export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveConfirm }: MoveStockModalProps) {
+  const availableKiosks = kiosks.filter(l => l.id !== lotToMove.kioskId);
   
   const moveSchema = z.object({
     quantity: z.coerce.number()
         .min(1, "A quantidade deve ser de pelo menos 1.")
         .max(lotToMove.quantity, `A quantidade não pode ser maior que ${lotToMove.quantity}.`),
-    destinationId: z.string().min(1, 'Selecione um local de destino.'),
+    destinationId: z.string().min(1, 'Selecione um quiosque de destino.'),
   });
 
   const form = useForm<z.infer<typeof moveSchema>>({
@@ -42,7 +42,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, locations, onMov
     onOpenChange(false);
   };
   
-  const sourceLocationName = locations.find(l => l.id === lotToMove.locationId)?.name || 'Desconhecido';
+  const sourceKioskName = kiosks.find(l => l.id === lotToMove.kioskId)?.name || 'Desconhecido';
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -53,7 +53,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, locations, onMov
         <DialogHeader>
           <DialogTitle>Mover Estoque</DialogTitle>
           <DialogDescription>
-            Mova itens do lote <strong>{lotToMove.lotNumber}</strong> de <strong>{sourceLocationName}</strong>.
+            Mova itens do lote <strong>{lotToMove.lotNumber}</strong> de <strong>{sourceKioskName}</strong>.
           </DialogDescription>
         </DialogHeader>
         <div className="py-2">
@@ -80,14 +80,14 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, locations, onMov
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Mover Para</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={availableLocations.length === 0}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={availableKiosks.length === 0}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Destino..." />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {availableLocations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
+                        {availableKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
