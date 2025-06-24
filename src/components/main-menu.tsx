@@ -1,5 +1,4 @@
 "use client"
-import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Scale, Boxes } from 'lucide-react';
@@ -12,14 +11,10 @@ export function MainMenu({ onSelect }: MainMenuProps) {
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
       <CardHeader className="items-center text-center">
-        <Image
-          src="https://placehold.co/150x150.png"
-          alt="Coala Shakes Logo"
-          width={150}
-          height={150}
-          data-ai-hint="koala logo"
-          className="mb-4 rounded-full"
-        />
+        <div className="font-logo mb-4 text-center select-none">
+          <div className="text-6xl text-primary">coala</div>
+          <div className="text-5xl text-accent -mt-4">shakes</div>
+        </div>
         <CardTitle className="text-3xl font-headline">Conversor Inteligente</CardTitle>
         <CardDescription className="px-4 pt-2">
             Sua ferramenta para conversões de unidades no dia a dia e no controle de estoque.
