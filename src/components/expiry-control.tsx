@@ -37,7 +37,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
-    if (user.kioskId === 'matriz') return lots;
+    if (user.role === 'admin') return lots;
     return lots.filter(lot => lot.kioskId === user.kioskId);
   }, [lots, user, loading]);
 
@@ -150,6 +150,18 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
             <div className="text-center py-16 text-muted-foreground">
                 <p>Nenhum resultado encontrado para "{searchTerm}".</p>
             </div>
+        );
+    }
+    
+    if (groupedLots.length === 0) {
+        return (
+          <div className="text-center py-16 flex flex-col items-center">
+              <Search className="h-16 w-16 text-muted-foreground/50 mb-4" />
+              <h3 className="text-xl font-semibold">Nenhum lote visível</h3>
+              <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
+                  Não há lotes correspondentes à sua visão atual. Adicione um novo lote ou verifique os filtros.
+              </p>
+          </div>
         );
     }
 
