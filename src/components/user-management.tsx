@@ -1,18 +1,19 @@
 "use client"
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog } from 'lucide-react';
 import { type User, type UserRole } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -40,7 +41,6 @@ const userSchema = z.object({
     path: ["password"],
 });
 
-
 type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement({ onBack }: UserManagementProps) {
@@ -61,7 +61,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
       role: 'user',
       permissions: { 
         products: { add: false, edit: false, delete: false },
-        lots: { add: false, edit: false, move: false, delete: false },
+        lots: { add: true, edit: true, move: true, delete: true },
         locations: { add: false, delete: false },
         users: { add: false, edit: false, delete: false },
         kiosks: { add: false, delete: false },
@@ -127,16 +127,19 @@ export function UserManagement({ onBack }: UserManagementProps) {
     );
   }
 
-  const renderPermissionSwitch = (name: keyof UserFormValues['permissions'][keyof UserFormValues['permissions']], label: string) => (
+  const renderPermissionSwitch = (name: FieldPath<UserFormValues>, label: string, description: string) => (
     <FormField
       control={form.control}
-      name={name as any}
+      name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-col justify-between rounded-lg border p-3 shadow-sm gap-2">
-            <FormLabel htmlFor={field.name} className="font-normal text-sm leading-none">{label}</FormLabel>
-            <FormControl>
-                <Switch id={field.name} checked={field.value} onCheckedChange={field.onChange} />
-            </FormControl>
+        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+          <div className="space-y-0.5">
+            <FormLabel className="text-base">{label}</FormLabel>
+            <FormDescription>{description}</FormDescription>
+          </div>
+          <FormControl>
+            <Switch checked={field.value} onCheckedChange={field.onChange} />
+          </FormControl>
         </FormItem>
       )}
     />
@@ -157,97 +160,88 @@ export function UserManagement({ onBack }: UserManagementProps) {
         <CardContent className="p-6">
           {showForm ? (
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <Card className="p-4">
-                  <CardHeader className="p-2">
-                    <CardTitle className="text-lg flex items-center gap-2"><KeyRound />{editingUser ? 'Editar Credenciais' : 'Novas Credenciais'}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-2">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <FormField control={form.control} name="username" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome de Usuário</FormLabel>
-                            <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={!!editingUser} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField control={form.control} name="password" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Senha</FormLabel>
-                            <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                       <FormField control={form.control} name="role" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Perfil</FormLabel>
-                            <Select onValueChange={(value) => field.onChange(value as UserRole)} value={field.value}>
-                              <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="user">Usuário Padrão</SelectItem>
-                                <SelectItem value="admin">Administrador</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="p-4">
-                    <CardHeader className="p-2">
-                       <CardTitle className="text-lg flex items-center gap-2"><ShieldCheck />Permissões Detalhadas</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 p-2">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <Accordion type="multiple" defaultValue={['credentials', 'permissions']} className="w-full">
+                  <AccordionItem value="credentials">
+                    <AccordionTrigger className="text-lg font-semibold"><KeyRound className="mr-2 h-5 w-5" /> Credenciais e Perfil</AccordionTrigger>
+                    <AccordionContent className="pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-1">
+                        <FormField control={form.control} name="username" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nome de Usuário</FormLabel>
+                              <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={!!editingUser} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField control={form.control} name="password" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Senha</FormLabel>
+                              <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                         <FormField control={form.control} name="role" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Perfil</FormLabel>
+                              <Select onValueChange={(value) => field.onChange(value as UserRole)} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="user">Usuário Padrão</SelectItem>
+                                  <SelectItem value="admin">Administrador</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="permissions">
+                    <AccordionTrigger className="text-lg font-semibold"><ShieldCheck className="mr-2 h-5 w-5" /> Permissões Detalhadas</AccordionTrigger>
+                    <AccordionContent className="space-y-6 pt-4 p-1">
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2"><Package /> Produtos</h4>
                         <div className="space-y-2">
-                            <h4 className="font-medium flex items-center gap-2"><Package />Produtos</h4>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {renderPermissionSwitch("permissions.products.add", "Adicionar")}
-                                {renderPermissionSwitch("permissions.products.edit", "Editar")}
-                                {renderPermissionSwitch("permissions.products.delete", "Excluir")}
-                            </div>
+                          {renderPermissionSwitch("permissions.products.add", "Adicionar Produtos", "Permite que o usuário cadastre novos produtos no sistema.")}
+                          {renderPermissionSwitch("permissions.products.edit", "Editar Produtos", "Permite que o usuário edite informações de produtos existentes.")}
+                          {renderPermissionSwitch("permissions.products.delete", "Excluir Produtos", "Permite que o usuário remova produtos do inventário.")}
                         </div>
-                        <Separator />
+                      </div>
+                      <Separator />
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2"><Box /> Lotes de Validade</h4>
                         <div className="space-y-2">
-                            <h4 className="font-medium flex items-center gap-2"><Box />Lotes de Validade</h4>
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {renderPermissionSwitch("permissions.lots.add", "Adicionar")}
-                                {renderPermissionSwitch("permissions.lots.edit", "Editar")}
-                                {renderPermissionSwitch("permissions.lots.move", "Mover")}
-                                {renderPermissionSwitch("permissions.lots.delete", "Excluir")}
-                            </div>
+                          {renderPermissionSwitch("permissions.lots.add", "Adicionar Lotes", "Permite adicionar novos lotes ao controle de validade.")}
+                          {renderPermissionSwitch("permissions.lots.edit", "Editar Lotes", "Permite editar informações de um lote, como data ou quantidade.")}
+                          {renderPermissionSwitch("permissions.lots.move", "Mover Estoque", "Permite mover estoque de um lote entre diferentes locais.")}
+                          {renderPermissionSwitch("permissions.lots.delete", "Excluir Lotes", "Permite excluir entradas de lote do controle de validade.")}
                         </div>
-                        <Separator />
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                             <div className="space-y-2">
-                                <h4 className="font-medium flex items-center gap-2"><Warehouse />Locais</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {renderPermissionSwitch("permissions.locations.add", "Adicionar")}
-                                    {renderPermissionSwitch("permissions.locations.delete", "Excluir")}
-                                </div>
-                             </div>
-                             <div className="space-y-2">
-                                <h4 className="font-medium flex items-center gap-2"><UserCog />Usuários</h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                     {renderPermissionSwitch("permissions.users.add", "Adicionar")}
-                                     {renderPermissionSwitch("permissions.users.edit", "Editar")}
-                                     {renderPermissionSwitch("permissions.users.delete", "Excluir")}
-                                </div>
-                             </div>
-                             <div className="space-y-2">
-                                <h4 className="font-medium flex items-center gap-2"><Warehouse />Quiosques</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {renderPermissionSwitch("permissions.kiosks.add", "Adicionar")}
-                                    {renderPermissionSwitch("permissions.kiosks.delete", "Excluir")}
-                                </div>
-                            </div>
-                         </div>
-                    </CardContent>
-                </Card>
+                      </div>
+                      <Separator />
+                       <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2"><Warehouse /> Locais e Quiosques</h4>
+                        <div className="space-y-2">
+                          {renderPermissionSwitch("permissions.locations.add", "Adicionar Locais", "Permite cadastrar novas lojas ou locais de armazenamento.")}
+                          {renderPermissionSwitch("permissions.locations.delete", "Excluir Locais", "Permite excluir locais de armazenamento existentes.")}
+                          {renderPermissionSwitch("permissions.kiosks.add", "Adicionar Quiosques", "Permite cadastrar novos quiosques no sistema.")}
+                          {renderPermissionSwitch("permissions.kiosks.delete", "Excluir Quiosques", "Permite excluir quiosques existentes.")}
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2"><UserCog /> Gerenciamento de Usuários</h4>
+                        <div className="space-y-2">
+                          {renderPermissionSwitch("permissions.users.add", "Adicionar Usuários", "Permite criar novos usuários e definir suas permissões.")}
+                          {renderPermissionSwitch("permissions.users.edit", "Editar Usuários", "Permite editar informações e permissões de outros usuários.")}
+                          {renderPermissionSwitch("permissions.users.delete", "Excluir Usuários", "Permite excluir outros usuários do sistema.")}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
