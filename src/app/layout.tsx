@@ -2,6 +2,9 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/components/auth-provider';
+import { ProductsProvider } from '@/components/products-provider';
+import { KiosksProvider } from '@/components/kiosks-provider';
+import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -22,8 +25,14 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <AuthProvider>
-          {children}
-          <Toaster />
+          <KiosksProvider>
+            <ProductsProvider>
+              <ExpiryProductsProvider>
+                {children}
+                <Toaster />
+              </ExpiryProductsProvider>
+            </ProductsProvider>
+          </KiosksProvider>
         </AuthProvider>
       </body>
     </html>
