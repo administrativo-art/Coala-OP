@@ -1,6 +1,6 @@
 "use client"
 import Image from 'next/image';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 
@@ -11,7 +11,7 @@ type MainMenuProps = {
 export function MainMenu({ onSelect }: MainMenuProps) {
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
-      <CardHeader className="items-center">
+      <CardHeader className="items-center text-center">
         <Image
           src="/logo.png"
           alt="Coala Shakes Logo"
@@ -19,16 +19,25 @@ export function MainMenu({ onSelect }: MainMenuProps) {
           height={150}
           className="mb-4"
         />
-        <CardTitle className="text-center text-3xl font-headline">Conversor Inteligente</CardTitle>
+        <CardTitle className="text-3xl font-headline">Conversor Inteligente</CardTitle>
+        <CardDescription className="px-4 pt-2">
+            Sua ferramenta para conversões de unidades no dia a dia e no controle de estoque.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-6">
-        <Button size="lg" className="h-20 text-lg" onClick={() => onSelect('standard')}>
-          Conversão Padrão
-          <ArrowRight className="ml-2 h-5 w-5" />
+        <Button size="lg" className="h-auto justify-between py-4" onClick={() => onSelect('standard')}>
+          <div className="text-left">
+            <p className="text-base font-semibold">Conversão Padrão</p>
+            <p className="text-sm font-normal text-primary-foreground/80">Medidas de peso, volume, etc.</p>
+          </div>
+          <ArrowRight className="h-5 w-5" />
         </Button>
-        <Button size="lg" className="h-20 text-lg" variant="secondary" onClick={() => onSelect('inventory')}>
-          Conversão de Inventário
-          <ArrowRight className="ml-2 h-5 w-5" />
+        <Button size="lg" className="h-auto justify-between py-4" variant="secondary" onClick={() => onSelect('inventory')}>
+           <div className="text-left">
+            <p className="text-base font-semibold">Conversão de Inventário</p>
+            <p className="text-sm font-normal text-secondary-foreground/80">Com base nos seus produtos.</p>
+          </div>
+          <ArrowRight className="h-5 w-5" />
         </Button>
       </CardContent>
     </Card>

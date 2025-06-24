@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
 import { convertValue, getUnitsForCategory } from '@/lib/conversion';
 import { unitCategories, UnitCategory } from '@/types';
 
@@ -25,6 +25,7 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
     const newUnits = getUnitsForCategory(category);
     setFromUnit(newUnits[0]);
     setToUnit(newUnits.length > 1 ? newUnits[1] : newUnits[0]);
+    setValue('1');
   }, [category]);
 
   const result = useMemo(() => {
@@ -33,6 +34,12 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
     const converted = convertValue(numericValue, fromUnit, toUnit, category);
     return converted.toLocaleString(undefined, { maximumFractionDigits: 5 });
   }, [value, fromUnit, toUnit, category]);
+
+  const handleSwap = () => {
+    setFromUnit(toUnit);
+    setToUnit(fromUnit);
+    setValue(result === '...' ? '1' : result.replace(/,/g, ''));
+  };
 
   return (
     <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
@@ -71,7 +78,9 @@ export function StandardConverter({ onBack }: StandardConverterProps) {
           </div>
 
           <div className="flex items-center justify-center pt-8">
-            <ArrowRight className="h-6 w-6 text-muted-foreground" />
+            <Button variant="ghost" size="icon" onClick={handleSwap}>
+                <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
+            </Button>
           </div>
 
           <div className="space-y-2">
