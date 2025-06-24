@@ -17,7 +17,7 @@ type InventoryConverterProps = {
 };
 
 export function InventoryConverter({ onBack }: InventoryConverterProps) {
-  const { products, getProductFullName, loading } = useProducts();
+  const { products, loading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
@@ -140,7 +140,15 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
            </div>
         </CardContent>
       </Card>
-      <ProductManagementModal open={isModalOpen} onOpenChange={setIsModalOpen} />
+      <ProductManagementModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen}
+        products={products}
+        addProduct={addProduct}
+        updateProduct={updateProduct}
+        deleteProduct={deleteProduct}
+        getProductFullName={getProductFullName}
+      />
     </>
   );
 }

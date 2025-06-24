@@ -20,7 +20,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 
-import { useProducts } from '@/hooks/use-products';
 import { type Product, unitCategories, UnitCategory } from '@/types';
 import { units } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -37,10 +36,22 @@ type ProductFormValues = z.infer<typeof productSchema>;
 type ProductManagementModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  products: Product[];
+  addProduct: (product: Omit<Product, 'id'>) => void;
+  updateProduct: (updatedProduct: Product) => void;
+  deleteProduct: (productId: string) => void;
+  getProductFullName: (product: Product) => string;
 };
 
-export function ProductManagementModal({ open, onOpenChange }: ProductManagementModalProps) {
-  const { products, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
+export function ProductManagementModal({ 
+  open, 
+  onOpenChange,
+  products,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  getProductFullName,
+}: ProductManagementModalProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
