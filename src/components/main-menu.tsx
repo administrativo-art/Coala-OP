@@ -15,9 +15,9 @@ export function MainMenu({ onSelect }: MainMenuProps) {
           <div className="text-6xl text-primary">coala</div>
           <div className="text-5xl text-accent -mt-4">shakes</div>
         </div>
-        <CardTitle className="text-3xl font-headline">Conversor Inteligente</CardTitle>
+        <CardTitle className="text-3xl font-headline">Olá, humanos!</CardTitle>
         <CardDescription className="px-4 pt-2">
-            Sua ferramenta para conversões e gestão de estoque.
+            Fiz esse APP para ajudar vocês a gerenciar melhor o meu negócio. Estou de olho!
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-6">
