@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, ArrowRight, Settings } from 'lucide-react';
 
 import { useProducts } from '@/hooks/use-products';
-import { convertValue, getUnitsForCategory } from '@/lib/conversion';
+import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
 import { ProductManagementModal } from './product-management-modal';
 
 type InventoryConverterProps = {
@@ -61,7 +61,16 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
   
   const result = useMemo(() => {
     const numericValue = parseFloat(value);
-    if (isNaN(numericValue) || !selectedProduct || !fromUnit || !toUnit) return '...';
+    if (isNaN(numericValue) || !selectedProduct || !fromUnit || !toUnit) {
+      return '...';
+    }
+
+    const isFromUnitValid = fromUnit === 'Pacote(s)' || !!units[selectedProduct.category]?.[fromUnit];
+    const isToUnitValid = toUnit === 'Pacote(s)' || !!units[selectedProduct.category]?.[toUnit];
+
+    if (!isFromUnitValid || !isToUnitValid) {
+      return '...';
+    }
 
     let valueInProductUnit: number;
     if (fromUnit === 'Pacote(s)') {
