@@ -1,3 +1,4 @@
+"use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento"] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
@@ -37,10 +38,11 @@ export type Kiosk = {
 export type UserRole = 'admin' | 'user';
 
 export type PermissionSet = {
-    canManageProducts: boolean;
-    canManageLocations: boolean;
-    canManageUsers: boolean;
-    canManageKiosks: boolean;
+    products: { add: boolean; edit: boolean; delete: boolean };
+    lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
+    locations: { add: boolean; delete: boolean };
+    users: { add: boolean; edit: boolean; delete: boolean };
+    kiosks: { add: boolean; delete: boolean };
 };
 
 export type User = {
@@ -49,4 +51,5 @@ export type User = {
     password?: string; // Should be hashed in a real app
     role: UserRole;
     permissions: PermissionSet;
+    kioskId?: string;
 };

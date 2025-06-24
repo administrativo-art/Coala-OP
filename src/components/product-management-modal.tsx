@@ -19,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
 import { type Product, unitCategories, UnitCategory } from '@/types';
 import { units } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -41,6 +40,7 @@ type ProductManagementModalProps = {
   updateProduct: (updatedProduct: Product) => void;
   deleteProduct: (productId: string) => void;
   getProductFullName: (product: Product) => string;
+  permissions: { add: boolean; edit: boolean; delete: boolean };
 };
 
 export function ProductManagementModal({ 
@@ -51,8 +51,8 @@ export function ProductManagementModal({
   updateProduct,
   deleteProduct,
   getProductFullName,
+  permissions,
 }: ProductManagementModalProps) {
-  const { permissions } = useAuth();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -71,14 +71,10 @@ export function ProductManagementModal({
 
   useEffect(() => {
     if (open) {
-      if (!permissions.canManageProducts) {
-        onOpenChange(false);
-        return;
-      }
       setShowForm(false);
       setEditingProduct(null);
     }
-  }, [open, permissions.canManageProducts, onOpenChange]);
+  }, [open]);
 
   useEffect(() => {
       if (category) {
@@ -124,7 +120,8 @@ export function ProductManagementModal({
     setEditingProduct(null);
   };
 
-  if (!permissions.canManageProducts) {
+  const canManageAnything = permissions.add || permissions.edit || permissions.delete;
+  if (!canManageAnything) {
     return null;
   }
 
@@ -205,9 +202,11 @@ export function ProductManagementModal({
             </Form>
           ) : (
             <>
-              <Button onClick={handleAddNew} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Produto
-              </Button>
+              {permissions.add && (
+                <Button onClick={handleAddNew} className="w-full">
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Produto
+                </Button>
+              )}
               <Separator className="my-4" />
               <ScrollArea className="h-72">
                 <div className="space-y-2 pr-4">
@@ -215,8 +214,8 @@ export function ProductManagementModal({
                     <div key={product.id} className="flex items-center justify-between rounded-md border p-3">
                       <span className="font-medium">{getProductFullName(product)}</span>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
+                        {permissions.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>}
+                        {permissions.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     </div>
                   )) : (

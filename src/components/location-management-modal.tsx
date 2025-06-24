@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -16,9 +16,10 @@ type LocationManagementModalProps = {
   locations: Location[];
   addLocation: (name: string) => void;
   deleteLocation: (id: string) => void;
+  permissions: { add: boolean, delete: boolean };
 };
 
-export function LocationManagementModal({ open, onOpenChange, locations, addLocation, deleteLocation }: LocationManagementModalProps) {
+export function LocationManagementModal({ open, onOpenChange, locations, addLocation, deleteLocation, permissions }: LocationManagementModalProps) {
   const [newLocationName, setNewLocationName] = useState('');
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
 
@@ -55,8 +56,9 @@ export function LocationManagementModal({ open, onOpenChange, locations, addLoca
                 value={newLocationName}
                 onChange={(e) => setNewLocationName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddLocation()}
+                disabled={!permissions.add}
               />
-              <Button onClick={handleAddLocation}>
+              <Button onClick={handleAddLocation} disabled={!permissions.add}>
                 <PlusCircle className="h-4 w-4" />
               </Button>
             </div>
@@ -71,6 +73,7 @@ export function LocationManagementModal({ open, onOpenChange, locations, addLoca
                       size="icon"
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDeleteClick(location)}
+                      disabled={!permissions.delete}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

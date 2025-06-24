@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useMemo } from 'react';
-import { format, differenceInDays, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,7 @@ import { ArrowLeft, PlusCircle, Warehouse, Search, ClipboardCheck, Inbox } from 
 import { useAuth } from '@/hooks/use-auth';
 import { useLocations } from '@/hooks/use-locations';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Location as LocationType } from '@/types';
+import { type LotEntry } from '@/types';
 import { LotCard, type GroupedLot } from './lot-card';
 import { LocationManagementModal } from './location-management-modal';
 import { AddEditLotModal } from './add-edit-lot-modal';
@@ -112,6 +111,8 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
     }
   };
 
+  const canManageLocations = permissions.locations.add || permissions.locations.delete;
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -131,7 +132,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                   Comece adicionando um novo lote de produtos para monitorar a validade.
               </p>
-              <Button size="lg" onClick={handleAddClick} disabled={!permissions.canManageProducts}>
+              <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.add}>
                   <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Lote
               </Button>
           </div>
@@ -156,7 +157,9 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
             onEdit={handleEditClick}
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
-            canEdit={permissions.canManageProducts}
+            canEdit={permissions.lots.edit}
+            canMove={permissions.lots.move}
+            canDelete={permissions.lots.delete}
           />
         ))}
       </div>
@@ -187,10 +190,10 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
               />
             </div>
             <div className="flex gap-4">
-              <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.canManageProducts}>
-                <PlusCircle className="mr-2" /> Adicionar produto
+              <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
+                <PlusCircle className="mr-2" /> Adicionar Lote
               </Button>
-              <Button variant="outline" onClick={() => setIsLocationsModalOpen(true)} className="flex-grow" disabled={!permissions.canManageLocations}>
+              <Button variant="outline" onClick={() => setIsLocationsModalOpen(true)} className="flex-grow" disabled={!canManageLocations}>
                 <Warehouse className="mr-2" /> Gerenciar Locais
               </Button>
             </div>
@@ -205,6 +208,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
         locations={locations}
         addLocation={addLocation}
         deleteLocation={deleteLocation}
+        permissions={permissions.locations}
       />
       
       <AddEditLotModal 

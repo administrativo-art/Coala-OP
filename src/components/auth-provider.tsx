@@ -2,23 +2,25 @@
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { type User, type PermissionSet } from '@/types';
+import { type User, type PermissionSet, type UserRole } from '@/types';
 
 const USERS_STORAGE_KEY = 'smart-converter-users';
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
 
-const defaultPermissions: { [key in User['role']]: PermissionSet } = {
+const defaultPermissions: { [key in UserRole]: PermissionSet } = {
   admin: {
-    canManageProducts: true,
-    canManageLocations: true,
-    canManageUsers: true,
-    canManageKiosks: true,
+    products: { add: true, edit: true, delete: true },
+    lots: { add: true, edit: true, move: true, delete: true },
+    locations: { add: true, delete: true },
+    users: { add: true, edit: true, delete: true },
+    kiosks: { add: true, delete: true },
   },
   user: {
-    canManageProducts: false,
-    canManageLocations: false,
-    canManageUsers: false,
-    canManageKiosks: false,
+    products: { add: false, edit: false, delete: false },
+    lots: { add: false, edit: false, move: false, delete: false },
+    locations: { add: false, delete: false },
+    users: { add: false, edit: false, delete: false },
+    kiosks: { add: false, delete: false },
   },
 };
 
@@ -30,12 +32,21 @@ export interface AuthContextType {
   permissions: PermissionSet;
   login: (username: string, password: string, kioskId: string) => boolean;
   logout: () => void;
-  addUser: (user: Omit<User, 'id' | 'permissions'>) => void;
+  addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (user: User) => void;
   deleteUser: (userId: string) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const getValidPermissions = (user: User | null): PermissionSet => {
+    if (!user) return defaultPermissions.user;
+    // Simple migration: if old format is detected, assign default for the role.
+    if (!user.permissions || 'canManageProducts' in user.permissions) {
+        return defaultPermissions[user.role] || defaultPermissions.user;
+    }
+    return user.permissions;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
@@ -107,11 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
-  const addUser = (userData: Omit<User, 'id'|'permissions'>) => {
+  const addUser = (userData: Omit<User, 'id'>) => {
     const newUser: User = {
       ...userData,
       id: new Date().toISOString(),
-      permissions: defaultPermissions[userData.role] || defaultPermissions.user,
     };
     saveUsers([...users, newUser]);
   };
@@ -119,6 +129,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = (updatedUser: User) => {
     const updatedUsers = users.map(u => u.id === updatedUser.id ? updatedUser : u);
     saveUsers(updatedUsers);
+    // If the updated user is the current user, update the current user state as well
+    if (currentUser?.id === updatedUser.id) {
+        setCurrentUser(updatedUser);
+        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(updatedUser));
+    }
   };
 
   const deleteUser = (userId: string) => {
@@ -132,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     users,
     isAuthenticated: !!currentUser,
     loading,
-    permissions: currentUser?.permissions || defaultPermissions.user,
+    permissions: getValidPermissions(currentUser),
     login,
     logout,
     addUser,

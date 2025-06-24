@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,13 +8,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog } from 'lucide-react';
 import { type User, type UserRole } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -27,28 +26,25 @@ const userSchema = z.object({
   password: z.string().optional(),
   role: z.enum(['admin', 'user']),
   permissions: z.object({
-    canManageProducts: z.boolean(),
-    canManageLocations: z.boolean(),
-    canManageUsers: z.boolean(),
-    canManageKiosks: z.boolean(),
+    products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
+    lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean() }),
+    locations: z.object({ add: z.boolean(), delete: z.boolean() }),
+    users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
+    kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
   }),
-}).superRefine((data, ctx) => {
-  if (!data.password && !data.username) {
-    // This is likely an edit, so password is not required
-  } else if (!data.password || data.password.length < 4) {
-    ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "A senha deve ter pelo menos 4 caracteres.",
-        path: ["password"],
-    });
-  }
+}).refine(data => {
+    // If we are creating a user (no editingUser) or a password is provided, it must be at least 4 chars
+    return !data.password || data.password.length >= 4;
+}, {
+    message: "A senha deve ter pelo menos 4 caracteres.",
+    path: ["password"],
 });
 
 
 type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement({ onBack }: UserManagementProps) {
-  const { users, addUser, updateUser, deleteUser, permissions } = useAuth();
+  const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -63,7 +59,13 @@ export function UserManagement({ onBack }: UserManagementProps) {
       username: '',
       password: '',
       role: 'user',
-      permissions: { canManageProducts: false, canManageLocations: false, canManageUsers: false, canManageKiosks: false },
+      permissions: { 
+        products: { add: false, edit: false, delete: false },
+        lots: { add: false, edit: false, move: false, delete: false },
+        locations: { add: false, delete: false },
+        users: { add: false, edit: false, delete: false },
+        kiosks: { add: false, delete: false },
+       },
     });
     setShowForm(true);
   };
@@ -80,7 +82,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
   };
   
   const handleDeleteClick = (user: User) => {
-    if (user.id === 'master-user') return;
+    if (user.id === 'master-user' || user.id === currentUser?.id) return;
     setUserToDelete(user);
   };
 
@@ -94,18 +96,24 @@ export function UserManagement({ onBack }: UserManagementProps) {
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
       const updatedData: User = { ...editingUser, ...values };
-      if (!values.password) {
+      if (!values.password || values.password.trim() === '') {
         delete updatedData.password;
       }
       updateUser(updatedData);
     } else {
-      addUser(values as Omit<User, 'id' | 'permissions'> & {password: string});
+        if (!values.password) {
+             form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
+             return;
+        }
+      addUser(values as Omit<User, 'id'>);
     }
     setShowForm(false);
     setEditingUser(null);
   };
 
-  if (!permissions.canManageUsers) {
+  const canManageAnyUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+
+  if (!canManageAnyUsers) {
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
@@ -119,6 +127,21 @@ export function UserManagement({ onBack }: UserManagementProps) {
     );
   }
 
+  const renderPermissionSwitch = (name: keyof UserFormValues['permissions'][keyof UserFormValues['permissions']], label: string) => (
+    <FormField
+      control={form.control}
+      name={name as any}
+      render={({ field }) => (
+        <FormItem className="flex flex-col justify-between rounded-lg border p-3 shadow-sm gap-2">
+            <FormLabel htmlFor={field.name} className="font-normal text-sm leading-none">{label}</FormLabel>
+            <FormControl>
+                <Switch id={field.name} checked={field.value} onCheckedChange={field.onChange} />
+            </FormControl>
+        </FormItem>
+      )}
+    />
+  );
+  
   return (
     <>
       <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
@@ -135,35 +158,29 @@ export function UserManagement({ onBack }: UserManagementProps) {
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="space-y-4 rounded-md border p-4">
-                  <h3 className="text-lg font-medium flex items-center gap-2"><KeyRound />{editingUser ? 'Editar Credenciais' : 'Novas Credenciais'}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nome de Usuário</FormLabel>
-                          <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={!!editingUser} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Senha</FormLabel>
-                          <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                     <FormField
-                        control={form.control}
-                        name="role"
-                        render={({ field }) => (
+                <Card className="p-4">
+                  <CardHeader className="p-2">
+                    <CardTitle className="text-lg flex items-center gap-2"><KeyRound />{editingUser ? 'Editar Credenciais' : 'Novas Credenciais'}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <FormField control={form.control} name="username" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome de Usuário</FormLabel>
+                            <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={!!editingUser} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField control={form.control} name="password" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Senha</FormLabel>
+                            <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                       <FormField control={form.control} name="role" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Perfil</FormLabel>
                             <Select onValueChange={(value) => field.onChange(value as UserRole)} value={field.value}>
@@ -177,62 +194,60 @@ export function UserManagement({ onBack }: UserManagementProps) {
                           </FormItem>
                         )}
                       />
-                  </div>
-                </div>
-
-                <div className="space-y-4 rounded-md border p-4">
-                    <h3 className="text-lg font-medium flex items-center gap-2"><ShieldCheck />Permissões</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <FormField
-                            control={form.control}
-                            name="permissions.canManageProducts"
-                            render={({ field }) => (
-                                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                                    <FormLabel htmlFor="canManageProducts" className="font-normal text-sm">Gerenciar Produtos</FormLabel>
-                                    <FormControl>
-                                        <Switch id="canManageProducts" checked={field.value} onCheckedChange={field.onChange} />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="permissions.canManageLocations"
-                            render={({ field }) => (
-                                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                                    <FormLabel htmlFor="canManageLocations" className="font-normal text-sm">Gerenciar Locais</FormLabel>
-                                    <FormControl>
-                                        <Switch id="canManageLocations" checked={field.value} onCheckedChange={field.onChange} />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="permissions.canManageUsers"
-                            render={({ field }) => (
-                                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                                    <FormLabel htmlFor="canManageUsers" className="font-normal text-sm">Gerenciar Usuários</FormLabel>
-                                    <FormControl>
-                                        <Switch id="canManageUsers" checked={field.value} onCheckedChange={field.onChange} />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="permissions.canManageKiosks"
-                            render={({ field }) => (
-                                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                                    <FormLabel htmlFor="canManageKiosks" className="font-normal text-sm">Gerenciar Quiosques</FormLabel>
-                                    <FormControl>
-                                        <Switch id="canManageKiosks" checked={field.value} onCheckedChange={field.onChange} />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
                     </div>
-                </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="p-4">
+                    <CardHeader className="p-2">
+                       <CardTitle className="text-lg flex items-center gap-2"><ShieldCheck />Permissões Detalhadas</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 p-2">
+                        <div className="space-y-2">
+                            <h4 className="font-medium flex items-center gap-2"><Package />Produtos</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {renderPermissionSwitch("permissions.products.add", "Adicionar")}
+                                {renderPermissionSwitch("permissions.products.edit", "Editar")}
+                                {renderPermissionSwitch("permissions.products.delete", "Excluir")}
+                            </div>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                            <h4 className="font-medium flex items-center gap-2"><Box />Lotes de Validade</h4>
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {renderPermissionSwitch("permissions.lots.add", "Adicionar")}
+                                {renderPermissionSwitch("permissions.lots.edit", "Editar")}
+                                {renderPermissionSwitch("permissions.lots.move", "Mover")}
+                                {renderPermissionSwitch("permissions.lots.delete", "Excluir")}
+                            </div>
+                        </div>
+                        <Separator />
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                             <div className="space-y-2">
+                                <h4 className="font-medium flex items-center gap-2"><Warehouse />Locais</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {renderPermissionSwitch("permissions.locations.add", "Adicionar")}
+                                    {renderPermissionSwitch("permissions.locations.delete", "Excluir")}
+                                </div>
+                             </div>
+                             <div className="space-y-2">
+                                <h4 className="font-medium flex items-center gap-2"><UserCog />Usuários</h4>
+                                <div className="grid grid-cols-3 gap-4">
+                                     {renderPermissionSwitch("permissions.users.add", "Adicionar")}
+                                     {renderPermissionSwitch("permissions.users.edit", "Editar")}
+                                     {renderPermissionSwitch("permissions.users.delete", "Excluir")}
+                                </div>
+                             </div>
+                             <div className="space-y-2">
+                                <h4 className="font-medium flex items-center gap-2"><Warehouse />Quiosques</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {renderPermissionSwitch("permissions.kiosks.add", "Adicionar")}
+                                    {renderPermissionSwitch("permissions.kiosks.delete", "Excluir")}
+                                </div>
+                            </div>
+                         </div>
+                    </CardContent>
+                </Card>
 
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
@@ -242,7 +257,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
             </Form>
           ) : (
             <>
-              <Button onClick={handleAddNew} className="w-full">
+              <Button onClick={handleAddNew} className="w-full" disabled={!permissions.users.add}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Usuário
               </Button>
               <Separator className="my-4" />
@@ -255,8 +270,8 @@ export function UserManagement({ onBack }: UserManagementProps) {
                             <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-primary/20 text-primary' : 'bg-secondary'}`}>{user.role}</span>
                         </div>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === 'master-user'}><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(user)} disabled={!permissions.users.edit}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === 'master-user' || !permissions.users.delete || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </div>
                   ))}

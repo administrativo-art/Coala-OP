@@ -29,9 +29,11 @@ type LotCardProps = {
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
   canEdit: boolean;
+  canMove: boolean;
+  canDelete: boolean;
 };
 
-export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEdit }: LotCardProps) {
+export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEdit, canMove, canDelete }: LotCardProps) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const expiry = parseISO(groupedLot.expiryDate);
@@ -42,8 +44,10 @@ export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEd
     status = { color: 'bg-red-600 hover:bg-red-700', text: `Vencido há ${Math.abs(daysUntilExpiry)} dias` };
   } else if (daysUntilExpiry === 0) {
     status = { color: 'bg-red-600 hover:bg-red-700', text: 'Vence hoje' };
-  } else if (daysUntilExpiry <= 30) {
+  } else if (daysUntilExpiry <= 7) {
     status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
+  } else if (daysUntilExpiry <= 30) {
+    status = { color: 'bg-orange-500 hover:bg-orange-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
   } else {
     status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
   }
@@ -78,17 +82,23 @@ export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEd
                         <span className="font-medium">{getLocationName(loc.locationId)}:</span>
                         <span>{loc.quantity} un.</span>
                     </div>
-                    {canEdit && (
+                    {(canMove || canEdit || canDelete) && (
                       <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => onMove(loc.id)}>
-                              <Move className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => onEdit(loc.id)}>
-                              <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(loc.id)}>
-                              <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canMove && (
+                            <Button variant="ghost" size="icon" onClick={() => onMove(loc.id)}>
+                                <Move className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canEdit && (
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(loc.id)}>
+                                <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(loc.id)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                       </div>
                     )}
                 </div>

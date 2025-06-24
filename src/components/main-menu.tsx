@@ -1,7 +1,8 @@
 "use client"
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Scale, Boxes, ClipboardCheck, Users } from 'lucide-react';
+import { ArrowRight, Scale, Boxes, ClipboardCheck, Users, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 type MainMenuProps = {
@@ -11,6 +12,8 @@ type MainMenuProps = {
 export function MainMenu({ onSelect }: MainMenuProps) {
   const { user, permissions, logout } = useAuth();
   
+  const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
       <CardHeader className="items-center text-center">
@@ -24,43 +27,54 @@ export function MainMenu({ onSelect }: MainMenuProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-6">
-        <Button size="lg" className="h-auto justify-start text-left py-4" onClick={() => onSelect('standard')}>
-          <Scale className="h-8 w-8 mr-4 text-primary-foreground/50" />
-          <div className="flex-grow">
-            <p className="text-base font-semibold">Conversão Padrão</p>
-            <p className="text-sm font-normal text-primary-foreground/80">Medidas de peso, volume, etc.</p>
-          </div>
-          <ArrowRight className="h-5 w-5 ml-4" />
-        </Button>
-        <Button size="lg" className="h-auto justify-start text-left py-4" variant="secondary" onClick={() => onSelect('inventory')}>
-           <Boxes className="h-8 w-8 mr-4 text-secondary-foreground/50" />
-           <div className="flex-grow">
-            <p className="text-base font-semibold">Conversão de Inventário</p>
-            <p className="text-sm font-normal text-secondary-foreground/80">Com base nos seus produtos.</p>
-          </div>
-          <ArrowRight className="h-5 w-5 ml-4" />
-        </Button>
-        <Button size="lg" className="h-auto justify-start text-left py-4" variant="secondary" onClick={() => onSelect('expiry')}>
-           <ClipboardCheck className="h-8 w-8 mr-4 text-secondary-foreground/50" />
-           <div className="flex-grow">
-            <p className="text-base font-semibold">Controle de Validade</p>
-            <p className="text-sm font-normal text-secondary-foreground/80">Gerencie lotes e vencimentos.</p>
-          </div>
-          <ArrowRight className="h-5 w-5 ml-4" />
-        </Button>
-        {permissions.canManageUsers && (
-          <Button size="lg" className="h-auto justify-start text-left py-4" variant="secondary" onClick={() => onSelect('users')}>
-            <Users className="h-8 w-8 mr-4 text-secondary-foreground/50" />
-            <div className="flex-grow">
-              <p className="text-base font-semibold">Gerenciar Usuários</p>
-              <p className="text-sm font-normal text-secondary-foreground/80">Adicione e edite usuários e permissões.</p>
+        <Button size="lg" className="h-auto justify-between text-left py-4" onClick={() => onSelect('standard')}>
+          <div className="flex items-center">
+            <Scale className="h-8 w-8 mr-4 text-primary-foreground/50" />
+            <div>
+              <p className="text-base font-semibold">Conversão Padrão</p>
+              <p className="text-sm font-normal text-primary-foreground/80">Medidas de peso, volume, etc.</p>
             </div>
-            <ArrowRight className="h-5 w-5 ml-4" />
+          </div>
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('inventory')}>
+           <div className="flex items-center">
+            <Boxes className="h-8 w-8 mr-4 text-secondary-foreground/50" />
+            <div>
+              <p className="text-base font-semibold">Conversão de Inventário</p>
+              <p className="text-sm font-normal text-secondary-foreground/80">Com base nos seus produtos.</p>
+            </div>
+           </div>
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('expiry')}>
+           <div className="flex items-center">
+            <ClipboardCheck className="h-8 w-8 mr-4 text-secondary-foreground/50" />
+            <div>
+              <p className="text-base font-semibold">Controle de Validade</p>
+              <p className="text-sm font-normal text-secondary-foreground/80">Gerencie lotes e vencimentos.</p>
+            </div>
+           </div>
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+        {canManageUsers && (
+          <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('users')}>
+            <div className="flex items-center">
+              <Users className="h-8 w-8 mr-4 text-secondary-foreground/50" />
+              <div>
+                <p className="text-base font-semibold">Gerenciar Usuários</p>
+                <p className="text-sm font-normal text-secondary-foreground/80">Adicione e edite usuários e permissões.</p>
+              </div>
+            </div>
+            <ArrowRight className="h-5 w-5" />
           </Button>
         )}
         <div className="text-center pt-4">
-            <p className="text-sm text-muted-foreground">Logado como: <strong>{user?.username}</strong></p>
-            <Button variant="link" onClick={logout}>Sair</Button>
+            <p className="text-sm text-muted-foreground">Logado como: <strong>{user?.username}</strong> ({user?.kioskId ? `Quiosque: ${user.kioskId}` : 'N/A'})</p>
+            <Button variant="link" onClick={logout} className="text-muted-foreground hover:text-primary">
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </Button>
         </div>
       </CardContent>
     </Card>

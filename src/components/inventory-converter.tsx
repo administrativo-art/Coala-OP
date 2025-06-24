@@ -46,11 +46,30 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
   useEffect(() => {
     if (selectedProduct) {
       const categoryUnits = getUnitsForCategory(selectedProduct.category);
-      setFromUnit('Pacote(s)');
-      const newToUnit = selectedProduct.unit === categoryUnits[0] 
-        ? (categoryUnits[1] || selectedProduct.unit) 
-        : categoryUnits[0];
-      setToUnit(newToUnit);
+      // setFromUnit('Pacote(s)'); // This was causing issues when swapping
+      
+      const newFromUnit = 'Pacote(s)';
+      let newToUnit = categoryUnits[0];
+
+      // If fromUnit is already set to something other than package, keep it
+      // if it's still valid for the new product category
+      const currentFromUnitIsValid = fromUnit !== 'Pacote(s)' && availableUnits.includes(fromUnit);
+      const currentToUnitIsValid = toUnit !== 'Pacote(s)' && availableUnits.includes(toUnit);
+      
+      if (currentFromUnitIsValid) {
+        setFromUnit(fromUnit);
+        if (currentToUnitIsValid && toUnit !== fromUnit) {
+          setToUnit(toUnit);
+        } else {
+           const fallbackToUnit = availableUnits.find(u => u !== fromUnit) || 'Pacote(s)';
+           setToUnit(fallbackToUnit);
+        }
+      } else {
+        setFromUnit(newFromUnit);
+        setToUnit(newToUnit);
+      }
+
+
     } else if (!loading && products.length === 0) {
         setFromUnit('');
         setToUnit('');
@@ -63,8 +82,10 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
 
   const handleSwap = () => {
     if(!selectedProduct) return;
-    setFromUnit(toUnit);
-    setToUnit(fromUnit);
+    const currentFrom = fromUnit;
+    const currentTo = toUnit;
+    setFromUnit(currentTo);
+    setToUnit(currentFrom);
   };
   
   const result = useMemo(() => {
@@ -127,16 +148,21 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
       );
     }
 
+    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
+
     if (products.length === 0) {
       return (
         <div className="text-center py-8 flex flex-col items-center">
-            <h3 className="text-xl font-semibold">Nenhum produto encontrado</h3>
+            <Boxes className="h-16 w-16 text-muted-foreground/50 mb-4" />
+            <h3 className="text-xl font-semibold">Nenhum produto cadastrado</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Adicione produtos ao seu inventário para começar a converter.
+                Adicione produtos ao seu inventário para começar a fazer conversões.
             </p>
-            <Button size="lg" onClick={() => setIsModalOpen(true)} disabled={!permissions.canManageProducts}>
-                <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Produto
-            </Button>
+            {permissions.products.add && (
+                <Button size="lg" onClick={() => setIsModalOpen(true)}>
+                    <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Produto
+                </Button>
+            )}
         </div>
       );
     }
@@ -155,7 +181,7 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
               </SelectContent>
             </Select>
           </div>
-          {permissions.canManageProducts && (
+          {canManageProducts && (
             <Button variant="outline" onClick={() => setIsModalOpen(true)}>
               <Settings className="mr-2 h-4 w-4" /> Gerenciar
             </Button>
@@ -178,7 +204,7 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
 
             <div className="flex items-center justify-center pt-8">
                <Button variant="ghost" size="icon" onClick={handleSwap} disabled={!selectedProduct}>
-                <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
+                <ArrowLeftRight className="h-5 w-5 text-muted-foreground hover:text-primary" />
               </Button>
             </div>
 
@@ -223,6 +249,7 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
         updateProduct={updateProduct}
         deleteProduct={deleteProduct}
         getProductFullName={getProductFullName}
+        permissions={permissions.products}
       />
     </>
   );
