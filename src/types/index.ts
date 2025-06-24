@@ -28,3 +28,25 @@ export type LotEntry = {
   locationId: string;
   quantity: number;
 };
+
+export type Kiosk = {
+    id: string;
+    name: string;
+}
+
+export type UserRole = 'admin' | 'user';
+
+export type PermissionSet = {
+    canManageProducts: boolean;
+    canManageLocations: boolean;
+    canManageUsers: boolean;
+    canManageKiosks: boolean;
+};
+
+export type User = {
+    id: string;
+    username: string;
+    password?: string; // Should be hashed in a real app
+    role: UserRole;
+    permissions: PermissionSet;
+};

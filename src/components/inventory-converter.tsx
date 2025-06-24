@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, ArrowRight, Settings, PlusCircle, ArrowLeftRight, Boxes } from 'lucide-react';
-
+import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
 import { ProductManagementModal } from './product-management-modal';
@@ -19,6 +19,7 @@ type InventoryConverterProps = {
 
 export function InventoryConverter({ onBack }: InventoryConverterProps) {
   const { products, loading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
+  const { permissions } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
@@ -133,7 +134,7 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                 Adicione produtos ao seu inventário para começar a converter.
             </p>
-            <Button size="lg" onClick={() => setIsModalOpen(true)}>
+            <Button size="lg" onClick={() => setIsModalOpen(true)} disabled={!permissions.canManageProducts}>
                 <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Produto
             </Button>
         </div>
@@ -154,9 +155,11 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={() => setIsModalOpen(true)}>
-            <Settings className="mr-2 h-4 w-4" /> Gerenciar
-          </Button>
+          {permissions.canManageProducts && (
+            <Button variant="outline" onClick={() => setIsModalOpen(true)}>
+              <Settings className="mr-2 h-4 w-4" /> Gerenciar
+            </Button>
+          )}
         </div>
         
          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">

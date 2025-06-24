@@ -1,16 +1,40 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import { MainMenu } from '@/components/main-menu';
 import { StandardConverter } from '@/components/standard-converter';
 import { InventoryConverter } from '@/components/inventory-converter';
 import { ExpiryControl } from '@/components/expiry-control';
+import { UserManagement } from '@/components/user-management';
 import { AppFooter } from '@/components/footer';
+import { Skeleton } from '@/components/ui/skeleton';
 
-type Screen = 'menu' | 'standard' | 'inventory' | 'expiry';
+type Screen = 'menu' | 'standard' | 'inventory' | 'expiry' | 'users';
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('menu');
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, loading, router]);
+
+  if (loading || !isAuthenticated) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-10 w-1/2 mx-auto" />
+        </div>
+      </div>
+    );
+  }
 
   const renderScreen = () => {
     switch (screen) {
@@ -20,6 +44,8 @@ export default function Home() {
         return <InventoryConverter onBack={() => setScreen('menu')} />;
       case 'expiry':
         return <ExpiryControl onBack={() => setScreen('menu')} />;
+      case 'users':
+        return <UserManagement onBack={() => setScreen('menu')} />;
       case 'menu':
       default:
         return <MainMenu onSelect={(selection) => setScreen(selection as Screen)} />;

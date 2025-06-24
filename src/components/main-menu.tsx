@@ -1,13 +1,16 @@
 "use client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Scale, Boxes, ClipboardCheck } from 'lucide-react';
+import { ArrowRight, Scale, Boxes, ClipboardCheck, Users } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 
 type MainMenuProps = {
-  onSelect: (selection: 'standard' | 'inventory' | 'expiry') => void;
+  onSelect: (selection: 'standard' | 'inventory' | 'expiry' | 'users') => void;
 };
 
 export function MainMenu({ onSelect }: MainMenuProps) {
+  const { user, permissions, logout } = useAuth();
+  
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
       <CardHeader className="items-center text-center">
@@ -45,6 +48,20 @@ export function MainMenu({ onSelect }: MainMenuProps) {
           </div>
           <ArrowRight className="h-5 w-5 ml-4" />
         </Button>
+        {permissions.canManageUsers && (
+          <Button size="lg" className="h-auto justify-start text-left py-4" variant="secondary" onClick={() => onSelect('users')}>
+            <Users className="h-8 w-8 mr-4 text-secondary-foreground/50" />
+            <div className="flex-grow">
+              <p className="text-base font-semibold">Gerenciar Usuários</p>
+              <p className="text-sm font-normal text-secondary-foreground/80">Adicione e edite usuários e permissões.</p>
+            </div>
+            <ArrowRight className="h-5 w-5 ml-4" />
+          </Button>
+        )}
+        <div className="text-center pt-4">
+            <p className="text-sm text-muted-foreground">Logado como: <strong>{user?.username}</strong></p>
+            <Button variant="link" onClick={logout}>Sair</Button>
+        </div>
       </CardContent>
     </Card>
   );

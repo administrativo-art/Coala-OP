@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-
+import { useAuth } from '@/hooks/use-auth';
 import { type Product, unitCategories, UnitCategory } from '@/types';
 import { units } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -52,6 +52,7 @@ export function ProductManagementModal({
   deleteProduct,
   getProductFullName,
 }: ProductManagementModalProps) {
+  const { permissions } = useAuth();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -70,10 +71,14 @@ export function ProductManagementModal({
 
   useEffect(() => {
     if (open) {
+      if (!permissions.canManageProducts) {
+        onOpenChange(false);
+        return;
+      }
       setShowForm(false);
       setEditingProduct(null);
     }
-  }, [open]);
+  }, [open, permissions.canManageProducts, onOpenChange]);
 
   useEffect(() => {
       if (category) {
@@ -118,6 +123,10 @@ export function ProductManagementModal({
     setShowForm(false);
     setEditingProduct(null);
   };
+
+  if (!permissions.canManageProducts) {
+    return null;
+  }
 
   return (
     <>

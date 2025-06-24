@@ -28,9 +28,10 @@ type LotCardProps = {
   onEdit: (lotId: string) => void;
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
+  canEdit: boolean;
 };
 
-export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete }: LotCardProps) {
+export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete, canEdit }: LotCardProps) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const expiry = parseISO(groupedLot.expiryDate);
@@ -77,17 +78,19 @@ export function LotCard({ groupedLot, locations, onEdit, onMove, onDelete }: Lot
                         <span className="font-medium">{getLocationName(loc.locationId)}:</span>
                         <span>{loc.quantity} un.</span>
                     </div>
-                    <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => onMove(loc.id)}>
-                            <Move className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => onEdit(loc.id)}>
-                            <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(loc.id)}>
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => onMove(loc.id)}>
+                              <Move className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => onEdit(loc.id)}>
+                              <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(loc.id)}>
+                              <Trash2 className="h-4 w-4" />
+                          </Button>
+                      </div>
+                    )}
                 </div>
             ))}
         </div>

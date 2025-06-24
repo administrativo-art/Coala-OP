@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, PlusCircle, Warehouse, Search, ClipboardCheck, Inbox } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { useLocations } from '@/hooks/use-locations';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { type LotEntry, type Location as LocationType } from '@/types';
@@ -22,6 +23,7 @@ type ExpiryControlProps = {
 };
 
 export function ExpiryControl({ onBack }: ExpiryControlProps) {
+  const { permissions } = useAuth();
   const { locations, addLocation, deleteLocation } = useLocations();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
 
@@ -129,7 +131,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                   Comece adicionando um novo lote de produtos para monitorar a validade.
               </p>
-              <Button size="lg" onClick={handleAddClick}>
+              <Button size="lg" onClick={handleAddClick} disabled={!permissions.canManageProducts}>
                   <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Lote
               </Button>
           </div>
@@ -154,6 +156,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
             onEdit={handleEditClick}
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
+            canEdit={permissions.canManageProducts}
           />
         ))}
       </div>
@@ -184,10 +187,10 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
               />
             </div>
             <div className="flex gap-4">
-              <Button onClick={handleAddClick} className="flex-grow">
+              <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.canManageProducts}>
                 <PlusCircle className="mr-2" /> Adicionar produto
               </Button>
-              <Button variant="outline" onClick={() => setIsLocationsModalOpen(true)} className="flex-grow">
+              <Button variant="outline" onClick={() => setIsLocationsModalOpen(true)} className="flex-grow" disabled={!permissions.canManageLocations}>
                 <Warehouse className="mr-2" /> Gerenciar Locais
               </Button>
             </div>
