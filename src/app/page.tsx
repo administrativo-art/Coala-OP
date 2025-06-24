@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { MainMenu } from '@/components/main-menu';
 import { StandardConverter } from '@/components/standard-converter';
 import { InventoryConverter } from '@/components/inventory-converter';
+import { DeploymentInfo } from '@/components/deployment-info';
 
 type Screen = 'menu' | 'standard' | 'inventory';
 
@@ -27,6 +28,7 @@ export default function Home() {
       <div className="w-full transition-all duration-300">
         {renderScreen()}
       </div>
+      <DeploymentInfo />
     </main>
   );
 }
