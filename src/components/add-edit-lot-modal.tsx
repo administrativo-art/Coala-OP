@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -15,7 +16,11 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Calendar as CalendarIcon, Camera } from 'lucide-react';
 import { type LotEntry, type Location } from '@/types';
-import { BarcodeScannerModal } from './barcode-scanner-modal';
+
+const BarcodeScannerModal = dynamic(
+  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  { ssr: false }
+);
 
 const lotSchema = z.object({
   productName: z.string().min(1, 'O nome do produto é obrigatório.'),
@@ -211,11 +216,11 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, locations, addL
           </Form>
         </DialogContent>
       </Dialog>
-      <BarcodeScannerModal
+      {isScannerOpen && <BarcodeScannerModal
         open={isScannerOpen}
         onOpenChange={setIsScannerOpen}
         onScanSuccess={handleScanSuccess}
-      />
+      />}
     </>
   );
 }
