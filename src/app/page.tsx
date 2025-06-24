@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { MainMenu } from '@/components/main-menu';
 import { StandardConverter } from '@/components/standard-converter';
 import { InventoryConverter } from '@/components/inventory-converter';
+import { ExpiryControl } from '@/components/expiry-control';
 import { AppFooter } from '@/components/footer';
 
-type Screen = 'menu' | 'standard' | 'inventory';
+type Screen = 'menu' | 'standard' | 'inventory' | 'expiry';
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -17,6 +18,8 @@ export default function Home() {
         return <StandardConverter onBack={() => setScreen('menu')} />;
       case 'inventory':
         return <InventoryConverter onBack={() => setScreen('menu')} />;
+      case 'expiry':
+        return <ExpiryControl onBack={() => setScreen('menu')} />;
       case 'menu':
       default:
         return <MainMenu onSelect={(selection) => setScreen(selection as Screen)} />;
@@ -25,8 +28,8 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex-grow flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
-        <div className="w-full transition-all duration-300">
+      <main className="flex-grow flex flex-col items-center p-4 sm:p-6 md:p-8">
+        <div className="w-full max-w-4xl transition-all duration-300">
           {renderScreen()}
         </div>
       </main>

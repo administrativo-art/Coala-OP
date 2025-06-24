@@ -13,3 +13,18 @@ export type Product = {
 export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
+
+export type Location = {
+  id: string;
+  name: string;
+};
+
+export type LotEntry = {
+  id: string;
+  productName: string;
+  barcode: string;
+  lotNumber: string;
+  expiryDate: string; // ISO String
+  locationId: string;
+  quantity: number;
+};
