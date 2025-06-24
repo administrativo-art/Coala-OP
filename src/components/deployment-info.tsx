@@ -2,9 +2,19 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 import { Rocket } from "lucide-react";
 
 export function DeploymentInfo() {
+  const { toast } = useToast();
+
+  const handleDeployClick = () => {
+    toast({
+      title: "Recurso indisponível",
+      description: "A funcionalidade de deploy não está disponível neste ambiente de demonstração.",
+    });
+  };
+
   return (
     <Card className="fixed bottom-4 right-4 w-auto max-w-sm animate-in fade-in-50 slide-in-from-bottom-10 duration-500">
       <CardContent className="p-4 flex items-center gap-4">
@@ -14,7 +24,7 @@ export function DeploymentInfo() {
             Seu app está em modo de desenvolvimento. Para compartilhar, faça o deploy.
           </p>
         </div>
-        <Button disabled>
+        <Button onClick={handleDeployClick}>
           <Rocket className="mr-2 h-4 w-4" />
           Deploy
         </Button>
