@@ -13,11 +13,12 @@ export function MainMenu({ onSelect }: MainMenuProps) {
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
       <CardHeader className="items-center text-center">
         <Image
-          src="/logo.png"
+          src="https://placehold.co/150x150.png"
           alt="Coala Shakes Logo"
           width={150}
           height={150}
-          className="mb-4"
+          data-ai-hint="koala logo"
+          className="mb-4 rounded-full"
         />
         <CardTitle className="text-3xl font-headline">Conversor Inteligente</CardTitle>
         <CardDescription className="px-4 pt-2">
