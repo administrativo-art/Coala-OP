@@ -14,6 +14,7 @@ const defaultPermissions: { [key in UserRole]: PermissionSet } = {
     locations: { add: true, delete: true },
     users: { add: true, edit: true, delete: true },
     kiosks: { add: true, delete: true },
+    predefinedLists: { add: true, edit: true, delete: true },
   },
   user: {
     products: { add: false, edit: false, delete: false },
@@ -21,6 +22,7 @@ const defaultPermissions: { [key in UserRole]: PermissionSet } = {
     locations: { add: false, delete: false },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
+    predefinedLists: { add: false, edit: false, delete: false },
   },
 };
 
@@ -41,11 +43,23 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const getValidPermissions = (user: User | null): PermissionSet => {
     if (!user) return defaultPermissions.user;
+    
+    const roleDefault = defaultPermissions[user.role] || defaultPermissions.user;
+
     // Simple migration: if old format is detected, assign default for the role.
     if (!user.permissions || 'canManageProducts' in user.permissions) {
-        return defaultPermissions[user.role] || defaultPermissions.user;
+        return roleDefault;
     }
-    return user.permissions;
+    
+    // Create a new object to avoid mutating state directly.
+    const completePermissions = { ...user.permissions };
+    
+    // Add new permission set if it doesn't exist (for existing users)
+    if (!completePermissions.predefinedLists) {
+        completePermissions.predefinedLists = roleDefault.predefinedLists;
+    }
+
+    return completePermissions;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

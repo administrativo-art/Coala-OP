@@ -38,6 +38,7 @@ export type PermissionSet = {
     locations: { add: boolean; delete: boolean };
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
+    predefinedLists: { add: boolean; edit: boolean; delete: boolean };
 };
 
 export type User = {

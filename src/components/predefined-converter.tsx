@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Edit, Trash2, ClipboardList, ListPlus, Wand2 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { type PredefinedList } from '@/types';
@@ -20,6 +21,7 @@ type PredefinedConverterProps = {
 export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { lists, loading: listsLoading, addList, updateList, deleteList } = usePredefinedLists();
+  const { permissions } = useAuth();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [listToEdit, setListToEdit] = useState<PredefinedList | null>(null);
@@ -65,7 +67,7 @@ export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                 Crie listas de conversões rápidas para agilizar as tarefas do dia a dia.
             </p>
-            <Button size="lg" onClick={handleAddNew}>
+            <Button size="lg" onClick={handleAddNew} disabled={!permissions.predefinedLists.add}>
                 <ListPlus className="mr-2 h-5 w-5" /> Criar sua primeira lista
             </Button>
         </div>
@@ -81,10 +83,10 @@ export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
                   <div className="flex justify-between items-center w-full">
                     <span className="text-lg font-semibold">{list.name}</span>
                     <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }}>
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }} disabled={!permissions.predefinedLists.edit}>
                             <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }}>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }} disabled={!permissions.predefinedLists.delete}>
                             <Trash2 className="h-4 w-4" />
                         </Button>
                     </div>
@@ -123,7 +125,7 @@ export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
           <CardDescription className="text-center">Use listas de conversão rápida para as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          <Button onClick={handleAddNew} className="w-full">
+          <Button onClick={handleAddNew} className="w-full" disabled={!permissions.predefinedLists.add}>
               <ListPlus className="mr-2 h-4 w-4" /> Criar Nova Lista de Conversão
           </Button>
           <div className="mt-6">

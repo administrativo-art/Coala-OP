@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog, ClipboardList } from 'lucide-react';
 import { type User, type UserRole } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -35,6 +35,7 @@ const userSchema = z.object({
     locations: z.object({ add: z.boolean(), delete: z.boolean() }),
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
+    predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   }),
 }).refine(data => {
     // If a password is provided, it must be at least 4 chars
@@ -71,6 +72,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
         locations: { add: false, delete: false },
         users: { add: false, edit: false, delete: false },
         kiosks: { add: false, delete: false },
+        predefinedLists: { add: false, edit: false, delete: false },
        },
     });
     setShowForm(true);
@@ -251,6 +253,15 @@ export function UserManagement({ onBack }: UserManagementProps) {
                           {renderPermissionSwitch("permissions.lots.edit", "Editar Lotes", "Permite editar informações de um lote, como data ou quantidade.")}
                           {renderPermissionSwitch("permissions.lots.move", "Mover Estoque", "Permite mover estoque de um lote entre diferentes locais.")}
                           {renderPermissionSwitch("permissions.lots.delete", "Excluir Lotes", "Permite excluir entradas de lote do controle de validade.")}
+                        </div>
+                      </div>
+                       <Separator />
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2"><ClipboardList /> Conversão Predefinida</h4>
+                        <div className="space-y-2">
+                          {renderPermissionSwitch("permissions.predefinedLists.add", "Criar Listas", "Permite que o usuário crie novas listas de conversão.")}
+                          {renderPermissionSwitch("permissions.predefinedLists.edit", "Editar Listas", "Permite que o usuário edite nomes e itens de listas existentes.")}
+                          {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir Listas", "Permite que o usuário remova listas de conversão predefinida.")}
                         </div>
                       </div>
                       <Separator />
