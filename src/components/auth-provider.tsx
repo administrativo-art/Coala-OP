@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUsers(allUsers);
     
     try {
-      const storedCurrentUser = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      const storedCurrentUser = window.sessionStorage.getItem(CURRENT_USER_STORAGE_KEY);
       if (storedCurrentUser) {
         const parsedUser = JSON.parse(storedCurrentUser);
         // re-validate user from the main user list
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userToLogin = users.find(u => u.username === username && u.password === password);
     if (userToLogin) {
       setCurrentUser(userToLogin);
-      window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
+      window.sessionStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
       return true;
     }
     return false;
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setCurrentUser(null);
-    window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    window.sessionStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     router.push('/login');
   };
 
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // If the updated user is the current user, update the current user state as well
     if (currentUser?.id === updatedUser.id) {
         setCurrentUser(updatedUser);
-        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(updatedUser));
+        window.sessionStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(updatedUser));
     }
   };
 
