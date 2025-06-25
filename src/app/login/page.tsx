@@ -72,7 +72,7 @@ export default function LoginPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Usuário</FormLabel>
-                    <FormControl><Input placeholder="seu.usuario" {...field} /></FormControl>
+                    <FormControl><Input placeholder="ex: master" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
