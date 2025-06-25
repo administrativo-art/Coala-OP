@@ -2,9 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
-      // Permite leitura e escrita por qualquer pessoa.
-      // Isso é necessário para a primeira publicação, para o app poder criar os dados iniciais.
-      // Depois da primeira publicação, vamos trocar por regras mais seguras.
+      // Permite leitura e escrita para todos durante o desenvolvimento inicial.
+      // ISSO DEVE SER ALTERADO para regras seguras antes de ir para produção.
       allow read, write: if true;
     }
   }
