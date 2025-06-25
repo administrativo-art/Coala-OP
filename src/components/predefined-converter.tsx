@@ -1,233 +1,118 @@
 "use client"
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, ArrowRight, Settings, PlusCircle, ArrowLeftRight, ClipboardList } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
+import { ArrowLeft, Edit, Trash2, ClipboardList, ListPlus, Wand2 } from 'lucide-react';
 import { useProducts } from '@/hooks/use-products';
-import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
-import { ProductManagementModal } from './product-management-modal';
+import { usePredefinedLists } from '@/hooks/use-predefined-lists';
+import { type PredefinedList } from '@/types';
+import { AddEditPredefinedListModal } from './add-edit-predefined-list-modal';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { PredefinedListItemConverter } from './predefined-list-item-converter';
+import { Skeleton } from './ui/skeleton';
 
 type PredefinedConverterProps = {
   onBack: () => void;
 };
 
 export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
-  const { products, loading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
-  const { permissions } = useAuth();
+  const { products, loading: productsLoading, getProductFullName } = useProducts();
+  const { lists, loading: listsLoading, addList, updateList, deleteList } = usePredefinedLists();
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
-  const [value, setValue] = useState<string>('1');
-  const [fromUnit, setFromUnit] = useState<string>('Pacote(s)');
-  const [toUnit, setToUnit] = useState<string>('');
+  const [listToEdit, setListToEdit] = useState<PredefinedList | null>(null);
+  const [listToDelete, setListToDelete] = useState<PredefinedList | null>(null);
 
-  useEffect(() => {
-    if (!loading && products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
-    }
-  }, [products, loading, selectedProductId]);
-
-  const selectedProduct = useMemo(() => {
-    return products.find(p => p.id === selectedProductId);
-  }, [selectedProductId, products]);
-
-  const availableUnits = useMemo(() => {
-    if (!selectedProduct) return [];
-    const categoryUnits = getUnitsForCategory(selectedProduct.category);
-    return ['Pacote(s)', ...categoryUnits];
-  }, [selectedProduct]);
-
-  useEffect(() => {
-    if (selectedProduct) {
-      const categoryUnits = getUnitsForCategory(selectedProduct.category);
-      // setFromUnit('Pacote(s)'); // This was causing issues when swapping
-      
-      const newFromUnit = 'Pacote(s)';
-      let newToUnit = categoryUnits[0];
-
-      // If fromUnit is already set to something other than package, keep it
-      // if it's still valid for the new product category
-      const currentFromUnitIsValid = fromUnit !== 'Pacote(s)' && availableUnits.includes(fromUnit);
-      const currentToUnitIsValid = toUnit !== 'Pacote(s)' && availableUnits.includes(toUnit);
-      
-      if (currentFromUnitIsValid) {
-        setFromUnit(fromUnit);
-        if (currentToUnitIsValid && toUnit !== fromUnit) {
-          setToUnit(toUnit);
-        } else {
-           const fallbackToUnit = availableUnits.find(u => u !== fromUnit) || 'Pacote(s)';
-           setToUnit(fallbackToUnit);
-        }
-      } else {
-        setFromUnit(newFromUnit);
-        setToUnit(newToUnit);
-      }
-
-
-    } else if (!loading && products.length === 0) {
-        setFromUnit('');
-        setToUnit('');
-    }
-  }, [selectedProduct, loading, products.length]);
-
-  const handleProductChange = (productId: string) => {
-    setSelectedProductId(productId);
+  const handleAddNew = () => {
+    setListToEdit(null);
+    setIsModalOpen(true);
   };
 
-  const handleSwap = () => {
-    if(!selectedProduct) return;
-    const currentFrom = fromUnit;
-    const currentTo = toUnit;
-    setFromUnit(currentTo);
-    setToUnit(currentFrom);
+  const handleEdit = (list: PredefinedList) => {
+    setListToEdit(list);
+    setIsModalOpen(true);
   };
-  
-  const result = useMemo(() => {
-    const numericValue = parseFloat(value);
-    if (isNaN(numericValue) || !selectedProduct || !fromUnit || !toUnit) {
-      return '...';
-    }
 
-    const isFromUnitValid = fromUnit === 'Pacote(s)' || !!units[selectedProduct.category]?.[fromUnit];
-    const isToUnitValid = toUnit === 'Pacote(s)' || !!units[selectedProduct.category]?.[toUnit];
+  const handleDeleteClick = (list: PredefinedList) => {
+    setListToDelete(list);
+  };
 
-    if (!isFromUnitValid || !isToUnitValid) {
-      return '...';
+  const handleDeleteConfirm = () => {
+    if (listToDelete) {
+      deleteList(listToDelete.id);
+      setListToDelete(null);
     }
-
-    let valueInProductUnit: number;
-    if (fromUnit === 'Pacote(s)') {
-      valueInProductUnit = numericValue * selectedProduct.packageSize;
-    } else {
-      valueInProductUnit = convertValue(numericValue, fromUnit, selectedProduct.unit, selectedProduct.category);
-    }
-    
-    if (toUnit === 'Pacote(s)') {
-      if(selectedProduct.packageSize === 0) return '...';
-      return (valueInProductUnit / selectedProduct.packageSize).toLocaleString(undefined, { maximumFractionDigits: 5 });
-    } else {
-      const converted = convertValue(valueInProductUnit, selectedProduct.unit, toUnit, selectedProduct.category);
-      return converted.toLocaleString(undefined, { maximumFractionDigits: 5 });
-    }
-  }, [value, fromUnit, toUnit, selectedProduct]);
+  };
 
   const renderContent = () => {
-    if (loading) {
+    if (listsLoading || productsLoading) {
       return (
-        <div className="space-y-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-grow space-y-2">
-              <Label htmlFor="product">Produto</Label>
-              <Skeleton className="h-10 w-full" />
-            </div>
-            <Skeleton className="h-10 w-28" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">
-            <div className="space-y-2">
-              <Label>De</Label>
-              <div className="flex gap-2">
-                <Skeleton className="h-10 w-2/3" />
-                <Skeleton className="h-10 w-1/3" />
-              </div>
-            </div>
-            <div className="flex items-center justify-center pt-8">
-              <ArrowRight className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <div className="space-y-2">
-              <Label>Para</Label>
-              <Skeleton className="h-[72px] w-full" />
-            </div>
-          </div>
+        <div className="space-y-4">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
         </div>
       );
     }
 
-    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
-
-    if (products.length === 0) {
+    if (lists.length === 0) {
       return (
         <div className="text-center py-8 flex flex-col items-center">
-            <ClipboardList className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-xl font-semibold">Nenhum produto cadastrado</h3>
+            <Wand2 className="h-16 w-16 text-muted-foreground/50 mb-4" />
+            <h3 className="text-xl font-semibold">Nenhuma lista predefinida criada</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Adicione produtos para usar a conversão predefinida. Os produtos são compartilhados com a conversão de inventário.
+                Crie listas de conversões rápidas para agilizar as tarefas do dia a dia.
             </p>
-            {permissions.products.add && (
-                <Button size="lg" onClick={() => setIsModalOpen(true)}>
-                    <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Produto
-                </Button>
-            )}
+            <Button size="lg" onClick={handleAddNew}>
+                <ListPlus className="mr-2 h-5 w-5" /> Criar sua primeira lista
+            </Button>
         </div>
       );
     }
 
     return (
-      <>
-        <div className="flex gap-4 items-end">
-          <div className="flex-grow space-y-2">
-            <Label htmlFor="product">Produto</Label>
-            <Select value={selectedProductId} onValueChange={handleProductChange} disabled={products.length === 0}>
-              <SelectTrigger id="product-predef">
-                <SelectValue placeholder="Selecione um produto" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {canManageProducts && (
-            <Button variant="outline" onClick={() => setIsModalOpen(true)}>
-              <Settings className="mr-2 h-4 w-4" /> Gerenciar
-            </Button>
-          )}
-        </div>
-        
-         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">
-             <div className="space-y-2">
-               <Label htmlFor="from-unit-predef">De</Label>
-               <div className="flex gap-2">
-                  <Input id="value-predef" type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Digite o valor" className="w-2/3" disabled={!selectedProduct} />
-                  <Select value={fromUnit} onValueChange={setFromUnit} disabled={!selectedProduct}>
-                      <SelectTrigger id="from-unit-predef" className="w-1/3"><SelectValue/></SelectTrigger>
-                      <SelectContent>
-                          {availableUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-                      </SelectContent>
-                  </Select>
-               </div>
-            </div>
-
-            <div className="flex items-center justify-center pt-8">
-               <Button variant="ghost" size="icon" onClick={handleSwap} disabled={!selectedProduct}>
-                <ArrowLeftRight className="h-5 w-5 text-muted-foreground hover:text-primary" />
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-               <Label htmlFor="to-unit-predef">Para</Label>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary">
-                  <p className="text-2xl font-bold text-primary font-headline flex-grow">{result}</p>
-                   <Select value={toUnit} onValueChange={setToUnit} disabled={!selectedProduct}>
-                      <SelectTrigger id="to-unit-predef" className="w-1/3"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                           {availableUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-                      </SelectContent>
-                  </Select>
-              </div>
-            </div>
-         </div>
-      </>
+      <Accordion type="single" collapsible className="w-full space-y-2">
+        {lists.map(list => (
+          <AccordionItem value={list.id} key={list.id} className="border-none">
+            <Card>
+              <AccordionTrigger className="p-4 hover:no-underline rounded-lg">
+                  <div className="flex justify-between items-center w-full">
+                    <span className="text-lg font-semibold">{list.name}</span>
+                    <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }}>
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }}>
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                  </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="p-4 pt-0 space-y-4">
+                  {list.items.length > 0 ? list.items.map(item => (
+                    <PredefinedListItemConverter 
+                      key={item.id}
+                      item={item}
+                      products={products}
+                    />
+                  )) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">Esta lista está vazia.</p>
+                  )}
+                </div>
+              </AccordionContent>
+            </Card>
+          </AccordionItem>
+        ))}
+      </Accordion>
     );
   };
 
   return (
     <>
-      <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
+      <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
@@ -235,22 +120,36 @@ export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
           <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
             <ClipboardList /> Conversão Predefinida
           </CardTitle>
-          <CardDescription className="text-center">Converta unidades usando seus produtos pré-cadastrados.</CardDescription>
+          <CardDescription className="text-center">Use listas de conversão rápida para as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          {renderContent()}
+          <Button onClick={handleAddNew} className="w-full">
+              <ListPlus className="mr-2 h-4 w-4" /> Criar Nova Lista de Conversão
+          </Button>
+          <div className="mt-6">
+            {renderContent()}
+          </div>
         </CardContent>
       </Card>
-      <ProductManagementModal 
-        open={isModalOpen} 
+
+      <AddEditPredefinedListModal
+        open={isModalOpen}
         onOpenChange={setIsModalOpen}
+        listToEdit={listToEdit}
+        addList={addList}
+        updateList={updateList}
         products={products}
-        addProduct={addProduct}
-        updateProduct={updateProduct}
-        deleteProduct={deleteProduct}
         getProductFullName={getProductFullName}
-        permissions={permissions.products}
       />
+      
+      {listToDelete && (
+        <DeleteConfirmationDialog
+          open={!!listToDelete}
+          onOpenChange={() => setListToDelete(null)}
+          onConfirm={handleDeleteConfirm}
+          itemName={`a lista "${listToDelete.name}"`}
+        />
+      )}
     </>
   );
 }

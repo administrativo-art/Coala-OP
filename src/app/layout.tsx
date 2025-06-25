@@ -5,6 +5,7 @@ import { AuthProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
+import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -28,8 +29,10 @@ export default function RootLayout({
           <KiosksProvider>
             <ProductsProvider>
               <ExpiryProductsProvider>
-                {children}
-                <Toaster />
+                <PredefinedListsProvider>
+                  {children}
+                  <Toaster />
+                </PredefinedListsProvider>
               </ExpiryProductsProvider>
             </ProductsProvider>
           </KiosksProvider>

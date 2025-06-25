@@ -48,3 +48,16 @@ export type User = {
     permissions: PermissionSet;
     kioskId?: string;
 };
+
+export type PredefinedConversionItem = {
+  id: string;
+  productId: string;
+  fromUnit: string;
+  toUnit: string;
+};
+
+export type PredefinedList = {
+  id: string;
+  name: string;
+  items: PredefinedConversionItem[];
+};
