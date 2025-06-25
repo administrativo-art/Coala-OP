@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 logout(); // User was deleted elsewhere
             } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
                 setCurrentUser(foundUser);
-                localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
+                window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
             }
         }
         
