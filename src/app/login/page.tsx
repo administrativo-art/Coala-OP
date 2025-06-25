@@ -34,8 +34,8 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, authLoading, router]);
 
-  const onSubmit = (values: LoginFormValues) => {
-    const success = login(values.username, values.password);
+  const onSubmit = async (values: LoginFormValues) => {
+    const success = await login(values.username, values.password);
     if (success) {
       router.push('/');
     } else {
