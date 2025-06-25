@@ -64,10 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Load current user from sessionStorage on initial load
+  // Load current user from localStorage on initial load
   useEffect(() => {
     try {
-      const storedCurrentUser = window.sessionStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      const storedCurrentUser = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
       if (storedCurrentUser) {
         setCurrentUser(JSON.parse(storedCurrentUser));
       }
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setCurrentUser(null);
-    window.sessionStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     router.push('/login');
   }, [router]);
 
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 logout(); // User was deleted elsewhere
             } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
                 setCurrentUser(foundUser);
-                sessionStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
+                localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
             }
         }
         
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userDoc = querySnapshot.docs[0];
             const userToLogin = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userToLogin);
-            window.sessionStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
+            window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
             return true;
         }
         return false;
