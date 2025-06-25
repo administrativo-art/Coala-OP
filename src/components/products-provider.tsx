@@ -3,7 +3,7 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type Product } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
 
 export interface ProductsContextType {
   products: Product[];
@@ -22,7 +22,31 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const q = query(collection(db, "products"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        if (querySnapshot.empty && !localStorage.getItem('products_seeded')) {
+          console.log("No products found. Seeding default products...");
+          const defaultProducts: Omit<Product, 'id'>[] = [
+            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L' },
+            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g' },
+            { baseName: 'Açúcar Refinado', category: 'Massa', packageSize: 1, unit: 'kg' },
+            { baseName: 'Polpa de Morango', category: 'Volume', packageSize: 500, unit: 'mL' },
+          ];
+          
+          const batch = writeBatch(db);
+          defaultProducts.forEach(product => {
+            const docRef = doc(collection(db, "products"));
+            batch.set(docRef, product);
+          });
+          
+          try {
+            await batch.commit();
+            localStorage.setItem('products_seeded', 'true');
+          } catch(seedError) {
+            console.error("Error seeding products:", seedError);
+          }
+          return;
+        }
+
         const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
         setProducts(productsData);
         setLoading(false);
