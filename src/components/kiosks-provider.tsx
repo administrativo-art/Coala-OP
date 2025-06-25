@@ -2,14 +2,14 @@
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type Kiosk } from '@/types';
-
-const STORAGE_KEY = 'smart-converter-kiosks';
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDocs, query } from "firebase/firestore";
 
 export interface KiosksContextType {
   kiosks: Kiosk[];
   loading: boolean;
-  addKiosk: (kioskName: string) => void;
-  deleteKiosk: (kioskId: string) => void;
+  addKiosk: (kioskName: string) => Promise<void>;
+  deleteKiosk: (kioskId: string) => Promise<void>;
 }
 
 export const KiosksContext = createContext<KiosksContextType | undefined>(undefined);
@@ -19,46 +19,59 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const items = window.localStorage.getItem(STORAGE_KEY);
-      if (items) {
-        setKiosks(JSON.parse(items));
-      } else {
-        const defaultKiosks: Kiosk[] = [
-            { id: 'matriz', name: 'Centro de distribuição - Matriz' },
-            { id: 'tirirical', name: 'Quiosque Tirirical' },
-            { id: 'joao-paulo', name: 'Quiosque João Paulo' },
+    const q = query(collection(db, "kiosks"));
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+      // If the collection is empty, seed it with default data.
+      if (querySnapshot.empty && !localStorage.getItem('kiosks_seeded')) {
+        console.log("No kiosks found. Seeding default kiosks...");
+        const defaultKiosks = [
+            { name: 'Centro de distribuição - Matriz' },
+            { name: 'Quiosque Tirirical' },
+            { name: 'Quiosque João Paulo' },
         ];
-        setKiosks(defaultKiosks);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultKiosks));
+        const batch = writeBatch(db);
+        // We need a stable ID for the 'matriz' kiosk for user assignment
+        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz' });
+        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical' });
+        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo' });
+        
+        try {
+          await batch.commit();
+          localStorage.setItem('kiosks_seeded', 'true');
+        } catch (seedError) {
+          console.error("Error seeding kiosks:", seedError);
+        }
+        return; // Listener will re-run with new data.
       }
-    } catch (error) {
-      console.error('Failed to load kiosks from localStorage', error);
-    } finally {
+      
+      const kiosksData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kiosk));
+      setKiosks(kiosksData);
+      setLoading(false);
+    }, (error) => {
+        console.error("Error fetching kiosks from Firestore: ", error);
         setLoading(false);
-    }
-  }, []);
+    });
 
-  const saveKiosks = useCallback((newKiosks: Kiosk[]) => {
-    try {
-      setKiosks(newKiosks);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newKiosks));
-    } catch (error) {
-      console.error('Failed to save kiosks to localStorage', error);
-    }
+    return () => unsubscribe();
   }, []);
-
-  const addKiosk = useCallback((kioskName: string) => {
-    if (kioskName && !kiosks.find(l => l.name.toLowerCase() === kioskName.toLowerCase())) {
-        const newKiosk = { name: kioskName, id: new Date().toISOString() };
-        saveKiosks([...kiosks, newKiosk]);
-    }
-  }, [kiosks, saveKiosks]);
   
-  const deleteKiosk = useCallback((kioskId: string) => {
-    const newKiosks = kiosks.filter(l => l.id !== kioskId);
-    saveKiosks(newKiosks);
-  }, [kiosks, saveKiosks]);
+  const addKiosk = useCallback(async (kioskName: string) => {
+    if (kioskName && !kiosks.find(l => l.name.toLowerCase() === kioskName.toLowerCase())) {
+        try {
+            await addDoc(collection(db, "kiosks"), { name: kioskName });
+        } catch(error) {
+            console.error("Error adding kiosk:", error);
+        }
+    }
+  }, [kiosks]);
+  
+  const deleteKiosk = useCallback(async (kioskId: string) => {
+    try {
+        await deleteDoc(doc(db, "kiosks", kioskId));
+    } catch(error) {
+        console.error("Error deleting kiosk:", error);
+    }
+  }, []);
   
   const value: KiosksContextType = {
     kiosks,

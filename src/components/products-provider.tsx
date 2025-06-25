@@ -2,15 +2,15 @@
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type Product } from '@/types';
-
-const STORAGE_KEY = 'smart-converter-products';
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
 
 export interface ProductsContextType {
   products: Product[];
   loading: boolean;
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (updatedProduct: Product) => void;
-  deleteProduct: (productId: string) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (updatedProduct: Product) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   getProductFullName: (product: Product) => string;
 }
 
@@ -21,41 +21,44 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const items = window.localStorage.getItem(STORAGE_KEY);
-      if (items) {
-        setProducts(JSON.parse(items));
-      }
-    } catch (error) {
-      console.error('Failed to load products from localStorage', error);
-    } finally {
+    const q = query(collection(db, "products"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+        setProducts(productsData);
         setLoading(false);
-    }
+    }, (error) => {
+        console.error("Error fetching products from Firestore: ", error);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const saveProducts = useCallback((newProducts: Product[]) => {
+  const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
     try {
-      setProducts(newProducts);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newProducts));
-    } catch (error) {
-      console.error('Failed to save products to localStorage', error);
+        await addDoc(collection(db, "products"), product);
+    } catch(error) {
+        console.error("Error adding product:", error);
     }
   }, []);
 
-  const addProduct = useCallback((product: Omit<Product, 'id'>) => {
-    const newProduct = { ...product, id: new Date().toISOString() };
-    saveProducts([...products, newProduct]);
-  }, [products, saveProducts]);
+  const updateProduct = useCallback(async (updatedProduct: Product) => {
+    const productRef = doc(db, "products", updatedProduct.id);
+    const { id, ...dataToUpdate } = updatedProduct;
+    try {
+        await updateDoc(productRef, dataToUpdate);
+    } catch(error) {
+        console.error("Error updating product:", error);
+    }
+  }, []);
 
-  const updateProduct = useCallback((updatedProduct: Product) => {
-    const newProducts = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
-    saveProducts(newProducts);
-  }, [products, saveProducts]);
-
-  const deleteProduct = useCallback((productId: string) => {
-    const newProducts = products.filter(p => p.id !== productId);
-    saveProducts(newProducts);
-  }, [products, saveProducts]);
+  const deleteProduct = useCallback(async (productId: string) => {
+    try {
+        await deleteDoc(doc(db, "products", productId));
+    } catch (error) {
+        console.error("Error deleting product:", error);
+    }
+  }, []);
   
   const getProductFullName = useCallback((product: Product) => {
     if (!product) return '';

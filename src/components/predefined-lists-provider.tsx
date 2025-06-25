@@ -2,15 +2,15 @@
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type PredefinedList } from '@/types';
-
-const STORAGE_KEY = 'smart-converter-predefined-lists';
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
 
 export interface PredefinedListsContextType {
   lists: PredefinedList[];
   loading: boolean;
-  addList: (list: Omit<PredefinedList, 'id'>) => void;
-  updateList: (updatedList: PredefinedList) => void;
-  deleteList: (listId: string) => void;
+  addList: (list: Omit<PredefinedList, 'id'>) => Promise<void>;
+  updateList: (updatedList: PredefinedList) => Promise<void>;
+  deleteList: (listId: string) => Promise<void>;
 }
 
 export const PredefinedListsContext = createContext<PredefinedListsContextType | undefined>(undefined);
@@ -20,41 +20,44 @@ export function PredefinedListsProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const items = window.localStorage.getItem(STORAGE_KEY);
-      if (items) {
-        setLists(JSON.parse(items));
-      }
-    } catch (error) {
-      console.error('Failed to load predefined lists from localStorage', error);
-    } finally {
+    const q = query(collection(db, "predefinedLists"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const listsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PredefinedList));
+      setLists(listsData);
       setLoading(false);
-    }
+    }, (error) => {
+        console.error("Error fetching predefined lists from Firestore: ", error);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const saveLists = useCallback((newLists: PredefinedList[]) => {
+  const addList = useCallback(async (list: Omit<PredefinedList, 'id'>) => {
     try {
-      setLists(newLists);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newLists));
-    } catch (error) {
-      console.error('Failed to save predefined lists to localStorage', error);
+        await addDoc(collection(db, "predefinedLists"), list);
+    } catch(error) {
+        console.error("Error adding list:", error);
     }
   }, []);
 
-  const addList = useCallback((list: Omit<PredefinedList, 'id'>) => {
-    const newList = { ...list, id: new Date().toISOString() };
-    saveLists([...lists, newList]);
-  }, [lists, saveLists]);
+  const updateList = useCallback(async (updatedList: PredefinedList) => {
+    const listRef = doc(db, "predefinedLists", updatedList.id);
+    const { id, ...dataToUpdate } = updatedList;
+     try {
+        await updateDoc(listRef, dataToUpdate);
+    } catch(error) {
+        console.error("Error updating list:", error);
+    }
+  }, []);
 
-  const updateList = useCallback((updatedList: PredefinedList) => {
-    const newLists = lists.map(l => l.id === updatedList.id ? updatedList : l);
-    saveLists(newLists);
-  }, [lists, saveLists]);
-
-  const deleteList = useCallback((listId: string) => {
-    const newLists = lists.filter(l => l.id !== listId);
-    saveLists(newLists);
-  }, [lists, saveLists]);
+  const deleteList = useCallback(async (listId: string) => {
+    try {
+        await deleteDoc(doc(db, "predefinedLists", listId));
+    } catch(error) {
+        console.error("Error deleting list:", error);
+    }
+  }, []);
 
   const value: PredefinedListsContextType = {
     lists,
