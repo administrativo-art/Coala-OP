@@ -1,11 +1,10 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // IMPORTANTE: Esta regra permite acesso aberto para fins de desenvolvimento.
-    // Antes de lançar o aplicativo para usuários reais,
-    // é crucial proteger seus dados com regras de segurança adequadas.
     match /{document=**} {
+      // Permite leitura e escrita por qualquer pessoa.
+      // IMPORTANTE: Isso é para fins de desenvolvimento e para a primeira
+      // inicialização. Você deve configurar regras mais seguras para produção.
       allow read, write: if true;
     }
   }
