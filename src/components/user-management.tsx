@@ -32,7 +32,6 @@ const userSchema = z.object({
   permissions: z.object({
     products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean() }),
-    locations: z.object({ add: z.boolean(), delete: z.boolean() }),
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
@@ -69,7 +68,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
       permissions: { 
         products: { add: false, edit: false, delete: false },
         lots: { add: true, edit: true, move: true, delete: true },
-        locations: { add: false, delete: false },
         users: { add: false, edit: false, delete: false },
         kiosks: { add: false, delete: false },
         predefinedLists: { add: false, edit: false, delete: false },
@@ -266,10 +264,8 @@ export function UserManagement({ onBack }: UserManagementProps) {
                       </div>
                       <Separator />
                        <div className="space-y-3">
-                        <h4 className="font-medium flex items-center gap-2"><Warehouse /> Locais e Quiosques</h4>
+                        <h4 className="font-medium flex items-center gap-2"><Warehouse /> Quiosques</h4>
                         <div className="space-y-2">
-                          {renderPermissionSwitch("permissions.locations.add", "Adicionar Locais", "Permite cadastrar novas lojas ou locais de armazenamento.")}
-                          {renderPermissionSwitch("permissions.locations.delete", "Excluir Locais", "Permite excluir locais de armazenamento existentes.")}
                           {renderPermissionSwitch("permissions.kiosks.add", "Adicionar Quiosques", "Permite cadastrar novos quiosques no sistema.")}
                           {renderPermissionSwitch("permissions.kiosks.delete", "Excluir Quiosques", "Permite excluir quiosques existentes.")}
                         </div>

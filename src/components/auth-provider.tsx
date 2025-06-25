@@ -12,7 +12,6 @@ const defaultPermissions: { [key in UserRole]: PermissionSet } = {
   admin: {
     products: { add: true, edit: true, delete: true },
     lots: { add: true, edit: true, move: true, delete: true },
-    locations: { add: true, delete: true },
     users: { add: true, edit: true, delete: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
@@ -20,7 +19,6 @@ const defaultPermissions: { [key in UserRole]: PermissionSet } = {
   user: {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false },
-    locations: { add: false, delete: false },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },

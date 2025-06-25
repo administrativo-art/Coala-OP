@@ -35,7 +35,6 @@ export type UserRole = 'admin' | 'user';
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
-    locations: { add: boolean; delete: boolean };
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
