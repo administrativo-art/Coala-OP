@@ -18,6 +18,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog } from 'lucide-react';
 import { type User, type UserRole } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { LocationManagementModal } from './location-management-modal';
 
 type UserManagementProps = {
   onBack: () => void;
@@ -47,10 +48,11 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement({ onBack }: UserManagementProps) {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
-  const { kiosks } = useKiosks();
+  const { kiosks, addKiosk, deleteKiosk } = useKiosks();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -122,6 +124,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
   };
 
   const canManageAnyUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+  const canManageKiosks = permissions.kiosks.add || permissions.kiosks.delete;
 
   if (!canManageAnyUsers) {
     return (
@@ -281,9 +284,14 @@ export function UserManagement({ onBack }: UserManagementProps) {
             </Form>
           ) : (
             <>
-              <Button onClick={handleAddNew} className="w-full" disabled={!permissions.users.add}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Usuário
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.users.add}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Usuário
+                </Button>
+                 <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
+                    <Warehouse className="mr-2" /> Gerenciar Quiosques
+                </Button>
+              </div>
               <Separator className="my-4" />
               <ScrollArea className="h-72">
                 <div className="space-y-2 pr-4">
@@ -305,6 +313,16 @@ export function UserManagement({ onBack }: UserManagementProps) {
           )}
         </CardContent>
       </Card>
+      
+      <LocationManagementModal
+        open={isKiosksModalOpen}
+        onOpenChange={setIsKiosksModalOpen}
+        kiosks={kiosks}
+        addKiosk={addKiosk}
+        deleteKiosk={deleteKiosk}
+        permissions={permissions.kiosks}
+      />
+
       {userToDelete && (
         <DeleteConfirmationDialog
           open={!!userToDelete}

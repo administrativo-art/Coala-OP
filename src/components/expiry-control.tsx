@@ -6,13 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, PlusCircle, Warehouse, Search, ClipboardCheck, Inbox } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Search, ClipboardCheck, Inbox } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { type LotEntry } from '@/types';
 import { LotCard, type GroupedLot } from './lot-card';
-import { LocationManagementModal } from './location-management-modal';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -23,11 +22,10 @@ type ExpiryControlProps = {
 
 export function ExpiryControl({ onBack }: ExpiryControlProps) {
   const { user, permissions } = useAuth();
-  const { kiosks, addKiosk, deleteKiosk } = useKiosks();
+  const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -117,8 +115,6 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
     }
   };
 
-  const canManageKiosks = permissions.kiosks.add || permissions.kiosks.delete;
-
   const renderContent = () => {
     if (loading) {
       return (
@@ -207,27 +203,13 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex gap-4">
-              <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
-                <PlusCircle className="mr-2" /> Adicionar Lote
-              </Button>
-              <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
-                <Warehouse className="mr-2" /> Gerenciar Quiosques
-              </Button>
-            </div>
+            <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
+              <PlusCircle className="mr-2" /> Adicionar Lote
+            </Button>
           </div>
           {renderContent()}
         </CardContent>
       </Card>
-
-      <LocationManagementModal
-        open={isKiosksModalOpen}
-        onOpenChange={setIsKiosksModalOpen}
-        kiosks={kiosks}
-        addKiosk={addKiosk}
-        deleteKiosk={deleteKiosk}
-        permissions={permissions.kiosks}
-      />
       
       <AddEditLotModal 
         open={isAddEditModalOpen}
