@@ -2,12 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Scale, Boxes, ClipboardCheck, Users, LogOut } from 'lucide-react';
+import { ArrowRight, Scale, Boxes, ClipboardCheck, Users, LogOut, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 
 type MainMenuProps = {
-  onSelect: (selection: 'standard' | 'inventory' | 'expiry' | 'users') => void;
+  onSelect: (selection: 'standard' | 'inventory' | 'predefined' | 'expiry' | 'users') => void;
 };
 
 export function MainMenu({ onSelect }: MainMenuProps) {
@@ -49,6 +49,16 @@ export function MainMenu({ onSelect }: MainMenuProps) {
             <div>
               <p className="text-base font-semibold">Conversão de Inventário</p>
               <p className="text-sm font-normal text-secondary-foreground/80">Com base nos seus produtos.</p>
+            </div>
+           </div>
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('predefined')}>
+           <div className="flex items-center">
+            <ClipboardList className="h-8 w-8 mr-4 text-secondary-foreground/50" />
+            <div>
+              <p className="text-base font-semibold">Conversão Predefinida</p>
+              <p className="text-sm font-normal text-secondary-foreground/80">Use itens pré-cadastrados para conversões rápidas.</p>
             </div>
            </div>
           <ArrowRight className="h-5 w-5" />
