@@ -2,12 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Scale, Boxes, ClipboardCheck, Users, LogOut, ClipboardList } from 'lucide-react';
+import { ArrowRight, Boxes, ClipboardCheck, Users, LogOut, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 
 type MainMenuProps = {
-  onSelect: (selection: 'standard' | 'inventory' | 'predefined' | 'expiry' | 'users') => void;
+  onSelect: (selection: 'inventory' | 'predefined' | 'expiry' | 'users') => void;
 };
 
 export function MainMenu({ onSelect }: MainMenuProps) {
@@ -19,6 +19,8 @@ export function MainMenu({ onSelect }: MainMenuProps) {
   const kioskName = user?.kioskId 
     ? (kiosks.find(k => k.id === user.kioskId)?.name || user.kioskId) 
     : 'N/A';
+    
+  const buttonClassName = "h-auto justify-between text-left py-4 hover:bg-primary hover:text-primary-foreground transition-colors duration-200";
 
   return (
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
@@ -33,17 +35,7 @@ export function MainMenu({ onSelect }: MainMenuProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-6">
-        <Button size="lg" className="h-auto justify-between text-left py-4" onClick={() => onSelect('standard')}>
-          <div className="flex items-center">
-            <Scale className="h-8 w-8 mr-4 text-primary-foreground/50" />
-            <div>
-              <p className="text-base font-semibold">Conversão Padrão</p>
-              <p className="text-sm font-normal text-primary-foreground/80">Medidas de peso, volume, etc.</p>
-            </div>
-          </div>
-          <ArrowRight className="h-5 w-5" />
-        </Button>
-        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('inventory')}>
+        <Button size="lg" className={buttonClassName} variant="secondary" onClick={() => onSelect('inventory')}>
            <div className="flex items-center">
             <Boxes className="h-8 w-8 mr-4 text-secondary-foreground/50" />
             <div>
@@ -53,7 +45,7 @@ export function MainMenu({ onSelect }: MainMenuProps) {
            </div>
           <ArrowRight className="h-5 w-5" />
         </Button>
-        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('predefined')}>
+        <Button size="lg" className={buttonClassName} variant="secondary" onClick={() => onSelect('predefined')}>
            <div className="flex items-center">
             <ClipboardList className="h-8 w-8 mr-4 text-secondary-foreground/50" />
             <div>
@@ -63,7 +55,7 @@ export function MainMenu({ onSelect }: MainMenuProps) {
            </div>
           <ArrowRight className="h-5 w-5" />
         </Button>
-        <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('expiry')}>
+        <Button size="lg" className={buttonClassName} variant="secondary" onClick={() => onSelect('expiry')}>
            <div className="flex items-center">
             <ClipboardCheck className="h-8 w-8 mr-4 text-secondary-foreground/50" />
             <div>
@@ -74,7 +66,7 @@ export function MainMenu({ onSelect }: MainMenuProps) {
           <ArrowRight className="h-5 w-5" />
         </Button>
         {canManageUsers && (
-          <Button size="lg" className="h-auto justify-between text-left py-4" variant="secondary" onClick={() => onSelect('users')}>
+          <Button size="lg" className={buttonClassName} variant="secondary" onClick={() => onSelect('users')}>
             <div className="flex items-center">
               <Users className="h-8 w-8 mr-4 text-secondary-foreground/50" />
               <div>

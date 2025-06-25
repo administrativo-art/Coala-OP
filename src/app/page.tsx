@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { MainMenu } from '@/components/main-menu';
-import { StandardConverter } from '@/components/standard-converter';
 import { InventoryConverter } from '@/components/inventory-converter';
 import { PredefinedConverter } from '@/components/predefined-converter';
 import { ExpiryControl } from '@/components/expiry-control';
@@ -12,7 +11,7 @@ import { UserManagement } from '@/components/user-management';
 import { AppFooter } from '@/components/footer';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type Screen = 'menu' | 'standard' | 'inventory' | 'predefined' | 'expiry' | 'users';
+type Screen = 'menu' | 'inventory' | 'predefined' | 'expiry' | 'users';
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -39,8 +38,6 @@ export default function Home() {
 
   const renderScreen = () => {
     switch (screen) {
-      case 'standard':
-        return <StandardConverter onBack={() => setScreen('menu')} />;
       case 'inventory':
         return <InventoryConverter onBack={() => setScreen('menu')} />;
       case 'predefined':
