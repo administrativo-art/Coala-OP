@@ -3,16 +3,18 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyCn2V94gjX_Y1n4IOY40Y0JBKgXl--Sgns",
+  authDomain: "smart-converter-752gf.firebaseapp.com",
+  projectId: "smart-converter-752gf",
+  storageBucket: "smart-converter-752gf.appspot.com",
+  messagingSenderId: "787876557774",
+  appId: "1:787876557774:web:cf2b2c3d7d0aae313a319f"
 };
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID);
+
+// Connect to the specific "coala" database
+const db = getFirestore(app, "coala");
 
 export { db };
