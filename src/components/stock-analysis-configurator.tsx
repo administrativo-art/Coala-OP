@@ -13,8 +13,15 @@ import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
 import { Switch } from './ui/switch';
 
+// This will be the type for the form, including the calculated field.
+type FormProduct = Product & {
+  formId?: string; // from useFieldArray
+  totalQuantityInPurchaseUnit?: number;
+};
+
+
 type FormValues = {
-  products: Product[];
+  products: FormProduct[];
 };
 
 export function StockAnalysisConfigurator() {
@@ -33,12 +40,13 @@ export function StockAnalysisConfigurator() {
   });
 
   useEffect(() => {
-    if (!productsLoading && !kiosksLoading) {
-      const initialData = products.map(p => ({
+    if (!productsLoading && !kiosksLoading && products.length > 0 && kiosks.length > 0) {
+      const initialData: FormProduct[] = products.map(p => ({
         ...p,
         hasPurchaseUnit: p.hasPurchaseUnit ?? !!p.purchaseUnitName,
         purchaseUnitName: p.purchaseUnitName || '',
         itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
+        totalQuantityInPurchaseUnit: (p.itemsPerPurchaseUnit || 1) * p.packageSize,
         stockLevels: kiosks.reduce((acc, kiosk) => {
           acc[kiosk.id] = {
             min: p.stockLevels?.[kiosk.id]?.min || 0,
@@ -52,7 +60,18 @@ export function StockAnalysisConfigurator() {
   }, [products, kiosks, productsLoading, kiosksLoading, replace]);
   
   const onSubmit = (data: FormValues) => {
-    updateMultipleProducts(data.products).then(() => {
+    const productsToUpdate: Product[] = data.products.map(p => {
+        const { formId, totalQuantityInPurchaseUnit, ...productData } = p;
+        if (productData.hasPurchaseUnit && totalQuantityInPurchaseUnit && productData.packageSize > 0) {
+            productData.itemsPerPurchaseUnit = Math.round(totalQuantityInPurchaseUnit / productData.packageSize);
+        } else if (!productData.hasPurchaseUnit) {
+            productData.purchaseUnitName = '';
+            productData.itemsPerPurchaseUnit = 1;
+        }
+        return productData;
+    });
+
+    updateMultipleProducts(productsToUpdate).then(() => {
         toast({
             title: "Parâmetros salvos!",
             description: "As configurações de análise de estoque foram atualizadas.",
@@ -128,7 +147,7 @@ export function StockAnalysisConfigurator() {
                             name={`products.${index}.purchaseUnitName`}
                             render={({ field }) => (
                                 <FormItem>
-                                <FormLabel>Nome da unidade (ex: Caixa, Fardo)</FormLabel>
+                                <FormLabel>Nome da unidade (ex: Caixa)</FormLabel>
                                 <FormControl><Input {...field} placeholder="Caixa" /></FormControl>
                                 <FormMessage />
                                 </FormItem>
@@ -136,12 +155,19 @@ export function StockAnalysisConfigurator() {
                             />
                             <FormField
                             control={form.control}
-                            name={`products.${index}.itemsPerPurchaseUnit`}
-                            render={({ field }) => (
+                            name={`products.${index}.totalQuantityInPurchaseUnit`}
+                            render={({ field: inputField }) => (
                                 <FormItem>
-                                <FormLabel>Embalagens por unidade de compra</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                                <FormMessage />
+                                    <FormLabel>Total na unidade ({products[index].unit})</FormLabel>
+                                    <FormControl>
+                                        <Input 
+                                            type="number" 
+                                            {...inputField} 
+                                            onChange={e => inputField.onChange(parseFloat(e.target.value) || 0)}
+                                            step="any"
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                             />
