@@ -30,14 +30,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.push('/');
+      router.push('/dashboard');
     }
   }, [isAuthenticated, authLoading, router]);
 
   const onSubmit = async (values: LoginFormValues) => {
     const success = await login(values.username, values.password);
     if (success) {
-      router.push('/');
+      router.push('/dashboard');
     } else {
       toast({
         variant: "destructive",
@@ -48,7 +48,7 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || isAuthenticated) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
   

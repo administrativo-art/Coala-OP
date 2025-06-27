@@ -1,0 +1,51 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { useAuth } from "@/hooks/use-auth"
+import { Home, Boxes, ClipboardList, ClipboardCheck, Users } from 'lucide-react'
+
+export function Sidebar() {
+  const pathname = usePathname()
+  const { permissions } = useAuth()
+  const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+
+  const navItems = [
+    { href: '/dashboard', label: 'Dashboard', icon: Home },
+    { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes },
+    { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList },
+    { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck },
+    ...(canManageUsers ? [{ href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users }] : [])
+  ];
+
+  return (
+    <div className="hidden border-r bg-background md:block">
+      <div className="flex h-full max-h-screen flex-col gap-2">
+        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold font-logo">
+            <div className="text-xl text-primary">coala</div>
+            <div className="text-lg text-accent -mt-2">shakes</div>
+          </Link>
+        </div>
+        <div className="flex-1">
+          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+            {navItems.map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
+                  pathname === item.href && "bg-muted text-primary"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </div>
+    </div>
+  )
+}

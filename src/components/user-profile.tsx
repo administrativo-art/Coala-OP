@@ -27,43 +27,42 @@ export function UserProfile() {
     : 'N/A';
 
   return (
-    <div className="absolute top-6 left-6 z-40">
-      <DropdownMenu>
+    <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-12 w-12 rounded-full">
-            <Avatar className="h-12 w-12">
-              <AvatarFallback className="text-lg bg-primary text-primary-foreground">
-                {user.username?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </Button>
+            <Button variant="secondary" size="icon" className="rounded-full">
+                <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                    {user.username?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                </Avatar>
+                <span className="sr-only">Toggle user menu</span>
+            </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56" align="start" forceMount>
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">{user.username}</p>
-              <p className="text-xs leading-none text-muted-foreground">
-                {user.role === 'admin' ? 'Administrador' : 'Usuário Padrão'}
-              </p>
-            </div>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-default focus:bg-transparent focus:text-accent-foreground">
-              <Warehouse className="mr-2 h-4 w-4" />
-              <span>Quiosque: {kioskName}</span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled>
-            <User className="mr-2 h-4 w-4" />
-            <span>Adicionar Foto</span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={logout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            <span>Sair</span>
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end">
+            <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{user.username}</p>
+                <p className="text-xs leading-none text-muted-foreground">
+                    {user.role === 'admin' ? 'Administrador' : 'Usuário Padrão'}
+                </p>
+                </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-default focus:bg-transparent focus:text-accent-foreground">
+                <Warehouse className="mr-2 h-4 w-4" />
+                <span>Quiosque: {kioskName}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+                <User className="mr-2 h-4 w-4" />
+                <span>Adicionar Foto</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sair</span>
+            </DropdownMenuItem>
         </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+    </DropdownMenu>
   );
 }
