@@ -60,10 +60,37 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       }
 
       const profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
+      
+      // Auto-correction for admin profile
+      const adminProfile = profilesData.find(p => p.isDefaultAdmin === true);
+      if (adminProfile) {
+        const currentPerms = adminProfile.permissions || {};
+        const permissionsNeedUpdate = (current: Partial<PermissionSet>, defaults: PermissionSet): boolean => {
+          for (const category in defaults) {
+            if (!current.hasOwnProperty(category)) return true;
+            for (const perm in defaults[category as keyof PermissionSet]) {
+              if (!current[category as keyof PermissionSet]!.hasOwnProperty(perm)) return true;
+            }
+          }
+          return false;
+        };
+        
+        if (permissionsNeedUpdate(currentPerms, defaultAdminPermissions)) {
+          console.warn("Admin profile permissions are outdated. Updating automatically.");
+          const adminProfileRef = doc(db, "profiles", adminProfile.id);
+          try {
+            await updateDoc(adminProfileRef, { permissions: defaultAdminPermissions });
+            // onSnapshot will automatically re-run with the corrected data.
+          } catch (error) {
+            console.error("Failed to auto-update admin profile permissions:", error);
+          }
+        }
+      }
+
       setProfiles(profilesData);
 
-      const adminProfile = profilesData.find(p => p.isDefaultAdmin);
-      setAdminProfileId(adminProfile ? adminProfile.id : 'admin');
+      const adminProfileForId = profilesData.find(p => p.isDefaultAdmin);
+      setAdminProfileId(adminProfileForId ? adminProfileForId.id : 'admin');
 
       setLoading(false);
     }, (error) => {
