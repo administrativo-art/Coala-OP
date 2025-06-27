@@ -282,10 +282,16 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                 )}
                             />
                             <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
-                                <Button type="button" variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}><ArrowUp className="h-4 w-4" /></Button>
-                                <Button type="button" variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}><ArrowDown className="h-4 w-4" /></Button>
+                                <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}>
+                                  <span><ArrowUp className="h-4 w-4" /></span>
+                                </Button>
+                                <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}>
+                                  <span><ArrowDown className="h-4 w-4" /></span>
+                                </Button>
                                 {sections.length > 1 && (
-                                    <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}><Trash2 className="h-4 w-4" /></Button>
+                                    <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}>
+                                      <span><Trash2 className="h-4 w-4" /></span>
+                                    </Button>
                                 )}
                             </div>
                         </div>
