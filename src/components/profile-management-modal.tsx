@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, FileUp } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -32,6 +32,7 @@ const permissionsSchema = z.object({
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
+    import: z.object({ upload: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -86,6 +87,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       kiosks: { ...defaultGuestPermissions.kiosks, ...profile.permissions?.kiosks },
       predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profile.permissions?.predefinedLists },
       forms: { ...defaultGuestPermissions.forms, ...profile.permissions?.forms },
+      import: { ...defaultGuestPermissions.import, ...profile.permissions?.import },
     };
 
     form.reset({
@@ -157,7 +159,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     </FormItem>
                   )}
                 />
-                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users']} className="w-full">
+                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'import']} className="w-full">
+                  <AccordionItem value="import">
+                    <AccordionTrigger className="text-lg font-semibold"><FileUp className="mr-2 h-5 w-5" /> Importação de Estoque</AccordionTrigger>
+                    <AccordionContent className="space-y-2 pt-4 p-1">
+                        {renderPermissionSwitch("permissions.import.upload", "Fazer upload", "Permite que o usuário suba arquivos PDF para atualizar o estoque.")}
+                    </AccordionContent>
+                  </AccordionItem>
                   <AccordionItem value="products">
                     <AccordionTrigger className="text-lg font-semibold"><Package className="mr-2 h-5 w-5" /> Produtos</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
@@ -203,7 +211,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     <AccordionContent className="space-y-2 pt-4 p-1">
                         {renderPermissionSwitch("permissions.users.add", "Adicionar usuários", "Permite criar novos usuários e definir suas permissões.")}
                         {renderPermissionSwitch("permissions.users.edit", "Editar usuários", "Permite editar informações e perfis de outros usuários.")}
-                        {renderPermissionSwitch("permissions.users.delete", "Excluir usuários", "Permite excluir outros usuários do sistema.")}
+                        {renderPermissionSwitch("permissions.users.delete", "Excluir outros usuários do sistema.")}
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>

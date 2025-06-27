@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
             predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
             forms: { ...defaultGuestPermissions.forms, ...profilePermissions?.forms },
+            import: { ...defaultGuestPermissions.import, ...profilePermissions?.import },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

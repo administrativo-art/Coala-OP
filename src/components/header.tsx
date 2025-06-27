@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList } from "lucide-react"
+import { Menu, LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList, FileUp } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -17,9 +17,11 @@ export function Header() {
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
     const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
+    const canImport = !loading && permissions.import?.upload;
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+        { href: '/dashboard/import', label: 'Importar Estoque', icon: FileUp, show: canImport },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: ArrowLeftRight, show: true },
         { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: Repeat, show: true },
@@ -61,7 +63,7 @@ export function Header() {
             </SheetContent>
         </Sheet>
         <div className="w-full flex-1">
-            <p className="hidden font-logo text-lg font-bold text-foreground md:block">
+            <p className="hidden md:block font-logo text-2xl font-bold text-primary">
               Oi, humano. Acredite em você!
             </p>
         </div>
