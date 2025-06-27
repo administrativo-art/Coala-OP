@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -28,7 +27,7 @@ export function Sidebar() {
       <div className="flex h-full max-h-screen flex-col gap-2">
         <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
           <Link href="/dashboard" className="font-logo select-none">
-            <div className="text-left text-2xl font-bold text-primary-foreground">coala</div>
+            <div className="text-left text-2xl font-bold text-primary">coala</div>
             <div className="text-left text-xl font-bold text-accent -mt-1 pl-4">shakes</div>
           </Link>
         </div>
@@ -39,8 +38,8 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground",
-                  pathname === item.href && "bg-muted text-primary-foreground border border-primary"
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
+                  pathname === item.href && "bg-muted text-primary border border-primary"
                 )}
               >
                 <item.icon className="h-4 w-4" />
