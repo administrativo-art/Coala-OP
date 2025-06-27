@@ -205,14 +205,17 @@ export function ProductManagementModal({
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Unidade de medida no relatório (PDF)</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ''}>
+                            <Select 
+                                onValueChange={(value) => field.onChange(value === 'none' ? '' : value)} 
+                                value={field.value || 'none'}
+                            >
                                 <FormControl>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecione a unidade do relatório" />
                                     </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    <SelectItem value="">-- Mesma unidade do pacote --</SelectItem>
+                                    <SelectItem value="none">-- Mesma unidade do pacote --</SelectItem>
                                     {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
                                 </SelectContent>
                             </Select>
