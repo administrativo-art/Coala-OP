@@ -68,9 +68,6 @@ export function FormModule() {
                     <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                         Crie seu primeiro modelo de formulário para padronizar processos.
                     </p>
-                    {permissions.forms.manage && <Button size="lg" onClick={handleAddNew}>
-                        <PlusCircle className="mr-2 h-5 w-5" /> Criar modelo
-                    </Button>}
                 </div>
             )
         }
