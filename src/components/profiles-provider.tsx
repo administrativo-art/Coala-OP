@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -59,17 +60,18 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         return; 
       }
 
-      const profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
+      let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
       
-      // Auto-correction for admin profile
       const adminProfile = profilesData.find(p => p.isDefaultAdmin === true);
       if (adminProfile) {
         const currentPerms = adminProfile.permissions || {};
+        
         const permissionsNeedUpdate = (current: Partial<PermissionSet>, defaults: PermissionSet): boolean => {
           for (const category in defaults) {
-            if (!current.hasOwnProperty(category)) return true;
-            for (const perm in defaults[category as keyof PermissionSet]) {
-              if (!current[category as keyof PermissionSet]!.hasOwnProperty(perm)) return true;
+            const key = category as keyof PermissionSet;
+            if (!current.hasOwnProperty(key)) return true;
+            for (const perm in defaults[key]) {
+               if (!current[key] || !current[key]!.hasOwnProperty(perm)) return true;
             }
           }
           return false;
@@ -77,10 +79,19 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         
         if (permissionsNeedUpdate(currentPerms, defaultAdminPermissions)) {
           console.warn("Admin profile permissions are outdated. Updating automatically.");
+          
+          const correctedProfiles = profilesData.map(p => 
+              p.id === adminProfile.id 
+              ? { ...p, permissions: defaultAdminPermissions } 
+              : p
+          );
+          profilesData = correctedProfiles;
+          setProfiles(correctedProfiles); // Update state immediately to fix the UI race condition
+
           const adminProfileRef = doc(db, "profiles", adminProfile.id);
           try {
+            // Persist the correction to the database for future loads
             await updateDoc(adminProfileRef, { permissions: defaultAdminPermissions });
-            // onSnapshot will automatically re-run with the corrected data.
           } catch (error) {
             console.error("Failed to auto-update admin profile permissions:", error);
           }
