@@ -128,7 +128,7 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
 
 
   return (
-    <div className="p-4 border rounded-lg space-y-3 bg-secondary/30">
+    <div className="p-4 border rounded-lg space-y-3 bg-card">
       <div className="flex items-start gap-2">
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-2 flex-grow">
           <FormField control={control} name={`${namePrefix}.label`} render={({ field }) => (
@@ -266,8 +266,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
             <ScrollArea className="h-80 pr-4">
               <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
                 {sections.map((section, sectionIndex) => (
-                  <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2">
-                    <AccordionTrigger className="p-4 hover:no-underline [&>svg]:ml-auto">
+                  <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted">
+                    <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
                         <div className="flex items-center w-full gap-2 mr-4">
                             <Controller
                                 control={form.control}
@@ -316,3 +316,5 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     </Dialog>
   );
 }
+
+    
