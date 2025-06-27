@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from 'react';
@@ -56,9 +57,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <div className="font-logo mb-4 select-none">
-            <div className="text-6xl text-primary">coala</div>
-            <div className="text-5xl text-accent -mt-4">shakes</div>
+          <div className="inline-block font-logo mb-4 select-none">
+            <div className="text-left text-6xl text-primary">coala</div>
+            <div className="text-left text-5xl text-accent -mt-4 pl-6">shakes</div>
           </div>
           <CardTitle className="text-2xl font-headline">Acessar Sistema</CardTitle>
           <CardDescription>Identifique-se para continuar</CardDescription>

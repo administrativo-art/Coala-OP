@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -41,10 +42,10 @@ export function Header() {
                 <nav className="grid gap-2 text-lg font-medium">
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-2 text-lg font-semibold mb-4 font-logo"
+                        className="inline-block text-lg font-semibold mb-4 font-logo"
                     >
-                        <div className="text-2xl text-primary">coala</div>
-                        <div className="text-xl text-accent -mt-2">shakes</div>
+                        <div className="text-left text-2xl text-primary">coala</div>
+                        <div className="text-left text-xl text-accent -mt-2 pl-4">shakes</div>
                     </Link>
                     {navItems.map(item => (
                     <SheetTrigger asChild key={item.href}>
