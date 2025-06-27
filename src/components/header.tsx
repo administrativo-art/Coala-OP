@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -62,8 +61,8 @@ export function Header() {
             </SheetContent>
         </Sheet>
         <div className="w-full flex-1">
-            <p className="hidden text-sm text-muted-foreground md:block">
-              Oi, Humano. Acredite em você!
+            <p className="hidden text-base text-muted-foreground md:block">
+              Oi, humano. Acredite em você!
             </p>
         </div>
         <UserProfile />
