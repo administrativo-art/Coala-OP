@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList, FileUp } from "lucide-react"
+import { Menu, LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3 } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -17,11 +17,11 @@ export function Header() {
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
     const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
-    const canImport = !loading && permissions.import?.upload;
+    const canAnalyzeStock = !loading && permissions.stockAnalysis && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure);
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
-        { href: '/dashboard/import', label: 'Importar Estoque', icon: FileUp, show: canImport },
+        { href: '/dashboard/import', label: 'Análise de Estoque', icon: BarChart3, show: canAnalyzeStock },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: ArrowLeftRight, show: true },
         { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: Repeat, show: true },

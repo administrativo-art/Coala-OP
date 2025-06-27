@@ -1,6 +1,6 @@
 
-import { StockImporter } from '@/components/stock-importer'
+import { StockAnalyzer } from '@/components/stock-analyzer'
 
 export default function ImportPage() {
-    return <StockImporter />
+    return <StockAnalyzer />
 }

@@ -38,7 +38,7 @@ export type PermissionSet = {
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
     forms: { manage: boolean; fill: boolean; viewHistory: boolean };
-    import: { upload: boolean; };
+    stockAnalysis: { upload: boolean; configure: boolean; };
 };
 
 export type Profile = {
@@ -117,7 +117,7 @@ export const defaultGuestPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     forms: { manage: false, fill: false, viewHistory: false },
-    import: { upload: false },
+    stockAnalysis: { upload: false, configure: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -127,7 +127,7 @@ export const defaultUserPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
     forms: { manage: false, fill: true, viewHistory: true },
-    import: { upload: false },
+    stockAnalysis: { upload: true, configure: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -137,5 +137,5 @@ export const defaultAdminPermissions: PermissionSet = {
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
     forms: { manage: true, fill: true, viewHistory: true },
-    import: { upload: true },
+    stockAnalysis: { upload: true, configure: true },
 };
