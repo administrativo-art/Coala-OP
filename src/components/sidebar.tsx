@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -24,11 +23,11 @@ export function Sidebar() {
   return (
     <div className="hidden border-r bg-muted md:block">
       <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+        <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
           <Link href="/dashboard" className="font-semibold font-logo">
-            <div className="inline-block">
-                <div className="text-left text-xl text-foreground">coala</div>
-                <div className="text-left text-lg text-accent -mt-2 pl-3">shakes</div>
+            <div>
+                <div className="text-center text-xl text-primary">coala</div>
+                <div className="text-center text-lg text-accent -mt-2">shakes</div>
             </div>
           </Link>
         </div>
