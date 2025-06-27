@@ -27,7 +27,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do produto é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+  packageSize: z.coerce.number().min(0.001, 'O tamanho da embalagem deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   pdfUnit: z.string().optional(),
 });
@@ -176,7 +176,7 @@ export function ProductManagementModal({
                     name="packageSize"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Tamanho do pacote</FormLabel>
+                        <FormLabel>Tamanho da embalagem</FormLabel>
                         <FormControl><Input type="number" step="any" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -187,7 +187,7 @@ export function ProductManagementModal({
                     name="unit"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unidade do pacote</FormLabel>
+                        <FormLabel>Unidade da embalagem</FormLabel>
                          <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
                           <SelectContent>
@@ -215,14 +215,13 @@ export function ProductManagementModal({
                                     </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    <SelectItem value="none">-- Mesma unidade do pacote --</SelectItem>
+                                    <SelectItem value="none">-- Mesma unidade da embalagem --</SelectItem>
                                     {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                             <FormDescription>
-                                Se a unidade no relatório for diferente da unidade do pacote, especifique aqui.
-                                <br />
-                                <strong>Por exemplo:</strong> se um produto está em 'mL' no relatório e seu pacote é de 2 'L', o sistema usará essa informação para converter os valores e calcular a quantidade correta de pacotes.
+                                Especifique aqui a unidade (ex: mL, g) em que o estoque deste produto é listado no relatório PDF. 
+                                O sistema usará essa informação para converter o valor do relatório para a 'Unidade da embalagem' (ex: L, kg) e então calcular a quantidade de embalagens a serem repostas.
                             </FormDescription>
                             <FormMessage />
                         </FormItem>

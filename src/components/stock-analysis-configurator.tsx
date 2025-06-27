@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -121,7 +122,7 @@ export function StockAnalysisConfigurator() {
                       )}
                     />
                   </div>
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em pacotes)</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em embalagens)</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
