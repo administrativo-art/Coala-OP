@@ -7,7 +7,7 @@ import { KiosksProvider } from '@/components/kiosks-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
-import { ChecklistProvider } from '@/components/checklist-provider';
+import { FormProvider } from '@/components/form-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -33,10 +33,10 @@ export default function RootLayout({
               <ProductsProvider>
                 <ExpiryProductsProvider>
                   <PredefinedListsProvider>
-                    <ChecklistProvider>
+                    <FormProvider>
                       {children}
                       <Toaster />
-                    </ChecklistProvider>
+                    </FormProvider>
                   </PredefinedListsProvider>
                 </ExpiryProductsProvider>
               </ProductsProvider>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from 'react';
@@ -11,8 +12,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Trash2, ArrowRight } from 'lucide-react';
-import { type ChecklistTemplate, type ChecklistQuestion } from '@/types';
+import { type FormTemplate, type FormQuestion } from '@/types';
 
 const questionConditionSchema = z.object({
   questionId: z.string(),
@@ -22,26 +24,27 @@ const questionConditionSchema = z.object({
 const questionSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "A pergunta não pode estar em branco."),
-  type: z.enum(['yes-no', 'text', 'number']),
+  type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice']),
+  options: z.array(z.string()).optional(),
   condition: questionConditionSchema,
 });
 
 const templateSchema = z.object({
   name: z.string().min(1, 'O nome do modelo é obrigatório.'),
-  questions: z.array(questionSchema).min(1, "O checklist precisa ter pelo menos uma pergunta."),
+  questions: z.array(questionSchema).min(1, "O formulário precisa ter pelo menos uma pergunta."),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
 
-type AddEditChecklistTemplateModalProps = {
+type AddEditFormTemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  templateToEdit: ChecklistTemplate | null;
-  addTemplate: (template: Omit<ChecklistTemplate, 'id'>) => void;
-  updateTemplate: (template: ChecklistTemplate) => void;
+  templateToEdit: FormTemplate | null;
+  addTemplate: (template: Omit<FormTemplate, 'id'>) => void;
+  updateTemplate: (template: FormTemplate) => void;
 };
 
-export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditChecklistTemplateModalProps) {
+export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
     defaultValues: { name: '', questions: [] }
@@ -59,7 +62,7 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
       if (templateToEdit) {
         form.reset({
           name: templateToEdit.name,
-          questions: templateToEdit.questions.map(q => ({ ...q, condition: q.condition || null })),
+          questions: templateToEdit.questions.map(q => ({ ...q, condition: q.condition || null, options: q.options || [] })),
         });
       } else {
         form.reset({ name: '', questions: [] });
@@ -68,25 +71,35 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
   }, [templateToEdit, open, form]);
 
   const onSubmit = (values: TemplateFormValues) => {
+    const finalValues = {
+        ...values,
+        questions: values.questions.map(q => ({
+            ...q,
+            // Remove empty strings from options
+            options: q.options?.filter(opt => opt.trim() !== ''),
+            // If not a choice type, remove options array
+            ...(!['single-choice', 'multiple-choice'].includes(q.type) && { options: undefined })
+        }))
+    }
     if (templateToEdit) {
-      updateTemplate({ ...templateToEdit, ...values });
+      updateTemplate({ ...templateToEdit, ...finalValues });
     } else {
-      addTemplate(values);
+      addTemplate(finalValues);
     }
     onOpenChange(false);
   };
   
   const handleAddQuestion = () => {
-    append({ id: new Date().toISOString(), label: '', type: 'yes-no', condition: null });
+    append({ id: new Date().toISOString(), label: '', type: 'yes-no', options: [], condition: null });
   };
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>{templateToEdit ? 'Editar Modelo' : 'Criar Novo Modelo de Checklist'}</DialogTitle>
+          <DialogTitle>{templateToEdit ? 'Editar Modelo' : 'Criar Novo Modelo de Formulário'}</DialogTitle>
           <DialogDescription>
-            Defina o nome e as perguntas que farão parte deste modelo de checklist.
+            Defina o nome e as perguntas que farão parte deste modelo.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -97,7 +110,7 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nome do Modelo</FormLabel>
-                  <FormControl><Input placeholder="ex: Checklist de Abertura de Loja" {...field} /></FormControl>
+                  <FormControl><Input placeholder="ex: Formulário de Abertura de Loja" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -107,8 +120,12 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
             <ScrollArea className="h-80">
               <div className="space-y-4 pr-4">
                 {fields.map((field, index) => {
-                  const potentialConditions = watchedQuestions.slice(0, index).filter(q => q.type === 'yes-no');
-                  const currentCondition = watchedQuestions[index]?.condition;
+                  const currentQuestion = watchedQuestions[index];
+                  const potentialConditions = watchedQuestions.slice(0, index).filter(q => ['yes-no', 'single-choice'].includes(q.type));
+                  const sourceQuestionForCondition = potentialConditions.find(q => q.id === currentQuestion?.condition?.questionId);
+                  const conditionValueOptions = sourceQuestionForCondition?.type === 'yes-no' 
+                    ? ['Sim', 'Não'] 
+                    : sourceQuestionForCondition?.options ?? [];
 
                   return (
                     <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-secondary/30">
@@ -125,6 +142,8 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
                                             <SelectItem value="yes-no">Sim / Não</SelectItem>
                                             <SelectItem value="text">Texto</SelectItem>
                                             <SelectItem value="number">Número</SelectItem>
+                                            <SelectItem value="single-choice">Escolha Única</SelectItem>
+                                            <SelectItem value="multiple-choice">Múltipla Escolha</SelectItem>
                                         </SelectContent>
                                     </Select><FormMessage /></FormItem>
                                 )}/>
@@ -133,6 +152,27 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                         </div>
+                        
+                        {['single-choice', 'multiple-choice'].includes(currentQuestion?.type) && (
+                            <FormField
+                                control={form.control}
+                                name={`questions.${index}.options`}
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Opções de Resposta</FormLabel>
+                                        <FormControl>
+                                            <Textarea 
+                                                placeholder="Uma opção por linha..."
+                                                value={Array.isArray(field.value) ? field.value.join('\n') : ''}
+                                                onChange={e => field.onChange(e.target.value.split('\n'))}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
+
                         {potentialConditions.length > 0 && (
                              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                                 <FormField control={form.control} name={`questions.${index}.condition.questionId`} render={({ field }) => (
@@ -151,11 +191,10 @@ export function AddEditChecklistTemplateModal({ open, onOpenChange, templateToEd
                                 <FormField control={form.control} name={`questions.${index}.condition.value`} render={({ field }) => (
                                     <FormItem>
                                          <FormLabel className="text-xs">...</FormLabel>
-                                         <Select onValueChange={field.onChange} value={field.value || ''} disabled={!currentCondition?.questionId}>
+                                         <Select onValueChange={field.onChange} value={field.value || ''} disabled={!currentQuestion?.condition?.questionId}>
                                             <FormControl><SelectTrigger><SelectValue placeholder="Valor..." /></SelectTrigger></FormControl>
                                             <SelectContent>
-                                                <SelectItem value="Sim">Sim</SelectItem>
-                                                <SelectItem value="Não">Não</SelectItem>
+                                                {conditionValueOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </FormItem>

@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento"] as const;
 
@@ -21,7 +22,7 @@ export type Kiosk = {
 }
 
 export type LotEntry = {
-  id: string;
+  id:string;
   productName: string;
   barcode: string;
   lotNumber: string;
@@ -36,7 +37,7 @@ export type PermissionSet = {
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
-    checklists: { manage: boolean; fill: boolean; viewHistory: boolean };
+    forms: { manage: boolean; fill: boolean; viewHistory: boolean };
 };
 
 export type Profile = {
@@ -67,30 +68,32 @@ export type PredefinedList = {
   items: PredefinedConversionItem[];
 };
 
-export type ChecklistQuestionCondition = {
+export type FormQuestionCondition = {
     questionId: string;
     value: string; 
 }
 
-export type ChecklistQuestion = {
+export type FormQuestion = {
     id: string;
     label: string;
-    type: 'yes-no' | 'text' | 'number';
-    condition?: ChecklistQuestionCondition | null;
+    type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice';
+    options?: string[];
+    condition?: FormQuestionCondition | null;
 };
 
-export type ChecklistTemplate = {
+export type FormTemplate = {
     id: string;
     name: string;
-    questions: ChecklistQuestion[];
+    questions: FormQuestion[];
 };
 
-export type ChecklistAnswer = {
+export type FormAnswer = {
     questionId: string;
-    value: string | number;
+    questionLabel: string;
+    value: string | number | string[];
 };
 
-export type ChecklistSubmission = {
+export type FormSubmission = {
     id: string;
     templateId: string;
     templateName: string;
@@ -99,7 +102,7 @@ export type ChecklistSubmission = {
     kioskId: string;
     kioskName: string;
     createdAt: string; // ISO string
-    answers: ChecklistAnswer[];
+    answers: FormAnswer[];
 };
 
 export const defaultGuestPermissions: PermissionSet = {
@@ -108,7 +111,7 @@ export const defaultGuestPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
-    checklists: { manage: false, fill: false, viewHistory: false },
+    forms: { manage: false, fill: false, viewHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -117,7 +120,7 @@ export const defaultUserPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
-    checklists: { manage: false, fill: true, viewHistory: true },
+    forms: { manage: false, fill: true, viewHistory: true },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -126,5 +129,5 @@ export const defaultAdminPermissions: PermissionSet = {
     users: { add: true, edit: true, delete: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
-    checklists: { manage: true, fill: true, viewHistory: true },
+    forms: { manage: true, fill: true, viewHistory: true },
 };

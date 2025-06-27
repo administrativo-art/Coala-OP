@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -20,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, ClipboardEdit } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -30,7 +31,7 @@ const permissionsSchema = z.object({
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-    checklists: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
+    forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -84,7 +85,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       users: { ...defaultGuestPermissions.users, ...profile.permissions?.users },
       kiosks: { ...defaultGuestPermissions.kiosks, ...profile.permissions?.kiosks },
       predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profile.permissions?.predefinedLists },
-      checklists: { ...defaultGuestPermissions.checklists, ...profile.permissions?.checklists },
+      forms: { ...defaultGuestPermissions.forms, ...profile.permissions?.forms },
     };
 
     form.reset({
@@ -156,7 +157,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     </FormItem>
                   )}
                 />
-                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'kiosks', 'users', 'checklists']} className="w-full">
+                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users']} className="w-full">
                   <AccordionItem value="products">
                     <AccordionTrigger className="text-lg font-semibold"><Package className="mr-2 h-5 w-5" /> Produtos</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
@@ -182,12 +183,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir Listas", "Permite que o usuário remova listas de conversão predefinida.")}
                     </AccordionContent>
                   </AccordionItem>
-                   <AccordionItem value="checklists">
-                    <AccordionTrigger className="text-lg font-semibold"><ClipboardEdit className="mr-2 h-5 w-5" /> Checklists</AccordionTrigger>
+                   <AccordionItem value="forms">
+                    <AccordionTrigger className="text-lg font-semibold"><FileText className="mr-2 h-5 w-5" /> Formulários</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.checklists.manage", "Gerenciar Modelos", "Permite criar, editar e excluir modelos de checklist.")}
-                        {renderPermissionSwitch("permissions.checklists.fill", "Preencher Checklists", "Permite preencher e enviar checklists.")}
-                        {renderPermissionSwitch("permissions.checklists.viewHistory", "Ver Histórico", "Permite visualizar o histórico de checklists enviados.")}
+                        {renderPermissionSwitch("permissions.forms.manage", "Gerenciar Modelos", "Permite criar, editar e excluir modelos de formulário.")}
+                        {renderPermissionSwitch("permissions.forms.fill", "Preencher Formulários", "Permite preencher e enviar formulários.")}
+                        {renderPermissionSwitch("permissions.forms.viewHistory", "Ver Histórico", "Permite visualizar o histórico de formulários enviados.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="kiosks">

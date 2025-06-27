@@ -45,10 +45,44 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       }
 
       const profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
-      setProfiles(profilesData);
+      
+      const adminProfile = profilesData.find(p => p.isDefaultAdmin);
+      if (adminProfile) {
+        const adminPerms = adminProfile.permissions;
+        const defaultAdminPerms = defaultAdminPermissions;
+        let needsUpdate = false;
 
-      const adminProfileForId = profilesData.find(p => p.isDefaultAdmin);
-      setAdminProfileId(adminProfileForId ? adminProfileForId.id : 'admin');
+        // Deep-check and merge permissions
+        for (const key in defaultAdminPerms) {
+          const typedKey = key as keyof typeof defaultAdminPerms;
+          if (!adminPerms[typedKey]) {
+            adminPerms[typedKey] = defaultAdminPerms[typedKey];
+            needsUpdate = true;
+          } else {
+            for (const subKey in defaultAdminPerms[typedKey]) {
+              const typedSubKey = subKey as keyof typeof defaultAdminPerms[typedKey];
+              if (adminPerms[typedKey][typedSubKey] === undefined) {
+                 adminPerms[typedKey][typedSubKey] = defaultAdminPerms[typedKey][typedSubKey];
+                 needsUpdate = true;
+              }
+            }
+          }
+        }
+        
+        if (needsUpdate) {
+            console.log("Admin profile is outdated. Auto-updating...");
+            const adminProfileRef = doc(db, "profiles", adminProfile.id);
+            try {
+                await updateDoc(adminProfileRef, { permissions: adminPerms });
+                adminProfile.permissions = adminPerms;
+            } catch (error) {
+                console.error("Failed to auto-update admin profile:", error);
+            }
+        }
+      }
+      
+      setProfiles(profilesData);
+      setAdminProfileId(adminProfile ? adminProfile.id : 'admin');
 
       setLoading(false);
     }, (error) => {

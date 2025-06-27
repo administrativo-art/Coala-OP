@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
@@ -67,7 +68,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (profilesContext.profiles.length > 0) {
         const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
-        setPermissions(userProfile ? userProfile.permissions : defaultGuestPermissions);
+        
+        const profilePermissions = userProfile ? userProfile.permissions : defaultGuestPermissions;
+        
+        // Deep merge to ensure all permission keys exist, preventing crashes.
+        const finalPermissions: PermissionSet = {
+            ...defaultGuestPermissions,
+            ...profilePermissions,
+            products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
+            lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
+            users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
+            kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
+            predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
+            forms: { ...defaultGuestPermissions.forms, ...profilePermissions?.forms },
+        };
+
+        setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
       } else {
         setPermissions(defaultGuestPermissions);
       }
