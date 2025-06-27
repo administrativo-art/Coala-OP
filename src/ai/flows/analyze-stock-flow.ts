@@ -3,8 +3,6 @@
  * @fileOverview An AI agent that analyzes stock reports from PDF files.
  *
  * - analyzeStock - A function that handles the stock analysis process.
- * - AnalyzeStockInput - The input type for the analyzeStock function.
- * - AnalyzeStockOutput - The return type for the analyzeStock function.
  */
 
 import { ai } from '@/ai/genkit';
@@ -36,7 +34,7 @@ const AnalyzeStockInputSchema = z.object({
   products: z.array(ProductSchema).describe("The list of products to be considered in the analysis, including their configuration."),
   kiosks: z.array(KioskSchema).describe("The list of all available kiosks."),
 });
-export type AnalyzeStockInput = z.infer<typeof AnalyzeStockInputSchema>;
+type AnalyzeStockInput = z.infer<typeof AnalyzeStockInputSchema>;
 
 const StockAnalysisResultItemSchema = z.object({
   productId: z.string(),
@@ -54,7 +52,7 @@ const AnalyzeStockOutputSchema = z.object({
   summary: z.string().describe("A concise summary of the analysis findings, e.g., '3 products need replenishment across 2 kiosks.'"),
   results: z.array(StockAnalysisResultItemSchema),
 });
-export type AnalyzeStockOutput = z.infer<typeof AnalyzeStockOutputSchema>;
+type AnalyzeStockOutput = z.infer<typeof AnalyzeStockOutputSchema>;
 
 
 export async function analyzeStock(input: AnalyzeStockInput): Promise<AnalyzeStockOutput> {
