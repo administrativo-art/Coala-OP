@@ -220,7 +220,9 @@ export function ProductManagementModal({
                                 </SelectContent>
                             </Select>
                             <FormDescription>
-                                Se a unidade no relatório PDF for diferente da unidade do pacote (ex: mL no PDF, L no pacote), especifique aqui.
+                                Se a unidade no relatório for diferente da unidade do pacote, especifique aqui.
+                                <br />
+                                <strong>Por exemplo:</strong> se um produto está em 'mL' no relatório e seu pacote é de 2 'L', o sistema usará essa informação para converter os valores e calcular a quantidade correta de pacotes.
                             </FormDescription>
                             <FormMessage />
                         </FormItem>
