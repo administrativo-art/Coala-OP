@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
 
 // Zod schema for a question, defined recursively
@@ -67,7 +67,7 @@ type QuestionListProps = {
 }
 
 const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level }) => {
-  const { fields, append, remove } = useFieldArray({ control, name: namePrefix });
+  const { fields, append, remove, move } = useFieldArray({ control, name: namePrefix });
 
   return (
     <div className={`space-y-4 ${level > 0 ? 'pl-4 border-l-2 border-dashed' : ''}`}>
@@ -79,6 +79,10 @@ const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level 
           remove={() => remove(index)}
           namePrefix={`${namePrefix}.${index}`}
           level={level}
+          onMoveUp={() => move(index, index - 1)}
+          onMoveDown={() => move(index, index + 1)}
+          isFirst={index === 0}
+          isLast={index === fields.length - 1}
         />
       ))}
       <Button type="button" variant="outline" className="w-full" onClick={() => append(createNewQuestion())}>
@@ -95,9 +99,13 @@ type QuestionItemProps = {
   remove: () => void;
   namePrefix: string;
   level: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  isFirst: boolean;
+  isLast: boolean;
 }
 
-const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level }) => {
+const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level, onMoveUp, onMoveDown, isFirst, isLast }) => {
   const questionType = useWatch({ control, name: `${namePrefix}.type` });
   const hasOptions = ['yes-no', 'single-choice', 'multiple-choice'].includes(questionType);
 
@@ -140,9 +148,17 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
             </Select><FormMessage /></FormItem>
           )}/>
         </div>
-        <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive mt-8" onClick={remove}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center shrink-0 mt-8">
+            <Button type="button" variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
+                <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast}>
+                <ArrowDown className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={remove}>
+                <Trash2 className="h-4 w-4" />
+            </Button>
+        </div>
       </div>
       
       {hasOptions && (
@@ -199,7 +215,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     defaultValues: { name: '', sections: [] }
   });
 
-  const { fields: sections, append: appendSection, remove: removeSection } = useFieldArray({
+  const { fields: sections, append: appendSection, remove: removeSection, move: moveSection } = useFieldArray({
     control: form.control,
     name: "sections"
   });
@@ -251,27 +267,31 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
               <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
                 {sections.map((section, sectionIndex) => (
                   <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2">
-                    <AccordionTrigger className="p-4 hover:no-underline">
-                      <Controller
-                        control={form.control}
-                        name={`sections.${sectionIndex}.name`}
-                        render={({ field }) => (
-                          <Input
-                            {...field}
-                            placeholder={`Nome da seção ${sectionIndex + 1}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
-                          />
-                        )}
-                      />
+                    <AccordionTrigger className="p-4 hover:no-underline [&>svg]:ml-auto">
+                        <div className="flex items-center w-full gap-2 mr-4">
+                            <Controller
+                                control={form.control}
+                                name={`sections.${sectionIndex}.name`}
+                                render={({ field }) => (
+                                <Input
+                                    {...field}
+                                    placeholder={`Nome da seção ${sectionIndex + 1}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
+                                />
+                                )}
+                            />
+                            <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}><ArrowUp className="h-4 w-4" /></Button>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}><ArrowDown className="h-4 w-4" /></Button>
+                                {sections.length > 1 && (
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}><Trash2 className="h-4 w-4" /></Button>
+                                )}
+                            </div>
+                        </div>
                     </AccordionTrigger>
                     <AccordionContent className="p-4">
                        <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
-                       {sections.length > 1 && (
-                         <Button type="button" variant="destructive" size="sm" className="mt-4" onClick={() => removeSection(sectionIndex)}>
-                            Remover Seção
-                         </Button>
-                       )}
                     </AccordionContent>
                   </AccordionItem>
                 ))}
