@@ -57,7 +57,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                 setHasPermission(false);
                 toast({
                     variant: 'destructive',
-                    title: 'Erro de Câmera',
+                    title: 'Erro de câmera',
                     description: 'Não foi possível iniciar o leitor. Verifique as permissões da câmera.',
                 });
             }
@@ -80,7 +80,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Escanear Código de Barras</DialogTitle>
+                    <DialogTitle>Escanear código de barras</DialogTitle>
                     <DialogDescription>
                         Aponte a câmera para o código de barras do produto.
                     </DialogDescription>
@@ -89,7 +89,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                     <div id={QRCODE_REGION_ID} className="w-full" />
                     {!hasPermission && (
                         <Alert variant="destructive" className="mt-4">
-                            <AlertTitle>Acesso à Câmera Negado</AlertTitle>
+                            <AlertTitle>Acesso à câmera negado</AlertTitle>
                             <AlertDescription>
                                 Por favor, habilite o acesso à câmera nas configurações do seu navegador para usar esta funcionalidade.
                             </AlertDescription>

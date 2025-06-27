@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -117,13 +118,13 @@ export function PredefinedConverter() {
       <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <ClipboardList /> Conversão Predefinida
+            <ClipboardList /> Conversão predefinida
           </CardTitle>
           <CardDescription className="text-center">Use listas de conversão rápida para as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <Button onClick={handleAddNew} className="w-full" disabled={!permissions.predefinedLists.add}>
-              <ListPlus className="mr-2 h-4 w-4" /> Criar Nova Lista de Conversão
+              <ListPlus className="mr-2 h-4 w-4" /> Criar nova lista de conversão
           </Button>
           <div className="mt-6">
             {renderContent()}

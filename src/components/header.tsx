@@ -22,10 +22,10 @@ export function Header() {
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: Home, show: true },
         { href: '/dashboard/forms', label: 'Formulários', icon: FileText, show: canViewForms },
-        { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes, show: true },
-        { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList, show: true },
-        { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck, show: true },
-        { href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users, show: canManageUsers }
+        { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: Boxes, show: true },
+        { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: ClipboardList, show: true },
+        { href: '/dashboard/expiry', label: 'Controle de validade', icon: ClipboardCheck, show: true },
+        { href: '/dashboard/users', label: 'Gerenciar usuários', icon: Users, show: canManageUsers }
     ]
 
   return (

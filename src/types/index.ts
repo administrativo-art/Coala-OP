@@ -52,7 +52,7 @@ export type User = {
     username: string;
     password?: string; // Should be hashed in a real app
     profileId: string;
-    kioskId?: string;
+    kioskId: string;
 };
 
 export type PredefinedConversionItem = {

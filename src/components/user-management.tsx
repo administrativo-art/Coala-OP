@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -37,8 +38,8 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
-  const { kiosks, addKiosk, deleteKiosk } = useKiosks();
-  const { profiles, adminProfileId } = useProfiles();
+  const { kiosks, addKiosk, deleteKiosk, loading: kiosksLoading } = useKiosks();
+  const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -113,7 +114,7 @@ export function UserManagement() {
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
-                <CardTitle>Acesso Negado</CardTitle>
+                <CardTitle>Acesso negado</CardTitle>
             </CardHeader>
             <CardContent>
                 <p>Você não tem permissão para gerenciar usuários.</p>
@@ -131,7 +132,7 @@ export function UserManagement() {
       <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <Users /> Gerenciar Usuários
+            <Users /> Gerenciar usuários
           </CardTitle>
           <CardDescription className="text-center">Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
         </CardHeader>
@@ -139,11 +140,11 @@ export function UserManagement() {
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar Novo Usuário'}</h3>
+                <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
                   <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nome de Usuário</FormLabel>
+                        <FormLabel>Nome de usuário</FormLabel>
                         <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'master'} /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -159,8 +160,8 @@ export function UserManagement() {
                   />
                     <FormField control={form.control} name="profileId" render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Perfil de Permissão</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'master'}>
+                        <FormLabel>Perfil de permissão</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'master' || profilesLoading}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
                             <SelectContent>
                                 {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -175,8 +176,8 @@ export function UserManagement() {
                       name="kioskId"
                       render={({ field }) => (
                           <FormItem>
-                          <FormLabel>Quiosque Principal</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormLabel>Quiosque principal</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={kiosksLoading}>
                               <FormControl>
                               <SelectTrigger>
                                   <SelectValue placeholder="Selecione o quiosque" />
@@ -193,7 +194,7 @@ export function UserManagement() {
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingUser ? 'Salvar Alterações' : 'Criar Usuário'}</Button>
+                  <Button type="submit">{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
                 </div>
               </form>
             </Form>
@@ -201,13 +202,13 @@ export function UserManagement() {
             <>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.users.add}>
-                  <PlusCircle className="mr-2" /> Adicionar Usuário
+                  <PlusCircle className="mr-2" /> Adicionar usuário
                 </Button>
                  <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.users.edit}>
-                    <Shield className="mr-2" /> Gerenciar Perfis
+                    <Shield className="mr-2" /> Gerenciar perfis
                 </Button>
                  <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
-                    <Warehouse className="mr-2" /> Gerenciar Quiosques
+                    <Warehouse className="mr-2" /> Gerenciar quiosques
                 </Button>
               </div>
               <Separator className="my-4" />

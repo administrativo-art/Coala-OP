@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from 'react';
@@ -82,7 +83,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{listToEdit ? 'Editar Lista' : 'Criar Nova Lista Predefinida'}</DialogTitle>
+          <DialogTitle>{listToEdit ? 'Editar lista' : 'Criar nova lista predefinida'}</DialogTitle>
           <DialogDescription>
             {listToEdit ? 'Atualize o nome e os itens da lista.' : 'Crie uma lista com conversões rápidas para usar no dia a dia.'}
           </DialogDescription>
@@ -94,14 +95,14 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome da Lista</FormLabel>
+                  <FormLabel>Nome da lista</FormLabel>
                   <FormControl><Input placeholder="ex: Receitas de Milkshake" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <Separator />
-            <h3 className="text-md font-medium">Itens da Lista</h3>
+            <h3 className="text-md font-medium">Itens da lista</h3>
             <ScrollArea className="h-60">
               <div className="space-y-4 pr-4">
                 {fields.map((field, index) => {
@@ -166,11 +167,11 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
               </div>
             </ScrollArea>
              <Button type="button" variant="outline" className="w-full" onClick={handleAddItem}>
-                <PlusCircle className="mr-2" /> Adicionar Item à Lista
+                <PlusCircle className="mr-2" /> Adicionar item à lista
             </Button>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{listToEdit ? 'Salvar Alterações' : 'Criar Lista'}</Button>
+              <Button type="submit">{listToEdit ? 'Salvar alterações' : 'Criar lista'}</Button>
             </DialogFooter>
           </form>
         </Form>

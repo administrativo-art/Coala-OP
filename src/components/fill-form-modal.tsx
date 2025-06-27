@@ -169,7 +169,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             </ScrollArea>
             <DialogFooter className="pt-6">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Enviar Formulário</Button>
+              <Button type="submit">Enviar formulário</Button>
             </DialogFooter>
           </form>
         </Form>

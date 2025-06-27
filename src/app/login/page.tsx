@@ -42,7 +42,7 @@ export default function LoginPage() {
     } else {
       toast({
         variant: "destructive",
-        title: "Falha no Login",
+        title: "Falha no login",
         description: "Nome de usuário ou senha inválidos. Tente novamente.",
       });
       form.setValue('password', '');
@@ -61,7 +61,7 @@ export default function LoginPage() {
             <div className="text-left text-6xl text-primary">coala</div>
             <div className="text-left text-5xl text-accent -mt-4 pl-6">shakes</div>
           </div>
-          <CardTitle className="text-2xl font-headline">Acessar Sistema</CardTitle>
+          <CardTitle className="text-2xl font-headline">Acessar sistema</CardTitle>
           <CardDescription>Identifique-se para continuar</CardDescription>
         </CardHeader>
         <CardContent>

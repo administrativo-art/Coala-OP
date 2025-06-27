@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -46,7 +47,7 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, addKiosk, 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Gerenciar Quiosques</DialogTitle>
+            <DialogTitle>Gerenciar quiosques</DialogTitle>
             <DialogDescription>Adicione, edite ou exclua os quiosques.</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">

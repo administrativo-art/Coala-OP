@@ -97,7 +97,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>{templateToEdit ? 'Editar Modelo' : 'Criar Novo Modelo de Formulário'}</DialogTitle>
+          <DialogTitle>{templateToEdit ? 'Editar modelo' : 'Novo formulário'}</DialogTitle>
           <DialogDescription>
             Defina o nome e as perguntas que farão parte deste modelo.
           </DialogDescription>
@@ -109,8 +109,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome do Modelo</FormLabel>
-                  <FormControl><Input placeholder="ex: Formulário de Abertura de Loja" {...field} /></FormControl>
+                  <FormLabel>Nome do modelo</FormLabel>
+                  <FormControl><Input placeholder="ex: Formulário de abertura de loja" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -132,18 +132,18 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                         <div className="flex items-start gap-2">
                             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-2 flex-grow">
                                 <FormField control={form.control} name={`questions.${index}.label`} render={({ field }) => (
-                                    <FormItem><FormLabel>Texto da Pergunta</FormLabel><FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Texto da pergunta</FormLabel><FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name={`questions.${index}.type`} render={({ field }) => (
-                                    <FormItem><FormLabel>Tipo de Resposta</FormLabel>
+                                    <FormItem><FormLabel>Tipo de resposta</FormLabel>
                                     <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                         <SelectContent>
-                                            <SelectItem value="yes-no">Sim / Não</SelectItem>
+                                            <SelectItem value="yes-no">Sim / não</SelectItem>
                                             <SelectItem value="text">Texto</SelectItem>
                                             <SelectItem value="number">Número</SelectItem>
-                                            <SelectItem value="single-choice">Escolha Única</SelectItem>
-                                            <SelectItem value="multiple-choice">Múltipla Escolha</SelectItem>
+                                            <SelectItem value="single-choice">Escolha única</SelectItem>
+                                            <SelectItem value="multiple-choice">Múltipla escolha</SelectItem>
                                         </SelectContent>
                                     </Select><FormMessage /></FormItem>
                                 )}/>
@@ -159,7 +159,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                 name={`questions.${index}.options`}
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Opções de Resposta</FormLabel>
+                                        <FormLabel>Opções de resposta</FormLabel>
                                         <FormControl>
                                             <Textarea 
                                                 placeholder="Uma opção por linha..."
@@ -210,11 +210,11 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
               </div>
             </ScrollArea>
              <Button type="button" variant="outline" className="w-full" onClick={handleAddQuestion}>
-                <PlusCircle className="mr-2" /> Adicionar Pergunta
+                <PlusCircle className="mr-2" /> Adicionar pergunta
             </Button>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{templateToEdit ? 'Salvar Alterações' : 'Criar Modelo'}</Button>
+              <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>
             </DialogFooter>
           </form>
         </Form>

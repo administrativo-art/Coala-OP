@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -130,20 +131,20 @@ export function ProductManagementModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Gerenciar Produtos</DialogTitle>
+            <DialogTitle>Gerenciar produtos</DialogTitle>
             <DialogDescription>Adicione, edite ou exclua seus produtos de inventário.</DialogDescription>
           </DialogHeader>
           
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <h3 className="text-lg font-medium">{editingProduct ? 'Editar Produto' : 'Adicionar Novo Produto'}</h3>
+                <h3 className="text-lg font-medium">{editingProduct ? 'Editar produto' : 'Adicionar novo produto'}</h3>
                 <FormField
                   control={form.control}
                   name="baseName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome do Produto</FormLabel>
+                      <FormLabel>Nome do produto</FormLabel>
                       <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -171,7 +172,7 @@ export function ProductManagementModal({
                     name="packageSize"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Tamanho do Pacote</FormLabel>
+                        <FormLabel>Tamanho do pacote</FormLabel>
                         <FormControl><Input type="number" step="any" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -196,7 +197,7 @@ export function ProductManagementModal({
                 </div>
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProduct ? 'Salvar Alterações' : 'Adicionar Produto'}</Button>
+                  <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar produto'}</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -204,7 +205,7 @@ export function ProductManagementModal({
             <>
               {permissions.add && (
                 <Button onClick={handleAddNew} className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Produto
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto
                 </Button>
               )}
               <Separator className="my-4" />

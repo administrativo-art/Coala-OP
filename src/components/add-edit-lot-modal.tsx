@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -91,7 +92,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{lotToEdit ? 'Editar Lote' : 'Adicionar Novo Lote'}</DialogTitle>
+            <DialogTitle>{lotToEdit ? 'Editar lote' : 'Adicionar novo lote'}</DialogTitle>
             <DialogDescription>
               {lotToEdit ? 'Atualize as informações do lote.' : 'Preencha os detalhes do novo lote de produtos.'}
             </DialogDescription>
@@ -103,7 +104,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 name="productName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nome do Produto</FormLabel>
+                    <FormLabel>Nome do produto</FormLabel>
                     <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -114,7 +115,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 name="lotNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Número do Lote</FormLabel>
+                    <FormLabel>Número do lote</FormLabel>
                     <FormControl><Input placeholder="ex: L12345" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -125,7 +126,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 name="barcode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Código de Barras (Opcional)</FormLabel>
+                    <FormLabel>Código de barras (opcional)</FormLabel>
                     <div className="flex gap-2">
                       <FormControl><Input placeholder="ex: 7891234567890" {...field} /></FormControl>
                       <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
@@ -141,7 +142,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 name="expiryDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Data de Validade</FormLabel>
+                    <FormLabel>Data de validade</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -210,7 +211,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
               </div>
               <DialogFooter className="pt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                <Button type="submit">{lotToEdit ? 'Salvar Alterações' : 'Adicionar Lote'}</Button>
+                <Button type="submit">{lotToEdit ? 'Salvar alterações' : 'Adicionar lote'}</Button>
               </DialogFooter>
             </form>
           </Form>

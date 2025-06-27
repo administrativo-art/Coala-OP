@@ -139,7 +139,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Gerenciar Perfis</DialogTitle>
+            <DialogTitle>Gerenciar perfis</DialogTitle>
             <DialogDescription>Crie perfis de permissão para atribuir aos usuários.</DialogDescription>
           </DialogHeader>
           
@@ -151,8 +151,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome do Perfil</FormLabel>
-                      <FormControl><Input placeholder="ex: Operador de Quiosque" {...field} /></FormControl>
+                      <FormLabel>Nome do perfil</FormLabel>
+                      <FormControl><Input placeholder="ex: Operador de quiosque" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -161,55 +161,55 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                   <AccordionItem value="products">
                     <AccordionTrigger className="text-lg font-semibold"><Package className="mr-2 h-5 w-5" /> Produtos</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.products.add", "Adicionar Produtos", "Permite que o usuário cadastre novos produtos no sistema.")}
-                        {renderPermissionSwitch("permissions.products.edit", "Editar Produtos", "Permite que o usuário edite informações de produtos existentes.")}
-                        {renderPermissionSwitch("permissions.products.delete", "Excluir Produtos", "Permite que o usuário remova produtos do inventário.")}
+                        {renderPermissionSwitch("permissions.products.add", "Adicionar produtos", "Permite que o usuário cadastre novos produtos no sistema.")}
+                        {renderPermissionSwitch("permissions.products.edit", "Editar produtos", "Permite que o usuário edite informações de produtos existentes.")}
+                        {renderPermissionSwitch("permissions.products.delete", "Excluir produtos", "Permite que o usuário remova produtos do inventário.")}
                     </AccordionContent>
                   </AccordionItem>
                    <AccordionItem value="lots">
-                    <AccordionTrigger className="text-lg font-semibold"><Box className="mr-2 h-5 w-5" /> Lotes de Validade</AccordionTrigger>
+                    <AccordionTrigger className="text-lg font-semibold"><Box className="mr-2 h-5 w-5" /> Lotes de validade</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.lots.add", "Adicionar Lotes", "Permite adicionar novos lotes ao controle de validade.")}
-                        {renderPermissionSwitch("permissions.lots.edit", "Editar Lotes", "Permite editar informações de um lote, como data ou quantidade.")}
-                        {renderPermissionSwitch("permissions.lots.move", "Mover Estoque", "Permite mover estoque de um lote entre diferentes locais.")}
-                        {renderPermissionSwitch("permissions.lots.delete", "Excluir Lotes", "Permite excluir entradas de lote do controle de validade.")}
+                        {renderPermissionSwitch("permissions.lots.add", "Adicionar lotes", "Permite adicionar novos lotes ao controle de validade.")}
+                        {renderPermissionSwitch("permissions.lots.edit", "Editar lotes", "Permite editar informações de um lote, como data ou quantidade.")}
+                        {renderPermissionSwitch("permissions.lots.move", "Mover estoque", "Permite mover estoque de um lote entre diferentes locais.")}
+                        {renderPermissionSwitch("permissions.lots.delete", "Excluir lotes", "Permite excluir entradas de lote do controle de validade.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="predefinedLists">
-                    <AccordionTrigger className="text-lg font-semibold"><ClipboardList className="mr-2 h-5 w-5" /> Conversão Predefinida</AccordionTrigger>
+                    <AccordionTrigger className="text-lg font-semibold"><ClipboardList className="mr-2 h-5 w-5" /> Conversão predefinida</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.predefinedLists.add", "Criar Listas", "Permite que o usuário crie novas listas de conversão.")}
-                        {renderPermissionSwitch("permissions.predefinedLists.edit", "Editar Listas", "Permite que o usuário edite nomes e itens de listas existentes.")}
-                        {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir Listas", "Permite que o usuário remova listas de conversão predefinida.")}
+                        {renderPermissionSwitch("permissions.predefinedLists.add", "Criar listas", "Permite que o usuário crie novas listas de conversão.")}
+                        {renderPermissionSwitch("permissions.predefinedLists.edit", "Editar listas", "Permite que o usuário edite nomes e itens de listas existentes.")}
+                        {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir listas", "Permite que o usuário remova listas de conversão predefinida.")}
                     </AccordionContent>
                   </AccordionItem>
                    <AccordionItem value="forms">
                     <AccordionTrigger className="text-lg font-semibold"><FileText className="mr-2 h-5 w-5" /> Formulários</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.forms.manage", "Gerenciar Modelos", "Permite criar, editar e excluir modelos de formulário.")}
-                        {renderPermissionSwitch("permissions.forms.fill", "Preencher Formulários", "Permite preencher e enviar formulários.")}
-                        {renderPermissionSwitch("permissions.forms.viewHistory", "Ver Histórico", "Permite visualizar o histórico de formulários enviados.")}
+                        {renderPermissionSwitch("permissions.forms.manage", "Gerenciar modelos", "Permite criar, editar e excluir modelos de formulário.")}
+                        {renderPermissionSwitch("permissions.forms.fill", "Preencher formulários", "Permite preencher e enviar formulários.")}
+                        {renderPermissionSwitch("permissions.forms.viewHistory", "Ver histórico", "Permite visualizar o histórico de formulários enviados.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="kiosks">
                     <AccordionTrigger className="text-lg font-semibold"><Warehouse className="mr-2 h-5 w-5" /> Quiosques</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.kiosks.add", "Adicionar Quiosques", "Permite cadastrar novos quiosques no sistema.")}
-                        {renderPermissionSwitch("permissions.kiosks.delete", "Excluir Quiosques", "Permite excluir quiosques existentes.")}
+                        {renderPermissionSwitch("permissions.kiosks.add", "Adicionar quiosques", "Permite cadastrar novos quiosques no sistema.")}
+                        {renderPermissionSwitch("permissions.kiosks.delete", "Excluir quiosques", "Permite excluir quiosques existentes.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="users">
-                    <AccordionTrigger className="text-lg font-semibold"><UserCog className="mr-2 h-5 w-5" /> Gerenciamento de Usuários</AccordionTrigger>
+                    <AccordionTrigger className="text-lg font-semibold"><UserCog className="mr-2 h-5 w-5" /> Gerenciamento de usuários</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
-                        {renderPermissionSwitch("permissions.users.add", "Adicionar Usuários", "Permite criar novos usuários e definir suas permissões.")}
-                        {renderPermissionSwitch("permissions.users.edit", "Editar Usuários", "Permite editar informações e perfis de outros usuários.")}
-                        {renderPermissionSwitch("permissions.users.delete", "Excluir Usuários", "Permite excluir outros usuários do sistema.")}
+                        {renderPermissionSwitch("permissions.users.add", "Adicionar usuários", "Permite criar novos usuários e definir suas permissões.")}
+                        {renderPermissionSwitch("permissions.users.edit", "Editar usuários", "Permite editar informações e perfis de outros usuários.")}
+                        {renderPermissionSwitch("permissions.users.delete", "Excluir usuários", "Permite excluir outros usuários do sistema.")}
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProfile ? 'Salvar Alterações' : 'Criar Perfil'}</Button>
+                  <Button type="submit">{editingProfile ? 'Salvar alterações' : 'Criar perfil'}</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -217,7 +217,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
             <>
               {canEdit && (
                 <Button onClick={handleAddNew} className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Perfil
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo perfil
                 </Button>
               )}
               <Separator className="my-4" />

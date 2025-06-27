@@ -29,7 +29,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
       if (querySnapshot.empty && !localStorage.getItem('form_templates_seeded')) {
         console.log("No form templates found. Seeding default template...");
         const defaultTemplate: Omit<FormTemplate, 'id'> = {
-          name: 'Formulário de Abertura de Quiosque',
+          name: 'Formulário de abertura de quiosque',
           questions: [
             { id: '1', label: 'O quiosque está limpo e organizado?', type: 'yes-no', condition: null },
             { id: '2', label: 'Se não, descreva o problema:', type: 'text', condition: { questionId: '1', value: 'Não' } },
@@ -54,7 +54,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     const qSubmissions = query(collection(db, "formSubmissions"));
     const unsubscribeSubmissions = onSnapshot(qSubmissions, (querySnapshot) => {
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormSubmission));
-      setSubmissions(data);
+      setSubmissions(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     }, (error) => {
       console.error("Error fetching form submissions from Firestore: ", error);
     });

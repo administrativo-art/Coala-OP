@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useAuth } from "@/hooks/use-auth"
@@ -12,7 +13,7 @@ export default function DashboardPage() {
   const { lots } = useExpiryProducts()
   const { products } = useProducts()
 
-  const lotsInKiosk = user?.role === 'admin' ? lots : lots.filter(lot => lot.kioskId === user?.kioskId);
+  const lotsInKiosk = user?.username === 'master' ? lots : lots.filter(lot => lot.kioskId === user?.kioskId);
   const expiringSoonCount = lotsInKiosk.filter(lot => {
       const days = differenceInDays(parseISO(lot.expiryDate), new Date());
       return days >= 0 && days <= 7;
@@ -26,7 +27,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos Cadastrados</CardTitle>
+            <CardTitle className="text-sm font-medium">Produtos cadastrados</CardTitle>
             <Package className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -35,7 +36,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lotes no seu Quiosque</CardTitle>
+            <CardTitle className="text-sm font-medium">Lotes no seu quiosque</CardTitle>
             <Box className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -53,7 +54,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos Vencidos</CardTitle>
+            <CardTitle className="text-sm font-medium">Produtos vencidos</CardTitle>
             <AlertTriangle className="h-6 w-6 text-destructive" />
           </CardHeader>
           <CardContent>

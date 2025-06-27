@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -51,7 +52,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
     }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Mover Estoque</DialogTitle>
+          <DialogTitle>Mover estoque</DialogTitle>
           <DialogDescription>
             Mova itens do lote <strong>{lotToMove.lotNumber}</strong> de <strong>{sourceKioskName}</strong>.
           </DialogDescription>
@@ -68,7 +69,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
                 name="quantity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Quantidade a Mover</FormLabel>
+                    <FormLabel>Quantidade a mover</FormLabel>
                     <FormControl><Input type="number" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -79,7 +80,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
                 name="destinationId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Mover Para</FormLabel>
+                    <FormLabel>Mover para</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value} disabled={availableKiosks.length === 0}>
                       <FormControl>
                         <SelectTrigger>
@@ -97,7 +98,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
             </div>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Confirmar Movimentação</Button>
+              <Button type="submit">Confirmar movimentação</Button>
             </DialogFooter>
           </form>
         </Form>

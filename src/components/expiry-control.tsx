@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -31,9 +32,9 @@ export function ExpiryControl() {
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
-    if (user.role === 'admin') return lots;
+    if (user.username === 'master' || (permissions.lots.edit && permissions.lots.delete)) return lots;
     return lots.filter(lot => lot.kioskId === user.kioskId);
-  }, [lots, user, loading]);
+  }, [lots, user, loading, permissions]);
 
   const groupedLots = useMemo(() => {
     const filteredLots = visibleLots.filter(lot => {
@@ -131,7 +132,7 @@ export function ExpiryControl() {
                   Comece adicionando um novo lote de produtos para monitorar a validade.
               </p>
               <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.add}>
-                  <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Lote
+                  <PlusCircle className="mr-2 h-5 w-5" /> Adicionar lote
               </Button>
           </div>
         );
@@ -181,7 +182,7 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <ClipboardCheck /> Controle de Validade
+            <ClipboardCheck /> Controle de validade
           </CardTitle>
           <CardDescription className="text-center">Gerencie os lotes e as datas de vencimento do seu estoque.</CardDescription>
         </CardHeader>
@@ -197,7 +198,7 @@ export function ExpiryControl() {
               />
             </div>
             <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
-              <PlusCircle className="mr-2" /> Adicionar Lote
+              <PlusCircle className="mr-2" /> Adicionar lote
             </Button>
           </div>
           {renderContent()}

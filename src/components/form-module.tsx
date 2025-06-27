@@ -2,7 +2,7 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "@/hooks/use-form"
+import { useForm as useFormHook } from "@/hooks/use-form"
 import { useAuth } from "@/hooks/use-auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,7 +16,7 @@ import { FillFormModal } from "./fill-form-modal"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 
 export function FormModule() {
-    const { templates, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, submissions } = useForm()
+    const { templates, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, submissions } = useFormHook()
     const { permissions } = useAuth()
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false)
@@ -69,7 +69,7 @@ export function FormModule() {
                         Crie seu primeiro modelo de formulário para padronizar processos.
                     </p>
                     {permissions.forms.manage && <Button size="lg" onClick={handleAddNew}>
-                        <PlusCircle className="mr-2 h-5 w-5" /> Criar Modelo
+                        <PlusCircle className="mr-2 h-5 w-5" /> Criar modelo
                     </Button>}
                 </div>
             )
@@ -144,20 +144,20 @@ export function FormModule() {
             <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
                 <CardHeader>
                     <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-                       <ListChecks /> Módulo de Formulários
+                       <ListChecks /> Módulo de formulários
                     </CardTitle>
                     <CardDescription className="text-center">Crie, preencha e gerencie formulários para as operações diárias.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="fill">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="fill" disabled={!permissions.forms.fill}>Preencher Formulário</TabsTrigger>
+                            <TabsTrigger value="fill" disabled={!permissions.forms.fill}>Preencher formulário</TabsTrigger>
                             <TabsTrigger value="history" disabled={!permissions.forms.viewHistory}>Histórico</TabsTrigger>
                         </TabsList>
                         
                         <TabsContent value="fill" className="mt-6">
                             {permissions.forms.manage && <Button onClick={handleAddNew} className="w-full mb-4">
-                                <PlusCircle className="mr-2 h-4 w-4" /> Criar Novo Modelo de Formulário
+                                <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
                             </Button>}
                             {renderTemplateList()}
                         </TabsContent>

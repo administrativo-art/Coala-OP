@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -70,7 +71,7 @@ export function InventoryConverter() {
         setFromUnit('');
         setToUnit('');
     }
-  }, [selectedProduct, loading, products.length]);
+  }, [selectedProduct, loading, products.length, availableUnits, fromUnit, toUnit]);
 
   const handleProductChange = (productId: string) => {
     setSelectedProductId(productId);
@@ -156,7 +157,7 @@ export function InventoryConverter() {
             </p>
             {permissions.products.add && (
                 <Button size="lg" onClick={() => setIsModalOpen(true)}>
-                    <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Produto
+                    <PlusCircle className="mr-2 h-5 w-5" /> Adicionar produto
                 </Button>
             )}
         </div>
@@ -226,7 +227,7 @@ export function InventoryConverter() {
       <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <Boxes /> Conversão de Inventário
+            <Boxes /> Conversão de inventário
           </CardTitle>
           <CardDescription className="text-center">Converta o inventário com base em seus produtos cadastrados.</CardDescription>
         </CardHeader>
