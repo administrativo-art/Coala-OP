@@ -39,7 +39,7 @@ const sectionSchema = z.object({
 });
 
 const templateSchema = z.object({
-  name: z.string().min(1, 'O nome do modelo é obrigatório.'),
+  name: z.string().min(1, 'O nome do formulário é obrigatório.'),
   sections: z.array(sectionSchema).min(1, "O formulário precisa ter pelo menos uma seção."),
 });
 
@@ -243,7 +243,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>{templateToEdit ? 'Editar modelo' : 'Novo formulário'}</DialogTitle>
+          <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
           <DialogDescription>
             Defina o nome, as seções e as perguntas que farão parte deste modelo.
           </DialogDescription>
@@ -257,7 +257,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Nome do modelo</FormLabel>
+                        <FormLabel>Nome do formulário</FormLabel>
                         <FormControl><Input placeholder="ex: Formulário de abertura de loja" {...field} /></FormControl>
                         <FormMessage />
                         </FormItem>
@@ -311,7 +311,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
             </ScrollArea>
             <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>
+              <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar formulário'}</Button>
             </DialogFooter>
           </form>
         </Form>
