@@ -25,7 +25,42 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const qTemplates = query(collection(db, "formTemplates"));
-    const unsubscribeTemplates = onSnapshot(qTemplates, (querySnapshot) => {
+    const unsubscribeTemplates = onSnapshot(qTemplates, async (querySnapshot) => {
+      
+      if (querySnapshot.empty && !localStorage.getItem('formTemplates_seeded')) {
+        console.log("No form templates found. Seeding default template...");
+        
+        const defaultTemplate: Omit<FormTemplate, 'id'> = {
+          name: "Formulário de abertura de quiosque",
+          sections: [
+            {
+              id: new Date().toISOString() + Math.random(),
+              name: "Verificação Inicial",
+              questions: [
+                { id: new Date().toISOString() + Math.random(), label: "O quiosque está limpo e organizado?", type: "yes-no", options: [ { id: "opt1", value: "Sim", subQuestions: [] }, { id: "opt2", value: "Não", subQuestions: [] } ] },
+                { id: new Date().toISOString() + Math.random(), label: "Todos os equipamentos estão funcionando?", type: "yes-no", options: [ { id: "opt3", value: "Sim", subQuestions: [] }, { id: "opt4", value: "Não", subQuestions: [{ id: new Date().toISOString() + Math.random(), label: "Qual equipamento está com defeito?", type: "text", options: [] }] } ] },
+                { id: new Date().toISOString() + Math.random(), label: "Quantidade de polpa de morango (em kg):", type: "number", options: [] }
+              ]
+            },
+            {
+              id: new Date().toISOString() + Math.random(),
+              name: "Verificação Final",
+              questions: [
+                { id: new Date().toISOString() + Math.random(), label: "O caixa foi aberto com o valor correto?", type: "yes-no", options: [ { id: "opt5", value: "Sim", subQuestions: [] }, { id: "opt6", value: "Não", subQuestions: [] } ] },
+              ]
+            }
+          ]
+        };
+        
+        try {
+            await addDoc(collection(db, "formTemplates"), defaultTemplate);
+            localStorage.setItem('formTemplates_seeded', 'true');
+        } catch (seedError) {
+            console.error("Error seeding form template:", seedError);
+        }
+        return;
+      }
+
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormTemplate));
       setTemplates(data);
       setLoading(false);

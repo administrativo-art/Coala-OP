@@ -62,16 +62,11 @@ export function FormModule() {
         
         if (templates.length === 0) {
             return (
-                <div className="text-center py-8">
-                    <Image
-                        src="/koala-checklist.png"
-                        alt="Ilustração de um coala chefe com uma prancheta"
-                        width={300}
-                        height={300}
-                        className="rounded-md mx-auto"
-                    />
-                    <p className="text-muted-foreground mt-6 text-lg">
-                        Nenhum formulário por aqui
+                <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12" />
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum formulário criado</h3>
+                    <p className="mt-1 text-sm">
+                        Clique no botão acima para criar o seu primeiro.
                     </p>
                 </div>
             )
