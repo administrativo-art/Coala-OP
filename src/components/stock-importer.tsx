@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, ChevronRight, PackagePlus } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -97,29 +99,62 @@ export function StockAnalyzer() {
         }
 
         return (
-            <div className="space-y-3">
+            <Accordion type="single" collapsible className="w-full space-y-3">
                 {history.map(report => (
-                    <Card key={report.id}>
-                        <CardContent className="p-4 flex items-center justify-between gap-4">
-                           <div className="grid gap-1 flex-grow">
-                                <p className="font-semibold">{report.reportName}</p>
-                                <p className="text-sm text-muted-foreground">
-                                    {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                </p>
-                                <p className="text-sm">{report.summary}</p>
-                           </div>
-                           <div className="flex items-center gap-1 shrink-0">
-                               <Button variant="outline" size="sm" disabled>Ver detalhes <ChevronRight className="ml-2 h-4 w-4" /></Button>
-                               {canDeleteHistory && (
-                                   <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(report)}>
-                                       <Trash2 className="h-4 w-4" />
-                                   </Button>
-                               )}
-                           </div>
-                        </CardContent>
-                    </Card>
+                    <AccordionItem value={report.id} key={report.id} className="border-none">
+                        <Card>
+                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full [&[data-state=open]>div>div>button]:rotate-90">
+                                <div className="flex items-center justify-between gap-4 w-full">
+                                    <div className="grid gap-1 flex-grow text-left">
+                                        <p className="font-semibold">{report.reportName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                        </p>
+                                        <p className="text-sm">{report.summary}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {canDeleteHistory && (
+                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 pt-0">
+                                <div className="rounded-md border mt-2">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Produto</TableHead>
+                                                <TableHead>Quiosque</TableHead>
+                                                <TableHead className="text-right">Estoque Atual</TableHead>
+                                                <TableHead className="text-right">Reposição Necessária</TableHead>
+                                                <TableHead>Sugestão de Compra</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {report.results.map((item, index) => {
+                                                const product = stockAnalysisProducts.products.find(p => p.id === item.productId);
+                                                const unit = product ? product.unit : '';
+                                                return (
+                                                    <TableRow key={`${item.productId}-${item.kioskId}-${index}`}>
+                                                        <TableCell>{item.productName}</TableCell>
+                                                        <TableCell>{item.kioskName}</TableCell>
+                                                        <TableCell className="text-right">{item.currentStock} {unit}</TableCell>
+                                                        <TableCell className="text-right font-bold text-destructive">{item.needed} {unit}</TableCell>
+                                                        <TableCell className="font-semibold text-primary">{item.purchaseSuggestion}</TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </AccordionContent>
+                        </Card>
+                    </AccordionItem>
                 ))}
-            </div>
+            </Accordion>
         )
     }
 
