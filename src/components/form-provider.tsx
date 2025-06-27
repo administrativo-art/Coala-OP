@@ -26,59 +26,6 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const qTemplates = query(collection(db, "formTemplates"));
     const unsubscribeTemplates = onSnapshot(qTemplates, (querySnapshot) => {
-      if (querySnapshot.empty && !localStorage.getItem('form_templates_seeded')) {
-        console.log("No form templates found. Seeding default template...");
-        const defaultTemplate: Omit<FormTemplate, 'id'> = {
-          name: 'Formulário de abertura de quiosque',
-          sections: [
-            {
-              id: 'sec1',
-              name: 'Verificações iniciais',
-              questions: [
-                { 
-                  id: 'q1', 
-                  label: 'O quiosque está limpo e organizado?', 
-                  type: 'yes-no',
-                  options: [
-                    { id: 'q1-opt1', value: 'Sim', subQuestions: [] },
-                    { 
-                      id: 'q1-opt2',
-                      value: 'Não', 
-                      subQuestions: [
-                        { id: 'q1-sub1', label: 'Descreva o problema:', type: 'text', options: [] }
-                      ]
-                    },
-                  ]
-                },
-                { 
-                  id: 'q2', 
-                  label: 'Qual o turno?', 
-                  type: 'single-choice', 
-                  options: [
-                    { id: 'q2-opt1', value: 'Manhã', subQuestions: [] },
-                    { id: 'q2-opt2', value: 'Tarde', subQuestions: [] },
-                    { id: 'q2-opt3', value: 'Noite', subQuestions: [] },
-                  ]
-                },
-                { id: 'q3', label: 'Qual a temperatura do freezer?', type: 'number', options: [] },
-                { 
-                  id: 'q4', 
-                  label: 'Todos os equipamentos estão funcionando?', 
-                  type: 'yes-no',
-                  options: [
-                    { id: 'q4-opt1', value: 'Sim', subQuestions: [] },
-                    { id: 'q4-opt2', value: 'Não', subQuestions: [] },
-                  ]
-                },
-              ]
-            }
-          ]
-        };
-        addDoc(collection(db, "formTemplates"), defaultTemplate)
-          .then(() => localStorage.setItem('form_templates_seeded', 'true'))
-          .catch(err => console.error("Error seeding form template:", err));
-        return;
-      }
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormTemplate));
       setTemplates(data);
       setLoading(false);
