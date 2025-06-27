@@ -49,21 +49,17 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                     false 
                 );
                 
-                newScanner.render(onScanSuccessCallback, onScanFailureCallback)
-                    .catch((err) => {
-                        setHasPermission(false);
-                        toast({
-                            variant: 'destructive',
-                            title: 'Erro de Câmera',
-                            description: 'Não foi possível acessar a câmera. Verifique as permissões do seu navegador.',
-                        });
-                    });
-
+                newScanner.render(onScanSuccessCallback, onScanFailureCallback);
                 scannerRef.current = newScanner;
 
             } catch (error) {
-                console.error('Error constructing scanner:', error);
+                console.error('Error constructing or rendering scanner:', error);
                 setHasPermission(false);
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro de Câmera',
+                    description: 'Não foi possível iniciar o leitor. Verifique as permissões da câmera.',
+                });
             }
         }, 200);
 
