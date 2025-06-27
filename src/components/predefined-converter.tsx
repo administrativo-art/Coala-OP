@@ -79,11 +79,15 @@ export function PredefinedConverter() {
                   <div className="flex justify-between items-center w-full">
                     <span className="text-lg font-semibold">{list.name}</span>
                     <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }} disabled={!permissions.predefinedLists.edit}>
-                            <Edit className="h-4 w-4" />
+                        <Button asChild variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }} disabled={!permissions.predefinedLists.edit}>
+                            <span>
+                                <Edit className="h-4 w-4" />
+                            </span>
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }} disabled={!permissions.predefinedLists.delete}>
-                            <Trash2 className="h-4 w-4" />
+                        <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }} disabled={!permissions.predefinedLists.delete}>
+                             <span>
+                                <Trash2 className="h-4 w-4" />
+                            </span>
                         </Button>
                     </div>
                   </div>
