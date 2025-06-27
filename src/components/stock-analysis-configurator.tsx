@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -39,10 +38,13 @@ export function StockAnalysisConfigurator() {
         ...p,
         purchaseUnitName: p.purchaseUnitName || '',
         itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
-        idealStock: kiosks.reduce((acc, kiosk) => {
-          acc[kiosk.id] = p.idealStock?.[kiosk.id] || 0;
+        stockLevels: kiosks.reduce((acc, kiosk) => {
+          acc[kiosk.id] = {
+            min: p.stockLevels?.[kiosk.id]?.min || 0,
+            max: p.stockLevels?.[kiosk.id]?.max || 0,
+          };
           return acc;
-        }, {} as { [kioskId: string]: number }),
+        }, {} as { [kioskId: string]: { min: number; max: number } }),
       }));
       replace(initialData);
     }
@@ -119,13 +121,14 @@ export function StockAnalysisConfigurator() {
                       )}
                     />
                   </div>
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Estoque Ideal (em pacotes)</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em pacotes)</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Quiosque</TableHead>
-                                <TableHead className="text-right w-[150px]">Quantidade Ideal</TableHead>
+                                <TableHead className="text-right w-[120px]">Estoque Mínimo</TableHead>
+                                <TableHead className="text-right w-[120px]">Estoque Máximo</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -135,7 +138,19 @@ export function StockAnalysisConfigurator() {
                                     <TableCell className="text-right">
                                         <FormField
                                             control={form.control}
-                                            name={`products.${index}.idealStock.${kiosk.id}`}
+                                            name={`products.${index}.stockLevels.${kiosk.id}.min`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl><Input type="number" className="text-right min-w-[80px]" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                            />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <FormField
+                                            control={form.control}
+                                            name={`products.${index}.stockLevels.${kiosk.id}.max`}
                                             render={({ field }) => (
                                                 <FormItem>
                                                     <FormControl><Input type="number" className="text-right min-w-[80px]" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>

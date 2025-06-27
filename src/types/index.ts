@@ -14,7 +14,7 @@ export type Product = {
   pdfUnit?: string;
   purchaseUnitName?: string;
   itemsPerPurchaseUnit?: number;
-  idealStock?: { [kioskId: string]: number };
+  stockLevels?: { [kioskId: string]: { min: number; max: number } };
 };
 
 export type ConversionUnits = {
