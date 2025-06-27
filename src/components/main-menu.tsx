@@ -2,23 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Boxes, ClipboardCheck, Users, LogOut, ClipboardList } from 'lucide-react';
+import { ArrowRight, Boxes, ClipboardCheck, Users, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useKiosks } from '@/hooks/use-kiosks';
 
 type MainMenuProps = {
   onSelect: (selection: 'inventory' | 'predefined' | 'expiry' | 'users') => void;
 };
 
 export function MainMenu({ onSelect }: MainMenuProps) {
-  const { user, permissions, logout } = useAuth();
-  const { kiosks } = useKiosks();
+  const { permissions } = useAuth();
   
   const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
-  
-  const kioskName = user?.kioskId 
-    ? (kiosks.find(k => k.id === user.kioskId)?.name || user.kioskId) 
-    : 'N/A';
     
   const buttonClassName = "h-auto justify-between text-left py-4 hover:bg-primary hover:text-primary-foreground transition-colors duration-200";
 
@@ -77,13 +71,6 @@ export function MainMenu({ onSelect }: MainMenuProps) {
             <ArrowRight className="h-5 w-5" />
           </Button>
         )}
-        <div className="text-center pt-4">
-            <p className="text-sm text-muted-foreground">Logado como: <strong>{user?.username}</strong> (Quiosque: {kioskName})</p>
-            <Button variant="link" onClick={logout} className="text-muted-foreground hover:text-primary">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sair
-            </Button>
-        </div>
       </CardContent>
     </Card>
   );

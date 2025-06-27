@@ -12,6 +12,7 @@ import { AppFooter } from '@/components/footer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { UserProfile } from '@/components/user-profile';
 
 type Screen = 'menu' | 'inventory' | 'predefined' | 'expiry' | 'users';
 
@@ -55,7 +56,8 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-background relative">
+      <UserProfile />
       <main className="flex-grow flex flex-col items-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-4xl transition-all duration-300">
           {screen !== 'menu' && (
