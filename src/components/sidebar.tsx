@@ -5,16 +5,18 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3, CreditCard } from 'lucide-react'
 import { UserProfile } from "./user-profile"
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { permissions, loading } = useAuth()
+  const { permissions, loading, user } = useAuth()
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
   const canAnalyzeStock = !loading && permissions.stockAnalysis && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure);
+  const isMasterUser = user?.username === 'master';
+
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
@@ -22,7 +24,8 @@ export function Sidebar() {
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
     { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
     { href: '/dashboard/expiry', label: 'Controle de validade', icon: CheckSquare, show: true },
-    { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers }
+    { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
+    { href: '/dashboard/pricing', label: 'Planos e Cobrança', icon: CreditCard, show: isMasterUser }
   ];
 
   return (
