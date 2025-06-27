@@ -10,7 +10,7 @@ import { Button } from "./ui/button"
 export function Sidebar() {
   const pathname = usePathname()
   const { permissions } = useAuth()
-  const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+  const canManageUsers = !!(permissions.users?.add || permissions.users?.edit || permissions.users?.delete);
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },

@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth"
 
 export function Header() {
     const { permissions, user } = useAuth()
-    const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+    const canManageUsers = !!(permissions.users?.add || permissions.users?.edit || permissions.users?.delete);
     
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: Home },
