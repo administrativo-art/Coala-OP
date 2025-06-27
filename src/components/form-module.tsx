@@ -65,10 +65,10 @@ export function FormModule() {
                 <div className="text-center py-8">
                     <Image
                         src="https://placehold.co/300x300.png"
-                        alt="Nenhum formulário por aqui"
+                        alt="Ilustração de um coala chefe com uma prancheta"
                         width={300}
                         height={300}
-                        data-ai-hint="empty state"
+                        data-ai-hint="koala checklist"
                         className="rounded-md mx-auto"
                     />
                     <p className="text-muted-foreground mt-6 text-lg">
