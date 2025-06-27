@@ -2,7 +2,7 @@
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { useProducts } from '@/hooks/use-products';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ type FormValues = {
 };
 
 export function StockAnalysisConfigurator() {
-  const { products, loading: productsLoading, getProductFullName, updateMultipleProducts } = useProducts();
+  const { products, loading: productsLoading, getProductFullName, updateMultipleProducts } = useStockAnalysisProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
 
@@ -73,11 +73,20 @@ export function StockAnalysisConfigurator() {
       </div>
     );
   }
+  
+  if (!productsLoading && products.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <p>Nenhum produto configurado para análise.</p>
+        <p className="text-sm">Clique em "Gerenciar Produtos para Análise" para adicionar o primeiro.</p>
+      </div>
+    )
+  }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Accordion type="multiple" className="w-full space-y-4">
+        <Accordion type="multiple" className="w-full space-y-4" defaultValue={fields.map(field => field.id)}>
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">

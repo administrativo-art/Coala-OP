@@ -4,16 +4,18 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, ChevronRight } from 'lucide-react';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, ChevronRight, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { ProductManagementModal } from './product-management-modal';
 import { type StockAnalysisReport } from '@/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -21,8 +23,10 @@ import { ptBR } from 'date-fns/locale';
 export function StockAnalyzer() {
     const { permissions } = useAuth();
     const { history, loading: historyLoading, deleteReport } = useStockAnalysis();
+    const stockAnalysisProducts = useStockAnalysisProducts();
     const { toast } = useToast();
     const [reportToDelete, setReportToDelete] = useState<StockAnalysisReport | null>(null);
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
     const handleUploadClick = () => {
         toast({
@@ -155,15 +159,32 @@ export function StockAnalyzer() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Configurar Parâmetros de Análise</CardTitle>
-                            <CardDescription>Defina o estoque ideal por quiosque e as unidades de compra para cada produto. Essas informações são essenciais para a análise automática.</CardDescription>
+                            <CardDescription>Defina o estoque ideal, unidades de compra e gerencie os produtos que serão considerados na análise de estoque.</CardDescription>
                         </CardHeader>
                         <CardContent className="p-6">
+                            <div className="mb-6">
+                                <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
+                                    <PackagePlus className="mr-2" /> Gerenciar Produtos para Análise
+                                </Button>
+                            </div>
                             <StockAnalysisConfigurator />
                         </CardContent>
                     </Card>
                 </TabsContent>
                 )}
             </Tabs>
+            
+            <ProductManagementModal
+                open={isProductModalOpen}
+                onOpenChange={setIsProductModalOpen}
+                products={stockAnalysisProducts.products}
+                addProduct={stockAnalysisProducts.addProduct}
+                updateProduct={stockAnalysisProducts.updateProduct}
+                deleteProduct={stockAnalysisProducts.deleteProduct}
+                getProductFullName={stockAnalysisProducts.getProductFullName}
+                permissions={{ add: !!canConfigure, edit: !!canConfigure, delete: !!canConfigure }}
+            />
+            
             {reportToDelete && canDeleteHistory && (
                 <DeleteConfirmationDialog
                     open={!!reportToDelete}
