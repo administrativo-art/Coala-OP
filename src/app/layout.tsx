@@ -6,6 +6,7 @@ import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
+import { ProfilesProvider } from '@/components/profiles-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -25,18 +26,20 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        <AuthProvider>
-          <KiosksProvider>
-            <ProductsProvider>
-              <ExpiryProductsProvider>
-                <PredefinedListsProvider>
-                  {children}
-                  <Toaster />
-                </PredefinedListsProvider>
-              </ExpiryProductsProvider>
-            </ProductsProvider>
-          </KiosksProvider>
-        </AuthProvider>
+        <ProfilesProvider>
+          <AuthProvider>
+            <KiosksProvider>
+              <ProductsProvider>
+                <ExpiryProductsProvider>
+                  <PredefinedListsProvider>
+                    {children}
+                    <Toaster />
+                  </PredefinedListsProvider>
+                </ExpiryProductsProvider>
+              </ProductsProvider>
+            </KiosksProvider>
+          </AuthProvider>
+        </ProfilesProvider>
       </body>
     </html>
   );

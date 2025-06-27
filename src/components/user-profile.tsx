@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useProfiles } from '@/hooks/use-profiles';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,7 @@ import { LogOut, User, Warehouse } from 'lucide-react';
 export function UserProfile() {
   const { user, logout } = useAuth();
   const { kiosks } = useKiosks();
+  const { profiles } = useProfiles();
 
   if (!user) {
     return null;
@@ -25,6 +27,9 @@ export function UserProfile() {
   const kioskName = user?.kioskId 
     ? (kiosks.find(k => k.id === user.kioskId)?.name || 'N/A') 
     : 'N/A';
+  
+  const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
+  const profileName = profile ? profile.name : 'Perfil não encontrado';
 
   return (
     <DropdownMenu>
@@ -43,7 +48,7 @@ export function UserProfile() {
                 <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">{user.username}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                    {user.role === 'admin' ? 'Administrador' : 'Usuário Padrão'}
+                    {profileName}
                 </p>
                 </div>
             </DropdownMenuLabel>

@@ -1,29 +1,22 @@
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { useRouter } from 'next/navigation';
-import { type User, type PermissionSet, type UserRole } from '@/types';
+import { type User, type PermissionSet } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { ProfilesContext } from '@/components/profiles-provider';
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
 
-const defaultPermissions: { [key in UserRole]: PermissionSet } = {
-  admin: {
-    products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true },
-    users: { add: true, edit: true, delete: true },
-    kiosks: { add: true, delete: true },
-    predefinedLists: { add: true, edit: true, delete: true },
-  },
-  user: {
+const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
-  },
 };
+
 
 export interface AuthContextType {
   user: User | null;
@@ -40,31 +33,14 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const getValidPermissions = (user: User | null): PermissionSet => {
-    if (!user) return defaultPermissions.user;
-    
-    const roleDefault = defaultPermissions[user.role] || defaultPermissions.user;
-
-    if (!user.permissions || 'canManageProducts' in user.permissions) {
-        return roleDefault;
-    }
-    
-    const completePermissions = { ...user.permissions };
-    
-    if (!completePermissions.predefinedLists) {
-        completePermissions.predefinedLists = roleDefault.predefinedLists;
-    }
-
-    return completePermissions;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
+  const [authLoading, setAuthLoading] = useState(true);
   const router = useRouter();
+  const profilesContext = useContext(ProfilesContext);
 
-  // Load current user from localStorage on initial load
   useEffect(() => {
     try {
       const storedCurrentUser = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
@@ -74,26 +50,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
         console.error("Failed to load current user", error);
     }
-    // We set loading to false in the onSnapshot listener
   }, []);
 
   const logout = useCallback(() => {
     setCurrentUser(null);
+    setPermissions(defaultGuestPermissions);
     window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     router.push('/login');
   }, [router]);
 
-  // Listen for real-time updates to users collection
   useEffect(() => {
+    if (!profilesContext || profilesContext.loading) {
+      setPermissions(defaultGuestPermissions);
+      return;
+    }
+    if (currentUser && profilesContext.profiles.length > 0) {
+      const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
+      setPermissions(userProfile ? userProfile.permissions : defaultGuestPermissions);
+    } else {
+      setPermissions(defaultGuestPermissions);
+    }
+  }, [currentUser, profilesContext, profilesContext?.loading, profilesContext?.profiles]);
+
+
+  useEffect(() => {
+    if (!profilesContext || profilesContext.loading) return; 
+
     const q = query(collection(db, "users"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        if (querySnapshot.empty && !localStorage.getItem('users_seeded')) {
+        if (querySnapshot.empty && !localStorage.getItem('users_seeded') && profilesContext.adminProfileId) {
             console.log("No users found. Seeding master user...");
             const masterUser: Omit<User, 'id'> = {
               username: 'master',
               password: 'master',
-              role: 'admin',
-              permissions: defaultPermissions.admin,
+              profileId: profilesContext.adminProfileId,
               kioskId: 'matriz',
             };
             try {
@@ -102,7 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (seedError) {
               console.error("Error seeding master user: ", seedError);
             }
-            // The listener will re-run with the newly added user.
             return;
         }
 
@@ -112,21 +101,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (currentUser) {
             const foundUser = usersData.find(u => u.id === currentUser.id);
             if (!foundUser) {
-                logout(); // User was deleted elsewhere
+                logout();
             } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
                 setCurrentUser(foundUser);
                 window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
             }
         }
         
-        setLoading(false);
+        setAuthLoading(false);
     }, (error) => {
         console.error("Error fetching users from Firestore: ", error);
-        setLoading(false);
+        setAuthLoading(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser, logout]);
+  }, [currentUser, logout, profilesContext, profilesContext?.loading, profilesContext?.adminProfileId]);
   
   const login = async (username: string, password: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", password));
@@ -165,7 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteUser = async (userId: string) => {
-    if (userId === 'master-user') return; // Should be based on ID, not username. Assuming a fixed ID for master user is not ideal.
     try {
         await deleteDoc(doc(db, "users", userId));
     } catch (error) {
@@ -177,8 +165,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: currentUser,
     users,
     isAuthenticated: !!currentUser,
-    loading,
-    permissions: getValidPermissions(currentUser),
+    loading: authLoading || (!!currentUser && (!profilesContext || profilesContext.loading)),
+    permissions,
     login,
     logout,
     addUser,

@@ -30,8 +30,6 @@ export type LotEntry = {
   quantity: number;
 };
 
-export type UserRole = 'admin' | 'user';
-
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
@@ -40,12 +38,18 @@ export type PermissionSet = {
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
 };
 
+export type Profile = {
+    id: string;
+    name: string;
+    isDefaultAdmin?: boolean;
+    permissions: PermissionSet;
+}
+
 export type User = {
     id: string;
     username: string;
     password?: string; // Should be hashed in a real app
-    role: UserRole;
-    permissions: PermissionSet;
+    profileId: string;
     kioskId?: string;
 };
 
