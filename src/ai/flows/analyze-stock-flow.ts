@@ -30,7 +30,7 @@ const ProductSchema = z.object({
   stockLevels: z.record(z.string(), z.object({ min: z.number(), max: z.number() })).optional(),
 });
 
-export const AnalyzeStockInputSchema = z.object({
+const AnalyzeStockInputSchema = z.object({
   reportName: z.string(),
   pdfDataUri: z.string().describe("A PDF file of a stock report, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."),
   products: z.array(ProductSchema).describe("The list of products to be considered in the analysis, including their configuration."),
@@ -38,7 +38,7 @@ export const AnalyzeStockInputSchema = z.object({
 });
 export type AnalyzeStockInput = z.infer<typeof AnalyzeStockInputSchema>;
 
-export const StockAnalysisResultItemSchema = z.object({
+const StockAnalysisResultItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   kioskId: z.string(),
@@ -49,7 +49,7 @@ export const StockAnalysisResultItemSchema = z.object({
   purchaseSuggestion: z.string(),
 });
 
-export const AnalyzeStockOutputSchema = z.object({
+const AnalyzeStockOutputSchema = z.object({
   reportName: z.string(),
   summary: z.string().describe("A concise summary of the analysis findings, e.g., '3 products need replenishment across 2 kiosks.'"),
   results: z.array(StockAnalysisResultItemSchema),
