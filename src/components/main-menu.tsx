@@ -26,10 +26,10 @@ export function MainMenu({ onSelect }: MainMenuProps) {
     <Card className="w-full max-w-md mx-auto animate-in fade-in zoom-in-95">
       <CardHeader className="items-center text-center">
         <div className="font-logo mb-4 text-center select-none">
-          <div className="text-6xl text-primary">coala</div>
-          <div className="text-5xl text-accent -mt-4">shakes</div>
+          <div className="text-5xl sm:text-6xl text-primary">coala</div>
+          <div className="text-4xl sm:text-5xl text-accent -mt-4">shakes</div>
         </div>
-        <CardTitle className="text-3xl font-headline">Olá, humanos!</CardTitle>
+        <CardTitle className="text-2xl sm:text-3xl font-headline">Olá, humanos!</CardTitle>
         <CardDescription className="px-4 pt-2">
             Fiz esse APP para ajudar vocês a gerenciar melhor o meu negócio. Estou de olho!
         </CardDescription>
