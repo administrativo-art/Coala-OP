@@ -28,9 +28,9 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
         if (querySnapshot.empty && !localStorage.getItem('stockAnalysisProducts_seeded')) {
           console.log("No stock analysis products found. Seeding default products...");
           const defaultProducts: Omit<Product, 'id'>[] = [
-            { baseName: 'Bebida Láctea Baunilha', category: 'Volume', packageSize: 2, unit: 'L', purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 10 },
-            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L', purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 12 },
-            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g', purchaseUnitName: 'Fardo', itemsPerPurchaseUnit: 20 },
+            { baseName: 'Bebida Láctea Baunilha', category: 'Volume', packageSize: 2, unit: 'L', hasPurchaseUnit: true, purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 10 },
+            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L', hasPurchaseUnit: true, purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 12 },
+            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g', hasPurchaseUnit: true, purchaseUnitName: 'Fardo', itemsPerPurchaseUnit: 20 },
           ];
           
           const batch = writeBatch(db);

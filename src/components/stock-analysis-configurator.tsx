@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -8,11 +7,12 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage, FormDescription } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
 import { Label } from './ui/label';
+import { Switch } from './ui/switch';
 
 type FormValues = {
   products: Product[];
@@ -37,6 +37,7 @@ export function StockAnalysisConfigurator() {
     if (!productsLoading && !kiosksLoading) {
       const initialData = products.map(p => ({
         ...p,
+        hasPurchaseUnit: p.hasPurchaseUnit ?? !!p.purchaseUnitName,
         purchaseUnitName: p.purchaseUnitName || '',
         itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
         stockLevels: kiosks.reduce((acc, kiosk) => {
@@ -97,31 +98,58 @@ export function StockAnalysisConfigurator() {
               </AccordionTrigger>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
-                  <h4 className="font-medium text-sm text-muted-foreground">Unidade de Compra</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name={`products.${index}.purchaseUnitName`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <Label>Nome da unidade (ex: Caixa, Fardo)</Label>
-                          <FormControl><Input {...field} placeholder="Caixa" /></FormControl>
-                          <FormMessage />
+                  
+                  <FormField
+                    control={form.control}
+                    name={`products.${index}.hasPurchaseUnit`}
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <FormLabel>Usar unidade de compra?</FormLabel>
+                            <FormDescription>
+                                Ative se você compra este produto em embalagens maiores (caixas, fardos).
+                            </FormDescription>
+                        </div>
+                        <FormControl>
+                            <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                            />
+                        </FormControl>
                         </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`products.${index}.itemsPerPurchaseUnit`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <Label>Itens por unidade de compra</Label>
-                          <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                    )}
+                  />
+
+                  {form.watch(`products.${index}.hasPurchaseUnit`) && (
+                    <div className="space-y-4 pl-4 border-l-2 ml-2">
+                        <h4 className="font-medium text-sm text-muted-foreground">Detalhes da Unidade de Compra</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                            control={form.control}
+                            name={`products.${index}.purchaseUnitName`}
+                            render={({ field }) => (
+                                <FormItem>
+                                <Label>Nome da unidade (ex: Caixa, Fardo)</Label>
+                                <FormControl><Input {...field} placeholder="Caixa" /></FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                            <FormField
+                            control={form.control}
+                            name={`products.${index}.itemsPerPurchaseUnit`}
+                            render={({ field }) => (
+                                <FormItem>
+                                <Label>Embalagens por unidade de compra</Label>
+                                <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                        </div>
+                    </div>
+                  )}
+
                   <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em embalagens)</h4>
                    <div className="rounded-md border">
                     <Table>

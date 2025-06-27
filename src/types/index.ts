@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento"] as const;
 
@@ -12,6 +11,7 @@ export type Product = {
   unit: string;
   // New fields for stock analysis
   pdfUnit?: string;
+  hasPurchaseUnit?: boolean;
   purchaseUnitName?: string;
   itemsPerPurchaseUnit?: number;
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
