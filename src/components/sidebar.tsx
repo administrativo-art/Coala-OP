@@ -27,9 +27,9 @@ export function Sidebar() {
     <div className="hidden border-r bg-background text-foreground md:block dark">
       <div className="flex h-full max-h-screen flex-col gap-2">
         <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
-          <Link href="/dashboard" className="font-logo text-2xl font-bold">
-            <span className="text-primary-foreground">coala</span>
-            <span className="text-accent">shakes</span>
+          <Link href="/dashboard" className="font-logo select-none">
+            <div className="text-left text-2xl font-bold text-primary-foreground">coala</div>
+            <div className="text-left text-xl font-bold text-accent -mt-1 pl-4">shakes</div>
           </Link>
         </div>
         <div className="flex-1">

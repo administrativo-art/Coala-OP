@@ -58,8 +58,8 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
           <div className="inline-block font-logo mb-4 select-none">
-            <span className="text-6xl font-bold text-primary-foreground">coala</span>
-            <span className="text-6xl font-bold text-accent">shakes</span>
+            <div className="text-left text-6xl font-bold text-primary-foreground">coala</div>
+            <div className="text-left text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
           </div>
           <CardTitle className="text-2xl font-headline">Acessar sistema</CardTitle>
           <CardDescription>Identifique-se para continuar</CardDescription>
