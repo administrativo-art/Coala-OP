@@ -98,7 +98,7 @@ export function StockAnalyzer() {
                     <Card key={report.id}>
                         <CardContent className="p-4 flex items-center justify-between gap-4">
                            <div className="grid gap-1 flex-grow">
-                                <p className="font-semibold">{report.fileName}</p>
+                                <p className="font-semibold">{report.reportName}</p>
                                 <p className="text-sm text-muted-foreground">
                                     {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                                 </p>
@@ -169,7 +169,7 @@ export function StockAnalyzer() {
                     open={!!reportToDelete}
                     onOpenChange={() => setReportToDelete(null)}
                     onConfirm={handleDeleteConfirm}
-                    itemName={`a análise do arquivo "${reportToDelete.fileName}"`}
+                    itemName={`a análise "${reportToDelete.reportName}"`}
                 />
             )}
         </>

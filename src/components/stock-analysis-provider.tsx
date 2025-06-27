@@ -26,7 +26,7 @@ export function StockAnalysisProvider({ children }: { children: React.ReactNode 
         console.log("No analysis reports found. Seeding default report...");
         const today = new Date();
         const dummyReport: Omit<StockAnalysisReport, 'id'> = {
-          fileName: 'relatorio_semanal_exemplo.pdf',
+          reportName: 'Relatório Semanal Quiosque Tirirical',
           createdAt: today.toISOString(),
           status: 'completed',
           summary: '3 produtos precisam de reposição em 2 quiosques.',

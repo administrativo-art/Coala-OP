@@ -48,7 +48,7 @@ export type StockAnalysisResultItem = {
 
 export type StockAnalysisReport = {
   id: string;
-  fileName: string;
+  reportName: string;
   createdAt: string; // ISO String
   status: 'completed' | 'processing' | 'error';
   summary: string;
