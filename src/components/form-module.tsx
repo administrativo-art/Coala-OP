@@ -64,11 +64,11 @@ export function FormModule() {
             return (
                 <div className="text-center py-8 flex flex-col items-center gap-6">
                     <Image
-                        src="https://placehold.co/300x225.png"
-                        alt="Ilustração de um coala fofo espiando"
+                        src="https://placehold.co/300x300.png"
+                        alt="Ilustração de um coala chefe com prancheta"
                         width={300}
-                        height={225}
-                        data-ai-hint="cute koala peeking illustration"
+                        height={300}
+                        data-ai-hint="koala chef"
                         className=""
                     />
                     <div className="space-y-2">
