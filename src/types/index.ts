@@ -35,6 +35,26 @@ export type LotEntry = {
   quantity: number;
 };
 
+export type StockAnalysisResultItem = {
+  productId: string;
+  productName: string;
+  kioskId: string;
+  kioskName: string;
+  currentStock: number;
+  idealStock: number;
+  needed: number;
+  purchaseSuggestion: string;
+};
+
+export type StockAnalysisReport = {
+  id: string;
+  fileName: string;
+  createdAt: string; // ISO String
+  status: 'completed' | 'processing' | 'error';
+  summary: string;
+  results: StockAnalysisResultItem[];
+};
+
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
@@ -42,7 +62,7 @@ export type PermissionSet = {
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
     forms: { manage: boolean; fill: boolean; viewHistory: boolean };
-    stockAnalysis: { upload: boolean; configure: boolean; };
+    stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
 };
 
 export type Profile = {
@@ -121,7 +141,7 @@ export const defaultGuestPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     forms: { manage: false, fill: false, viewHistory: false },
-    stockAnalysis: { upload: false, configure: false },
+    stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -131,7 +151,7 @@ export const defaultUserPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
     forms: { manage: false, fill: true, viewHistory: true },
-    stockAnalysis: { upload: true, configure: false },
+    stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -141,5 +161,5 @@ export const defaultAdminPermissions: PermissionSet = {
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
     forms: { manage: true, fill: true, viewHistory: true },
-    stockAnalysis: { upload: true, configure: true },
+    stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
 };

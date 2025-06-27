@@ -32,7 +32,7 @@ const permissionsSchema = z.object({
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
-    stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean() }),
+    stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -165,6 +165,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     <AccordionContent className="space-y-2 pt-4 p-1">
                         {renderPermissionSwitch("permissions.stockAnalysis.upload", "Fazer upload de relatório", "Permite que o usuário suba arquivos PDF para analisar o estoque.")}
                         {renderPermissionSwitch("permissions.stockAnalysis.configure", "Configurar parâmetros", "Permite que o usuário defina o estoque ideal e parâmetros de análise.")}
+                        {renderPermissionSwitch("permissions.stockAnalysis.viewHistory", "Ver histórico de análises", "Permite visualizar relatórios de análises anteriores.")}
+                        {renderPermissionSwitch("permissions.stockAnalysis.deleteHistory", "Excluir histórico", "Permite excluir relatórios do histórico de análises.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="products">
