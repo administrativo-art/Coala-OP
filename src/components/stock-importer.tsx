@@ -54,7 +54,7 @@ export function StockAnalyzer() {
     const canDeleteHistory = permissions.stockAnalysis?.deleteHistory;
 
 
-    if (!canUpload && !canConfigure) {
+    if (!canUpload && !canConfigure && !canViewHistory) {
       return (
         <Card className="w-full max-w-2xl mx-auto">
           <CardHeader>
@@ -103,7 +103,7 @@ export function StockAnalyzer() {
                 {history.map(report => (
                     <AccordionItem value={report.id} key={report.id} className="border-none">
                         <Card>
-                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full [&[data-state=open]>div>div>button]:rotate-90">
+                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full">
                                 <div className="flex items-center justify-between gap-4 w-full">
                                     <div className="grid gap-1 flex-grow text-left">
                                         <p className="font-semibold">{report.reportName}</p>
@@ -114,8 +114,10 @@ export function StockAnalyzer() {
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
                                         {canDeleteHistory && (
-                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
-                                                <Trash2 className="h-4 w-4" />
+                                            <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
+                                                <span>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </span>
                                             </Button>
                                         )}
                                     </div>
