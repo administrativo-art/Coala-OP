@@ -31,11 +31,41 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
         const defaultTemplate: Omit<FormTemplate, 'id'> = {
           name: 'Formulário de abertura de quiosque',
           questions: [
-            { id: '1', label: 'O quiosque está limpo e organizado?', type: 'yes-no', condition: null },
-            { id: '2', label: 'Se não, descreva o problema:', type: 'text', condition: { questionId: '1', value: 'Não' } },
-            { id: '3', label: 'Qual o turno?', type: 'single-choice', options: ['Manhã', 'Tarde', 'Noite'], condition: null },
-            { id: '4', label: 'Todos os equipamentos estão funcionando?', type: 'yes-no', condition: null },
-            { id: '5', label: 'Qual a temperatura do freezer?', type: 'number', condition: null },
+            { 
+              id: 'q1', 
+              label: 'O quiosque está limpo e organizado?', 
+              type: 'yes-no',
+              options: [
+                { id: 'q1-opt1', value: 'Sim', subQuestions: [] },
+                { 
+                  id: 'q1-opt2',
+                  value: 'Não', 
+                  subQuestions: [
+                    { id: 'q1-sub1', label: 'Descreva o problema:', type: 'text' }
+                  ]
+                },
+              ]
+            },
+            { 
+              id: 'q2', 
+              label: 'Qual o turno?', 
+              type: 'single-choice', 
+              options: [
+                { id: 'q2-opt1', value: 'Manhã', subQuestions: [] },
+                { id: 'q2-opt2', value: 'Tarde', subQuestions: [] },
+                { id: 'q2-opt3', value: 'Noite', subQuestions: [] },
+              ]
+            },
+            { id: 'q3', label: 'Qual a temperatura do freezer?', type: 'number' },
+            { 
+              id: 'q4', 
+              label: 'Todos os equipamentos estão funcionando?', 
+              type: 'yes-no',
+              options: [
+                { id: 'q4-opt1', value: 'Sim', subQuestions: [] },
+                { id: 'q4-opt2', value: 'Não', subQuestions: [] },
+              ]
+            },
           ]
         };
         addDoc(collection(db, "formTemplates"), defaultTemplate)

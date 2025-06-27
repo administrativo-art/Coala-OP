@@ -68,17 +68,15 @@ export type PredefinedList = {
   items: PredefinedConversionItem[];
 };
 
-export type FormQuestionCondition = {
-    questionId: string;
-    value: string; 
-}
-
 export type FormQuestion = {
     id: string;
     label: string;
     type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice';
-    options?: string[];
-    condition?: FormQuestionCondition | null;
+    options?: {
+        id: string; // For react hook form field array key
+        value: string;
+        subQuestions: FormQuestion[];
+    }[];
 };
 
 export type FormTemplate = {

@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useEffect } from 'react';
+import { useForm, useFieldArray, Control, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -12,22 +12,26 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Trash2, ArrowRight } from 'lucide-react';
-import { type FormTemplate, type FormQuestion } from '@/types';
+import { PlusCircle, Trash2, GitBranchPlus } from 'lucide-react';
+import { type FormTemplate } from '@/types';
+import type { FormQuestion as FormQuestionType } from '@/types';
 
-const questionConditionSchema = z.object({
-  questionId: z.string(),
-  value: z.string(),
-}).nullable();
-
-const questionSchema = z.object({
+// Zod schema for a question, defined recursively
+const baseQuestionSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "A pergunta não pode estar em branco."),
   type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice']),
-  options: z.array(z.string()).optional(),
-  condition: questionConditionSchema,
 });
+
+const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() => 
+  baseQuestionSchema.extend({
+    options: z.array(z.object({
+      id: z.string(),
+      value: z.string().min(1, "O texto da opção é obrigatório."),
+      subQuestions: z.array(questionSchema)
+    })).optional()
+  })
+);
 
 const templateSchema = z.object({
   name: z.string().min(1, 'O nome do modelo é obrigatório.'),
@@ -36,6 +40,140 @@ const templateSchema = z.object({
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
 
+// Helper to create a new question object
+const createNewQuestion = (): FormQuestionType => ({
+  id: new Date().toISOString() + Math.random(),
+  label: '',
+  type: 'text',
+  options: []
+});
+
+// ==================== Question List Component (Recursive) ====================
+type QuestionListProps = {
+  control: Control<TemplateFormValues>;
+  namePrefix: `questions` | `${string}.subQuestions`;
+  level: number;
+}
+
+const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level }) => {
+  const { fields, append, remove } = useFieldArray({ control, name: namePrefix });
+
+  return (
+    <div className={`space-y-4 ${level > 0 ? 'pl-4 border-l-2 border-dashed' : ''}`}>
+      {fields.map((field, index) => (
+        <QuestionItem
+          key={field.id}
+          control={control}
+          index={index}
+          remove={() => remove(index)}
+          namePrefix={`${namePrefix}.${index}`}
+          level={level}
+        />
+      ))}
+      <Button type="button" variant="outline" className="w-full" onClick={() => append(createNewQuestion())}>
+        <PlusCircle className="mr-2" /> Adicionar pergunta {level > 0 ? 'na ramificação' : ''}
+      </Button>
+    </div>
+  );
+};
+
+// ==================== Question Item Component ====================
+type QuestionItemProps = {
+  control: Control<TemplateFormValues>;
+  index: number;
+  remove: () => void;
+  namePrefix: string;
+  level: number;
+}
+
+const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level }) => {
+  const questionType = useWatch({ control, name: `${namePrefix}.type` });
+  const hasOptions = ['yes-no', 'single-choice', 'multiple-choice'].includes(questionType);
+
+  const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({
+    control,
+    name: `${namePrefix}.options`
+  });
+
+  // Effect to manage options based on question type
+  useEffect(() => {
+    if (hasOptions && options.length === 0) {
+      if(questionType === 'yes-no') {
+        appendOption({ id: new Date().toISOString() + Math.random(), value: 'Sim', subQuestions: [] });
+        appendOption({ id: new Date().toISOString() + Math.random(), value: 'Não', subQuestions: [] });
+      } else {
+         appendOption({ id: new Date().toISOString() + Math.random(), value: '', subQuestions: [] });
+      }
+    }
+  }, [hasOptions, questionType, options.length, appendOption]);
+
+
+  return (
+    <div className="p-4 border rounded-lg space-y-3 bg-secondary/30">
+      <div className="flex items-start gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-2 flex-grow">
+          <FormField control={control} name={`${namePrefix}.label`} render={({ field }) => (
+            <FormItem><FormLabel>Texto da pergunta</FormLabel><FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl><FormMessage /></FormItem>
+          )}/>
+          <FormField control={control} name={`${namePrefix}.type`} render={({ field }) => (
+            <FormItem><FormLabel>Tipo de resposta</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="text">Texto</SelectItem>
+                <SelectItem value="number">Número</SelectItem>
+                <SelectItem value="yes-no">Sim / não</SelectItem>
+                <SelectItem value="single-choice">Escolha única</SelectItem>
+                <SelectItem value="multiple-choice">Múltipla escolha</SelectItem>
+              </SelectContent>
+            </Select><FormMessage /></FormItem>
+          )}/>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive mt-8" onClick={remove}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      
+      {hasOptions && (
+        <div className="space-y-3 pt-2">
+           <FormLabel>Opções de resposta e ramificações</FormLabel>
+           {options.map((option, optionIndex) => (
+             <div key={option.id} className="pl-4">
+                <div className="flex items-center gap-2">
+                     <FormField
+                        control={control}
+                        name={`${namePrefix}.options.${optionIndex}.value`}
+                        render={({ field }) => (
+                            <FormItem className="flex-grow">
+                                <FormControl><Input placeholder={`Opção ${optionIndex + 1}`} {...field} disabled={questionType === 'yes-no'} /></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    {questionType !== 'yes-no' && (
+                       <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeOption(optionIndex)}>
+                           <Trash2 className="h-4 w-4" />
+                       </Button>
+                    )}
+                </div>
+                <div className="pt-2">
+                   <QuestionList control={control} namePrefix={`${namePrefix}.options.${optionIndex}.subQuestions`} level={level + 1} />
+                </div>
+             </div>
+           ))}
+           {['single-choice', 'multiple-choice'].includes(questionType) && (
+              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: new Date().toISOString() + Math.random(), value: '', subQuestions: [] })}>
+                Adicionar opção
+              </Button>
+           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==================== Main Modal Component ====================
 type AddEditFormTemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -50,20 +188,10 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     defaultValues: { name: '', questions: [] }
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "questions"
-  });
-  
-  const watchedQuestions = form.watch('questions');
-
   useEffect(() => {
     if (open) {
       if (templateToEdit) {
-        form.reset({
-          name: templateToEdit.name,
-          questions: templateToEdit.questions.map(q => ({ ...q, condition: q.condition || null, options: q.options || [] })),
-        });
+        form.reset(templateToEdit);
       } else {
         form.reset({ name: '', questions: [] });
       }
@@ -71,26 +199,12 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   }, [templateToEdit, open, form]);
 
   const onSubmit = (values: TemplateFormValues) => {
-    const finalValues = {
-        ...values,
-        questions: values.questions.map(q => ({
-            ...q,
-            // Remove empty strings from options
-            options: q.options?.filter(opt => opt.trim() !== ''),
-            // If not a choice type, remove options array
-            ...(!['single-choice', 'multiple-choice'].includes(q.type) && { options: undefined })
-        }))
-    }
     if (templateToEdit) {
-      updateTemplate({ ...templateToEdit, ...finalValues });
+      updateTemplate({ ...templateToEdit, ...values });
     } else {
-      addTemplate(finalValues);
+      addTemplate(values);
     }
     onOpenChange(false);
-  };
-  
-  const handleAddQuestion = () => {
-    append({ id: new Date().toISOString(), label: '', type: 'yes-no', options: [], condition: null });
   };
   
   return (
@@ -117,115 +231,9 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
             />
             <Separator />
             <h3 className="text-md font-medium">Perguntas</h3>
-            <ScrollArea className="h-80">
-              <div className="space-y-4 pr-4">
-                {fields.map((field, index) => {
-                  const currentQuestion = watchedQuestions[index];
-                  const potentialConditions = watchedQuestions.slice(0, index).filter(q => ['yes-no', 'single-choice'].includes(q.type));
-                  const sourceQuestionForCondition = potentialConditions.find(q => q.id === currentQuestion?.condition?.questionId);
-                  const conditionValueOptions = sourceQuestionForCondition?.type === 'yes-no' 
-                    ? ['Sim', 'Não'] 
-                    : sourceQuestionForCondition?.options ?? [];
-
-                  return (
-                    <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-secondary/30">
-                        <div className="flex items-start gap-2">
-                            <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-2 flex-grow">
-                                <FormField control={form.control} name={`questions.${index}.label`} render={({ field }) => (
-                                    <FormItem><FormLabel>Texto da pergunta</FormLabel><FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <FormField control={form.control} name={`questions.${index}.type`} render={({ field }) => (
-                                    <FormItem><FormLabel>Tipo de resposta</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="yes-no">Sim / não</SelectItem>
-                                            <SelectItem value="text">Texto</SelectItem>
-                                            <SelectItem value="number">Número</SelectItem>
-                                            <SelectItem value="single-choice">Escolha única</SelectItem>
-                                            <SelectItem value="multiple-choice">Múltipla escolha</SelectItem>
-                                        </SelectContent>
-                                    </Select><FormMessage /></FormItem>
-                                )}/>
-                            </div>
-                            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive mt-8" onClick={() => remove(index)}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                        
-                        {['single-choice', 'multiple-choice'].includes(currentQuestion?.type) && (
-                            <FormField
-                                control={form.control}
-                                name={`questions.${index}.options`}
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Opções de resposta</FormLabel>
-                                        <FormControl>
-                                            <Textarea 
-                                                placeholder="Uma opção por linha..."
-                                                value={Array.isArray(field.value) ? field.value.join('\n') : ''}
-                                                onChange={e => field.onChange(e.target.value.split('\n'))}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        )}
-
-                        {index > 0 && (
-                             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                                <FormField control={form.control} name={`questions.${index}.condition.questionId`} render={({ field }) => (
-                                    <FormItem>
-                                       <FormLabel className="text-xs">Exibir se a pergunta...</FormLabel>
-                                       <Select 
-                                            onValueChange={(value) => {
-                                                form.setValue(`questions.${index}.condition.value`, '');
-                                                field.onChange(value === 'always' ? null : value);
-                                            }} 
-                                            value={field.value || 'always'} 
-                                            disabled={potentialConditions.length === 0}
-                                        >
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder={potentialConditions.length > 0 ? "Sempre exibir..." : "Sem perguntas compatíveis"} />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="always">Sempre exibir</SelectItem>
-                                                {potentialConditions.map((q, i) => <SelectItem key={q.id} value={q.id}>{`[${i+1}] ${q.label}`}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}/>
-                                <div className="pt-5 flex flex-col items-center">
-                                    <p className="text-xs text-muted-foreground">for</p>
-                                    <ArrowRight className="h-4 w-4" />
-                                </div>
-                                <FormField control={form.control} name={`questions.${index}.condition.value`} render={({ field }) => (
-                                    <FormItem>
-                                         <FormLabel className="text-xs">...</FormLabel>
-                                         <Select onValueChange={field.onChange} value={field.value || ''} disabled={!currentQuestion?.condition?.questionId}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Valor..." /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                {conditionValueOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}/>
-                            </div>
-                        )}
-                    </div>
-                  );
-                })}
-                 {fields.length === 0 && (
-                    <p className="text-center text-muted-foreground py-4">Nenhuma pergunta adicionada ainda.</p>
-                 )}
-              </div>
+            <ScrollArea className="h-80 pr-4">
+                <QuestionList control={form.control} namePrefix="questions" level={0} />
             </ScrollArea>
-             <Button type="button" variant="outline" className="w-full" onClick={handleAddQuestion}>
-                <PlusCircle className="mr-2" /> Adicionar pergunta
-            </Button>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>
