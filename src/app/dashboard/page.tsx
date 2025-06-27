@@ -27,37 +27,37 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Produtos Cadastrados</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{products.length}</div>
+            <div className="text-4xl font-bold">{products.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Lotes no seu Quiosque</CardTitle>
-            <Box className="h-4 w-4 text-muted-foreground" />
+            <Box className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{lotsInKiosk.length}</div>
+            <div className="text-4xl font-bold">{lotsInKiosk.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertTriangle className="h-6 w-6 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">{expiringSoonCount}</div>
+            <div className="text-4xl font-bold text-yellow-500">{expiringSoonCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Produtos Vencidos</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <AlertTriangle className="h-6 w-6 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{expiredCount}</div>
+            <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
           </CardContent>
         </Card>
       </div>
