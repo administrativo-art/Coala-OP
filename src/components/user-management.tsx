@@ -15,14 +15,10 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ArrowLeft, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog, ClipboardList } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, ShieldCheck, KeyRound, Package, Box, Warehouse, UserCog, ClipboardList } from 'lucide-react';
 import { type User, type UserRole } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
-
-type UserManagementProps = {
-  onBack: () => void;
-};
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
@@ -46,7 +42,7 @@ const userSchema = z.object({
 
 type UserFormValues = z.infer<typeof userSchema>;
 
-export function UserManagement({ onBack }: UserManagementProps) {
+export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
   const { kiosks, addKiosk, deleteKiosk } = useKiosks();
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -134,7 +130,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
             </CardHeader>
             <CardContent>
                 <p>Você não tem permissão para gerenciar usuários.</p>
-                <Button onClick={onBack} className="mt-4">Voltar</Button>
             </CardContent>
         </Card>
     );
@@ -162,10 +157,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
     <>
       <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
-          <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
-          </Button>
-          <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <Users /> Gerenciar Usuários
           </CardTitle>
           <CardDescription className="text-center">Adicione ou edite usuários e suas permissões de acesso.</CardDescription>

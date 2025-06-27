@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Edit, Trash2, ClipboardList, ListPlus, Wand2 } from 'lucide-react';
+import { Edit, Trash2, ClipboardList, ListPlus, Wand2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
@@ -14,11 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { PredefinedListItemConverter } from './predefined-list-item-converter';
 import { Skeleton } from './ui/skeleton';
 
-type PredefinedConverterProps = {
-  onBack: () => void;
-};
-
-export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
+export function PredefinedConverter() {
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { lists, loading: listsLoading, addList, updateList, deleteList } = usePredefinedLists();
   const { permissions } = useAuth();
@@ -116,10 +112,7 @@ export function PredefinedConverter({ onBack }: PredefinedConverterProps) {
     <>
       <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
-          <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
-          </Button>
-          <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <ClipboardList /> Conversão Predefinida
           </CardTitle>
           <CardDescription className="text-center">Use listas de conversão rápida para as tarefas comuns.</CardDescription>

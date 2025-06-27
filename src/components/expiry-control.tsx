@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, PlusCircle, Search, ClipboardCheck, Inbox } from 'lucide-react';
+import { PlusCircle, Search, ClipboardCheck, Inbox } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -16,11 +16,7 @@ import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
-type ExpiryControlProps = {
-  onBack: () => void;
-};
-
-export function ExpiryControl({ onBack }: ExpiryControlProps) {
+export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
@@ -184,10 +180,7 @@ export function ExpiryControl({ onBack }: ExpiryControlProps) {
     <>
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
-          <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
-          </Button>
-          <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <ClipboardCheck /> Controle de Validade
           </CardTitle>
           <CardDescription className="text-center">Gerencie os lotes e as datas de vencimento do seu estoque.</CardDescription>

@@ -7,17 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, ArrowRight, Settings, PlusCircle, ArrowLeftRight, Boxes } from 'lucide-react';
+import { ArrowRight, Settings, PlusCircle, ArrowLeftRight, Boxes } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
 import { ProductManagementModal } from './product-management-modal';
 
-type InventoryConverterProps = {
-  onBack: () => void;
-};
-
-export function InventoryConverter({ onBack }: InventoryConverterProps) {
+export function InventoryConverter() {
   const { products, loading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
   const { permissions } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -229,10 +225,7 @@ export function InventoryConverter({ onBack }: InventoryConverterProps) {
     <>
       <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
-          <Button variant="ghost" size="sm" className="absolute top-4 left-4" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
-          </Button>
-          <CardTitle className="text-center pt-10 font-headline flex items-center justify-center gap-2">
+          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <Boxes /> Conversão de Inventário
           </CardTitle>
           <CardDescription className="text-center">Converta o inventário com base em seus produtos cadastrados.</CardDescription>

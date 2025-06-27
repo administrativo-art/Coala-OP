@@ -10,6 +10,8 @@ import { ExpiryControl } from '@/components/expiry-control';
 import { UserManagement } from '@/components/user-management';
 import { AppFooter } from '@/components/footer';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 
 type Screen = 'menu' | 'inventory' | 'predefined' | 'expiry' | 'users';
 
@@ -39,13 +41,13 @@ export default function Home() {
   const renderScreen = () => {
     switch (screen) {
       case 'inventory':
-        return <InventoryConverter onBack={() => setScreen('menu')} />;
+        return <InventoryConverter />;
       case 'predefined':
-        return <PredefinedConverter onBack={() => setScreen('menu')} />;
+        return <PredefinedConverter />;
       case 'expiry':
-        return <ExpiryControl onBack={() => setScreen('menu')} />;
+        return <ExpiryControl />;
       case 'users':
-        return <UserManagement onBack={() => setScreen('menu')} />;
+        return <UserManagement />;
       case 'menu':
       default:
         return <MainMenu onSelect={(selection) => setScreen(selection as Screen)} />;
@@ -56,6 +58,16 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-background">
       <main className="flex-grow flex flex-col items-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-4xl transition-all duration-300">
+          {screen !== 'menu' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mb-4"
+              onClick={() => setScreen('menu')}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Menu
+            </Button>
+          )}
           {renderScreen()}
         </div>
       </main>
