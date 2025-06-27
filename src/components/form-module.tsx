@@ -52,7 +52,7 @@ export function FormModule() {
     const renderContent = () => {
         if (loading) {
             return (
-                <div className="space-y-3">
+                <div className="space-y-3 pt-8">
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
@@ -62,21 +62,18 @@ export function FormModule() {
         
         if (templates.length === 0) {
             return (
-                <div className="text-center py-8 flex flex-col items-center gap-6">
+                <div className="text-center py-8">
                     <Image
                         src="https://placehold.co/300x300.png"
-                        alt="Ilustração de um coala chefe com prancheta"
+                        alt="Nenhum formulário por aqui"
                         width={300}
                         height={300}
-                        data-ai-hint="koala chef"
-                        className=""
+                        data-ai-hint="empty state"
+                        className="rounded-md mx-auto"
                     />
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold">Nenhum formulário por aqui</h3>
-                        <p className="text-muted-foreground max-w-sm">
-                            Que tal criar o seu primeiro modelo de formulário para começar?
-                        </p>
-                    </div>
+                    <p className="text-muted-foreground mt-6 text-lg">
+                        Nenhum formulário por aqui
+                    </p>
                 </div>
             )
         }
