@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/use-auth"
 
 
 export function Header() {
-    const { permissions } = useAuth()
+    const { permissions, user } = useAuth()
     const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
     
     const navItems = [
@@ -61,7 +61,9 @@ export function Header() {
             </SheetContent>
         </Sheet>
         <div className="w-full flex-1">
-            {/* Can add search or other header items here */}
+            <p className="hidden text-sm text-muted-foreground md:block">
+              Olá, {user?.username}! Bem-vindo(a) de volta.
+            </p>
         </div>
         <UserProfile />
     </header>

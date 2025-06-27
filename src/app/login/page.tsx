@@ -55,8 +55,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <div className="font-logo mb-4 text-center select-none">
+        <CardHeader className="text-center">
+          <div className="font-logo mb-4 select-none w-fit mx-auto">
             <div className="text-6xl text-primary">coala</div>
             <div className="text-5xl text-accent -mt-4">shakes</div>
           </div>
