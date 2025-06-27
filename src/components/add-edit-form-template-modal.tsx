@@ -249,64 +249,67 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome do modelo</FormLabel>
-                  <FormControl><Input placeholder="ex: Formulário de abertura de loja" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <h3 className="text-md font-medium pt-2">Seções e perguntas</h3>
-            <ScrollArea className="h-80 pr-4">
-              <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
-                {sections.map((section, sectionIndex) => (
-                  <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted">
-                    <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
-                        <div className="flex items-center w-full gap-2 mr-4">
-                            <Controller
-                                control={form.control}
-                                name={`sections.${sectionIndex}.name`}
-                                render={({ field }) => (
-                                <Input
-                                    {...field}
-                                    placeholder={`Nome da seção ${sectionIndex + 1}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
-                                />
-                                )}
-                            />
-                            <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
-                                <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}>
-                                  <span><ArrowUp className="h-4 w-4" /></span>
-                                </Button>
-                                <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}>
-                                  <span><ArrowDown className="h-4 w-4" /></span>
-                                </Button>
-                                {sections.length > 1 && (
-                                    <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}>
-                                      <span><Trash2 className="h-4 w-4" /></span>
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-4">
-                       <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <ScrollArea className="h-[60vh] p-4 -m-4 pr-6">
+                <div className="space-y-4 p-2">
+                    <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Nome do modelo</FormLabel>
+                        <FormControl><Input placeholder="ex: Formulário de abertura de loja" {...field} /></FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    
+                    <h3 className="text-md font-medium pt-2">Seções e perguntas</h3>
+                    <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
+                        {sections.map((section, sectionIndex) => (
+                        <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted">
+                            <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
+                                <div className="flex items-center w-full gap-2 mr-4">
+                                    <Controller
+                                        control={form.control}
+                                        name={`sections.${sectionIndex}.name`}
+                                        render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            placeholder={`Nome da seção ${sectionIndex + 1}`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
+                                        />
+                                        )}
+                                    />
+                                    <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                                        <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}>
+                                        <span><ArrowUp className="h-4 w-4" /></span>
+                                        </Button>
+                                        <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}>
+                                        <span><ArrowDown className="h-4 w-4" /></span>
+                                        </Button>
+                                        {sections.length > 1 && (
+                                            <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}>
+                                            <span><Trash2 className="h-4 w-4" /></span>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4">
+                            <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
+                            </AccordionContent>
+                        </AccordionItem>
+                        ))}
+                    </Accordion>
+
+                    <Button type="button" variant="outline" className="w-full" onClick={() => appendSection(createNewSection())}>
+                        <PlusCircle className="mr-2" /> Adicionar seção
+                    </Button>
+                </div>
             </ScrollArea>
-             <Button type="button" variant="outline" className="w-full" onClick={() => appendSection(createNewSection())}>
-                <PlusCircle className="mr-2" /> Adicionar seção
-            </Button>
-            <DialogFooter className="pt-4">
+            <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>
             </DialogFooter>
@@ -316,5 +319,3 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     </Dialog>
   );
 }
-
-    
