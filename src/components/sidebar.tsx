@@ -25,7 +25,6 @@ export function Sidebar() {
     { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
     { href: '/dashboard/expiry', label: 'Controle de validade', icon: CheckSquare, show: true },
     { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
-    { href: '/dashboard/pricing', label: 'Planos e Cobrança', icon: CreditCard, show: isMasterUser }
   ];
 
   return (
