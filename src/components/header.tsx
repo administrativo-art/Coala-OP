@@ -63,7 +63,7 @@ export function Header() {
         </Sheet>
         <div className="w-full flex-1">
             <p className="hidden text-sm text-muted-foreground md:block">
-              Olá, {user?.username}! Bem-vindo(a) de volta.
+              Oi, Humano. Acredite em você!
             </p>
         </div>
         <UserProfile />
