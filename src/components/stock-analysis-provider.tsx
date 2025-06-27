@@ -9,7 +9,7 @@ import { collection, onSnapshot, deleteDoc, doc, query, writeBatch, addDoc } fro
 export interface StockAnalysisContextType {
   history: StockAnalysisReport[];
   loading: boolean;
-  addReport: (report: Omit<StockAnalysisReport, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  addReport: (report: Omit<StockAnalysisReport, 'id'>) => Promise<string | null>;
   deleteReport: (reportId: string) => Promise<void>;
 }
 
@@ -29,11 +29,10 @@ export function StockAnalysisProvider({ children }: { children: React.ReactNode 
           reportName: 'Relatório Semanal Quiosque Tirirical',
           createdAt: today.toISOString(),
           status: 'completed',
-          summary: '3 produtos precisam de reposição em 2 quiosques.',
+          summary: '2 produtos precisam de reposição no Quiosque Tirirical.',
           results: [
-            { productId: '1', productName: 'Leite Integral (1L)', kioskId: 'tirirical', kioskName: 'Quiosque Tirirical', currentStock: 15, idealStock: 50, needed: 35, purchaseSuggestion: 'Comprar 3 Caixas' },
-            { productId: '2', productName: 'Chocolate em Pó (400g)', kioskId: 'tirirical', kioskName: 'Quiosque Tirirical', currentStock: 20, idealStock: 40, needed: 20, purchaseSuggestion: 'Comprar 1 Fardo' },
-            { productId: '1', productName: 'Leite Integral (1L)', kioskId: 'joao-paulo', kioskName: 'Quiosque João Paulo', currentStock: 10, idealStock: 40, needed: 30, purchaseSuggestion: 'Comprar 3 Caixas' }
+            { productId: 'some-id-1', productName: 'Bebida Láctea Baunilha (2L)', kioskId: 'tirirical', kioskName: 'Quiosque Tirirical', currentStock: 15, idealStock: 50, needed: 35, purchaseSuggestion: 'Comprar 2 Caixas' },
+            { productId: 'some-id-2', productName: 'Chocolate em Pó (400g)', kioskId: 'tirirical', kioskName: 'Quiosque Tirirical', currentStock: 5, idealStock: 40, needed: 35, purchaseSuggestion: 'Comprar 2 Fardos' },
           ]
         };
         const batch = writeBatch(db);
@@ -59,17 +58,13 @@ export function StockAnalysisProvider({ children }: { children: React.ReactNode 
     return () => unsubscribe();
   }, []);
   
-  const addReport = useCallback(async (report: Omit<StockAnalysisReport, 'id' | 'createdAt' | 'status'>) => {
-    // This will be implemented later with the AI logic
-    const newReport = {
-      ...report,
-      createdAt: new Date().toISOString(),
-      status: 'processing' as const,
-    }
+  const addReport = useCallback(async (report: Omit<StockAnalysisReport, 'id'>) => {
     try {
-      await addDoc(collection(db, "stockAnalysisReports"), newReport);
+      const docRef = await addDoc(collection(db, "stockAnalysisReports"), report);
+      return docRef.id;
     } catch (error) {
       console.error("Error adding analysis report:", error);
+      return null;
     }
   }, []);
 

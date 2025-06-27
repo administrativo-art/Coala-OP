@@ -1,10 +1,12 @@
 
 "use client"
 
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { analyzeStock } from '@/ai/flows/analyze-stock-flow';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus } from 'lucide-react';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -24,18 +26,74 @@ import { ptBR } from 'date-fns/locale';
 
 export function StockAnalyzer() {
     const { permissions } = useAuth();
-    const { history, loading: historyLoading, deleteReport } = useStockAnalysis();
+    const { kiosks } = useKiosks();
+    const { history, loading: historyLoading, addReport, deleteReport } = useStockAnalysis();
     const stockAnalysisProducts = useStockAnalysisProducts();
     const { toast } = useToast();
+
     const [reportToDelete, setReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleUploadClick = () => {
-        toast({
-            title: "Funcionalidade em desenvolvimento",
-            description: "A IA para ler PDFs ainda está sendo treinada pelo nosso coala chefe!",
-        });
+        if (isAnalyzing) return;
+        fileInputRef.current?.click();
     };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsAnalyzing(true);
+        const { dismiss } = toast({
+            title: "Analisando relatório...",
+            description: "A nossa IA está lendo o PDF. Isso pode levar um momento.",
+            duration: Infinity,
+        });
+
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const pdfDataUri = reader.result as string;
+
+                const result = await analyzeStock({
+                    reportName: file.name,
+                    pdfDataUri,
+                    products: stockAnalysisProducts.products,
+                    kiosks: kiosks,
+                });
+                
+                await addReport({
+                    ...result,
+                    createdAt: new Date().toISOString(),
+                    status: 'completed',
+                });
+
+                toast({
+                    title: "Análise concluída!",
+                    description: result.summary,
+                });
+            };
+            reader.onerror = (error) => {
+                throw new Error("Falha ao ler o arquivo.");
+            }
+        } catch (error) {
+            console.error("Analysis failed:", error);
+            toast({
+                variant: "destructive",
+                title: "Falha na análise",
+                description: "Não foi possível analisar o relatório. Verifique o arquivo e tente novamente.",
+            });
+        } finally {
+            setIsAnalyzing(false);
+            dismiss();
+            // Reset file input
+            if(fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
 
     const handleDeleteClick = (report: StockAnalysisReport) => {
         setReportToDelete(report);
@@ -124,6 +182,7 @@ export function StockAnalyzer() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">
+                                {report.results.length > 0 ? (
                                 <div className="rounded-md border mt-2">
                                     <Table>
                                         <TableHeader>
@@ -152,6 +211,9 @@ export function StockAnalyzer() {
                                         </TableBody>
                                     </Table>
                                 </div>
+                                ) : (
+                                     <p className="text-center text-muted-foreground text-sm pt-4">Nenhum item precisou de reposição nesta análise.</p>
+                                )}
                             </AccordionContent>
                         </Card>
                     </AccordionItem>
@@ -175,9 +237,10 @@ export function StockAnalyzer() {
                             <CardDescription>Faça upload de um arquivo PDF para que a nossa IA identifique os itens, compare com o estoque ideal e sugira as compras.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4 text-center p-6">
-                            <p className="text-muted-foreground text-sm max-w-md mx-auto">Esta funcionalidade está em desenvolvimento. Em breve você poderá automatizar sua análise de estoque com um simples upload.</p>
-                            <Button size="lg" onClick={handleUploadClick} className="mt-4">
-                                <UploadCloud className="mr-2" /> Fazer Upload de Relatório
+                             <input type="file" accept=".pdf" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                            <Button size="lg" onClick={handleUploadClick} className="mt-4" disabled={isAnalyzing}>
+                                {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} 
+                                {isAnalyzing ? 'Analisando...' : 'Fazer Upload de Relatório'}
                             </Button>
                         </CardContent>
                     </Card>
