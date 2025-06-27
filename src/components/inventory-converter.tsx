@@ -224,7 +224,7 @@ export function InventoryConverter() {
 
   return (
     <>
-      <Card className="w-full max-w-2xl mx-auto animate-in fade-in zoom-in-95">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <Boxes /> Conversão de inventário

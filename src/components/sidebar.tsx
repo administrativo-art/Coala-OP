@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3 } from 'lucide-react'
 import { UserProfile } from "./user-profile"
 
 export function Sidebar() {
@@ -20,8 +20,7 @@ export function Sidebar() {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/import', label: 'Análise de Estoque', icon: BarChart3, show: canAnalyzeStock },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
-    { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: ArrowLeftRight, show: true },
-    { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: Repeat, show: true },
+    { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
     { href: '/dashboard/expiry', label: 'Controle de validade', icon: CheckSquare, show: true },
     { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers }
   ];

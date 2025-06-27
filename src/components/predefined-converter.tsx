@@ -115,7 +115,7 @@ export function PredefinedConverter() {
 
   return (
     <>
-      <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <ClipboardList /> Conversão predefinida
