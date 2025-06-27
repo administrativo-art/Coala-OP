@@ -1,7 +1,8 @@
+
 "use client"
 
-import { useEffect, useState } from 'react';
-import { Html5QrcodeScanner, Html5QrcodeError, Html5QrcodeResult } from 'html5-qrcode';
+import { useEffect, useState, useRef } from 'react';
+import { Html5QrcodeScanner, Html5QrcodeError, Html5QrcodeResult, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -17,54 +18,64 @@ const QRCODE_REGION_ID = "barcode-scanner-region";
 export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: BarcodeScannerModalProps) {
     const [hasPermission, setHasPermission] = useState(true);
     const { toast } = useToast();
+    const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
     useEffect(() => {
         if (!open) {
             return;
         }
 
-        let scanner: Html5QrcodeScanner | null = null;
-
-        const onScanSuccessCallback = (decodedText: string, decodedResult: Html5QrcodeResult) => {
-            if (scanner) {
-                scanner.clear().catch(error => {
-                    console.error("Failed to clear scanner.", error);
-                });
+        const timerId = setTimeout(() => {
+            if (scannerRef.current) {
+                return;
             }
-            onScanSuccess(decodedText);
-        };
 
-        const onScanFailureCallback = (error: Html5QrcodeError) => {
-            // Ignore noises
-        };
+            const onScanSuccessCallback = (decodedText: string, decodedResult: Html5QrcodeResult) => {
+                onScanSuccess(decodedText);
+            };
 
-        try {
-            scanner = new Html5QrcodeScanner(
-                QRCODE_REGION_ID,
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                    rememberLastUsedCamera: true,
-                },
-                false
-            );
-            scanner.render(onScanSuccessCallback, onScanFailureCallback);
-            setHasPermission(true);
-        } catch (error) {
-            console.error('Error initializing scanner:', error);
-            setHasPermission(false);
-            toast({
-              variant: 'destructive',
-              title: 'Erro de Câmera',
-              description: 'Não foi possível acessar a câmera. Verifique as permissões do seu navegador.',
-            });
-        }
+            const onScanFailureCallback = (error: Html5QrcodeError) => {
+                // Ignore non-fatal errors (e.g., QR code not found in a frame)
+            };
+            
+            try {
+                const newScanner = new Html5QrcodeScanner(
+                    QRCODE_REGION_ID,
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 },
+                        rememberLastUsedCamera: true,
+                    },
+                    false 
+                );
+                
+                newScanner.render(onScanSuccessCallback, onScanFailureCallback)
+                    .catch((err) => {
+                        setHasPermission(false);
+                        toast({
+                            variant: 'destructive',
+                            title: 'Erro de Câmera',
+                            description: 'Não foi possível acessar a câmera. Verifique as permissões do seu navegador.',
+                        });
+                    });
+
+                scannerRef.current = newScanner;
+
+            } catch (error) {
+                console.error('Error constructing scanner:', error);
+                setHasPermission(false);
+            }
+        }, 200);
 
         return () => {
-            if (scanner && scanner.getState() !== 3) { // 3 is NOT_STARTED
-                scanner.clear().catch(error => {
-                    console.error("Failed to clear scanner on cleanup.", error);
-                });
+            clearTimeout(timerId);
+            if (scannerRef.current) {
+                if (scannerRef.current.getState() !== Html5QrcodeScannerState.NOT_STARTED) {
+                    scannerRef.current.clear().catch(error => {
+                        console.error("Failed to clear scanner on cleanup.", error);
+                    });
+                }
+                scannerRef.current = null;
             }
         };
     }, [open, onScanSuccess, toast]);
@@ -79,10 +90,9 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
-                    {hasPermission ? (
-                        <div id={QRCODE_REGION_ID} className="w-full" />
-                    ) : (
-                        <Alert variant="destructive">
+                    <div id={QRCODE_REGION_ID} className="w-full" />
+                    {!hasPermission && (
+                        <Alert variant="destructive" className="mt-4">
                             <AlertTitle>Acesso à Câmera Negado</AlertTitle>
                             <AlertDescription>
                                 Por favor, habilite o acesso à câmera nas configurações do seu navegador para usar esta funcionalidade.
