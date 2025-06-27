@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, Home, Boxes, ClipboardList, ClipboardCheck, Users } from "lucide-react"
+import { Menu, Home, Boxes, ClipboardList, ClipboardCheck, Users, CheckSquare } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -15,14 +15,15 @@ import { useAuth } from "@/hooks/use-auth"
 export function Header() {
     const { permissions, loading } = useAuth()
 
-    // This is the robust check. It ensures permissions and permissions.users exist before checking the sub-permissions.
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
+    const canViewChecklist = !loading && permissions.checklists && (permissions.checklists.fill || permissions.checklists.manage || permissions.checklists.viewHistory);
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: Home, show: true },
         { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes, show: true },
         { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList, show: true },
         { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck, show: true },
+        { href: '/dashboard/checklist', label: 'Checklist', icon: CheckSquare, show: canViewChecklist },
         { href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users, show: canManageUsers }
     ]
 

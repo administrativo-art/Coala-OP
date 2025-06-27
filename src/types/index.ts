@@ -36,6 +36,7 @@ export type PermissionSet = {
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
+    checklists: { manage: boolean; fill: boolean; viewHistory: boolean };
 };
 
 export type Profile = {
@@ -46,10 +47,9 @@ export type Profile = {
 }
 
 export type User = {
-    id: string;
+    id:string;
     username: string;
     password?: string; // Should be hashed in a real app
-    role?: 'admin' | 'user'; //This is now deprecated, we use profiles
     profileId: string;
     kioskId?: string;
 };
@@ -67,21 +67,39 @@ export type PredefinedList = {
   items: PredefinedConversionItem[];
 };
 
+export type ChecklistQuestionCondition = {
+    questionId: string;
+    value: string; 
+}
 
-export const defaultAdminPermissions: PermissionSet = {
-    products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true },
-    users: { add: true, edit: true, delete: true },
-    kiosks: { add: true, delete: true },
-    predefinedLists: { add: true, edit: true, delete: true },
+export type ChecklistQuestion = {
+    id: string;
+    label: string;
+    type: 'yes-no' | 'text' | 'number';
+    condition?: ChecklistQuestionCondition | null;
 };
 
-export const defaultUserPermissions: PermissionSet = {
-    products: { add: false, edit: false, delete: false },
-    lots: { add: true, edit: true, move: true, delete: false },
-    users: { add: false, edit: false, delete: false },
-    kiosks: { add: false, delete: false },
-    predefinedLists: { add: true, edit: true, delete: false },
+export type ChecklistTemplate = {
+    id: string;
+    name: string;
+    questions: ChecklistQuestion[];
+};
+
+export type ChecklistAnswer = {
+    questionId: string;
+    value: string | number;
+};
+
+export type ChecklistSubmission = {
+    id: string;
+    templateId: string;
+    templateName: string;
+    userId: string;
+    username: string;
+    kioskId: string;
+    kioskName: string;
+    createdAt: string; // ISO string
+    answers: ChecklistAnswer[];
 };
 
 export const defaultGuestPermissions: PermissionSet = {
@@ -90,4 +108,23 @@ export const defaultGuestPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
+    checklists: { manage: false, fill: false, viewHistory: false },
+};
+
+export const defaultUserPermissions: PermissionSet = {
+    products: { add: false, edit: false, delete: false },
+    lots: { add: true, edit: true, move: true, delete: false },
+    users: { add: false, edit: false, delete: false },
+    kiosks: { add: false, delete: false },
+    predefinedLists: { add: true, edit: true, delete: false },
+    checklists: { manage: false, fill: true, viewHistory: true },
+};
+
+export const defaultAdminPermissions: PermissionSet = {
+    products: { add: true, edit: true, delete: true },
+    lots: { add: true, edit: true, move: true, delete: true },
+    users: { add: true, edit: true, delete: true },
+    kiosks: { add: true, delete: true },
+    predefinedLists: { add: true, edit: true, delete: true },
+    checklists: { manage: true, fill: true, viewHistory: true },
 };
