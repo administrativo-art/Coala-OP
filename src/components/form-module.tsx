@@ -78,26 +78,29 @@ export function FormModule() {
         return (
              <ScrollArea className="h-96">
                 <div className="space-y-2 pr-4">
-                {templates.map(template => (
-                    <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
-                        <div className="flex items-center gap-3">
-                            <FileText className="h-5 w-5 text-primary" />
-                            <div>
-                                <span className="font-medium">{template.name}</span>
-                                <p className="text-xs text-muted-foreground">{template.questions.length} perguntas</p>
+                {templates.map(template => {
+                    const itemCount = template.sections.reduce((acc, section) => acc + section.questions.length, 0);
+                    return (
+                        <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
+                            <div className="flex items-center gap-3">
+                                <FileText className="h-5 w-5 text-primary" />
+                                <div>
+                                    <span className="font-medium">{template.name}</span>
+                                    <p className="text-xs text-muted-foreground">{itemCount} itens</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                {permissions.forms.fill && <Button variant="outline" size="sm" onClick={() => handleFill(template)}>Preencher</Button>}
+                                {permissions.forms.manage && (
+                                    <>
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(template)}><Edit className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(template)}><Trash2 className="h-4 w-4" /></Button>
+                                    </>
+                                )}
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            {permissions.forms.fill && <Button variant="outline" size="sm" onClick={() => handleFill(template)}>Preencher</Button>}
-                            {permissions.forms.manage && (
-                                <>
-                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(template)}><Edit className="h-4 w-4" /></Button>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(template)}><Trash2 className="h-4 w-4" /></Button>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                    )
+                })}
                 </div>
             </ScrollArea>
         )

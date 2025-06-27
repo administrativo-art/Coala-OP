@@ -79,10 +79,16 @@ export type FormQuestion = {
     }[];
 };
 
+export type FormSection = {
+  id: string;
+  name: string;
+  questions: FormQuestion[];
+};
+
 export type FormTemplate = {
     id: string;
     name: string;
-    questions: FormQuestion[];
+    sections: FormSection[];
 };
 
 export type FormAnswer = {

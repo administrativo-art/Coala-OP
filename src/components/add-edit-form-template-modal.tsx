@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useEffect } from 'react';
-import { useForm, useFieldArray, Control, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, Control, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Trash2, GitBranchPlus } from 'lucide-react';
-import { type FormTemplate } from '@/types';
-import type { FormQuestion as FormQuestionType } from '@/types';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { PlusCircle, Trash2 } from 'lucide-react';
+import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
 
 // Zod schema for a question, defined recursively
 const baseQuestionSchema = z.object({
@@ -33,14 +32,20 @@ const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() =>
   })
 );
 
+const sectionSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, "O nome da seção é obrigatório."),
+  questions: z.array(questionSchema).min(1, "A seção precisa ter pelo menos uma pergunta."),
+});
+
 const templateSchema = z.object({
   name: z.string().min(1, 'O nome do modelo é obrigatório.'),
-  questions: z.array(questionSchema).min(1, "O formulário precisa ter pelo menos uma pergunta."),
+  sections: z.array(sectionSchema).min(1, "O formulário precisa ter pelo menos uma seção."),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
 
-// Helper to create a new question object
+// Helper to create new objects
 const createNewQuestion = (): FormQuestionType => ({
   id: new Date().toISOString() + Math.random(),
   label: '',
@@ -48,10 +53,16 @@ const createNewQuestion = (): FormQuestionType => ({
   options: []
 });
 
+const createNewSection = (): FormSection => ({
+  id: new Date().toISOString() + Math.random(),
+  name: '',
+  questions: [createNewQuestion()]
+});
+
 // ==================== Question List Component (Recursive) ====================
 type QuestionListProps = {
   control: Control<TemplateFormValues>;
-  namePrefix: `questions` | `${string}.subQuestions`;
+  namePrefix: `sections.${number}.questions` | `${string}.subQuestions`;
   level: number;
 }
 
@@ -185,7 +196,12 @@ type AddEditFormTemplateModalProps = {
 export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
-    defaultValues: { name: '', questions: [] }
+    defaultValues: { name: '', sections: [] }
+  });
+
+  const { fields: sections, append: appendSection, remove: removeSection } = useFieldArray({
+    control: form.control,
+    name: "sections"
   });
 
   useEffect(() => {
@@ -193,7 +209,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
       if (templateToEdit) {
         form.reset(templateToEdit);
       } else {
-        form.reset({ name: '', questions: [] });
+        form.reset({ name: '', sections: [createNewSection()] });
       }
     }
   }, [templateToEdit, open, form]);
@@ -213,7 +229,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         <DialogHeader>
           <DialogTitle>{templateToEdit ? 'Editar modelo' : 'Novo formulário'}</DialogTitle>
           <DialogDescription>
-            Defina o nome e as perguntas que farão parte deste modelo.
+            Defina o nome, as seções e as perguntas que farão parte deste modelo.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -229,11 +245,41 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                 </FormItem>
               )}
             />
-            <Separator />
-            <h3 className="text-md font-medium">Perguntas</h3>
+            
+            <h3 className="text-md font-medium pt-2">Seções e perguntas</h3>
             <ScrollArea className="h-80 pr-4">
-                <QuestionList control={form.control} namePrefix="questions" level={0} />
+              <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
+                {sections.map((section, sectionIndex) => (
+                  <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2">
+                    <AccordionTrigger className="p-4 hover:no-underline">
+                      <Controller
+                        control={form.control}
+                        name={`sections.${sectionIndex}.name`}
+                        render={({ field }) => (
+                          <Input
+                            {...field}
+                            placeholder={`Nome da seção ${sectionIndex + 1}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
+                          />
+                        )}
+                      />
+                    </AccordionTrigger>
+                    <AccordionContent className="p-4">
+                       <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
+                       {sections.length > 1 && (
+                         <Button type="button" variant="destructive" size="sm" className="mt-4" onClick={() => removeSection(sectionIndex)}>
+                            Remover Seção
+                         </Button>
+                       )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </ScrollArea>
+             <Button type="button" variant="outline" className="w-full" onClick={() => appendSection(createNewSection())}>
+                <PlusCircle className="mr-2" /> Adicionar seção
+            </Button>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit">{templateToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>

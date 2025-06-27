@@ -1,7 +1,7 @@
 
 "use client"
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm, Controller, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,12 +13,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAnswer } from '@/types';
+import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
+
+// Helper to recursively get all question IDs from a set of questions
+const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
+  let ids: string[] = [];
+  questions.forEach(q => {
+    ids.push(q.id);
+    if (q.options) {
+      q.options.forEach(opt => {
+        ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
+      });
+    }
+  });
+  return ids;
+};
 
 // Helper to recursively build Zod schema from template
-const generateSchema = (questions: FormQuestion[]): z.ZodObject<any> => {
+const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
   let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
   
   const buildSchemaPart = (question: FormQuestion) => {
@@ -47,7 +62,7 @@ const generateSchema = (questions: FormQuestion[]): z.ZodObject<any> => {
     });
   }
 
-  questions.forEach(buildSchemaPart);
+  sections.forEach(section => section.questions.forEach(buildSchemaPart));
   return z.object(schemaObject);
 }
 
@@ -113,16 +128,16 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                                     key={option.id}
                                     control={control}
                                     name={question.id}
-                                    render={({ field }) => (
+                                    render={({ field: checkboxField }) => (
                                         <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
                                             <FormControl>
                                                 <Checkbox
-                                                    checked={field.value?.includes(option.value)}
+                                                    checked={checkboxField.value?.includes(option.value)}
                                                     onCheckedChange={(checked) => {
-                                                        const currentValues = field.value || [];
+                                                        const currentValues = checkboxField.value || [];
                                                         return checked
-                                                            ? field.onChange([...currentValues, option.value])
-                                                            : field.onChange(currentValues.filter((v: string) => v !== option.value))
+                                                            ? checkboxField.onChange([...currentValues, option.value])
+                                                            : checkboxField.onChange(currentValues.filter((v: string) => v !== option.value))
                                                     }}
                                                 />
                                             </FormControl>
@@ -160,24 +175,45 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
+  const [currentStep, setCurrentStep] = useState(0);
   
-  const formSchema = generateSchema(template.questions);
+  const formSchema = generateSchema(template.sections);
   const form = useForm({
     resolver: zodResolver(formSchema),
-    // defaultValues can be generated recursively if needed
+    mode: 'onChange',
   });
 
-  const getQuestionLabel = (questions: FormQuestion[], questionId: string): string | undefined => {
-      for (const q of questions) {
-          if (q.id === questionId) return q.label;
-          if (q.options) {
+  const getQuestionLabel = (sections: FormSection[], questionId: string): string | undefined => {
+      for (const section of sections) {
+        const findInQuestions = (questions: FormQuestion[]): string | undefined => {
+          for (const q of questions) {
+            if (q.id === questionId) return q.label;
+            if (q.options) {
               for (const opt of q.options) {
-                  const label = getQuestionLabel(opt.subQuestions, questionId);
-                  if (label) return label;
+                const label = findInQuestions(opt.subQuestions);
+                if (label) return label;
               }
+            }
           }
+          return undefined;
+        }
+        const label = findInQuestions(section.questions);
+        if (label) return label;
       }
       return undefined;
+  }
+
+  const handleNext = async () => {
+    const currentSection = template.sections[currentStep];
+    const fieldsToValidate = getAllQuestionIds(currentSection.questions);
+    const isValid = await form.trigger(fieldsToValidate as any);
+    if(isValid) {
+      setCurrentStep(prev => prev + 1);
+    }
+  }
+
+  const handlePrevious = () => {
+    setCurrentStep(prev => prev - 1);
   }
 
   const onSubmit = (values: Record<string, any>) => {
@@ -193,10 +229,10 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
       kioskName: kiosk?.name || 'N/A',
       createdAt: new Date().toISOString(),
       answers: Object.entries(values)
-        .filter(([_, value]) => value !== undefined && (!Array.isArray(value) || value.length > 0))
+        .filter(([_, value]) => value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0))
         .map(([questionId, value]) => ({
           questionId,
-          questionLabel: getQuestionLabel(template.questions, questionId) || '',
+          questionLabel: getQuestionLabel(template.sections, questionId) || '',
           value,
         })),
     };
@@ -204,24 +240,44 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     addSubmission(submission);
     onOpenChange(false);
   };
+
+  const progress = ((currentStep + 1) / template.sections.length) * 100;
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{template.name}</DialogTitle>
-          <DialogDescription>Preencha o formulário abaixo. os campos marcados com * são obrigatórios.</DialogDescription>
+           <div className="pt-2">
+            <p className="text-sm text-muted-foreground text-center mb-2">
+              Etapa {currentStep + 1} de {template.sections.length}: {template.sections[currentStep].name}
+            </p>
+            <Progress value={progress} className="w-full" />
+           </div>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <ScrollArea className="h-[60vh] p-4">
+            <ScrollArea className="h-[50vh] p-4">
               <div className="space-y-6">
-                 <QuestionRenderer questions={template.questions} control={form.control} />
+                 <QuestionRenderer questions={template.sections[currentStep].questions} control={form.control} />
               </div>
             </ScrollArea>
             <DialogFooter className="pt-6">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Enviar formulário</Button>
+              <div className="w-full flex justify-between">
+                <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentStep === 0}>
+                  Anterior
+                </Button>
+
+                {currentStep < template.sections.length - 1 ? (
+                  <Button type="button" onClick={handleNext}>
+                    Próxima
+                  </Button>
+                ) : (
+                  <Button type="submit">
+                    Enviar formulário
+                  </Button>
+                )}
+              </div>
             </DialogFooter>
           </form>
         </Form>
