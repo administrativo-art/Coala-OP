@@ -173,14 +173,28 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                             />
                         )}
 
-                        {potentialConditions.length > 0 && (
+                        {index > 0 && (
                              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                                 <FormField control={form.control} name={`questions.${index}.condition.questionId`} render={({ field }) => (
                                     <FormItem>
                                        <FormLabel className="text-xs">Exibir se a pergunta...</FormLabel>
-                                       <Select onValueChange={field.onChange} value={field.value || ''}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Sempre exibir..." /></SelectTrigger></FormControl>
-                                            <SelectContent>{potentialConditions.map((q, i) => <SelectItem key={q.id} value={q.id}>{`[${i+1}] ${q.label}`}</SelectItem>)}</SelectContent>
+                                       <Select 
+                                            onValueChange={(value) => {
+                                                form.setValue(`questions.${index}.condition.value`, '');
+                                                field.onChange(value === 'always' ? null : value);
+                                            }} 
+                                            value={field.value || 'always'} 
+                                            disabled={potentialConditions.length === 0}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={potentialConditions.length > 0 ? "Sempre exibir..." : "Sem perguntas compatíveis"} />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="always">Sempre exibir</SelectItem>
+                                                {potentialConditions.map((q, i) => <SelectItem key={q.id} value={q.id}>{`[${i+1}] ${q.label}`}</SelectItem>)}
+                                            </SelectContent>
                                         </Select>
                                     </FormItem>
                                 )}/>
