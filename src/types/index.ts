@@ -10,6 +10,10 @@ export type Product = {
   category: UnitCategory;
   packageSize: number;
   unit: string;
+  // New fields for stock analysis
+  purchaseUnitName?: string;
+  itemsPerPurchaseUnit?: number;
+  idealStock?: { [kioskId: string]: number };
 };
 
 export type ConversionUnits = {
