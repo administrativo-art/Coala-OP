@@ -66,3 +66,28 @@ export type PredefinedList = {
   name: string;
   items: PredefinedConversionItem[];
 };
+
+
+export const defaultAdminPermissions: PermissionSet = {
+    products: { add: true, edit: true, delete: true },
+    lots: { add: true, edit: true, move: true, delete: true },
+    users: { add: true, edit: true, delete: true },
+    kiosks: { add: true, delete: true },
+    predefinedLists: { add: true, edit: true, delete: true },
+};
+
+export const defaultUserPermissions: PermissionSet = {
+    products: { add: false, edit: false, delete: false },
+    lots: { add: true, edit: true, move: true, delete: false },
+    users: { add: false, edit: false, delete: false },
+    kiosks: { add: false, delete: false },
+    predefinedLists: { add: true, edit: true, delete: false },
+};
+
+export const defaultGuestPermissions: PermissionSet = {
+    products: { add: false, edit: false, delete: false },
+    lots: { add: false, edit: false, move: false, delete: false },
+    users: { add: false, edit: false, delete: false },
+    kiosks: { add: false, delete: false },
+    predefinedLists: { add: false, edit: false, delete: false },
+};

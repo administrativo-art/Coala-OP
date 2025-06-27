@@ -2,21 +2,12 @@
 
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { useRouter } from 'next/navigation';
-import { type User, type PermissionSet } from '@/types';
+import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { ProfilesContext } from '@/components/profiles-provider';
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
-
-const defaultGuestPermissions: PermissionSet = {
-    products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false },
-    users: { add: false, edit: false, delete: false },
-    kiosks: { add: false, delete: false },
-    predefinedLists: { add: false, edit: false, delete: false },
-};
-
 
 export interface AuthContextType {
   user: User | null;
@@ -62,13 +53,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!profilesContext || profilesContext.loading) {
-      // While profiles are loading, we don't know the permissions yet.
       setPermissions(defaultGuestPermissions);
       return;
     }
-    if (currentUser && profilesContext.profiles.length > 0) {
-      const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
-      setPermissions(userProfile ? userProfile.permissions : defaultGuestPermissions);
+
+    if (currentUser) {
+      // FAILSAFE: If the user is 'master', always grant full admin permissions,
+      // bypassing the profile system for this specific user to ensure functionality.
+      if (currentUser.username === 'master') {
+        setPermissions(defaultAdminPermissions);
+        return;
+      }
+      
+      if (profilesContext.profiles.length > 0) {
+        const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
+        setPermissions(userProfile ? userProfile.permissions : defaultGuestPermissions);
+      } else {
+        setPermissions(defaultGuestPermissions);
+      }
     } else {
       setPermissions(defaultGuestPermissions);
     }

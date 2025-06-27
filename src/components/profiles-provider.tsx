@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { type Profile, type PermissionSet } from '@/types';
+import { type Profile, defaultAdminPermissions, defaultUserPermissions } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
 
@@ -16,22 +16,6 @@ export interface ProfilesContextType {
 }
 
 export const ProfilesContext = createContext<ProfilesContextType | undefined>(undefined);
-
-const defaultAdminPermissions: PermissionSet = {
-    products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true },
-    users: { add: true, edit: true, delete: true },
-    kiosks: { add: true, delete: true },
-    predefinedLists: { add: true, edit: true, delete: true },
-};
-
-const defaultUserPermissions: PermissionSet = {
-    products: { add: false, edit: false, delete: false },
-    lots: { add: true, edit: true, move: true, delete: false },
-    users: { add: false, edit: false, delete: false },
-    kiosks: { add: false, delete: false },
-    predefinedLists: { add: true, edit: true, delete: false },
-};
 
 export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -60,45 +44,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         return; 
       }
 
-      let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
-      
-      const adminProfile = profilesData.find(p => p.isDefaultAdmin === true);
-      if (adminProfile) {
-        const currentPerms = adminProfile.permissions || {};
-        
-        const permissionsNeedUpdate = (current: Partial<PermissionSet>, defaults: PermissionSet): boolean => {
-            for (const key of Object.keys(defaults) as Array<keyof PermissionSet>) {
-                if (!current[key] || typeof current[key] !== 'object') return true;
-                for (const subKey of Object.keys(defaults[key])) {
-                    if (current[key]![subKey as keyof typeof current[key]] === undefined) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-        
-        if (permissionsNeedUpdate(currentPerms, defaultAdminPermissions)) {
-            console.warn("Admin profile permissions are outdated. Updating automatically.");
-            
-            const correctedProfiles = profilesData.map(p => 
-                p.id === adminProfile.id 
-                ? { ...p, permissions: defaultAdminPermissions } 
-                : p
-            );
-            // This is the key fix: update the local state immediately to prevent UI race conditions.
-            setProfiles(correctedProfiles);
-            profilesData = correctedProfiles; // Use the corrected data for subsequent logic in this run
-
-            const adminProfileRef = doc(db, "profiles", adminProfile.id);
-            try {
-                await updateDoc(adminProfileRef, { permissions: defaultAdminPermissions });
-            } catch (error) {
-                console.error("Failed to auto-update admin profile permissions:", error);
-            }
-        }
-      }
-
+      const profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
       setProfiles(profilesData);
 
       const adminProfileForId = profilesData.find(p => p.isDefaultAdmin);
