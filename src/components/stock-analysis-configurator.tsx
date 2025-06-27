@@ -7,11 +7,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage, FormDescription, FormLabel } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
-import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 
 type FormValues = {
@@ -129,7 +128,7 @@ export function StockAnalysisConfigurator() {
                             name={`products.${index}.purchaseUnitName`}
                             render={({ field }) => (
                                 <FormItem>
-                                <Label>Nome da unidade (ex: Caixa, Fardo)</Label>
+                                <FormLabel>Nome da unidade (ex: Caixa, Fardo)</FormLabel>
                                 <FormControl><Input {...field} placeholder="Caixa" /></FormControl>
                                 <FormMessage />
                                 </FormItem>
@@ -140,7 +139,7 @@ export function StockAnalysisConfigurator() {
                             name={`products.${index}.itemsPerPurchaseUnit`}
                             render={({ field }) => (
                                 <FormItem>
-                                <Label>Embalagens por unidade de compra</Label>
+                                <FormLabel>Embalagens por unidade de compra</FormLabel>
                                 <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
                                 <FormMessage />
                                 </FormItem>
