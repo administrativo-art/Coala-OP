@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -8,7 +9,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { UserProfile } from "@/components/user-profile"
 import { useAuth } from "@/hooks/use-auth"
 
 
@@ -43,7 +43,7 @@ export function Header() {
             <SheetContent side="left" className="flex flex-col dark bg-background text-foreground">
                 <nav className="grid gap-2 text-lg font-medium">
                     <Link href="/dashboard" className="font-logo select-none mb-4">
-                        <div className="text-left text-2xl font-bold text-primary">coala</div>
+                        <div className="text-left text-2xl font-bold text-foreground">coala</div>
                         <div className="text-left text-xl font-bold text-accent -mt-1 pl-4">shakes</div>
                     </Link>
                     {navItems.map(item => item.show && (
@@ -65,7 +65,6 @@ export function Header() {
               Oi, humano. Acredite em você!
             </p>
         </div>
-        <UserProfile />
     </header>
   )
 }

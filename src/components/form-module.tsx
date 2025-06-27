@@ -69,7 +69,7 @@ export function FormModule() {
                         width={300}
                         height={225}
                         data-ai-hint="cute koala peeking illustration"
-                        className="dark:mix-blend-lighten"
+                        className=""
                     />
                     <div className="space-y-2">
                         <h3 className="text-xl font-semibold">Nenhum formulário por aqui</h3>

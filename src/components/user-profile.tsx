@@ -37,7 +37,7 @@ export function UserProfile() {
         <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground">
+                    <AvatarFallback className="bg-secondary text-secondary-foreground">
                     {user.username?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                 </Avatar>
