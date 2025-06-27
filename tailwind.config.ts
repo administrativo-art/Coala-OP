@@ -12,7 +12,7 @@ export default {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
         headline: ['Inter', 'sans-serif'],
-        logo: ['"Fredoka One"', 'sans-serif'],
+        logo: ['Poppins', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {

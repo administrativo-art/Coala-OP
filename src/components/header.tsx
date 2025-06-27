@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, Home, Boxes, ClipboardList, ClipboardCheck, Users, FileText } from "lucide-react"
+import { Menu, LayoutDashboard, ArrowLeftRight, Repeat, CheckSquare, UserCog, ClipboardList } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -20,12 +20,12 @@ export function Header() {
     const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
 
     const navItems = [
-        { href: '/dashboard', label: 'Dashboard', icon: Home, show: true },
-        { href: '/dashboard/forms', label: 'Formulários', icon: FileText, show: canViewForms },
-        { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: Boxes, show: true },
-        { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: ClipboardList, show: true },
-        { href: '/dashboard/expiry', label: 'Controle de validade', icon: ClipboardCheck, show: true },
-        { href: '/dashboard/users', label: 'Gerenciar usuários', icon: Users, show: canManageUsers }
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+        { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
+        { href: '/dashboard/inventory', label: 'Conversão de inventário', icon: ArrowLeftRight, show: true },
+        { href: '/dashboard/predefined', label: 'Conversão predefinida', icon: Repeat, show: true },
+        { href: '/dashboard/expiry', label: 'Controle de validade', icon: CheckSquare, show: true },
+        { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers }
     ]
 
   return (
@@ -41,14 +41,14 @@ export function Header() {
                 <span className="sr-only">Toggle navigation menu</span>
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex flex-col">
+            <SheetContent side="left" className="flex flex-col dark bg-background text-foreground">
                 <nav className="grid gap-2 text-lg font-medium">
                     <Link
                         href="/dashboard"
-                        className="inline-block text-lg font-semibold mb-4 font-logo"
+                        className="inline-block font-logo text-2xl font-bold mb-4"
                     >
-                        <div className="text-left text-2xl text-primary">coala</div>
-                        <div className="text-left text-xl text-accent -mt-2 pl-4">shakes</div>
+                        <span className="text-primary-foreground">coala</span>
+                        <span className="text-accent">shakes</span>
                     </Link>
                     {navItems.map(item => item.show && (
                     <SheetTrigger asChild key={item.href}>
