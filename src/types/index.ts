@@ -11,6 +11,7 @@ export type Product = {
   packageSize: number;
   unit: string;
   // New fields for stock analysis
+  pdfUnit?: string;
   purchaseUnitName?: string;
   itemsPerPurchaseUnit?: number;
   idealStock?: { [kioskId: string]: number };

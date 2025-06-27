@@ -14,7 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,6 +29,7 @@ const productSchema = z.object({
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
+  pdfUnit: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -65,6 +66,7 @@ export function ProductManagementModal({
       category: 'Volume',
       packageSize: 1,
       unit: 'L',
+      pdfUnit: '',
     },
   });
 
@@ -85,7 +87,7 @@ export function ProductManagementModal({
 
   const handleAddNew = () => {
     setEditingProduct(null);
-    form.reset({ baseName: '', category: 'Volume', packageSize: 1, unit: 'L' });
+    form.reset({ baseName: '', category: 'Volume', packageSize: 1, unit: 'L', pdfUnit: '' });
     setShowForm(true);
   };
 
@@ -96,6 +98,7 @@ export function ProductManagementModal({
       category: product.category,
       packageSize: product.packageSize,
       unit: product.unit,
+      pdfUnit: product.pdfUnit || '',
     });
     setShowForm(true);
   };
@@ -112,10 +115,11 @@ export function ProductManagementModal({
   };
 
   const onSubmit = (values: ProductFormValues) => {
+    const dataToSave = { ...values, pdfUnit: values.pdfUnit || undefined };
     if (editingProduct) {
-      updateProduct({ ...editingProduct, ...values });
+      updateProduct({ ...editingProduct, ...dataToSave });
     } else {
-      addProduct(values);
+      addProduct(dataToSave);
     }
     setShowForm(false);
     setEditingProduct(null);
@@ -150,23 +154,23 @@ export function ProductManagementModal({
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField
+                 <FormField
                     control={form.control}
                     name="category"
                     render={({ field }) => (
-                      <FormItem>
+                    <FormItem>
                         <FormLabel>Categoria</FormLabel>
                         <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger></FormControl>
-                          <SelectContent>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger></FormControl>
+                        <SelectContent>
                             {unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                          </SelectContent>
+                        </SelectContent>
                         </Select>
                         <FormMessage />
-                      </FormItem>
+                    </FormItem>
                     )}
-                  />
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="packageSize"
@@ -183,7 +187,7 @@ export function ProductManagementModal({
                     name="unit"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unidade</FormLabel>
+                        <FormLabel>Unidade do pacote</FormLabel>
                          <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
                           <SelectContent>
@@ -195,6 +199,30 @@ export function ProductManagementModal({
                     )}
                   />
                 </div>
+                <FormField
+                    control={form.control}
+                    name="pdfUnit"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Unidade de medida no relatório (PDF)</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ''}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione a unidade do relatório" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="">-- Mesma unidade do pacote --</SelectItem>
+                                    {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <FormDescription>
+                                Se a unidade no relatório PDF for diferente da unidade do pacote (ex: mL no PDF, L no pacote), especifique aqui.
+                            </FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                   <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar produto'}</Button>
