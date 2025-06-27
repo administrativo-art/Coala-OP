@@ -67,34 +67,35 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const currentPerms = adminProfile.permissions || {};
         
         const permissionsNeedUpdate = (current: Partial<PermissionSet>, defaults: PermissionSet): boolean => {
-          for (const category in defaults) {
-            const key = category as keyof PermissionSet;
-            if (!current.hasOwnProperty(key)) return true;
-            for (const perm in defaults[key]) {
-               if (!current[key] || !current[key]!.hasOwnProperty(perm)) return true;
+            for (const key of Object.keys(defaults) as Array<keyof PermissionSet>) {
+                if (!current[key] || typeof current[key] !== 'object') return true;
+                for (const subKey of Object.keys(defaults[key])) {
+                    if (current[key]![subKey as keyof typeof current[key]] === undefined) {
+                        return true;
+                    }
+                }
             }
-          }
-          return false;
+            return false;
         };
         
         if (permissionsNeedUpdate(currentPerms, defaultAdminPermissions)) {
-          console.warn("Admin profile permissions are outdated. Updating automatically.");
-          
-          const correctedProfiles = profilesData.map(p => 
-              p.id === adminProfile.id 
-              ? { ...p, permissions: defaultAdminPermissions } 
-              : p
-          );
-          profilesData = correctedProfiles;
-          setProfiles(correctedProfiles); // Update state immediately to fix the UI race condition
+            console.warn("Admin profile permissions are outdated. Updating automatically.");
+            
+            const correctedProfiles = profilesData.map(p => 
+                p.id === adminProfile.id 
+                ? { ...p, permissions: defaultAdminPermissions } 
+                : p
+            );
+            // This is the key fix: update the local state immediately to prevent UI race conditions.
+            setProfiles(correctedProfiles);
+            profilesData = correctedProfiles; // Use the corrected data for subsequent logic in this run
 
-          const adminProfileRef = doc(db, "profiles", adminProfile.id);
-          try {
-            // Persist the correction to the database for future loads
-            await updateDoc(adminProfileRef, { permissions: defaultAdminPermissions });
-          } catch (error) {
-            console.error("Failed to auto-update admin profile permissions:", error);
-          }
+            const adminProfileRef = doc(db, "profiles", adminProfile.id);
+            try {
+                await updateDoc(adminProfileRef, { permissions: defaultAdminPermissions });
+            } catch (error) {
+                console.error("Failed to auto-update admin profile permissions:", error);
+            }
         }
       }
 

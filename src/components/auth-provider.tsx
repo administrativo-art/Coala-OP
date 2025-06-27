@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
         console.error("Failed to load current user", error);
     }
+    // We set authLoading to false later, after checking user validity.
   }, []);
 
   const logout = useCallback(() => {
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!profilesContext || profilesContext.loading) {
+      // While profiles are loading, we don't know the permissions yet.
       setPermissions(defaultGuestPermissions);
       return;
     }
@@ -98,11 +100,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setUsers(usersData);
         
+        // Final validation of current user
         if (currentUser) {
             const foundUser = usersData.find(u => u.id === currentUser.id);
             if (!foundUser) {
+                // The stored user no longer exists in the DB
                 logout();
             } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
+                // User data has changed (e.g., profile), update local state
                 setCurrentUser(foundUser);
                 window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
             }

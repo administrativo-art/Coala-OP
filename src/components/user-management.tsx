@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react';
-import { useForm, type FieldPath } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
@@ -87,6 +87,7 @@ export function UserManagement() {
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
       const updatedData: Partial<User> = {
+          username: values.username, // Username should be editable now
           profileId: values.profileId,
           kioskId: values.kioskId,
       };
@@ -143,7 +144,7 @@ export function UserManagement() {
                   <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome de Usuário</FormLabel>
-                        <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={!!editingUser} /></FormControl>
+                        <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'master'} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -159,7 +160,7 @@ export function UserManagement() {
                     <FormField control={form.control} name="profileId" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Perfil de Permissão</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={editingUser?.username === 'master'}>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'master'}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
                             <SelectContent>
                                 {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -175,7 +176,7 @@ export function UserManagement() {
                       render={({ field }) => (
                           <FormItem>
                           <FormLabel>Quiosque Principal</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
                               <SelectTrigger>
                                   <SelectValue placeholder="Selecione o quiosque" />
@@ -219,8 +220,8 @@ export function UserManagement() {
                             <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary'}`}>{getProfileName(user.profileId)}</span>
                         </div>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(user)} disabled={!permissions.users.edit}><Edit className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'master' || !permissions.users.delete || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>
+                        {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
+                        {permissions.users.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'master' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     </div>
                   ))}
@@ -234,7 +235,7 @@ export function UserManagement() {
       <ProfileManagementModal 
         open={isProfilesModalOpen}
         onOpenChange={setIsProfilesModalOpen}
-        canEdit={permissions.users.edit}
+        canEdit={!!permissions.users?.edit}
       />
 
       <LocationManagementModal

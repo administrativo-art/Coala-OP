@@ -13,15 +13,17 @@ import { useAuth } from "@/hooks/use-auth"
 
 
 export function Header() {
-    const { permissions, user } = useAuth()
-    const canManageUsers = !!(permissions.users?.add || permissions.users?.edit || permissions.users?.delete);
-    
+    const { permissions, loading } = useAuth()
+
+    // This is the robust check. It ensures permissions and permissions.users exist before checking the sub-permissions.
+    const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
+
     const navItems = [
-        { href: '/dashboard', label: 'Dashboard', icon: Home },
-        { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes },
-        { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList },
-        { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck },
-        ...(canManageUsers ? [{ href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users }] : [])
+        { href: '/dashboard', label: 'Dashboard', icon: Home, show: true },
+        { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes, show: true },
+        { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList, show: true },
+        { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck, show: true },
+        { href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users, show: canManageUsers }
     ]
 
   return (
@@ -46,7 +48,7 @@ export function Header() {
                         <div className="text-left text-2xl text-primary">coala</div>
                         <div className="text-left text-xl text-accent -mt-2 pl-4">shakes</div>
                     </Link>
-                    {navItems.map(item => (
+                    {navItems.map(item => item.show && (
                     <SheetTrigger asChild key={item.href}>
                         <Link
                             href={item.href}

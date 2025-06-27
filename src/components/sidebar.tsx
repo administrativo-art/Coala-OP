@@ -9,15 +9,17 @@ import { Button } from "./ui/button"
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { permissions } = useAuth()
-  const canManageUsers = !!(permissions.users?.add || permissions.users?.edit || permissions.users?.delete);
+  const { permissions, loading } = useAuth()
+
+  // This is the robust check. It ensures permissions and permissions.users exist before checking the sub-permissions.
+  const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
 
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes },
-    { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList },
-    { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck },
-    ...(canManageUsers ? [{ href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users }] : [])
+    { href: '/dashboard', label: 'Dashboard', icon: Home, show: true },
+    { href: '/dashboard/inventory', label: 'Conversão de Inventário', icon: Boxes, show: true },
+    { href: '/dashboard/predefined', label: 'Conversão Predefinida', icon: ClipboardList, show: true },
+    { href: '/dashboard/expiry', label: 'Controle de Validade', icon: ClipboardCheck, show: true },
+    { href: '/dashboard/users', label: 'Gerenciar Usuários', icon: Users, show: canManageUsers }
   ];
 
   return (
@@ -33,7 +35,7 @@ export function Sidebar() {
         </div>
         <div className="flex-1">
           <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-            {navItems.map(item => (
+            {navItems.map(item => item.show && (
               <Link
                 key={item.href}
                 href={item.href}

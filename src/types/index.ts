@@ -49,6 +49,7 @@ export type User = {
     id: string;
     username: string;
     password?: string; // Should be hashed in a real app
+    role?: 'admin' | 'user'; //This is now deprecated, we use profiles
     profileId: string;
     kioskId?: string;
 };
