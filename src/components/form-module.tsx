@@ -64,11 +64,12 @@ export function FormModule() {
             return (
                 <div className="text-center py-8">
                     <Image
-                        src="/koala-checklist.png"
+                        src="https://placehold.co/300x300.png"
                         alt="Ilustração de um coala chefe com uma prancheta"
                         width={300}
                         height={300}
                         className="rounded-md mx-auto"
+                        data-ai-hint="koala checklist"
                     />
                     <p className="text-muted-foreground mt-6 text-lg">
                         Nenhum formulário por aqui
