@@ -282,6 +282,7 @@ export function StockAnalyzer() {
 
     const handleDownloadPDF = (report: StockAnalysisReport) => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de download em PDF será implementada em breve." }); };
     const handleExportToSheets = (report: StockAnalysisReport) => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de exportação para Google Sheets será implementada em breve." }); };
+    const handleExportParameters = () => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de exportação de parâmetros em PDF será implementada em breve." }); };
 
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canConfigureStock = permissions.stockAnalysis?.configure;
@@ -522,7 +523,10 @@ export function StockAnalyzer() {
 
                 {canConfigureStock && <TabsContent value="parameters" className="mt-4">
                     <Card><CardHeader><CardTitle>Configurar Parâmetros de Análise</CardTitle><CardDescription>Defina o estoque ideal, unidades de compra e gerencie os produtos que serão considerados na análise de estoque.</CardDescription></CardHeader><CardContent className="p-6">
-                        <div className="mb-6"><Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos para Análise</Button></div>
+                        <div className="mb-6 flex flex-wrap gap-2">
+                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos para Análise</Button>
+                            <Button variant="outline" onClick={handleExportParameters}><Download className="mr-2" /> Exportar Parâmetros (PDF)</Button>
+                        </div>
                         <StockAnalysisConfigurator />
                     </CardContent></Card>
                 </TabsContent>}
