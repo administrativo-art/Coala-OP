@@ -319,7 +319,7 @@ export function StockAnalyzer() {
                 </TabsList>
                 
                 {canUploadStock && <TabsContent value="replenishment" className="mt-4">
-                    <Card><CardHeader><CardTitle>Analisar Relatório de Estoque</CardTitle><CardDescription>Faça upload de um arquivo PDF para que a nossa IA identifique os itens, compare com o estoque ideal e sugira as compras.</CardDescription></CardHeader><CardContent className="space-y-4 text-center p-6">
+                    <Card><CardHeader><CardTitle>Análise para Reposição</CardTitle><CardDescription>Faça upload de um arquivo PDF para que a nossa IA identifique os itens, compare com o estoque ideal e sugira as compras.</CardDescription></CardHeader><CardContent className="space-y-4 text-center p-6">
                         <input type="file" accept=".pdf" ref={stockFileInputRef} onChange={handleStockFileChange} className="hidden" />
                         <Button size="lg" onClick={handleStockUploadClick} className="mt-4" disabled={isAnalyzing}>{isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} {isAnalyzing ? 'Analisando...' : 'Fazer Upload de Relatório'}</Button>
                     </CardContent></Card>
