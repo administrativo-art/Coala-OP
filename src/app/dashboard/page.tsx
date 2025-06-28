@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState } from "react"
@@ -49,54 +50,85 @@ export default function DashboardPage() {
       return [];
     }
 
-    const kioskConsumption: { [kioskId: string]: { [productId: string]: { total: number, count: number, name: string } } } = {};
+    // Step 1: Aggregate consumption data (total packages and number of reports)
+    const kioskConsumption: { [kioskId: string]: { [productId: string]: { total: number; count: number } } } = {};
 
     consumptionHistory.forEach(report => {
       if (!kioskConsumption[report.kioskId]) {
         kioskConsumption[report.kioskId] = {};
       }
       report.results.forEach(item => {
-        const product = stockProducts.find(p => p.id === item.productId);
         if (!kioskConsumption[report.kioskId][item.productId]) {
-          kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0, name: product?.baseName || item.productName.split(' (')[0] };
+          kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0 };
         }
         kioskConsumption[report.kioskId][item.productId].total += item.consumedPackages;
         kioskConsumption[report.kioskId][item.productId].count += 1;
       });
     });
 
-    let dataForChart: { name: string, "Consumo Médio (Pacotes)": number }[] = [];
+    // Step 2: Calculate averages and format for chart
+    let dataForChart: { name: string, "Consumo": number }[] = [];
 
     const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
 
+    // A. Aggregated view for 'master' user
     if (kioskIdForChart === 'all' && user.username === 'master') {
-      const masterAverages: { [productId: string]: { totalAvg: number, name: string } } = {};
+      const masterAverages: { [productId: string]: { totalAvg: number } } = {};
+      
       Object.values(kioskConsumption).forEach(productMap => {
         Object.entries(productMap).forEach(([productId, data]) => {
-          const avgForKiosk = data.total / data.count;
+          const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
           if (!masterAverages[productId]) {
-            masterAverages[productId] = { totalAvg: 0, name: data.name };
+            masterAverages[productId] = { totalAvg: 0 };
           }
           masterAverages[productId].totalAvg += avgForKiosk;
         });
       });
-      dataForChart = Object.values(masterAverages).map(d => ({
-        name: d.name,
-        "Consumo Médio (Pacotes)": Math.ceil(d.totalAvg),
-      }));
+      
+      dataForChart = Object.entries(masterAverages).map(([productId, data]) => {
+        const product = stockProducts.find(p => p.id === productId);
+        const avgPackages = data.totalAvg;
+        let consumption = Math.ceil(avgPackages);
+        let unitLabel = 'Pacotes';
+
+        if (product && product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
+            consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
+            unitLabel = product.purchaseUnitName || 'Un. Compra';
+        }
+
+        return {
+          name: `${product?.baseName || 'Produto Desconhecido'} (${unitLabel})`,
+          "Consumo": consumption,
+        };
+      });
+
+    // B. Single kiosk view
     } else {
       const singleKioskData = kioskConsumption[kioskIdForChart];
       if (singleKioskData) {
-        dataForChart = Object.values(singleKioskData).map(data => ({
-          name: data.name,
-          "Consumo Médio (Pacotes)": Math.ceil(data.total / data.count),
-        }));
+        dataForChart = Object.entries(singleKioskData).map(([productId, data]) => {
+            const product = stockProducts.find(p => p.id === productId);
+            const avgPackages = data.count > 0 ? data.total / data.count : 0;
+            let consumption = Math.ceil(avgPackages);
+            let unitLabel = 'Pacotes';
+
+            if (product && product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
+                consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
+                unitLabel = product.purchaseUnitName || 'Un. Compra';
+            }
+          return {
+            name: `${product?.baseName || 'Produto Desconhecido'} (${unitLabel})`,
+            "Consumo": consumption
+          };
+        });
       }
     }
 
-    return dataForChart.sort((a, b) => b["Consumo Médio (Pacotes)"] - a["Consumo Médio (Pacotes)"]).slice(0, 7);
+    // Step 3: Sort and return all products
+    return dataForChart.sort((a, b) => b["Consumo"] - a["Consumo"]);
 
   }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading, kiosks, kiosksLoading, selectedKiosk]);
+
 
   const initialLoading = productsLoading || lotsLoading || kiosksLoading;
 
@@ -171,8 +203,8 @@ export default function DashboardPage() {
                         </CardTitle>
                         <CardDescription>
                             {user?.username === 'master' 
-                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques (Top 7).' : `Produtos mais consumidos no quiosque selecionado (Top 7).`)
-                                : `Produtos mais consumidos no seu quiosque (Top 7).`}
+                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos mais consumidos no quiosque selecionado.`)
+                                : `Produtos mais consumidos no seu quiosque.`}
                         </CardDescription>
                     </div>
                     {user?.username === 'master' && (
@@ -205,8 +237,8 @@ export default function DashboardPage() {
                                 borderRadius: "var(--radius)"
                             }}
                         />
-                        <Bar dataKey="Consumo Médio (Pacotes)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="Consumo Médio (Pacotes)" position="top" style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                        <Bar dataKey="Consumo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="Consumo" position="top" style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
                         </Bar>
                         </BarChart>
                     </ResponsiveContainer>
