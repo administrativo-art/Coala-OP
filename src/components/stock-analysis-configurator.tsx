@@ -43,22 +43,28 @@ export function StockAnalysisConfigurator() {
     keyName: "formId"
   });
 
+  const watchedProducts = form.watch('products');
+
   useEffect(() => {
-    if (!productsLoading && !kiosksLoading && products.length > 0 && kiosks.length > 0) {
-      const initialData: FormProduct[] = products.map(p => ({
-        ...p,
-        hasPurchaseUnit: p.hasPurchaseUnit ?? !!p.purchaseUnitName,
-        purchaseUnitName: p.purchaseUnitName || '',
-        itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
-        totalQuantityInPurchaseUnit: (p.itemsPerPurchaseUnit || 1) * p.packageSize,
-        stockLevels: kiosks.reduce((acc, kiosk) => {
-          acc[kiosk.id] = {
-            min: p.stockLevels?.[kiosk.id]?.min || 0,
-            max: p.stockLevels?.[kiosk.id]?.max || 0,
-          };
-          return acc;
-        }, {} as { [kioskId: string]: { min: number; max: number } }),
-      }));
+    if (!productsLoading && !kiosksLoading) {
+      const initialData: FormProduct[] = products.map(p => {
+        const newStockLevels: { [kioskId: string]: { min: number; max: number } } = {};
+        kiosks.forEach(kiosk => {
+            newStockLevels[kiosk.id] = {
+                min: p.stockLevels?.[kiosk.id]?.min || 0,
+                max: p.stockLevels?.[kiosk.id]?.max || 0,
+            };
+        });
+
+        return {
+            ...p,
+            hasPurchaseUnit: p.hasPurchaseUnit ?? !!p.purchaseUnitName,
+            purchaseUnitName: p.purchaseUnitName || '',
+            itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
+            totalQuantityInPurchaseUnit: (p.itemsPerPurchaseUnit || 1) * p.packageSize,
+            stockLevels: newStockLevels,
+        };
+      });
       replace(initialData);
     }
   }, [products, kiosks, productsLoading, kiosksLoading, replace]);
@@ -232,9 +238,22 @@ export function StockAnalysisConfigurator() {
                             <FormField
                             control={form.control}
                             name={`products.${index}.totalQuantityInPurchaseUnit`}
-                            render={({ field: inputField }) => (
-                                <FormItem>
-                                    <FormLabel>Total na unidade ({products[index].unit})</FormLabel>
+                            render={({ field: inputField }) => {
+                                const currentProduct = watchedProducts[index];
+                                const productInfo = products.find(p => p.id === field.id);
+                                
+                                const itemsPerUnit = (
+                                    currentProduct &&
+                                    currentProduct.totalQuantityInPurchaseUnit &&
+                                    productInfo && productInfo.packageSize > 0
+                                ) ? Math.round(currentProduct.totalQuantityInPurchaseUnit / productInfo.packageSize)
+                                : (currentProduct?.itemsPerPurchaseUnit || 0);
+                                
+                                const purchaseUnitName = currentProduct?.purchaseUnitName || 'unidade de compra';
+
+                                return (
+                                    <FormItem>
+                                    <FormLabel>Total na unidade ({productInfo?.unit})</FormLabel>
                                     <FormControl>
                                         <Input 
                                             type="number" 
@@ -243,9 +262,13 @@ export function StockAnalysisConfigurator() {
                                             step="any"
                                         />
                                     </FormControl>
+                                    <FormDescription>
+                                        Isso equivale a {itemsPerUnit} embalagens por {purchaseUnitName}.
+                                    </FormDescription>
                                     <FormMessage />
-                                </FormItem>
-                            )}
+                                    </FormItem>
+                                )
+                            }}
                             />
                         </div>
                     </div>
