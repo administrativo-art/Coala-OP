@@ -1,16 +1,18 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useProducts } from "@/hooks/use-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
+import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Box, Package, AlertTriangle, TrendingUp } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 
 export default function DashboardPage() {
@@ -19,6 +21,9 @@ export default function DashboardPage() {
   const { products, loading: productsLoading } = useProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { products: stockProducts, loading: stockProductsLoading } = useStockAnalysisProducts()
+  const { kiosks, loading: kiosksLoading } = useKiosks();
+
+  const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -39,7 +44,7 @@ export default function DashboardPage() {
   }, [lotsInKiosk, lotsLoading]);
 
   const chartData = useMemo(() => {
-    const loading = consumptionLoading || stockProductsLoading;
+    const loading = consumptionLoading || stockProductsLoading || kiosksLoading;
     if (loading || !user || consumptionHistory.length === 0) {
       return [];
     }
@@ -62,7 +67,9 @@ export default function DashboardPage() {
 
     let dataForChart: { name: string, "Consumo Médio (Pacotes)": number }[] = [];
 
-    if (user.username === 'master') {
+    const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
+
+    if (kioskIdForChart === 'all' && user.username === 'master') {
       const masterAverages: { [productId: string]: { totalAvg: number, name: string } } = {};
       Object.values(kioskConsumption).forEach(productMap => {
         Object.entries(productMap).forEach(([productId, data]) => {
@@ -78,9 +85,9 @@ export default function DashboardPage() {
         "Consumo Médio (Pacotes)": Math.ceil(d.totalAvg),
       }));
     } else {
-      const userKioskData = kioskConsumption[user.kioskId];
-      if (userKioskData) {
-        dataForChart = Object.values(userKioskData).map(data => ({
+      const singleKioskData = kioskConsumption[kioskIdForChart];
+      if (singleKioskData) {
+        dataForChart = Object.values(singleKioskData).map(data => ({
           name: data.name,
           "Consumo Médio (Pacotes)": Math.ceil(data.total / data.count),
         }));
@@ -89,9 +96,9 @@ export default function DashboardPage() {
 
     return dataForChart.sort((a, b) => b["Consumo Médio (Pacotes)"] - a["Consumo Médio (Pacotes)"]).slice(0, 7);
 
-  }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading]);
+  }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading, kiosks, kiosksLoading, selectedKiosk]);
 
-  const initialLoading = productsLoading || lotsLoading;
+  const initialLoading = productsLoading || lotsLoading || kiosksLoading;
 
   if (initialLoading) {
     return (
@@ -157,21 +164,36 @@ export default function DashboardPage() {
        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-1">
           <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
-                </CardTitle>
-                <CardDescription>
-                {user?.username === 'master' 
-                    ? 'Soma do consumo médio mensal de todos os quiosques (Top 7 produtos).' 
-                    : `Produtos mais consumidos no seu quiosque (Top 7).`}
-                </CardDescription>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
+                        </CardTitle>
+                        <CardDescription>
+                            {user?.username === 'master' 
+                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques (Top 7).' : `Produtos mais consumidos no quiosque selecionado (Top 7).`)
+                                : `Produtos mais consumidos no seu quiosque (Top 7).`}
+                        </CardDescription>
+                    </div>
+                    {user?.username === 'master' && (
+                        <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
+                            <SelectTrigger className="w-full sm:w-[240px]">
+                                <SelectValue placeholder="Selecionar Quiosque" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos (Agregado)</SelectItem>
+                                {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="pl-2">
-                 { (consumptionLoading || stockProductsLoading) ? (
+                 { (consumptionLoading || stockProductsLoading || kiosksLoading) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={350}>
-                        <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 70 }}>
+                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 70 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
                         <YAxis fontSize={12} tickLine={false} axisLine={false} />
@@ -183,14 +205,20 @@ export default function DashboardPage() {
                                 borderRadius: "var(--radius)"
                             }}
                         />
-                        <Bar dataKey="Consumo Médio (Pacotes)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Consumo Médio (Pacotes)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="Consumo Médio (Pacotes)" position="top" style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                        </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                     ) : (
                     <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
                             <TrendingUp className="h-12 w-12 mb-4" />
                             <p className="font-semibold">Sem dados de consumo</p>
-                            <p className="text-sm">Faça o upload de relatórios de consumo para gerar o gráfico.</p>
+                            <p className="text-sm">
+                                {user?.username === 'master' && selectedKiosk !== 'all' 
+                                    ? `Nenhum relatório de consumo encontrado para o quiosque selecionado.`
+                                    : `Faça o upload de relatórios de consumo para gerar o gráfico.`}
+                            </p>
                     </div>
                     )}
             </CardContent>
