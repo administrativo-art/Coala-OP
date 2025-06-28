@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const { products: stockProducts, loading: stockProductsLoading } = useStockAnalysisProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
 
-  const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
+  const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
 
@@ -83,28 +83,33 @@ export default function DashboardPage() {
     const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
     let relevantConsumptionData: { [productId: string]: number } = {}; // Stores average packages per product
 
-    if (kioskIdForChart === 'all' && user.username === 'master') {
-      const masterAverages: { [productId: string]: { totalAvg: number } } = {};
-      
-      Object.values(kioskConsumption).forEach(productMap => {
-        Object.entries(productMap).forEach(([productId, data]) => {
-          const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
-          if (!masterAverages[productId]) {
-            masterAverages[productId] = { totalAvg: 0 };
-          }
-          masterAverages[productId].totalAvg += avgForKiosk;
+    if (kioskIdForChart === 'matriz' && user.username === 'master') {
+        const masterAverages: { [productId: string]: { totalAvg: number } } = {};
+        
+        Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
+            // Aggregate all kiosks except the distribution center itself
+            if (kioskId === 'matriz') return;
+
+            Object.entries(productMap).forEach(([productId, data]) => {
+                const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
+                if (!masterAverages[productId]) {
+                    masterAverages[productId] = { totalAvg: 0 };
+                }
+                masterAverages[productId].totalAvg += avgForKiosk;
+            });
         });
-      });
-      Object.entries(masterAverages).forEach(([productId, data]) => {
-          relevantConsumptionData[productId] = data.totalAvg;
-      });
+
+        Object.entries(masterAverages).forEach(([productId, data]) => {
+            relevantConsumptionData[productId] = data.totalAvg;
+        });
+
     } else {
-      const singleKioskData = kioskConsumption[kioskIdForChart];
-      if (singleKioskData) {
-         Object.entries(singleKioskData).forEach(([productId, data]) => {
-            relevantConsumptionData[productId] = data.count > 0 ? data.total / data.count : 0;
-        });
-      }
+        const singleKioskData = kioskConsumption[kioskIdForChart];
+        if (singleKioskData) {
+            Object.entries(singleKioskData).forEach(([productId, data]) => {
+                relevantConsumptionData[productId] = data.count > 0 ? data.total / data.count : 0;
+            });
+        }
     }
 
     // Step 3: Generate chart data for ALL selected products, maintaining a consistent alphabetical order.
@@ -163,6 +168,12 @@ export default function DashboardPage() {
     });
   }
 
+  const sortedKiosks = kiosks.sort((a,b) => {
+    if (a.id === 'matriz') return -1;
+    if (b.id === 'matriz') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-2">Bem-vindo, {user?.username}!</h1>
@@ -215,7 +226,7 @@ export default function DashboardPage() {
                     </CardTitle>
                     <CardDescription>
                         {user?.username === 'master' 
-                            ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
+                            ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
                             : `Produtos consumidos no seu quiosque.`}
                     </CardDescription>
                 </div>
@@ -254,8 +265,7 @@ export default function DashboardPage() {
                                 <SelectValue placeholder="Selecionar Quiosque" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todos (Agregado)</SelectItem>
-                                {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                                {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     )}
@@ -292,7 +302,7 @@ export default function DashboardPage() {
                             <p className="text-sm">
                                 {selectedProducts.length === 0
                                 ? "Selecione produtos no filtro para exibi-los no gráfico."
-                                : user?.username === 'master' && selectedKiosk !== 'all' 
+                                : user?.username === 'master' && selectedKiosk !== 'matriz' 
                                     ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
                                 }
