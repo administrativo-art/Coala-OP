@@ -14,6 +14,9 @@ export const units: ConversionUnits = {
     'm': 1,
     'cm': 0.01,
     'mm': 0.001,
+  },
+  Unidade: {
+    'un': 1,
   }
 };
 

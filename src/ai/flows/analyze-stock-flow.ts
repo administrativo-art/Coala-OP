@@ -6,7 +6,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { type Product, type Kiosk } from '@/types';
 
 // Zod schemas that mirror the types from src/types/index.ts for validation
@@ -18,7 +18,7 @@ const KioskSchema = z.object({
 const ProductSchema = z.object({
   id: z.string(),
   baseName: z.string(),
-  category: z.enum(['Volume', 'Massa', 'Comprimento']),
+  category: z.enum(['Volume', 'Massa', 'Comprimento', 'Unidade']),
   packageSize: z.number(),
   unit: z.string(),
   pdfUnit: z.string().optional(),
@@ -70,7 +70,7 @@ const analyzeStockPrompt = ai.definePrompt({
 
     Here are the business rules:
     1.  **Match Products:** For each product listed in the PDF, find a matching product from the provided \`products\` configuration list. The primary matching key is the product name (\`baseName\`).
-    2.  **Extract Stock:** Extract the current stock quantity for each matched product from the PDF. The PDF may list quantities in a different unit (e.g., 'ml') than the product's packaging unit (e.g., 'L'). Use the \`pdfUnit\` field from the product configuration to correctly interpret the PDF quantity, then convert it to the product's main \`unit\`.
+    2.  **Extract Stock:** Extract the current stock quantity for each matched product from the PDF. The PDF may list quantities in a different unit (e.g., 'ml') than the product's packaging unit (e.g., 'L'). Use the \`pdfUnit\` field from the product configuration to correctly interpret the PDF quantity, then convert it to the product's main \`unit\`. For products of category 'Unidade', the stock is a simple count.
     3.  **Identify Kiosk:** The PDF is for a specific kiosk. Identify which kiosk the stock report belongs to by matching names from the PDF with the provided \`kiosks\` list.
     4.  **Calculate Needs:** For each product and kiosk combination found in the PDF, calculate the replenishment need. A product needs replenishment only if its \`currentStock\` is BELOW the configured \`min\` stock level for that kiosk.
         - The \`needed\` quantity is the difference between the \`max\` stock level and the \`currentStock\`.
@@ -78,7 +78,7 @@ const analyzeStockPrompt = ai.definePrompt({
         - The \`idealStock\` is the \`max\` value from the configuration.
     5.  **Generate Purchase Suggestion:**
         - If the product's \`hasPurchaseUnit\` flag is true, calculate how many purchase units (e.g., 'Caixas') are needed. The number of purchase units should be rounded UP to the nearest whole number to ensure the \`needed\` quantity is met. The suggestion must be a string like "Comprar 3 Caixas".
-        - If the product does not have a purchase unit, the suggestion should be the \`needed\` quantity and its base unit, like "Comprar 35 L".
+        - If the product does not have a purchase unit, the suggestion should be the \`needed\` quantity and its base unit, like "Comprar 35 L" or "Comprar 10 un".
     6.  **Filter Results:** Your final output in the \`results\` array should ONLY include products that require replenishment (where \`needed\` > 0).
     7.  **Summarize:** Create a concise \`summary\` of the findings, like "3 produtos precisam de reposição em 2 quiosques.". If nothing is needed, say so.
     8.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema.

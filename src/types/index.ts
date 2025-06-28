@@ -1,5 +1,5 @@
 "use client"
-export const unitCategories = ["Volume", "Massa", "Comprimento"] as const;
+export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
 
