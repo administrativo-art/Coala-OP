@@ -517,9 +517,9 @@ export function StockAnalyzer() {
                                                                 consumptionText = '0';
                                                             } else if (item.hasPurchaseUnit && item.itemsPerPurchaseUnit && item.purchaseUnitName) {
                                                                 const purchaseUnits = item.packagesConsumed / item.itemsPerPurchaseUnit;
-                                                                consumptionText = `${purchaseUnits.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.purchaseUnitName}(s)`;
+                                                                consumptionText = `${Math.ceil(purchaseUnits).toLocaleString()} ${item.purchaseUnitName}(s)`;
                                                             } else {
-                                                                consumptionText = `${item.packagesConsumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} embalagen(s)`;
+                                                                consumptionText = `${Math.ceil(item.packagesConsumed).toLocaleString()} embalagem(s)`;
                                                             }
                                                             
                                                             const consumptionInBaseUnit = `(${item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.unit})`;
