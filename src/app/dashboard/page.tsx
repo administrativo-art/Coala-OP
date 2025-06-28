@@ -276,7 +276,7 @@ export default function DashboardPage() {
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={350}>
-                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 70 }}>
+                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 120 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
                         <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false}/>
