@@ -103,19 +103,29 @@ export function StockAnalyzer() {
 
         const results = Array.from(consumptionByKiosk.entries()).map(([kioskId, productMap]) => {
             const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'Quiosque desconhecido';
-            const averages = Array.from(productMap.entries()).map(([productId, data]) => ({
-                productId,
-                productName: data.name,
-                averageConsumption: data.total / data.count,
-                unit: stockAnalysisProducts.products.find(p => p.id === productId)?.unit || '',
-            })).sort((a, b) => a.productName.localeCompare(b.productName));
+            const averages = Array.from(productMap.entries()).map(([productId, data]) => {
+                const product = stockAnalysisProducts.products.find(p => p.id === productId);
+                const avgConsumption = data.total / data.count;
+                const packagesConsumed = product && product.packageSize > 0 ? avgConsumption / product.packageSize : 0;
+
+                return {
+                    productId,
+                    productName: product?.baseName || data.name,
+                    averageConsumption: avgConsumption,
+                    unit: product?.unit || '',
+                    packagesConsumed,
+                    hasPurchaseUnit: product?.hasPurchaseUnit,
+                    purchaseUnitName: product?.purchaseUnitName,
+                    itemsPerPurchaseUnit: product?.itemsPerPurchaseUnit,
+                };
+            }).sort((a, b) => a.productName.localeCompare(b.productName));
 
             return { kioskId, kioskName, averages };
         });
 
         const matriz = kiosks.find(k => k.id === 'matriz');
         if (matriz) {
-            const matrizAveragesMap = new Map<string, { totalConsumption: number; name: string, unit: string }>();
+            const matrizAveragesMap = new Map<string, { totalConsumption: number; }>();
 
             results.forEach(({ kioskId, averages }) => {
                 if (kioskId !== 'matriz') {
@@ -126,8 +136,6 @@ export function StockAnalyzer() {
                         } else {
                             matrizAveragesMap.set(avg.productId, {
                                 totalConsumption: avg.averageConsumption,
-                                name: avg.productName,
-                                unit: avg.unit,
                             });
                         }
                     });
@@ -137,12 +145,20 @@ export function StockAnalyzer() {
             const matrizResult = {
                 kioskId: 'matriz',
                 kioskName: matriz.name,
-                averages: Array.from(matrizAveragesMap.entries()).map(([productId, data]) => ({
-                    productId,
-                    productName: data.name,
-                    averageConsumption: data.totalConsumption,
-                    unit: data.unit,
-                })).sort((a,b) => a.productName.localeCompare(b.productName))
+                averages: Array.from(matrizAveragesMap.entries()).map(([productId, data]) => {
+                    const product = stockAnalysisProducts.products.find(p => p.id === productId);
+                    const packagesConsumed = product && product.packageSize > 0 ? data.totalConsumption / product.packageSize : 0;
+                    return {
+                        productId,
+                        productName: product?.baseName || 'Produto desconhecido',
+                        averageConsumption: data.totalConsumption,
+                        unit: product?.unit || '',
+                        packagesConsumed,
+                        hasPurchaseUnit: product?.hasPurchaseUnit,
+                        purchaseUnitName: product?.purchaseUnitName,
+                        itemsPerPurchaseUnit: product?.itemsPerPurchaseUnit,
+                    };
+                }).sort((a,b) => a.productName.localeCompare(b.productName))
             };
             results.push(matrizResult);
         }
@@ -495,12 +511,31 @@ export function StockAnalyzer() {
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {averages.map(item => (
-                                                            <TableRow key={item.productId}>
-                                                                <TableCell>{item.productName}</TableCell>
-                                                                <TableCell className="text-right font-semibold">{item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} {item.unit}</TableCell>
-                                                            </TableRow>
-                                                        ))}
+                                                        {averages.map(item => {
+                                                            let consumptionText = '';
+                                                            if (item.packagesConsumed === 0) {
+                                                                consumptionText = '0';
+                                                            } else if (item.hasPurchaseUnit && item.itemsPerPurchaseUnit && item.purchaseUnitName) {
+                                                                const purchaseUnits = item.packagesConsumed / item.itemsPerPurchaseUnit;
+                                                                consumptionText = `${purchaseUnits.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.purchaseUnitName}(s)`;
+                                                            } else {
+                                                                consumptionText = `${item.packagesConsumed.toLocaleString(undefined, { maximumFractionDigits: 2 })} embalagen(s)`;
+                                                            }
+                                                            
+                                                            const consumptionInBaseUnit = `(${item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.unit})`;
+
+                                                            return (
+                                                                <TableRow key={item.productId}>
+                                                                    <TableCell>{item.productName}</TableCell>
+                                                                    <TableCell className="text-right font-semibold">
+                                                                        <div className="flex flex-col items-end">
+                                                                            <span>{consumptionText}</span>
+                                                                            <span className="text-xs text-muted-foreground font-normal">{consumptionInBaseUnit}</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })}
                                                     </TableBody>
                                                 </Table>
                                             </div>
