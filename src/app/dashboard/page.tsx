@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useProducts } from "@/hooks/use-products"
@@ -9,11 +9,14 @@ import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 
 export default function DashboardPage() {
@@ -25,6 +28,13 @@ export default function DashboardPage() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (stockProducts.length > 0 && selectedProducts.length === 0) {
+      setSelectedProducts(stockProducts.map(p => p.id));
+    }
+  }, [stockProducts, selectedProducts.length]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -46,7 +56,7 @@ export default function DashboardPage() {
 
   const chartData = useMemo(() => {
     const loading = consumptionLoading || stockProductsLoading || kiosksLoading;
-    if (loading || !user || consumptionHistory.length === 0) {
+    if (loading || !user || consumptionHistory.length === 0 || stockProducts.length === 0) {
       return [];
     }
 
@@ -66,12 +76,10 @@ export default function DashboardPage() {
       });
     });
 
-    // Step 2: Calculate averages and format for chart
-    let dataForChart: { name: string, "Consumo": number }[] = [];
-
+    // Step 2: Determine which consumption data to use based on selectors
     const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
+    let relevantConsumptionData: { [productId: string]: number } = {}; // Stores average packages per product
 
-    // A. Aggregated view for 'master' user
     if (kioskIdForChart === 'all' && user.username === 'master') {
       const masterAverages: { [productId: string]: { totalAvg: number } } = {};
       
@@ -84,50 +92,42 @@ export default function DashboardPage() {
           masterAverages[productId].totalAvg += avgForKiosk;
         });
       });
-      
-      dataForChart = Object.entries(masterAverages).map(([productId, data]) => {
-        const product = stockProducts.find(p => p.id === productId);
-        const avgPackages = data.totalAvg;
+      Object.entries(masterAverages).forEach(([productId, data]) => {
+          relevantConsumptionData[productId] = data.totalAvg;
+      });
+    } else {
+      const singleKioskData = kioskConsumption[kioskIdForChart];
+      if (singleKioskData) {
+         Object.entries(singleKioskData).forEach(([productId, data]) => {
+            relevantConsumptionData[productId] = data.count > 0 ? data.total / data.count : 0;
+        });
+      }
+    }
+
+    // Step 3: Generate chart data for ALL selected products, maintaining a consistent alphabetical order.
+    const dataForChart = stockProducts
+      .filter(p => selectedProducts.includes(p.id))
+      .map(product => {
+        const avgPackages = relevantConsumptionData[product.id] || 0;
         let consumption = Math.ceil(avgPackages);
         let unitLabel = 'Pacotes';
 
-        if (product && product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
+        if (product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
             consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
             unitLabel = product.purchaseUnitName || 'Un. Compra';
         }
 
         return {
-          name: `${product?.baseName || 'Produto Desconhecido'} (${unitLabel})`,
+          productId: product.id,
+          name: `${product.baseName} (${unitLabel})`,
           "Consumo": consumption,
         };
-      });
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-    // B. Single kiosk view
-    } else {
-      const singleKioskData = kioskConsumption[kioskIdForChart];
-      if (singleKioskData) {
-        dataForChart = Object.entries(singleKioskData).map(([productId, data]) => {
-            const product = stockProducts.find(p => p.id === productId);
-            const avgPackages = data.count > 0 ? data.total / data.count : 0;
-            let consumption = Math.ceil(avgPackages);
-            let unitLabel = 'Pacotes';
+    return dataForChart;
 
-            if (product && product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
-                consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
-                unitLabel = product.purchaseUnitName || 'Un. Compra';
-            }
-          return {
-            name: `${product?.baseName || 'Produto Desconhecido'} (${unitLabel})`,
-            "Consumo": consumption
-          };
-        });
-      }
-    }
-
-    // Step 3: Sort and return all products
-    return dataForChart.sort((a, b) => b["Consumo"] - a["Consumo"]);
-
-  }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading, kiosks, kiosksLoading, selectedKiosk]);
+  }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts]);
 
 
   const initialLoading = productsLoading || lotsLoading || kiosksLoading;
@@ -148,6 +148,16 @@ export default function DashboardPage() {
             </div>
         </div>
     )
+  }
+
+  const handleProductSelection = (productId: string, checked: boolean) => {
+    setSelectedProducts(current => {
+        if (checked) {
+            return [...current, productId];
+        } else {
+            return current.filter(id => id !== productId);
+        }
+    });
   }
 
   return (
@@ -203,21 +213,51 @@ export default function DashboardPage() {
                         </CardTitle>
                         <CardDescription>
                             {user?.username === 'master' 
-                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos mais consumidos no quiosque selecionado.`)
-                                : `Produtos mais consumidos no seu quiosque.`}
+                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
+                                : `Produtos consumidos no seu quiosque.`}
                         </CardDescription>
                     </div>
-                    {user?.username === 'master' && (
-                        <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
-                            <SelectTrigger className="w-full sm:w-[240px]">
-                                <SelectValue placeholder="Selecionar Quiosque" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos (Agregado)</SelectItem>
-                                {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    )}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full sm:w-auto">
+                                    <ListFilter className="mr-2 h-4 w-4" />
+                                    Filtrar Produtos ({selectedProducts.length})
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64">
+                                <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                 <DropdownMenuItem onSelect={() => setSelectedProducts(stockProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
+                                 <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <ScrollArea className="h-60">
+                                {stockProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                                    <DropdownMenuCheckboxItem
+                                        key={product.id}
+                                        checked={selectedProducts.includes(product.id)}
+                                        onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
+                                        onSelect={(e) => e.preventDefault()}
+                                    >
+                                        {product.baseName}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                                </ScrollArea>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {user?.username === 'master' && (
+                            <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
+                                <SelectTrigger className="w-full sm:w-[240px]">
+                                    <SelectValue placeholder="Selecionar Quiosque" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todos (Agregado)</SelectItem>
+                                    {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="pl-2">
@@ -228,7 +268,7 @@ export default function DashboardPage() {
                         <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 70 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
-                        <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false}/>
                         <Tooltip 
                             cursor={{fill: 'hsl(var(--muted))'}}
                             contentStyle={{ 
@@ -245,11 +285,16 @@ export default function DashboardPage() {
                     ) : (
                     <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
                             <TrendingUp className="h-12 w-12 mb-4" />
-                            <p className="font-semibold">Sem dados de consumo</p>
+                            <p className="font-semibold">
+                                {selectedProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
+                            </p>
                             <p className="text-sm">
-                                {user?.username === 'master' && selectedKiosk !== 'all' 
-                                    ? `Nenhum relatório de consumo encontrado para o quiosque selecionado.`
-                                    : `Faça o upload de relatórios de consumo para gerar o gráfico.`}
+                                {selectedProducts.length === 0
+                                ? "Selecione produtos no filtro para exibi-los no gráfico."
+                                : user?.username === 'master' && selectedKiosk !== 'all' 
+                                    ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
+                                    : "Faça o upload de relatórios de consumo para gerar o gráfico."
+                                }
                             </p>
                     </div>
                     )}
@@ -259,3 +304,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
