@@ -109,13 +109,18 @@ export function StockAnalysisConfigurator() {
     doc.setTextColor(100);
     doc.text(`Exportado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
 
-    const head = [['Produto', 'Unidade de Compra', 'Itens/Unid.', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
+    const head = [['Produto', 'Embalagem', 'Unidade de Compra', 'Itens/Unid.', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
     const body: any[] = [];
 
     data.forEach(product => {
       const productInfo = [
         {
-          content: getProductFullName(product),
+          content: product.baseName,
+          rowSpan: kiosks.length,
+          styles: { valign: 'middle' },
+        },
+        {
+          content: `${product.packageSize} ${product.unit}`,
           rowSpan: kiosks.length,
           styles: { valign: 'middle' },
         },
