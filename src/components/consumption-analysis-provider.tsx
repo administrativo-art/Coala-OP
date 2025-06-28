@@ -29,6 +29,8 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
           reportName: 'Vendas de Maio de 2024.pdf',
           month: 5,
           year: 2024,
+          kioskId: 'tirirical',
+          kioskName: 'Quiosque Tirirical',
           createdAt: today.toISOString(),
           status: 'completed',
           results: [

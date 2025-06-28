@@ -28,6 +28,8 @@ const AnalyzeConsumptionInputSchema = z.object({
   pdfDataUri: z.string().describe("A PDF file of a consumption/sales report, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."),
   month: z.number().min(1).max(12),
   year: z.number(),
+  kioskId: z.string(),
+  kioskName: z.string(),
   products: z.array(ProductSchema).describe("The list of products to be considered in the analysis, including their packaging configuration."),
 });
 type AnalyzeConsumptionInput = z.infer<typeof AnalyzeConsumptionInputSchema>;
@@ -44,6 +46,8 @@ const AnalyzeConsumptionOutputSchema = z.object({
   reportName: z.string(),
   month: z.number(),
   year: z.number(),
+  kioskId: z.string(),
+  kioskName: z.string(),
   results: z.array(ConsumptionAnalysisItemSchema),
 });
 type AnalyzeConsumptionOutput = z.infer<typeof AnalyzeConsumptionOutputSchema>;
@@ -60,20 +64,21 @@ const analyzeConsumptionPrompt = ai.definePrompt({
   output: { schema: AnalyzeConsumptionOutputSchema },
   prompt: `
     You are an expert inventory analyst for a franchise of smoothie kiosks called "Coala Shakes".
-    Your task is to analyze a consumption or sales report for a specific month and year and determine how much of each product was used.
+    Your task is to analyze a consumption or sales report for a specific month, year, and kiosk, and determine how much of each product was used.
 
     Here are the business rules:
     1.  **Match Products:** For each product mentioned in the PDF report, find its corresponding entry in the provided \`products\` configuration list. The primary matching key is the product name (\`baseName\`).
     2.  **Extract Consumption:** Extract the total quantity consumed for each matched product from the PDF. The quantity in the PDF might be in a different unit (e.g., 'ml') than the product's main packaging unit (e.g., 'L'). Use the \`pdfUnit\` and \`unit\` fields from the product configuration to perform any necessary conversions.
     3.  **Calculate Total Consumed Quantity:** The final \`consumedQuantity\` for each product must be in its base unit as defined in its configuration (e.g., L, kg, un).
     4.  **Calculate Consumed Packages:** Based on the total \`consumedQuantity\`, calculate the \`consumedPackages\`. This is the number of individual packages sold or used. To calculate this, divide the total \`consumedQuantity\` by the product's \`packageSize\`. Round the result to the nearest whole number.
-    5.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema. Include the original report name, month, and year in your response. The \`results\` array should contain an entry for every product found in the report.
+    5.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema. Include the original report name, month, year, kioskId, and kioskName from the input in your response. The \`results\` array should contain an entry for every product found in the report.
 
     **CONFIGURATION DATA:**
     - All Products to look for, with their packaging configurations: {{{json products}}}
 
     **REPORT TO ANALYZE:**
     - Report Name: {{{reportName}}}
+    - Kiosk: {{{kioskName}}} (ID: {{{kioskId}}})
     - Month: {{{month}}}
     - Year: {{{year}}}
     - PDF Content: {{media url=pdfDataUri}}

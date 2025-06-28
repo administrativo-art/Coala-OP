@@ -68,6 +68,8 @@ export type ConsumptionReport = {
   reportName: string;
   month: number;
   year: number;
+  kioskId: string;
+  kioskName: string;
   createdAt: string;
   status: 'completed' | 'processing' | 'error';
   results: ConsumptionAnalysisItem[];

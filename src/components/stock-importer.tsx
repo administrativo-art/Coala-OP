@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useRef } from 'react';
@@ -45,12 +44,13 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 const consumptionFormSchema = z.object({
     month: z.string().min(1, "O mês é obrigatório."),
     year: z.string().min(1, "O ano é obrigatório."),
+    kioskId: z.string().min(1, "O quiosque é obrigatório."),
 });
 type ConsumptionFormValues = z.infer<typeof consumptionFormSchema>;
 
 export function StockAnalyzer() {
     const { permissions } = useAuth();
-    const { kiosks } = useKiosks();
+    const { kiosks, loading: kiosksLoading } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const stockAnalysisProducts = useStockAnalysisProducts();
@@ -68,22 +68,28 @@ export function StockAnalyzer() {
         defaultValues: {
             month: String(new Date().getMonth()),
             year: String(currentYear),
+            kioskId: '',
         }
     });
 
     const averageConsumption = React.useMemo(() => {
-        if (consumptionHistoryLoading || stockAnalysisProducts.loading) return [];
+        if (consumptionHistoryLoading || stockAnalysisProducts.loading || kiosksLoading) return [];
 
-        const consumptionData = new Map<string, { total: number; count: number; name: string; }>();
+        const consumptionByKiosk = new Map<string, Map<string, { total: number; count: number; name: string }>>();
 
         consumptionHistory.forEach(report => {
+            if (!consumptionByKiosk.has(report.kioskId)) {
+                consumptionByKiosk.set(report.kioskId, new Map());
+            }
+            const productMap = consumptionByKiosk.get(report.kioskId)!;
+
             report.results.forEach(item => {
-                const existing = consumptionData.get(item.productId);
+                const existing = productMap.get(item.productId);
                 if (existing) {
                     existing.total += item.consumedQuantity;
                     existing.count++;
                 } else {
-                    consumptionData.set(item.productId, {
+                    productMap.set(item.productId, {
                         total: item.consumedQuantity,
                         count: 1,
                         name: item.productName,
@@ -92,14 +98,58 @@ export function StockAnalyzer() {
             });
         });
 
-        return Array.from(consumptionData.entries()).map(([productId, data]) => ({
-            productId,
-            productName: data.name,
-            averageConsumption: data.total / data.count,
-            unit: stockAnalysisProducts.products.find(p => p.id === productId)?.unit || '',
-        })).sort((a,b) => a.productName.localeCompare(b.productName));
+        const results = Array.from(consumptionByKiosk.entries()).map(([kioskId, productMap]) => {
+            const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'Quiosque desconhecido';
+            const averages = Array.from(productMap.entries()).map(([productId, data]) => ({
+                productId,
+                productName: data.name,
+                averageConsumption: data.total / data.count,
+                unit: stockAnalysisProducts.products.find(p => p.id === productId)?.unit || '',
+            })).sort((a, b) => a.productName.localeCompare(b.productName));
 
-    }, [consumptionHistory, consumptionHistoryLoading, stockAnalysisProducts.products, stockAnalysisProducts.loading]);
+            return { kioskId, kioskName, averages };
+        });
+
+        const matriz = kiosks.find(k => k.id === 'matriz');
+        if (matriz) {
+            const matrizAveragesMap = new Map<string, { totalConsumption: number; name: string, unit: string }>();
+
+            results.forEach(({ kioskId, averages }) => {
+                if (kioskId !== 'matriz') {
+                    averages.forEach(avg => {
+                        const existing = matrizAveragesMap.get(avg.productId);
+                        if (existing) {
+                            existing.totalConsumption += avg.averageConsumption;
+                        } else {
+                            matrizAveragesMap.set(avg.productId, {
+                                totalConsumption: avg.averageConsumption,
+                                name: avg.productName,
+                                unit: avg.unit,
+                            });
+                        }
+                    });
+                }
+            });
+            
+            const matrizResult = {
+                kioskId: 'matriz',
+                kioskName: matriz.name,
+                averages: Array.from(matrizAveragesMap.entries()).map(([productId, data]) => ({
+                    productId,
+                    productName: data.name,
+                    averageConsumption: data.totalConsumption,
+                    unit: data.unit,
+                })).sort((a,b) => a.productName.localeCompare(b.productName))
+            };
+            results.push(matrizResult);
+        }
+        
+        return results.sort((a, b) => {
+             if (a.kioskId === 'matriz') return -1;
+             if (b.kioskId === 'matriz') return 1;
+             return a.kioskName.localeCompare(b.kioskName);
+        });
+    }, [consumptionHistory, consumptionHistoryLoading, stockAnalysisProducts.products, stockAnalysisProducts.loading, kiosks, kiosksLoading]);
 
     const handleStockUploadClick = () => {
         if (isAnalyzing) return;
@@ -173,11 +223,15 @@ export function StockAnalyzer() {
             reader.readAsDataURL(file);
             reader.onload = async () => {
                 const pdfDataUri = reader.result as string;
+                const kioskName = kiosks.find(k => k.id === values.kioskId)?.name || 'Quiosque desconhecido';
+                
                 const result = await analyzeConsumption({
                     reportName: file.name,
                     pdfDataUri,
                     month: parseInt(values.month, 10),
                     year: parseInt(values.year, 10),
+                    kioskId: values.kioskId,
+                    kioskName: kioskName,
                     products: stockAnalysisProducts.products,
                 });
 
@@ -315,7 +369,7 @@ export function StockAnalyzer() {
                                 <div className="flex items-center justify-between gap-4 w-full">
                                     <div className="grid gap-1 flex-grow text-left">
                                         <p className="font-semibold">{report.reportName}</p>
-                                        <p className="text-sm text-muted-foreground">{months.find(m => m.value === report.month)?.label} de {report.year}</p>
+                                        <p className="text-sm text-muted-foreground">{report.kioskName} - {months.find(m => m.value === report.month)?.label} de {report.year}</p>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
                                         {canDeleteConsumptionHistory && <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteConsumptionReportClick(report); }}><span><Trash2 className="h-4 w-4" /></span></Button>}
@@ -339,7 +393,7 @@ export function StockAnalyzer() {
     }
     
     const renderAverageConsumption = () => {
-        if (consumptionHistoryLoading || stockAnalysisProducts.loading) {
+        if (consumptionHistoryLoading || stockAnalysisProducts.loading || kiosksLoading) {
             return (
                 <Card>
                     <CardHeader>
@@ -373,28 +427,45 @@ export function StockAnalyzer() {
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Info /> Consumo Médio Mensal</CardTitle>
-                    <CardDescription>Calculado com base no histórico de relatórios de consumo enviados.</CardDescription>
+                    <CardTitle className="flex items-center gap-2"><Info /> Consumo Médio Mensal por Loja</CardTitle>
+                    <CardDescription>Calculado com base no histórico. O Centro de Distribuição reflete a soma de todas as lojas.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                     <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Produto</TableHead>
-                                    <TableHead className="text-right">Consumo Médio</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {averageConsumption.map(item => (
-                                    <TableRow key={item.productId}>
-                                        <TableCell>{item.productName}</TableCell>
-                                        <TableCell className="text-right font-semibold">{item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} {item.unit}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                     </div>
+                     <Accordion type="multiple" defaultValue={['matriz']} className="w-full space-y-3">
+                        {averageConsumption.map(({ kioskId, kioskName, averages }) => (
+                            <AccordionItem value={kioskId} key={kioskId} className="border-none">
+                                <Card>
+                                    <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full font-semibold text-base">
+                                        {kioskName}
+                                    </AccordionTrigger>
+                                    <AccordionContent className="p-4 pt-0">
+                                        {averages.length > 0 ? (
+                                            <div className="rounded-md border mt-2">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Produto</TableHead>
+                                                            <TableHead className="text-right">Consumo Médio</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {averages.map(item => (
+                                                            <TableRow key={item.productId}>
+                                                                <TableCell>{item.productName}</TableCell>
+                                                                <TableCell className="text-right font-semibold">{item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} {item.unit}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        ) : (
+                                            <p className="text-center text-muted-foreground text-sm pt-4">Nenhum consumo registrado para esta loja.</p>
+                                        )}
+                                    </AccordionContent>
+                                </Card>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
                 </CardContent>
             </Card>
         )
@@ -419,9 +490,19 @@ export function StockAnalyzer() {
                 </TabsContent>}
                 
                 {canUploadConsumption && <TabsContent value="consumption" className="mt-4 space-y-6">
-                    <Card><CardHeader><CardTitle>Analisar Consumo Mensal</CardTitle><CardDescription>Faça o upload do relatório de vendas do mês para registrar o consumo médio dos produtos.</CardDescription></CardHeader><CardContent className="space-y-4 p-6">
+                    <Card><CardHeader><CardTitle>Analisar Consumo Mensal</CardTitle><CardDescription>Faça o upload do relatório de vendas do mês para registrar o consumo dos produtos por quiosque.</CardDescription></CardHeader><CardContent className="space-y-4 p-6">
                         <Form {...consumptionForm}>
                             <form onSubmit={consumptionForm.handleSubmit(onConsumptionFormSubmit)} className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                <FormField control={consumptionForm.control} name="kioskId" render={({ field }) => (
+                                    <FormItem className="w-full sm:w-auto">
+                                        <FormLabel>Quiosque</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.filter(k => k.id !== 'matriz').length === 0}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                            <SelectContent>{kiosks.filter(k => k.id !== 'matriz').map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
                                 <FormField control={consumptionForm.control} name="month" render={({ field }) => <FormItem><FormLabel>Mês</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Mês" /></SelectTrigger></FormControl><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
                                 <FormField control={consumptionForm.control} name="year" render={({ field }) => <FormItem><FormLabel>Ano</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ano" /></SelectTrigger></FormControl><SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
                                 <div className="pt-6"><Button type="submit" disabled={isAnalyzing}>{isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} {isAnalyzing ? 'Analisando...' : 'Upload do Relatório'}</Button></div>
