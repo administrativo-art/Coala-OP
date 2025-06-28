@@ -15,7 +15,13 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2 } from 'lucide-react';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2, Download } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from '@/hooks/use-toast';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -106,6 +112,20 @@ export function StockAnalyzer() {
         }
     };
     
+    const handleDownloadPDF = (report: StockAnalysisReport) => {
+        toast({
+            title: "Em desenvolvimento",
+            description: "A funcionalidade de download em PDF será implementada em breve.",
+        });
+    };
+
+    const handleExportToSheets = (report: StockAnalysisReport) => {
+        toast({
+            title: "Em desenvolvimento",
+            description: "A funcionalidade de exportação para Google Sheets será implementada em breve.",
+        });
+    };
+
     const canUpload = permissions.stockAnalysis?.upload;
     const canConfigure = permissions.stockAnalysis?.configure;
     const canViewHistory = permissions.stockAnalysis?.viewHistory;
@@ -171,6 +191,23 @@ export function StockAnalyzer() {
                                         <p className="text-sm">{report.summary}</p>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon">
+                                                    <Download className="h-4 w-4" />
+                                                    <span className="sr-only">Baixar relatório</span>
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownloadPDF(report); }}>
+                                                    Baixar PDF
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleExportToSheets(report); }}>
+                                                    Exportar para Google Sheets
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+
                                         {canDeleteHistory && (
                                             <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
                                                 <span>
