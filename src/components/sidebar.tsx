@@ -1,14 +1,19 @@
-
 "use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3, CreditCard } from 'lucide-react'
-import { UserProfile } from "./user-profile"
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3, Shell, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-export function Sidebar() {
+interface SidebarProps {
+  isCollapsed: boolean
+  setIsCollapsed: (isCollapsed: boolean) => void
+}
+
+export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
   const { permissions, loading, user } = useAuth()
 
@@ -28,33 +33,58 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="hidden border-r bg-background text-foreground md:block dark">
+    <div className="hidden border-r bg-background text-foreground md:block dark transition-all duration-300">
       <div className="flex h-full max-h-screen flex-col">
         <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
-          <Link href="/dashboard" className="font-logo select-none">
-            <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
-            <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+            {isCollapsed ? (
+                <Shell className="h-6 w-6" />
+            ) : (
+              <div className="font-logo select-none">
+                <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
+                <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
+              </div>
+            )}
+             <span className="sr-only">Coala Shakes</span>
           </Link>
         </div>
+
         <div className="flex-1 overflow-y-auto">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4 py-4">
-            {navItems.map(item => item.show && (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
-                  pathname === item.href && "bg-muted text-primary"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <TooltipProvider delayDuration={0}>
+            <nav className="grid items-start px-2 text-sm font-medium lg:px-4 py-4">
+              {navItems.map(item => item.show && (
+                <Tooltip key={item.href}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
+                        pathname === item.href && "bg-muted text-primary",
+                        isCollapsed && "h-9 w-9 justify-center"
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span className={cn(isCollapsed && "sr-only")}>{item.label}</span>
+                    </Link>
+                  </TooltipTrigger>
+                  {isCollapsed && (
+                    <TooltipContent side="right" sideOffset={5}>{item.label}</TooltipContent>
+                  )}
+                </Tooltip>
+              ))}
+            </nav>
+          </TooltipProvider>
         </div>
-        <div className="mt-auto border-t p-4">
-            <UserProfile />
+        
+        <div className="mt-auto border-t p-4 flex justify-center">
+          <Button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            size="icon"
+            variant="outline"
+          >
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            <span className="sr-only">Toggle sidebar</span>
+          </Button>
         </div>
       </div>
     </div>

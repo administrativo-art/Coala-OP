@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
+import { UserProfile } from "./user-profile"
 
 
 export function Header() {
@@ -67,6 +67,7 @@ export function Header() {
               Oi, humano. Acredite em você!
             </p>
         </div>
+        <UserProfile />
     </header>
   )
 }
