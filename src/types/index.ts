@@ -56,6 +56,24 @@ export type StockAnalysisReport = {
   results: StockAnalysisResultItem[];
 };
 
+export type ConsumptionAnalysisItem = {
+  productId: string;
+  productName: string;
+  consumedQuantity: number;
+  consumedPackages: number;
+};
+
+export type ConsumptionReport = {
+  id: string;
+  reportName: string;
+  month: number;
+  year: number;
+  createdAt: string;
+  status: 'completed' | 'processing' | 'error';
+  results: ConsumptionAnalysisItem[];
+};
+
+
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
@@ -64,6 +82,7 @@ export type PermissionSet = {
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
     forms: { manage: boolean; fill: boolean; viewHistory: boolean };
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
+    consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
 };
 
 export type Profile = {
@@ -143,6 +162,7 @@ export const defaultGuestPermissions: PermissionSet = {
     predefinedLists: { add: false, edit: false, delete: false },
     forms: { manage: false, fill: false, viewHistory: false },
     stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
+    consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -153,6 +173,7 @@ export const defaultUserPermissions: PermissionSet = {
     predefinedLists: { add: true, edit: true, delete: false },
     forms: { manage: false, fill: true, viewHistory: true },
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
+    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -163,4 +184,5 @@ export const defaultAdminPermissions: PermissionSet = {
     predefinedLists: { add: true, edit: true, delete: true },
     forms: { manage: true, fill: true, viewHistory: true },
     stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
+    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
 };

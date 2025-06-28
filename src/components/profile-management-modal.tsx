@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -33,6 +33,7 @@ const permissionsSchema = z.object({
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
     stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
+    consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -88,6 +89,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profile.permissions?.predefinedLists },
       forms: { ...defaultGuestPermissions.forms, ...profile.permissions?.forms },
       stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profile.permissions?.stockAnalysis },
+      consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profile.permissions?.consumptionAnalysis },
     };
 
     form.reset({
@@ -159,7 +161,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     </FormItem>
                   )}
                 />
-                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis']} className="w-full">
+                <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis']} className="w-full">
                   <AccordionItem value="stockAnalysis">
                     <AccordionTrigger className="text-lg font-semibold"><BarChart3 className="mr-2 h-5 w-5" /> Análise de Estoque</AccordionTrigger>
                     <AccordionContent className="space-y-2 pt-4 p-1">
@@ -167,6 +169,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         {renderPermissionSwitch("permissions.stockAnalysis.configure", "Configurar parâmetros", "Permite que o usuário defina o estoque ideal e parâmetros de análise.")}
                         {renderPermissionSwitch("permissions.stockAnalysis.viewHistory", "Ver histórico de análises", "Permite visualizar relatórios de análises anteriores.")}
                         {renderPermissionSwitch("permissions.stockAnalysis.deleteHistory", "Excluir histórico", "Permite excluir relatórios do histórico de análises.")}
+                    </AccordionContent>
+                  </AccordionItem>
+                   <AccordionItem value="consumptionAnalysis">
+                    <AccordionTrigger className="text-lg font-semibold"><TrendingUp className="mr-2 h-5 w-5" /> Análise de Consumo</AccordionTrigger>
+                    <AccordionContent className="space-y-2 pt-4 p-1">
+                        {renderPermissionSwitch("permissions.consumptionAnalysis.upload", "Fazer upload de relatório", "Permite subir relatórios de vendas/consumo para análise.")}
+                        {renderPermissionSwitch("permissions.consumptionAnalysis.viewHistory", "Ver histórico de consumo", "Permite visualizar análises de consumo de meses anteriores.")}
+                        {renderPermissionSwitch("permissions.consumptionAnalysis.deleteHistory", "Excluir histórico", "Permite excluir relatórios do histórico de consumo.")}
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="products">

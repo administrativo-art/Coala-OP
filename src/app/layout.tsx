@@ -10,6 +10,7 @@ import { ProfilesProvider } from '@/components/profiles-provider';
 import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
+import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -38,8 +39,10 @@ export default function RootLayout({
                     <FormProvider>
                       <StockAnalysisProvider>
                         <StockAnalysisProductsProvider>
-                          {children}
-                          <Toaster />
+                          <ConsumptionAnalysisProvider>
+                            {children}
+                            <Toaster />
+                          </ConsumptionAnalysisProvider>
                         </StockAnalysisProductsProvider>
                       </StockAnalysisProvider>
                     </FormProvider>
