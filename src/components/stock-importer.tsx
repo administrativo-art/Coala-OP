@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2, Download, TrendingUp } from 'lucide-react';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2, Download, TrendingUp, Info } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -70,6 +70,36 @@ export function StockAnalyzer() {
             year: String(currentYear),
         }
     });
+
+    const averageConsumption = React.useMemo(() => {
+        if (consumptionHistoryLoading || stockAnalysisProducts.loading) return [];
+
+        const consumptionData = new Map<string, { total: number; count: number; name: string; }>();
+
+        consumptionHistory.forEach(report => {
+            report.results.forEach(item => {
+                const existing = consumptionData.get(item.productId);
+                if (existing) {
+                    existing.total += item.consumedQuantity;
+                    existing.count++;
+                } else {
+                    consumptionData.set(item.productId, {
+                        total: item.consumedQuantity,
+                        count: 1,
+                        name: item.productName,
+                    });
+                }
+            });
+        });
+
+        return Array.from(consumptionData.entries()).map(([productId, data]) => ({
+            productId,
+            productName: data.name,
+            averageConsumption: data.total / data.count,
+            unit: stockAnalysisProducts.products.find(p => p.id === productId)?.unit || '',
+        })).sort((a,b) => a.productName.localeCompare(b.productName));
+
+    }, [consumptionHistory, consumptionHistoryLoading, stockAnalysisProducts.products, stockAnalysisProducts.loading]);
 
     const handleStockUploadClick = () => {
         if (isAnalyzing) return;
@@ -307,13 +337,75 @@ export function StockAnalyzer() {
             </Accordion>
         );
     }
+    
+    const renderAverageConsumption = () => {
+        if (consumptionHistoryLoading || stockAnalysisProducts.loading) {
+            return (
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-1/2" />
+                        <Skeleton className="h-4 w-3/4" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-2">
+                            <Skeleton className="h-8 w-full" />
+                            <Skeleton className="h-8 w-full" />
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+        }
+        
+        if (averageConsumption.length === 0) {
+            return (
+                <Card className="text-center">
+                    <CardHeader>
+                        <CardTitle className="flex items-center justify-center gap-2"><Info /> Consumo Médio</CardTitle>
+                        <CardDescription>Ainda não há dados suficientes para calcular o consumo médio.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-sm text-muted-foreground">Faça o upload de alguns relatórios mensais de consumo para começar.</p>
+                    </CardContent>
+                </Card>
+            )
+        }
+
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Info /> Consumo Médio Mensal</CardTitle>
+                    <CardDescription>Calculado com base no histórico de relatórios de consumo enviados.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                     <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Produto</TableHead>
+                                    <TableHead className="text-right">Consumo Médio</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {averageConsumption.map(item => (
+                                    <TableRow key={item.productId}>
+                                        <TableCell>{item.productName}</TableCell>
+                                        <TableCell className="text-right font-semibold">{item.averageConsumption.toLocaleString(undefined, { maximumFractionDigits: 2 })} {item.unit}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                     </div>
+                </CardContent>
+            </Card>
+        )
+    }
 
 
     return (
         <>
             <Tabs defaultValue={defaultTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
-                    {canUploadStock && <TabsTrigger value="replenishment"><UploadCloud className="mr-2" /> Análise de Reposição</TabsTrigger>}
+                    {canUploadStock && <TabsTrigger value="replenishment"><UploadCloud className="mr-2" /> Análise para Reposição</TabsTrigger>}
                     {canUploadConsumption && <TabsTrigger value="consumption"><TrendingUp className="mr-2" /> Análise de Consumo</TabsTrigger>}
                     {canConfigureStock && <TabsTrigger value="parameters"><Settings className="mr-2" /> Configurar Parâmetros</TabsTrigger>}
                 </TabsList>
@@ -326,7 +418,7 @@ export function StockAnalyzer() {
                     {canViewStockHistory && <div className="mt-6"><Separator className="mb-4" /><h3 className="text-lg font-semibold mb-4">Histórico de Análise de Reposição</h3>{renderStockHistory()}</div>}
                 </TabsContent>}
                 
-                {canUploadConsumption && <TabsContent value="consumption" className="mt-4">
+                {canUploadConsumption && <TabsContent value="consumption" className="mt-4 space-y-6">
                     <Card><CardHeader><CardTitle>Analisar Consumo Mensal</CardTitle><CardDescription>Faça o upload do relatório de vendas do mês para registrar o consumo médio dos produtos.</CardDescription></CardHeader><CardContent className="space-y-4 p-6">
                         <Form {...consumptionForm}>
                             <form onSubmit={consumptionForm.handleSubmit(onConsumptionFormSubmit)} className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -337,7 +429,14 @@ export function StockAnalyzer() {
                             </form>
                         </Form>
                     </CardContent></Card>
-                     {canViewConsumptionHistory && <div className="mt-6"><Separator className="mb-4" /><h3 className="text-lg font-semibold mb-4">Histórico de Análise de Consumo</h3>{renderConsumptionHistory()}</div>}
+                    
+                    {renderAverageConsumption()}
+                    
+                    {canViewConsumptionHistory && <div>
+                        <h3 className="text-lg font-semibold mb-4">Histórico Detalhado por Mês</h3>
+                        <Separator className="mb-4" />
+                        {renderConsumptionHistory()}
+                    </div>}
                 </TabsContent>}
 
                 {canConfigureStock && <TabsContent value="parameters" className="mt-4">
