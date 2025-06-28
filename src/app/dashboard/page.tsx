@@ -29,12 +29,15 @@ export default function DashboardPage() {
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [initialSelectionMade, setInitialSelectionMade] = useState(false);
 
   useEffect(() => {
-    if (stockProducts.length > 0 && selectedProducts.length === 0) {
+    // Set initial selection only once when products are loaded.
+    if (!initialSelectionMade && stockProducts.length > 0) {
       setSelectedProducts(stockProducts.map(p => p.id));
+      setInitialSelectionMade(true);
     }
-  }, [stockProducts, selectedProducts.length]);
+  }, [stockProducts, initialSelectionMade]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -205,59 +208,57 @@ export default function DashboardPage() {
 
        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-1">
           <Card>
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
-                        </CardTitle>
-                        <CardDescription>
-                            {user?.username === 'master' 
-                                ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
-                                : `Produtos consumidos no seu quiosque.`}
-                        </CardDescription>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-full sm:w-auto">
-                                    <ListFilter className="mr-2 h-4 w-4" />
-                                    Filtrar Produtos ({selectedProducts.length})
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-64">
-                                <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                 <DropdownMenuItem onSelect={() => setSelectedProducts(stockProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
-                                 <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <ScrollArea className="h-60">
-                                {stockProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
-                                    <DropdownMenuCheckboxItem
-                                        key={product.id}
-                                        checked={selectedProducts.includes(product.id)}
-                                        onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
-                                        onSelect={(e) => e.preventDefault()}
-                                    >
-                                        {product.baseName}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                                </ScrollArea>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+            <CardHeader className="flex flex-col gap-4">
+                <div>
+                    <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
+                    </CardTitle>
+                    <CardDescription>
+                        {user?.username === 'master' 
+                            ? (selectedKiosk === 'all' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
+                            : `Produtos consumidos no seu quiosque.`}
+                    </CardDescription>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-auto">
+                                <ListFilter className="mr-2 h-4 w-4" />
+                                Filtrar Produtos ({selectedProducts.length})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64">
+                            <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => setSelectedProducts(stockProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-60">
+                            {stockProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                                <DropdownMenuCheckboxItem
+                                    key={product.id}
+                                    checked={selectedProducts.includes(product.id)}
+                                    onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {product.baseName}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
-                        {user?.username === 'master' && (
-                            <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
-                                <SelectTrigger className="w-full sm:w-[240px]">
-                                    <SelectValue placeholder="Selecionar Quiosque" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todos (Agregado)</SelectItem>
-                                    {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
+                    {user?.username === 'master' && (
+                        <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
+                            <SelectTrigger className="w-full sm:w-[240px]">
+                                <SelectValue placeholder="Selecionar Quiosque" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos (Agregado)</SelectItem>
+                                {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    )}
                 </div>
             </CardHeader>
             <CardContent className="pl-2">
