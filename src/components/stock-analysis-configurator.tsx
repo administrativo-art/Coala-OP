@@ -1,8 +1,11 @@
+
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useKiosks } from '@/hooks/use-kiosks';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
 import { Switch } from './ui/switch';
+import { Download } from 'lucide-react';
 
 // This will be the type for the form, including the calculated field.
 type FormProduct = Product & {
@@ -83,6 +87,73 @@ export function StockAnalysisConfigurator() {
             description: "Não foi possível salvar os parâmetros. Tente novamente.",
         });
     });
+  };
+
+  const handleExportPdf = () => {
+    const data = form.getValues('products');
+    
+    if (!data.length || !kiosks.length) {
+      toast({
+        variant: 'destructive',
+        title: 'Sem dados para exportar',
+        description: 'Não há produtos configurados para análise.',
+      });
+      return;
+    }
+
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text("Parâmetros de Análise de Estoque", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Exportado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
+
+    const head = [['Produto', 'Unidade de Compra', 'Itens/Unid.', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
+    const body: any[] = [];
+
+    data.forEach(product => {
+      const productInfo = [
+        {
+          content: getProductFullName(product),
+          rowSpan: kiosks.length,
+          styles: { valign: 'middle' },
+        },
+        {
+          content: product.purchaseUnitName || '-',
+          rowSpan: kiosks.length,
+          styles: { valign: 'middle' },
+        },
+        {
+          content: product.hasPurchaseUnit ? (product.itemsPerPurchaseUnit || 1) : '-',
+          rowSpan: kiosks.length,
+          styles: { valign: 'middle' },
+        },
+      ];
+
+      kiosks.forEach((kiosk, index) => {
+        const row = [
+          kiosk.name,
+          product.stockLevels?.[kiosk.id]?.min ?? 0,
+          product.stockLevels?.[kiosk.id]?.max ?? 0,
+        ];
+        if (index === 0) {
+          body.push([...productInfo, ...row]);
+        } else {
+          body.push(row);
+        }
+      });
+    });
+
+    autoTable(doc, {
+      startY: 35,
+      head: head,
+      body: body,
+      theme: 'grid',
+      headStyles: { fillColor: '#3F51B5' },
+    });
+
+    doc.save('parametros_de_analise.pdf');
   };
 
   if (productsLoading || kiosksLoading) {
@@ -223,8 +294,11 @@ export function StockAnalysisConfigurator() {
             </AccordionItem>
           ))}
         </Accordion>
-        <div className="flex justify-end pt-4 border-t">
-            <Button type="submit" disabled={form.formState.isSubmitting}>Salvar Alterações Gerais</Button>
+        <div className="flex justify-between items-center pt-4 border-t">
+          <Button type="button" variant="outline" onClick={handleExportPdf}>
+            <Download className="mr-2" /> Exportar para PDF
+          </Button>
+          <Button type="submit" disabled={form.formState.isSubmitting}>Salvar Alterações Gerais</Button>
         </div>
       </form>
     </Form>

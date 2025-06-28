@@ -1,9 +1,12 @@
+
 "use client"
 
 import React, { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
@@ -280,9 +283,51 @@ export function StockAnalyzer() {
         }
     };
 
-    const handleDownloadPDF = (report: StockAnalysisReport) => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de download em PDF será implementada em breve." }); };
+    const handleDownloadPDF = (report: StockAnalysisReport) => {
+        if (!report) return;
+
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text("Relatório de Análise de Reposição", 14, 22);
+
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Nome do arquivo: ${report.reportName}`, 14, 30);
+        doc.text(`Analisado em: ${format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 36);
+
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.text("Resumo:", 14, 46);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(report.summary, 14, 52);
+
+
+        const head = [['Produto', 'Quiosque', 'Estoque Atual', 'Necessário', 'Sugestão de Compra']];
+        const body = report.results.map(item => [
+            item.productName,
+            item.kioskName,
+            item.currentStock,
+            item.needed,
+            item.purchaseSuggestion,
+        ]);
+
+        autoTable(doc, {
+            startY: 60,
+            head: head,
+            body: body,
+            theme: 'grid',
+            headStyles: { fillColor: '#3F51B5' },
+            columnStyles: {
+                3: { fontStyle: 'bold', textColor: '#D32F2F' },
+                4: { fontStyle: 'bold', textColor: '#009688' } 
+            }
+        });
+
+        doc.save(`analise_${report.reportName.split('.')[0]}.pdf`);
+    };
+
     const handleExportToSheets = (report: StockAnalysisReport) => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de exportação para Google Sheets será implementada em breve." }); };
-    const handleExportParameters = () => { toast({ title: "Em desenvolvimento", description: "A funcionalidade de exportação de parâmetros em PDF será implementada em breve." }); };
 
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canConfigureStock = permissions.stockAnalysis?.configure;
@@ -525,7 +570,6 @@ export function StockAnalyzer() {
                     <Card><CardHeader><CardTitle>Configurar Parâmetros de Análise</CardTitle><CardDescription>Defina o estoque ideal, unidades de compra e gerencie os produtos que serão considerados na análise de estoque.</CardDescription></CardHeader><CardContent className="p-6">
                         <div className="mb-6 flex flex-wrap gap-2">
                             <Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos para Análise</Button>
-                            <Button variant="outline" onClick={handleExportParameters}><Download className="mr-2" /> Exportar Parâmetros (PDF)</Button>
                         </div>
                         <StockAnalysisConfigurator />
                     </CardContent></Card>
