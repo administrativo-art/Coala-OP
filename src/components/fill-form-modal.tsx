@@ -25,7 +25,9 @@ const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
     ids.push(q.id);
     if (q.options) {
       q.options.forEach(opt => {
-        ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
+        if (opt.subQuestions) {
+          ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
+        }
       });
     }
   });
@@ -58,7 +60,9 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
     }
     // Recursively add schemas for sub-questions
     question.options?.forEach(option => {
-        option.subQuestions.forEach(buildSchemaPart);
+        if (option.subQuestions) {
+            option.subQuestions.forEach(buildSchemaPart);
+        }
     });
   }
 
@@ -125,32 +129,34 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                 )}
                 
                 {question.type === 'multiple-choice' && (
-                  <div className="space-y-2">
-                    {question.options?.map((option) => (
-                      <FormItem
-                        key={option.id}
-                        className="flex flex-row items-center space-x-3 space-y-0"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(option.value)}
-                            onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([...(field.value || []), option.value])
-                                : field.onChange(
-                                    field.value?.filter(
-                                      (value: string) => value !== option.value
-                                    )
-                                  );
-                            }}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal">
-                          {option.value}
-                        </FormLabel>
-                      </FormItem>
-                    ))}
-                  </div>
+                  <FormControl>
+                    <div className="space-y-2">
+                        {question.options?.map((option) => (
+                        <FormItem
+                            key={option.id}
+                            className="flex flex-row items-center space-x-3 space-y-0"
+                        >
+                            <FormControl>
+                            <Checkbox
+                                checked={field.value?.includes(option.value)}
+                                onCheckedChange={(checked) => {
+                                return checked
+                                    ? field.onChange([...(field.value || []), option.value])
+                                    : field.onChange(
+                                        field.value?.filter(
+                                        (value: string) => value !== option.value
+                                        )
+                                    );
+                                }}
+                            />
+                            </FormControl>
+                            <FormLabel className="font-normal">
+                            {option.value}
+                            </FormLabel>
+                        </FormItem>
+                        ))}
+                    </div>
+                  </FormControl>
                 )}
                 
                 <FormMessage />
@@ -180,7 +186,9 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   const { kiosks } = useKiosks();
   const [currentStep, setCurrentStep] = useState(0);
   
-  const formSchema = generateSchema(template.sections);
+  // Memoize schema generation to avoid re-creating it on every render
+  const formSchema = React.useMemo(() => generateSchema(template.sections), [template.sections]);
+  
   const form = useForm({
     resolver: zodResolver(formSchema),
     mode: 'onChange',
@@ -194,9 +202,13 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         questions.forEach(q => {
           if (q.type === 'multiple-choice') {
             defaultValues[q.id] = [];
+          } else {
+            defaultValues[q.id] = undefined;
           }
           if (q.options) {
-            q.options.forEach(opt => setDefault(opt.subQuestions));
+            q.options.forEach(opt => {
+                if(opt.subQuestions) setDefault(opt.subQuestions)
+            });
           }
         });
       };
@@ -214,8 +226,10 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             if (q.id === questionId) return q.label;
             if (q.options) {
               for (const opt of q.options) {
-                const label = findInQuestions(opt.subQuestions);
-                if (label) return label;
+                if (opt.subQuestions) {
+                    const label = findInQuestions(opt.subQuestions);
+                    if (label) return label;
+                }
               }
             }
           }
