@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3, CreditCard } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, BarChart3 } from "lucide-react"
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -43,6 +45,9 @@ export function Header() {
                 </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col dark bg-background text-foreground">
+                <SheetHeader>
+                    <SheetTitle className="sr-only">Menu de Navegação</SheetTitle>
+                </SheetHeader>
                 <nav className="grid gap-2 text-lg font-medium">
                     <Link href="/dashboard" className="font-logo select-none mb-4">
                         <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
