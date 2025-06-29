@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState } from 'react';
-import { useForm, useWatch, Control } from 'react-hook-form';
+import { useForm, useWatch, Control, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
       case 'multiple-choice':
         schemaObject[question.id] = z.array(z.string()).refine(value => value.some(item => item), {
           message: 'Você deve selecionar ao menos uma opção.',
-        }).optional().default([]);
+        });
         break;
       default:
         break;
@@ -71,7 +71,6 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
 
   const finalSchema = z.object(schemaObject);
 
-  // This function will get all question IDs that should be visible based on the form data
   const getVisibleQuestionIds = (allQuestions: FormQuestion[], data: Record<string, any>): string[] => {
       let visibleIds: string[] = [];
 
@@ -99,7 +98,6 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
       return visibleIds;
   };
   
-  // We refine the schema to only validate visible fields
   return finalSchema.superRefine((data, ctx) => {
       const allQuestions = sections.flatMap(s => s.questions);
       const visibleIds = getVisibleQuestionIds(allQuestions, data);
@@ -173,58 +171,79 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                 )} />
             )}
             {(question.type === 'yes-no' || question.type === 'single-choice') && (
-                <FormField control={control} name={question.id} render={({ field }) => (
-                    <FormItem className="space-y-3">
-                        <FormLabel className="text-base">{question.label}</FormLabel>
-                        <FormControl>
-                            <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                 <FormField
+                    control={control}
+                    name={question.id}
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                            <FormLabel className="text-base">{question.label}</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                className="flex flex-col space-y-1"
+                                >
                                 {question.options?.map(option => (
-                                    <div key={option.id} className="flex items-center space-x-3">
-                                        <RadioGroupItem value={option.value} id={option.id} />
-                                        <Label htmlFor={option.id} className="font-normal">{option.value}</Label>
-                                    </div>
+                                    <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                            <RadioGroupItem value={option.value} id={option.id} />
+                                        </FormControl>
+                                        <Label htmlFor={option.id} className="font-normal">
+                                            {option.value}
+                                        </Label>
+                                    </FormItem>
                                 ))}
-                            </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
+                                </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
             )}
             {question.type === 'multiple-choice' && (
-                <FormField control={control} name={question.id} render={({ field }) => (
+                <FormField
+                    control={control}
+                    name={question.id}
+                    render={() => (
                     <FormItem>
                         <div className="mb-4">
-                           <FormLabel className="text-base">{question.label}</FormLabel>
+                            <FormLabel className="text-base">{question.label}</FormLabel>
                         </div>
-                        <div className="space-y-2">
                         {question.options?.map((option) => (
-                            <FormField
-                                key={option.id}
-                                control={control}
-                                name={question.id}
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                            <Checkbox
-                                                checked={field.value?.includes(option.value)}
-                                                onCheckedChange={(checked) => {
-                                                    const currentValue = field.value || [];
-                                                    const newValue = checked
-                                                        ? [...currentValue, option.value]
-                                                        : currentValue.filter((value: string) => value !== option.value);
-                                                    field.onChange(newValue);
-                                                }}
-                                            />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">{option.value}</FormLabel>
-                                    </FormItem>
-                                )}
-                            />
+                        <FormField
+                            key={option.id}
+                            control={control}
+                            name={question.id}
+                            render={({ field }) => {
+                            return (
+                                <FormItem
+                                    key={option.id}
+                                    className="flex flex-row items-center space-x-3 space-y-0"
+                                >
+                                <FormControl>
+                                    <Checkbox
+                                        checked={field.value?.includes(option.value)}
+                                        onCheckedChange={(checked) => {
+                                            const currentValue = field.value || [];
+                                            const newValue = checked
+                                                ? [...currentValue, option.value]
+                                                : currentValue.filter((value: string) => value !== option.value);
+                                            field.onChange(newValue);
+                                        }}
+                                    />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                    {option.value}
+                                </FormLabel>
+                                </FormItem>
+                            )
+                            }}
+                        />
                         ))}
-                        </div>
                         <FormMessage />
                     </FormItem>
-                )} />
+                    )}
+                />
             )}
             
             <div className="pl-4 border-l-2 ml-2 space-y-6">
@@ -254,43 +273,53 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   
   const form = useForm({
     resolver: zodResolver(formSchema),
-    mode: 'onChange', 
+    mode: 'onTouched', 
   });
 
   React.useEffect(() => {
     if(open) {
-      const defaultValues: Record<string, any> = {};
       const allIds = getAllQuestionIds(template.sections.flatMap(s => s.questions));
+      const defaultValues: Record<string, any> = {};
       allIds.forEach(id => {
-        defaultValues[id] = undefined;
+        const question = findQuestionById(template.sections, id);
+        if (question?.type === 'multiple-choice') {
+            defaultValues[id] = [];
+        } else {
+            defaultValues[id] = undefined;
+        }
       });
 
       form.reset(defaultValues);
       setCurrentStep(0);
     }
   }, [open, template, form]);
+  
+  const findQuestionById = (sections: FormSection[], questionId: string): FormQuestion | null => {
+      for (const section of sections) {
+          const findInQuestions = (questions: FormQuestion[]): FormQuestion | null => {
+              for (const q of questions) {
+                  if (q.id === questionId) return q;
+                  if (q.options) {
+                      for (const opt of q.options) {
+                          if (opt.subQuestions) {
+                              const found = findInQuestions(opt.subQuestions);
+                              if (found) return found;
+                          }
+                      }
+                  }
+              }
+              return null;
+          };
+          const found = findInQuestions(section.questions);
+          if (found) return found;
+      }
+      return null;
+  };
 
 
   const getQuestionLabel = (sections: FormSection[], questionId: string): string | undefined => {
-      for (const section of sections) {
-        const findInQuestions = (questions: FormQuestion[]): string | undefined => {
-          for (const q of questions) {
-            if (q.id === questionId) return q.label;
-            if (q.options) {
-              for (const opt of q.options) {
-                if (opt.subQuestions) {
-                    const label = findInQuestions(opt.subQuestions);
-                    if (label) return label;
-                }
-              }
-            }
-          }
-          return undefined;
-        }
-        const label = findInQuestions(section.questions);
-        if (label) return label;
-      }
-      return undefined;
+      const question = findQuestionById(sections, questionId);
+      return question?.label;
   }
   
   const getVisibleQuestionIdsForSection = (section: FormSection, formValues: Record<string, any>): string[] => {
@@ -400,5 +429,3 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
-
-    
