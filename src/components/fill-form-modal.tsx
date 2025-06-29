@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useForm, useWatch, Control } from 'react-hook-form';
+import { useForm, useWatch, Control, FormProvider, Controller, useFormContext, FieldPath, FieldValues, ControllerProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
         schemaObject[question.id] = z.string().min(1, 'Este campo é obrigatório.');
         break;
       case 'number':
-        schemaObject[question.id] = z.coerce.number({invalid_type_error: 'Deve ser um número'});
+        schemaObject[question.id] = z.coerce.number({invalid_type_error: 'Deve ser um número'}).min(0, 'O número deve ser positivo.');
         break;
       case 'yes-no':
       case 'single-choice':
@@ -146,76 +146,89 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
     return [];
   }, [answer, question]);
 
+
+  const renderField = () => {
+    switch(question.type) {
+      case 'text':
+        return (
+          <FormField control={control} name={question.id} render={({ field }) => (
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
+        );
+      case 'number':
+        return (
+          <FormField control={control} name={question.id} render={({ field }) => (
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
+        );
+      case 'yes-no':
+      case 'single-choice':
+        return (
+          <FormField
+            control={control}
+            name={question.id}
+            render={({ field }) => (
+              <FormItem className="space-y-3">
+                <FormLabel className="text-base">{question.label}</FormLabel>
+                <FormControl>
+                  <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                    {question.options?.map(option => (
+                      <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value={option.value} id={option.id} />
+                        </FormControl>
+                        <Label htmlFor={option.id} className="font-normal cursor-pointer">{option.value}</Label>
+                      </FormItem>
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        );
+      case 'multiple-choice':
+        return (
+          <FormField
+            control={control}
+            name={question.id}
+            render={({ field }) => (
+              <FormItem>
+                <div className="mb-4">
+                  <FormLabel className="text-base">{question.label}</FormLabel>
+                </div>
+                {question.options?.map(option => (
+                  <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value?.includes(option.value)}
+                        onCheckedChange={checked => {
+                          const currentValue = field.value || [];
+                          const newValue = checked
+                            ? [...currentValue, option.value]
+                            : currentValue.filter((value: string) => value !== option.value);
+                          field.onChange(newValue);
+                        }}
+                      />
+                    </FormControl>
+                    <Label className="font-normal cursor-pointer">
+                      {option.value}
+                    </Label>
+                  </FormItem>
+                ))}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {question.type === 'text' && (
-        <FormField control={control} name={question.id} render={({ field }) => (
-          <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-      )}
-      {question.type === 'number' && (
-        <FormField control={control} name={question.id} render={({ field }) => (
-          <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-      )}
-      {(question.type === 'yes-no' || question.type === 'single-choice') && (
-        <FormField
-          control={control}
-          name={question.id}
-          render={({ field }) => (
-            <FormItem className="space-y-3">
-              <FormLabel className="text-base">{question.label}</FormLabel>
-              <FormControl>
-                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
-                  {question.options?.map(option => (
-                    <div key={option.id} className="flex items-center space-x-3">
-                      <RadioGroupItem value={option.value} id={option.id} />
-                      <Label htmlFor={option.id} className="font-normal cursor-pointer">
-                        {option.value}
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
-      {question.type === 'multiple-choice' && (
-        <FormField
-          control={control}
-          name={question.id}
-          render={({ field }) => (
-            <FormItem>
-              <div className="mb-4">
-                <FormLabel className="text-base">{question.label}</FormLabel>
-              </div>
-              {question.options?.map(option => (
-                <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value?.includes(option.value)}
-                      onCheckedChange={checked => {
-                        const currentValue = field.value || [];
-                        const newValue = checked
-                          ? [...currentValue, option.value]
-                          : currentValue.filter((value: string) => value !== option.value);
-                        field.onChange(newValue);
-                      }}
-                    />
-                  </FormControl>
-                  <Label className="font-normal cursor-pointer">
-                    {option.value}
-                  </Label>
-                </FormItem>
-              ))}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
-      
+      {renderField()}
       {subQuestions.length > 0 && (
         <div className="pl-4 border-l-2 ml-2 space-y-6">
           <QuestionRenderer questions={subQuestions} control={control} />
