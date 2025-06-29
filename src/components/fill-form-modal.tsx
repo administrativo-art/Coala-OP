@@ -51,7 +51,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
       case 'multiple-choice':
         schemaObject[question.id] = z.array(z.string()).refine(value => value.some(item => item), {
           message: 'Você deve selecionar ao menos uma opção.',
-        });
+        }).optional().default([]);
         break;
       default:
         break;
@@ -82,7 +82,7 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
       if (!answer) return [];
 
       if (question.type === 'multiple-choice' && Array.isArray(answer)) {
-          return question.options.filter(opt => answer.includes(opt.value)).flatMap(opt => opt.subQuestions);
+          return question.options.filter(opt => answer.includes(opt.value)).flatMap(opt => opt.subQuestions || []);
       }
       
       if (typeof answer === 'string') {
@@ -125,41 +125,32 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                 )}
                 
                 {question.type === 'multiple-choice' && (
-                    <FormItem className="space-y-2">
-                        {question.options?.map(option => (
-                            <FormField
-                                key={option.id}
-                                control={control}
-                                name={question.id}
-                                render={({ field }) => {
-                                    return (
-                                        <FormItem
-                                            key={option.id}
-                                            className="flex flex-row items-center space-x-3 space-y-0"
-                                        >
-                                            <FormControl>
-                                                <Checkbox
-                                                    checked={field.value?.includes(option.value)}
-                                                    onCheckedChange={checked => {
-                                                        return checked
-                                                        ? field.onChange([...(field.value || []), option.value])
-                                                        : field.onChange(
-                                                            field.value?.filter(
-                                                                (value: string) => value !== option.value
-                                                            )
-                                                            )
-                                                    }}
-                                                />
-                                            </FormControl>
-                                            <FormLabel className="font-normal">
-                                                {option.value}
-                                            </FormLabel>
-                                        </FormItem>
-                                    );
-                                }}
-                            />
-                        ))}
-                    </FormItem>
+                  <div className="space-y-2">
+                    {question.options?.map((option) => (
+                      <FormItem
+                        key={option.id}
+                        className="flex flex-row items-center space-x-3 space-y-0"
+                      >
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value?.includes(option.value)}
+                            onCheckedChange={(checked) => {
+                              return checked
+                                ? field.onChange([...(field.value || []), option.value])
+                                : field.onChange(
+                                    field.value?.filter(
+                                      (value: string) => value !== option.value
+                                    )
+                                  );
+                            }}
+                          />
+                        </FormControl>
+                        <FormLabel className="font-normal">
+                          {option.value}
+                        </FormLabel>
+                      </FormItem>
+                    ))}
+                  </div>
                 )}
                 
                 <FormMessage />
@@ -194,6 +185,27 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     resolver: zodResolver(formSchema),
     mode: 'onChange',
   });
+
+  // Reset form when modal opens or template changes
+  React.useEffect(() => {
+    if(open) {
+      const defaultValues: Record<string, any> = {};
+      const setDefault = (questions: FormQuestion[]) => {
+        questions.forEach(q => {
+          if (q.type === 'multiple-choice') {
+            defaultValues[q.id] = [];
+          }
+          if (q.options) {
+            q.options.forEach(opt => setDefault(opt.subQuestions));
+          }
+        });
+      };
+      template.sections.forEach(sec => setDefault(sec.questions));
+      form.reset(defaultValues);
+      setCurrentStep(0);
+    }
+  }, [open, template, form]);
+
 
   const getQuestionLabel = (sections: FormSection[], questionId: string): string | undefined => {
       for (const section of sections) {
