@@ -2,12 +2,12 @@
 "use client"
 
 import React, { useState } from 'react';
-import { useForm, Controller, useWatch, Control, FormProvider } from 'react-hook-form';
+import { useForm, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, useFormContext } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -83,10 +83,14 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
       if (!question.options) return [];
       
       const answer = formValues[question.id];
-      if (!answer) return [];
+      if (answer === undefined || answer === null || (Array.isArray(answer) && answer.length === 0)) {
+          return [];
+      }
 
       if (question.type === 'multiple-choice' && Array.isArray(answer)) {
-          return question.options.filter(opt => answer.includes(opt.value)).flatMap(opt => opt.subQuestions || []);
+          return question.options
+              .filter(opt => answer.includes(opt.value))
+              .flatMap(opt => opt.subQuestions || []);
       }
       
       if (typeof answer === 'string') {
@@ -104,69 +108,67 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
   return (
     <>
       {questions.map(question => (
-        <div key={question.id} className="space-y-4">
-          <FormField
-            control={control}
-            name={question.id}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">{question.label}</FormLabel>
-                
-                {question.type === 'text' && <FormControl><Textarea {...field} /></FormControl>}
-                {question.type === 'number' && <FormControl><Input type="number" {...field} /></FormControl>}
-                
-                {(question.type === 'yes-no' || question.type === 'single-choice') && (
-                  <FormControl>
-                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
-                      {question.options?.map(option => (
-                        <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                          <FormControl><RadioGroupItem value={option.value} /></FormControl>
-                          <FormLabel className="font-normal">{option.value}</FormLabel>
-                        </FormItem>
-                      ))}
-                    </RadioGroup>
-                  </FormControl>
-                )}
-                
-                {question.type === 'multiple-choice' && (
-                  <FormControl>
-                    <div className="space-y-2">
-                        {question.options?.map((option) => (
-                        <FormItem
-                            key={option.id}
-                            className="flex flex-row items-center space-x-3 space-y-0"
-                        >
-                            <FormControl>
-                            <Checkbox
-                                checked={field.value?.includes(option.value)}
-                                onCheckedChange={(checked) => {
-                                return checked
-                                    ? field.onChange([...(field.value || []), option.value])
-                                    : field.onChange(
-                                        field.value?.filter(
-                                        (value: string) => value !== option.value
-                                        )
-                                    );
-                                }}
-                            />
-                            </FormControl>
-                            <FormLabel className="font-normal">
-                            {option.value}
-                            </FormLabel>
-                        </FormItem>
-                        ))}
-                    </div>
-                  </FormControl>
-                )}
-                
-                <FormMessage />
-              </FormItem>
+        <React.Fragment key={question.id}>
+            {question.type === 'text' && (
+                <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
             )}
-          />
-          <div className="pl-4 border-l-2 ml-2">
-             <QuestionRenderer questions={getSubQuestionsForQuestion(question)} control={control} />
-          </div>
-        </div>
+            {question.type === 'number' && (
+                <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+            )}
+            {(question.type === 'yes-no' || question.type === 'single-choice') && (
+                <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem className="space-y-3">
+                        <FormLabel className="text-base">{question.label}</FormLabel>
+                        <FormControl>
+                            <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                                {question.options?.map(option => (
+                                <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                                    <FormControl><RadioGroupItem value={option.value} /></FormControl>
+                                    <FormLabel className="font-normal">{option.value}</FormLabel>
+                                </FormItem>
+                                ))}
+                            </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            )}
+            {question.type === 'multiple-choice' && (
+                <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem>
+                        <div className="mb-4">
+                           <FormLabel className="text-base">{question.label}</FormLabel>
+                        </div>
+                        <div className="space-y-2">
+                        {question.options?.map((option) => (
+                            <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0">
+                            <FormControl>
+                                <Checkbox
+                                    checked={field.value?.includes(option.value)}
+                                    onCheckedChange={(checked) => {
+                                        return checked
+                                        ? field.onChange([...(field.value || []), option.value])
+                                        : field.onChange(field.value?.filter((value: string) => value !== option.value));
+                                    }}
+                                />
+                            </FormControl>
+                            <FormLabel className="font-normal">{option.value}</FormLabel>
+                            </FormItem>
+                        ))}
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            )}
+            
+            <div className="pl-4 border-l-2 ml-2 space-y-6">
+                <QuestionRenderer questions={getSubQuestionsForQuestion(question)} control={control} />
+            </div>
+        </React.Fragment>
       ))}
     </>
   );
@@ -186,7 +188,6 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   const { kiosks } = useKiosks();
   const [currentStep, setCurrentStep] = useState(0);
   
-  // Memoize schema generation to avoid re-creating it on every render
   const formSchema = React.useMemo(() => generateSchema(template.sections), [template.sections]);
   
   const form = useForm({
@@ -194,7 +195,6 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     mode: 'onChange',
   });
 
-  // Reset form when modal opens or template changes
   React.useEffect(() => {
     if(open) {
       const defaultValues: Record<string, any> = {};
@@ -300,7 +300,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
                  <QuestionRenderer questions={template.sections[currentStep].questions} control={form.control} />
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-6">
+            <DialogFooter className="pt-6 border-t">
               <div className="w-full flex justify-between">
                 <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentStep === 0}>
                   Anterior
