@@ -28,32 +28,55 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     const unsubscribeTemplates = onSnapshot(qTemplates, async (querySnapshot) => {
       
       if (querySnapshot.empty && !localStorage.getItem('formTemplates_seeded')) {
-        console.log("No form templates found. Seeding default template...");
+        console.log("No form templates found. Seeding test template...");
         
-        const defaultTemplate: Omit<FormTemplate, 'id'> = {
-          name: "Formulário de abertura de quiosque",
-          sections: [
-            {
-              id: new Date().toISOString() + Math.random(),
-              name: "Verificação Inicial",
-              questions: [
-                { id: new Date().toISOString() + Math.random(), label: "O quiosque está limpo e organizado?", type: "yes-no", options: [ { id: "opt1", value: "Sim", subQuestions: [] }, { id: "opt2", value: "Não", subQuestions: [] } ] },
-                { id: new Date().toISOString() + Math.random(), label: "Todos os equipamentos estão funcionando?", type: "yes-no", options: [ { id: "opt3", value: "Sim", subQuestions: [] }, { id: "opt4", value: "Não", subQuestions: [{ id: new Date().toISOString() + Math.random(), label: "Qual equipamento está com defeito?", type: "text", options: [] }] } ] },
-                { id: new Date().toISOString() + Math.random(), label: "Quantidade de polpa de morango (em kg):", type: "number", options: [] }
-              ]
-            },
-            {
-              id: new Date().toISOString() + Math.random(),
-              name: "Verificação Final",
-              questions: [
-                { id: new Date().toISOString() + Math.random(), label: "O caixa foi aberto com o valor correto?", type: "yes-no", options: [ { id: "opt5", value: "Sim", subQuestions: [] }, { id: "opt6", value: "Não", subQuestions: [] } ] },
-              ]
-            }
-          ]
+        const testTemplate: Omit<FormTemplate, 'id'> = {
+            name: "Formulário de Teste de Ramificação",
+            sections: [
+                {
+                    id: 'section1-' + new Date().toISOString() + Math.random(),
+                    name: "Testes de Ramificação",
+                    questions: [
+                        {
+                            id: 'q-yes-no-' + new Date().toISOString() + Math.random(),
+                            label: "Teste Sim/Não: Você precisa de ajuda?",
+                            type: "yes-no",
+                            options: [
+                                { id: 'opt-yes-' + new Date().toISOString() + Math.random(), value: "Sim", subQuestions: [ { id: 'subq-yes-' + new Date().toISOString() + Math.random(), label: "Descreva o problema:", type: "text", options: [] } ] },
+                                { id: 'opt-no-' + new Date().toISOString() + Math.random(), value: "Não", subQuestions: [] }
+                            ]
+                        },
+                        {
+                            id: 'q-single-' + new Date().toISOString() + Math.random(),
+                            label: "Teste Escolha Única: Qual seu departamento?",
+                            type: "single-choice",
+                            options: [
+                                { id: 'opt-sc1-' + new Date().toISOString() + Math.random(), value: "Vendas", subQuestions: [] },
+                                { id: 'opt-sc2-' + new Date().toISOString() + Math.random(), value: "Engenharia", subQuestions: [ { id: 'subq-eng-' + new Date().toISOString() + Math.random(), label: "Quantos anos de experiência?", type: "number", options: [] } ] },
+                                { id: 'opt-sc3-' + new Date().toISOString() + Math.random(), value: "Marketing", subQuestions: [] },
+                            ]
+                        },
+                        {
+                            id: 'q-multi-' + new Date().toISOString() + Math.random(),
+                            label: "Teste Múltipla Escolha: Quais tecnologias você usa?",
+                            type: "multiple-choice",
+                            options: [
+                                { id: 'opt-mc1-' + new Date().toISOString() + Math.random(), value: "React", subQuestions: [ { id: 'subq-react-' + new Date().toISOString() + Math.random(), label: "Qual state manager prefere com React?", type: "text", options: [] } ] },
+                                { id: 'opt-mc2-' + new Date().toISOString() + Math.random(), value: "Vue", subQuestions: [] },
+                                { id: 'opt-mc3-' + new Date().toISOString() + Math.random(), value: "Node.js", subQuestions: [ { id: 'subq-node-' + new Date().toISOString() + Math.random(), label: "Qual framework Node.js você mais usa?", type: "single-choice", options: [
+                                    { id: 'subq-node-opt1-' + new Date().toISOString() + Math.random(), value: "Express", subQuestions: [] },
+                                    { id: 'subq-node-opt2-' + new Date().toISOString() + Math.random(), value: "Fastify", subQuestions: [] },
+                                    { id: 'subq-node-opt3-' + new Date().toISOString() + Math.random(), value: "NestJS", subQuestions: [] },
+                                ] } ] }
+                            ]
+                        }
+                    ]
+                }
+            ]
         };
         
         try {
-            await addDoc(collection(db, "formTemplates"), defaultTemplate);
+            await addDoc(collection(db, "formTemplates"), testTemplate);
             localStorage.setItem('formTemplates_seeded', 'true');
         } catch (seedError) {
             console.error("Error seeding form template:", seedError);
