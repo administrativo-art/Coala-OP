@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -178,12 +179,10 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                         <FormControl>
                             <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
                                 {question.options?.map(option => (
-                                <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value={option.value} />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">{option.value}</FormLabel>
-                                </FormItem>
+                                    <div key={option.id} className="flex items-center space-x-3">
+                                        <RadioGroupItem value={option.value} id={option.id} />
+                                        <Label htmlFor={option.id} className="font-normal">{option.value}</Label>
+                                    </div>
                                 ))}
                             </RadioGroup>
                         </FormControl>
@@ -199,19 +198,28 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                         </div>
                         <div className="space-y-2">
                         {question.options?.map((option) => (
-                            <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0">
-                            <FormControl>
-                                <Checkbox
-                                    checked={field.value?.includes(option.value)}
-                                    onCheckedChange={(checked) => {
-                                        return checked
-                                        ? field.onChange([...(field.value || []), option.value])
-                                        : field.onChange(field.value?.filter((value: string) => value !== option.value));
-                                    }}
-                                />
-                            </FormControl>
-                            <FormLabel className="font-normal">{option.value}</FormLabel>
-                            </FormItem>
+                            <FormField
+                                key={option.id}
+                                control={control}
+                                name={question.id}
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value?.includes(option.value)}
+                                                onCheckedChange={(checked) => {
+                                                    const currentValue = field.value || [];
+                                                    const newValue = checked
+                                                        ? [...currentValue, option.value]
+                                                        : currentValue.filter((value: string) => value !== option.value);
+                                                    field.onChange(newValue);
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{option.value}</FormLabel>
+                                    </FormItem>
+                                )}
+                            />
                         ))}
                         </div>
                         <FormMessage />
@@ -392,3 +400,5 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
+
+    
