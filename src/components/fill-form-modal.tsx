@@ -1,8 +1,8 @@
 
 "use client"
 
-import React, { useMemo, useEffect } from 'react';
-import { useForm, useWatch, Control, Controller } from 'react-hook-form';
+import React, { useMemo, useEffect, useState } from 'react';
+import { useForm, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -131,91 +131,93 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
     if (!question.options || answer === undefined || answer === null || (Array.isArray(answer) && answer.length === 0)) {
       return [];
     }
-
     if (question.type === 'multiple-choice' && Array.isArray(answer)) {
       return question.options
         .filter(opt => answer.includes(opt.value))
         .flatMap(opt => opt.subQuestions || []);
     }
-    
     if (typeof answer === 'string') {
       const selectedOption = question.options.find(opt => opt.value === answer);
       return selectedOption?.subQuestions || [];
     }
-
     return [];
   }, [answer, question]);
 
+  const renderInput = () => {
+    switch (question.type) {
+      case 'text':
+        return (
+          <FormField control={control} name={question.id} render={({ field }) => (
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
+        );
+      case 'number':
+        return (
+          <FormField control={control} name={question.id} render={({ field }) => (
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+          )} />
+        );
+      case 'yes-no':
+      case 'single-choice':
+        return (
+          <FormField control={control} name={question.id} render={({ field }) => (
+            <FormItem className="space-y-3">
+              <FormLabel className="text-base">{question.label}</FormLabel>
+              <FormControl>
+                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                  {question.options?.map(option => (
+                    <div key={option.id} className="flex items-center space-x-3">
+                      <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                      <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        );
+      case 'multiple-choice':
+        return (
+          <FormField
+            control={control}
+            name={question.id}
+            render={({ field }) => (
+              <FormItem>
+                <div className="mb-4">
+                  <FormLabel className="text-base">{question.label}</FormLabel>
+                </div>
+                <div className="space-y-2">
+                    {question.options?.map(option => (
+                    <div key={option.id} className="flex flex-row items-center space-x-3">
+                        <Checkbox
+                        checked={field.value?.includes(option.value)}
+                        onCheckedChange={checked => {
+                            const currentValue = Array.isArray(field.value) ? field.value : [];
+                            const newValue = checked
+                            ? [...currentValue, option.value]
+                            : currentValue.filter((value: string) => value !== option.value);
+                            field.onChange(newValue);
+                        }}
+                        id={`${question.id}-${option.id}`}
+                        />
+                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
+                    </div>
+                    ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {question.type === 'text' && (
-        <FormField control={control} name={question.id} render={({ field }) => (
-          <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-      )}
-      {question.type === 'number' && (
-        <FormField control={control} name={question.id} render={({ field }) => (
-          <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-      )}
-      {(question.type === 'yes-no' || question.type === 'single-choice') && (
-        <FormField control={control} name={question.id} render={({ field }) => (
-          <FormItem className="space-y-3">
-            <FormLabel className="text-base">{question.label}</FormLabel>
-            <FormControl>
-              <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
-                {question.options?.map(option => (
-                  <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                    <FormControl>
-                      <RadioGroupItem value={option.value} id={option.id} />
-                    </FormControl>
-                    <Label htmlFor={option.id} className="font-normal cursor-pointer">{option.value}</Label>
-                  </FormItem>
-                ))}
-              </RadioGroup>
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-      )}
-      {question.type === 'multiple-choice' && (
-        <FormField
-          control={control}
-          name={question.id}
-          render={() => (
-            <FormItem>
-              <div className="mb-4"><FormLabel className="text-base">{question.label}</FormLabel></div>
-              {question.options?.map(option => (
-                <Controller
-                  key={option.id}
-                  control={control}
-                  name={question.id}
-                  render={({ field }) => (
-                    <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
-                        <FormControl>
-                            <Checkbox
-                                checked={field.value?.includes(option.value)}
-                                onCheckedChange={(checked) => {
-                                    const currentValue = field.value || [];
-                                    const newValue = checked
-                                        ? [...currentValue, option.value]
-                                        : currentValue.filter((value: string) => value !== option.value);
-                                    field.onChange(newValue);
-                                }}
-                            />
-                        </FormControl>
-                        <Label className="font-normal cursor-pointer">{option.value}</Label>
-                    </FormItem>
-                  )}
-                />
-              ))}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
-      
+      {renderInput()}
       {subQuestions.length > 0 && (
         <div className="pl-4 border-l-2 ml-2 space-y-6">
           <QuestionRenderer questions={subQuestions} control={control} />
@@ -248,7 +250,7 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
-  const [currentStep, setCurrentStep] = React.useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   
   const formSchema = useMemo(() => generateSchema(template.sections), [template]);
   
@@ -410,3 +412,5 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
+
+    
