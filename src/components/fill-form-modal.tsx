@@ -1,7 +1,7 @@
 
 "use client"
 
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useForm, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -127,7 +127,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
 function RenderedQuestion({ question, control }: { question: FormQuestion; control: Control<any> }) {
   const answer = useWatch({ control, name: question.id });
 
-  const subQuestions = React.useMemo(() => {
+  const subQuestions = useMemo(() => {
     if (!question.options || answer === undefined || answer === null || (Array.isArray(answer) && answer.length === 0)) {
       return [];
     }
@@ -250,14 +250,14 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   const { kiosks } = useKiosks();
   const [currentStep, setCurrentStep] = useState(0);
   
-  const formSchema = React.useMemo(() => generateSchema(template.sections), [template]);
+  const formSchema = useMemo(() => generateSchema(template.sections), [template]);
   
   const form = useForm({
     resolver: zodResolver(formSchema),
     mode: 'onTouched', 
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     if(open) {
       const allIds = getAllQuestionIds(template.sections.flatMap(s => s.questions));
       const defaultValues: Record<string, any> = {};
