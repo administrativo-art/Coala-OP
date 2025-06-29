@@ -108,7 +108,7 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
               <FormItem>
                 <FormLabel className="text-base">{question.label}</FormLabel>
                 <FormControl>
-                  <>
+                  <div>
                     {question.type === 'text' && <Textarea {...field} />}
                     {question.type === 'number' && <Input type="number" {...field} />}
                     {(question.type === 'yes-no' || question.type === 'single-choice') && (
@@ -148,7 +148,7 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                             ))}
                         </div>
                     )}
-                  </>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
