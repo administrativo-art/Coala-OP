@@ -2,12 +2,12 @@
 "use client"
 
 import React, { useState } from 'react';
-import { useForm, Controller, useWatch, Control } from 'react-hook-form';
+import { useForm, Controller, useWatch, Control, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, useFormContext } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -107,49 +107,61 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">{question.label}</FormLabel>
-                <FormControl>
-                  <div>
-                    {question.type === 'text' && <Textarea {...field} />}
-                    {question.type === 'number' && <Input type="number" {...field} />}
-                    {(question.type === 'yes-no' || question.type === 'single-choice') && (
-                      <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                
+                {question.type === 'text' && <FormControl><Textarea {...field} /></FormControl>}
+                {question.type === 'number' && <FormControl><Input type="number" {...field} /></FormControl>}
+                
+                {(question.type === 'yes-no' || question.type === 'single-choice') && (
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                      {question.options?.map(option => (
+                        <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                          <FormControl><RadioGroupItem value={option.value} /></FormControl>
+                          <FormLabel className="font-normal">{option.value}</FormLabel>
+                        </FormItem>
+                      ))}
+                    </RadioGroup>
+                  </FormControl>
+                )}
+                
+                {question.type === 'multiple-choice' && (
+                    <FormItem className="space-y-2">
                         {question.options?.map(option => (
-                          <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value={option.value} /></FormControl>
-                            <FormLabel className="font-normal">{option.value}</FormLabel>
-                          </FormItem>
-                        ))}
-                      </RadioGroup>
-                    )}
-                    {question.type === 'multiple-choice' && (
-                        <div>
-                            {question.options?.map(option => (
-                                <FormField
-                                    key={option.id}
-                                    control={control}
-                                    name={question.id}
-                                    render={({ field: checkboxField }) => (
-                                        <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormField
+                                key={option.id}
+                                control={control}
+                                name={question.id}
+                                render={({ field }) => {
+                                    return (
+                                        <FormItem
+                                            key={option.id}
+                                            className="flex flex-row items-center space-x-3 space-y-0"
+                                        >
                                             <FormControl>
                                                 <Checkbox
-                                                    checked={checkboxField.value?.includes(option.value)}
-                                                    onCheckedChange={(checked) => {
-                                                        const currentValues = checkboxField.value || [];
+                                                    checked={field.value?.includes(option.value)}
+                                                    onCheckedChange={checked => {
                                                         return checked
-                                                            ? checkboxField.onChange([...currentValues, option.value])
-                                                            : checkboxField.onChange(currentValues.filter((v: string) => v !== option.value))
+                                                        ? field.onChange([...(field.value || []), option.value])
+                                                        : field.onChange(
+                                                            field.value?.filter(
+                                                                (value: string) => value !== option.value
+                                                            )
+                                                            )
                                                     }}
                                                 />
                                             </FormControl>
-                                            <FormLabel className="font-normal">{option.value}</FormLabel>
+                                            <FormLabel className="font-normal">
+                                                {option.value}
+                                            </FormLabel>
                                         </FormItem>
-                                    )}
-                                />
-                            ))}
-                        </div>
-                    )}
-                  </div>
-                </FormControl>
+                                    );
+                                }}
+                            />
+                        ))}
+                    </FormItem>
+                )}
+                
                 <FormMessage />
               </FormItem>
             )}
