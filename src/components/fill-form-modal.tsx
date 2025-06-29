@@ -67,7 +67,59 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
   }
 
   sections.forEach(section => section.questions.forEach(buildSchemaPart));
-  return z.object(schemaObject);
+
+  const finalSchema = z.object(schemaObject);
+
+  // This function will get all question IDs that should be visible based on the form data
+  const getVisibleQuestionIds = (allQuestions: FormQuestion[], data: Record<string, any>): string[] => {
+      let visibleIds: string[] = [];
+
+      const recurse = (questions: FormQuestion[]) => {
+          questions.forEach(q => {
+              visibleIds.push(q.id);
+              if (q.options) {
+                  const answer = data[q.id];
+                  if (answer) {
+                       const selectedOptions = q.options.filter(opt => {
+                          if (q.type === 'multiple-choice') return Array.isArray(answer) && answer.includes(opt.value);
+                          return opt.value === answer;
+                      });
+                      selectedOptions.forEach(opt => {
+                          if (opt.subQuestions) {
+                              recurse(opt.subQuestions);
+                          }
+                      });
+                  }
+              }
+          });
+      };
+      
+      recurse(allQuestions);
+      return visibleIds;
+  };
+  
+  // We refine the schema to only validate visible fields
+  return finalSchema.superRefine((data, ctx) => {
+      const allQuestions = sections.flatMap(s => s.questions);
+      const visibleIds = getVisibleQuestionIds(allQuestions, data);
+      
+      for (const key in data) {
+          if (Object.prototype.hasOwnProperty.call(data, key)) {
+              if (!visibleIds.includes(key)) {
+                  delete (data as any)[key];
+              }
+          }
+      }
+      
+      const visibleSchema = finalSchema.pick(
+        Object.fromEntries(visibleIds.map(id => [id, true]))
+      );
+
+      const result = visibleSchema.safeParse(data);
+      if (!result.success) {
+        result.error.issues.forEach(issue => ctx.addIssue(issue));
+      }
+  });
 }
 
 // ==================== Recursive Question Renderer ====================
@@ -108,7 +160,7 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
   return (
     <>
       {questions.map(question => (
-        <React.Fragment key={question.id}>
+        <div key={question.id} className="space-y-6">
             {question.type === 'text' && (
                 <FormField control={control} name={question.id} render={({ field }) => (
                     <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
@@ -127,7 +179,9 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
                             <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
                                 {question.options?.map(option => (
                                 <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                                    <FormControl><RadioGroupItem value={option.value} /></FormControl>
+                                    <FormControl>
+                                        <RadioGroupItem value={option.value} />
+                                    </FormControl>
                                     <FormLabel className="font-normal">{option.value}</FormLabel>
                                 </FormItem>
                                 ))}
@@ -168,7 +222,7 @@ const QuestionRenderer: React.FC<QuestionRendererProps> = ({ questions, control 
             <div className="pl-4 border-l-2 ml-2 space-y-6">
                 <QuestionRenderer questions={getSubQuestionsForQuestion(question)} control={control} />
             </div>
-        </React.Fragment>
+        </div>
       ))}
     </>
   );
@@ -188,31 +242,21 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   const { kiosks } = useKiosks();
   const [currentStep, setCurrentStep] = useState(0);
   
-  const formSchema = React.useMemo(() => generateSchema(template.sections), [template.sections]);
+  const formSchema = React.useMemo(() => generateSchema(template.sections), [template]);
   
   const form = useForm({
     resolver: zodResolver(formSchema),
-    mode: 'onChange',
+    mode: 'onChange', 
   });
 
   React.useEffect(() => {
     if(open) {
       const defaultValues: Record<string, any> = {};
-      const setDefault = (questions: FormQuestion[]) => {
-        questions.forEach(q => {
-          if (q.type === 'multiple-choice') {
-            defaultValues[q.id] = [];
-          } else {
-            defaultValues[q.id] = undefined;
-          }
-          if (q.options) {
-            q.options.forEach(opt => {
-                if(opt.subQuestions) setDefault(opt.subQuestions)
-            });
-          }
-        });
-      };
-      template.sections.forEach(sec => setDefault(sec.questions));
+      const allIds = getAllQuestionIds(template.sections.flatMap(s => s.questions));
+      allIds.forEach(id => {
+        defaultValues[id] = undefined;
+      });
+
       form.reset(defaultValues);
       setCurrentStep(0);
     }
@@ -240,11 +284,36 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
       }
       return undefined;
   }
+  
+  const getVisibleQuestionIdsForSection = (section: FormSection, formValues: Record<string, any>): string[] => {
+    let ids: string[] = [];
+    const recurse = (questions: FormQuestion[]) => {
+      questions.forEach(q => {
+        ids.push(q.id);
+        const answer = formValues[q.id];
+        if (q.options && answer) {
+          const selectedOptions = q.options.filter(opt => {
+            if (q.type === 'multiple-choice') return Array.isArray(answer) && answer.includes(opt.value);
+            return opt.value === answer;
+          });
+          selectedOptions.forEach(opt => {
+            if (opt.subQuestions) {
+              recurse(opt.subQuestions);
+            }
+          });
+        }
+      });
+    }
+    recurse(section.questions);
+    return ids;
+  }
 
   const handleNext = async () => {
     const currentSection = template.sections[currentStep];
-    const fieldsToValidate = getAllQuestionIds(currentSection.questions);
+    const fieldsToValidate = getVisibleQuestionIdsForSection(currentSection, form.getValues());
+    
     const isValid = await form.trigger(fieldsToValidate as any);
+
     if(isValid) {
       setCurrentStep(prev => prev + 1);
     }
