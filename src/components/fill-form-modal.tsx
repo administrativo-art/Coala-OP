@@ -1,8 +1,8 @@
 
 "use client"
 
-import React, { useMemo, useEffect, useState } from 'react';
-import { useForm, useWatch, Control } from 'react-hook-form';
+import React, { useMemo, useEffect } from 'react';
+import { useForm, useWatch, Control, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -166,7 +166,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
               <FormControl>
                 <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
                   {question.options?.map(option => (
-                    <div key={option.id} className="flex items-center space-x-3">
+                     <div key={option.id} className="flex items-center space-x-3">
                       <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
                       <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
                     </div>
@@ -188,22 +188,24 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                   <FormLabel className="text-base">{question.label}</FormLabel>
                 </div>
                 <div className="space-y-2">
-                    {question.options?.map(option => (
+                  {question.options?.map(option => (
                     <div key={option.id} className="flex flex-row items-center space-x-3">
                         <Checkbox
-                        checked={field.value?.includes(option.value)}
-                        onCheckedChange={checked => {
+                          checked={field.value?.includes(option.value)}
+                          onCheckedChange={(checked) => {
                             const currentValue = Array.isArray(field.value) ? field.value : [];
                             const newValue = checked
-                            ? [...currentValue, option.value]
-                            : currentValue.filter((value: string) => value !== option.value);
+                              ? [...currentValue, option.value]
+                              : currentValue.filter((value: string) => value !== option.value);
                             field.onChange(newValue);
-                        }}
-                        id={`${question.id}-${option.id}`}
+                          }}
+                          id={`${question.id}-${option.id}`}
                         />
-                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
+                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
+                          {option.value}
+                        </Label>
                     </div>
-                    ))}
+                  ))}
                 </div>
                 <FormMessage />
               </FormItem>
@@ -250,7 +252,7 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = React.useState(0);
   
   const formSchema = useMemo(() => generateSchema(template.sections), [template]);
   
