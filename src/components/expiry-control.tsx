@@ -53,7 +53,7 @@ export function ExpiryControl() {
 
     const groups: { [key: string]: GroupedLot } = {};
     filteredLots.forEach(lot => {
-      const key = `${lot.productName}-${lot.lotNumber}`;
+      const key = `${lot.productName}-${lot.lotNumber}-${lot.expiryDate}`;
       if (!groups[key]) {
         groups[key] = {
           productName: lot.productName,
@@ -162,7 +162,7 @@ export function ExpiryControl() {
       <div className="space-y-4">
         {groupedLots.map(group => (
           <LotCard
-            key={`${group.productName}-${group.lotNumber}`}
+            key={`${group.productName}-${group.lotNumber}-${group.expiryDate}`}
             groupedLot={group}
             kiosks={kiosks}
             onEdit={handleEditClick}
