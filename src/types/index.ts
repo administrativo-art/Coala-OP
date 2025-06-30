@@ -145,6 +145,7 @@ export type FormAnswer = {
     questionId: string;
     questionLabel: string;
     value: string | number | string[];
+    subAnswers?: FormAnswer[];
 };
 
 export type FormSubmission = {

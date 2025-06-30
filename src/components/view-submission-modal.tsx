@@ -1,5 +1,6 @@
 "use client"
 
+import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { type FormSubmission } from '@/types';
+import { type FormSubmission, type FormAnswer } from '@/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
@@ -23,15 +24,48 @@ interface ViewSubmissionModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmissionModalProps) {
-  if (!submission) return null;
-
-  const formatAnswerValue = (value: string | number | string[]): string => {
+const formatAnswerValue = (value: string | number | string[]): string => {
     if (Array.isArray(value)) {
         return value.join(', ');
     }
     return String(value);
-  }
+};
+
+const AnswerRow: React.FC<{ answer: FormAnswer; level: number }> = ({ answer, level }) => {
+    const hasSubAnswers = answer.subAnswers && answer.subAnswers.length > 0;
+    const indentation = { paddingLeft: `${16 + level * 24}px` };
+
+    return (
+        <>
+            <TableRow>
+                <TableCell className="font-medium" style={indentation}>
+                    {level > 0 && <span className="mr-2 text-muted-foreground">↳</span>}
+                    {answer.questionLabel}
+                </TableCell>
+                <TableCell>{formatAnswerValue(answer.value)}</TableCell>
+            </TableRow>
+            {hasSubAnswers && answer.subAnswers!.map(subAnswer => (
+                <AnswerRow key={subAnswer.questionId} answer={subAnswer} level={level + 1} />
+            ))}
+        </>
+    );
+};
+
+
+export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmissionModalProps) {
+  if (!submission) return null;
+
+  const buildPdfBody = (answers: FormAnswer[], level: number): string[][] => {
+    let rows: string[][] = [];
+    answers.forEach(answer => {
+        const prefix = ' '.repeat(level * 2) + (level > 0 ? '↳ ' : '');
+        rows.push([`${prefix}${answer.questionLabel}`, formatAnswerValue(answer.value)]);
+        if (answer.subAnswers && answer.subAnswers.length > 0) {
+            rows = rows.concat(buildPdfBody(answer.subAnswers, level + 1));
+        }
+    });
+    return rows;
+  };
 
   const handleExportPdf = () => {
     const doc = new jsPDF();
@@ -45,10 +79,7 @@ export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmission
     doc.text(`Data: ${format(new Date(submission.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 42);
 
     const head = [['Pergunta', 'Resposta']];
-    const body = submission.answers.map(answer => [
-      answer.questionLabel,
-      formatAnswerValue(answer.value)
-    ]);
+    const body = buildPdfBody(submission.answers, 0);
 
     autoTable(doc, {
       startY: 50,
@@ -80,13 +111,9 @@ export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmission
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                      {submission.answers.map((answer) => (
-                          <TableRow key={answer.questionId}>
-                              <TableCell className="font-medium">{answer.questionLabel}</TableCell>
-                              <TableCell>{formatAnswerValue(answer.value)}</TableCell>
-                          </TableRow>
-                      ))}
-                      {submission.answers.length === 0 && (
+                      {submission.answers.length > 0 ? submission.answers.map((answer) => (
+                          <AnswerRow key={answer.questionId} answer={answer} level={0} />
+                      )) : (
                         <TableRow>
                             <TableCell colSpan={2} className="text-center text-muted-foreground">
                                 Nenhuma resposta registrada para este envio.
