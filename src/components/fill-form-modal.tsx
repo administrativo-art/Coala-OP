@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useForm, useWatch, Control, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,46 +19,35 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
 
-// Helper to recursively get all question IDs from a set of questions
-const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
-  let ids: string[] = [];
-  questions.forEach(q => {
-    ids.push(q.id);
-    if (q.options) {
-      q.options.forEach(opt => {
-        if (opt.subQuestions) {
-          ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
-        }
-      });
-    }
-  });
-  return ids;
-};
-
 // Helper to recursively build Zod schema from template
+// All fields are marked as optional at the schema level because their requirement
+// is conditional on their visibility, which is handled during form submission.
 const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
   let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
   
   const buildSchemaPart = (question: FormQuestion) => {
+    let fieldSchema: z.ZodType<any, any>;
     switch (question.type) {
       case 'text':
-        schemaObject[question.id] = z.string().min(1, 'Este campo é obrigatório.');
+        fieldSchema = z.string().min(1, 'Este campo é obrigatório.');
         break;
       case 'number':
-        schemaObject[question.id] = z.coerce.number({invalid_type_error: 'Deve ser um número'}).min(0, 'O número deve ser positivo.');
+        fieldSchema = z.coerce.number({invalid_type_error: 'Deve ser um número.'});
         break;
       case 'yes-no':
       case 'single-choice':
-        schemaObject[question.id] = z.string({ required_error: 'Selecione uma opção.' }).min(1, 'Selecione uma opção.');
+        fieldSchema = z.string({ required_error: 'Selecione uma opção.' });
         break;
       case 'multiple-choice':
-        schemaObject[question.id] = z.array(z.string()).refine(value => value.some(item => item), {
+        fieldSchema = z.array(z.string()).refine(value => value.length > 0, {
           message: 'Você deve selecionar ao menos uma opção.',
         });
         break;
       default:
-        break;
+        return; // Should not happen
     }
+     schemaObject[question.id] = fieldSchema.optional();
+
     // Recursively add schemas for sub-questions
     question.options?.forEach(option => {
         if (option.subQuestions) {
@@ -68,57 +57,8 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
   }
 
   sections.forEach(section => section.questions.forEach(buildSchemaPart));
-
-  const finalSchema = z.object(schemaObject);
-
-  const getVisibleQuestionIds = (allQuestions: FormQuestion[], data: Record<string, any>): string[] => {
-      let visibleIds: string[] = [];
-
-      const recurse = (questions: FormQuestion[]) => {
-          questions.forEach(q => {
-              visibleIds.push(q.id);
-              if (q.options) {
-                  const answer = data[q.id];
-                  if (answer) {
-                       const selectedOptions = q.options.filter(opt => {
-                          if (q.type === 'multiple-choice') return Array.isArray(answer) && answer.includes(opt.value);
-                          return opt.value === answer;
-                      });
-                      selectedOptions.forEach(opt => {
-                          if (opt.subQuestions) {
-                              recurse(opt.subQuestions);
-                          }
-                      });
-                  }
-              }
-          });
-      };
-      
-      recurse(allQuestions);
-      return visibleIds;
-  };
   
-  return finalSchema.superRefine((data, ctx) => {
-      const allQuestions = sections.flatMap(s => s.questions);
-      const visibleIds = getVisibleQuestionIds(allQuestions, data);
-      
-      for (const key in data) {
-          if (Object.prototype.hasOwnProperty.call(data, key)) {
-              if (!visibleIds.includes(key)) {
-                  delete (data as any)[key];
-              }
-          }
-      }
-      
-      const visibleSchema = finalSchema.pick(
-        Object.fromEntries(visibleIds.map(id => [id, true]))
-      );
-
-      const result = visibleSchema.safeParse(data);
-      if (!result.success) {
-        result.error.issues.forEach(issue => ctx.addIssue(issue));
-      }
-  });
+  return z.object(schemaObject);
 }
 
 
@@ -128,14 +68,16 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
   const answer = useWatch({ control, name: question.id });
 
   const subQuestions = useMemo(() => {
-    if (!question.options || answer === undefined || answer === null || (Array.isArray(answer) && answer.length === 0)) {
+    if (!question.options || answer === undefined || answer === null || answer === '' || (Array.isArray(answer) && answer.length === 0)) {
       return [];
     }
+    // For multiple choice, aggregate subquestions from all selected options
     if (question.type === 'multiple-choice' && Array.isArray(answer)) {
       return question.options
         .filter(opt => answer.includes(opt.value))
         .flatMap(opt => opt.subQuestions || []);
     }
+    // For single choice, get subquestions from the selected option
     if (typeof answer === 'string') {
       const selectedOption = question.options.find(opt => opt.value === answer);
       return selectedOption?.subQuestions || [];
@@ -143,33 +85,38 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
     return [];
   }, [answer, question]);
 
-  const renderInput = () => {
-    switch (question.type) {
-      case 'text':
-        return (
+  let inputComponent;
+
+  switch (question.type) {
+    case 'text':
+        inputComponent = (
           <FormField control={control} name={question.id} render={({ field }) => (
-            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
           )} />
         );
-      case 'number':
-        return (
+        break;
+    case 'number':
+        inputComponent = (
           <FormField control={control} name={question.id} render={({ field }) => (
-            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel className="text-base">{question.label}</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
           )} />
         );
-      case 'yes-no':
-      case 'single-choice':
-        return (
+        break;
+    case 'yes-no':
+    case 'single-choice':
+        inputComponent = (
           <FormField control={control} name={question.id} render={({ field }) => (
             <FormItem className="space-y-3">
               <FormLabel className="text-base">{question.label}</FormLabel>
               <FormControl>
                 <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
                   {question.options?.map(option => (
-                     <div key={option.id} className="flex items-center space-x-3">
-                      <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
-                      <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
-                    </div>
+                     <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                            <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                        </FormControl>
+                        <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</FormLabel>
+                     </FormItem>
                   ))}
                 </RadioGroup>
               </FormControl>
@@ -177,49 +124,59 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
             </FormItem>
           )} />
         );
-      case 'multiple-choice':
-        return (
+        break;
+    case 'multiple-choice':
+        inputComponent = (
           <FormField
             control={control}
             name={question.id}
-            render={({ field }) => (
+            render={() => (
               <FormItem>
                 <div className="mb-4">
                   <FormLabel className="text-base">{question.label}</FormLabel>
                 </div>
-                <div className="space-y-2">
-                  {question.options?.map(option => (
-                    <div key={option.id} className="flex flex-row items-center space-x-3">
-                        <Checkbox
-                          checked={field.value?.includes(option.value)}
-                          onCheckedChange={(checked) => {
-                            const currentValue = Array.isArray(field.value) ? field.value : [];
-                            const newValue = checked
-                              ? [...currentValue, option.value]
-                              : currentValue.filter((value: string) => value !== option.value);
-                            field.onChange(newValue);
-                          }}
-                          id={`${question.id}-${option.id}`}
-                        />
-                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
-                          {option.value}
-                        </Label>
-                    </div>
-                  ))}
-                </div>
+                {question.options?.map(option => (
+                    <FormField
+                        key={option.id}
+                        control={control}
+                        name={question.id}
+                        render={({field}) => {
+                            return (
+                                <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                        <Checkbox
+                                            checked={field.value?.includes(option.value)}
+                                            onCheckedChange={(checked) => {
+                                                const currentValue = Array.isArray(field.value) ? field.value : [];
+                                                const newValue = checked
+                                                    ? [...currentValue, option.value]
+                                                    : currentValue.filter((value: string) => value !== option.value);
+                                                return field.onChange(newValue);
+                                            }}
+                                            id={`${question.id}-${option.id}`}
+                                        />
+                                    </FormControl>
+                                    <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
+                                        {option.value}
+                                    </FormLabel>
+                                </FormItem>
+                            )
+                        }}
+                    />
+                ))}
                 <FormMessage />
               </FormItem>
             )}
           />
         );
-      default:
-        return null;
-    }
+        break;
+    default:
+        inputComponent = null;
   }
 
   return (
     <div className="space-y-6">
-      {renderInput()}
+      {inputComponent}
       {subQuestions.length > 0 && (
         <div className="pl-4 border-l-2 ml-2 space-y-6">
           <QuestionRenderer questions={subQuestions} control={control} />
@@ -252,7 +209,7 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = React.useState(0);
   
   const formSchema = useMemo(() => generateSchema(template.sections), [template]);
   
@@ -261,16 +218,38 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     mode: 'onTouched', 
   });
 
+  const findQuestionById = (sections: FormSection[], questionId: string): FormQuestion | null => {
+    for (const section of sections) {
+        const findInQuestions = (questions: FormQuestion[]): FormQuestion | null => {
+            for (const q of questions) {
+                if (q.id === questionId) return q;
+                if (q.options) {
+                    for (const opt of q.options) {
+                        if (opt.subQuestions) {
+                            const found = findInQuestions(opt.subQuestions);
+                            if (found) return found;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+        const found = findInQuestions(section.questions);
+        if (found) return found;
+    }
+    return null;
+  };
+
   useEffect(() => {
     if(open) {
-      const allIds = getAllQuestionIds(template.sections.flatMap(s => s.questions));
+      const allQuestionIds = template.sections.flatMap(s => s.questions).flatMap(q => getAllQuestionIds([q]));
       const defaultValues: Record<string, any> = {};
-      allIds.forEach(id => {
+      allQuestionIds.forEach(id => {
         const question = findQuestionById(template.sections, id);
         if (question?.type === 'multiple-choice') {
             defaultValues[id] = [];
         } else {
-            defaultValues[id] = '';
+            defaultValues[id] = undefined;
         }
       });
 
@@ -279,26 +258,20 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     }
   }, [open, template, form]);
   
-  const findQuestionById = (sections: FormSection[], questionId: string): FormQuestion | null => {
-      for (const section of sections) {
-          const findInQuestions = (questions: FormQuestion[]): FormQuestion | null => {
-              for (const q of questions) {
-                  if (q.id === questionId) return q;
-                  if (q.options) {
-                      for (const opt of q.options) {
-                          if (opt.subQuestions) {
-                              const found = findInQuestions(opt.subQuestions);
-                              if (found) return found;
-                          }
-                      }
-                  }
-              }
-              return null;
-          };
-          const found = findInQuestions(section.questions);
-          if (found) return found;
+
+  const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
+    let ids: string[] = [];
+    questions.forEach(q => {
+      ids.push(q.id);
+      if (q.options) {
+        q.options.forEach(opt => {
+          if (opt.subQuestions) {
+            ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
+          }
+        });
       }
-      return null;
+    });
+    return ids;
   };
 
 
@@ -334,6 +307,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const currentSection = template.sections[currentStep];
     const fieldsToValidate = getVisibleQuestionIdsForSection(currentSection, form.getValues());
     
+    // Manually trigger validation for visible fields
     const isValid = await form.trigger(fieldsToValidate as any);
 
     if(isValid) {
