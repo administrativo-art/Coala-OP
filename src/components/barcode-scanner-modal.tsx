@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from 'react';
-import { Html5QrcodeScanner, type Html5QrcodeError, type Html5QrcodeResult, Html5QrcodeScannerState } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScanner, type Html5QrcodeError, type Html5QrcodeResult, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { CameraOff, Loader2 } from 'lucide-react';
@@ -35,7 +35,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
             setPermissionState('loading');
             
             // Check for camera permissions before trying to render the scanner
-            Html5QrcodeScanner.getCameras().then(cameras => {
+            Html5Qrcode.getCameras().then(cameras => {
                 if (cameras && cameras.length) {
                     setPermissionState('granted');
                 } else {
