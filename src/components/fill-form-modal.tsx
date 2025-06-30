@@ -2,14 +2,13 @@
 "use client"
 
 import React, { useMemo, useEffect } from 'react';
-import { useForm, useWatch, Control, Controller } from 'react-hook-form';
+import { useForm, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,7 +35,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
         break;
       case 'yes-no':
       case 'single-choice':
-        fieldSchema = z.string({ required_error: 'Selecione uma opção.' });
+        fieldSchema = z.string({ required_error: 'Selecione uma opção.' }).min(1, 'Selecione uma opção.');
         break;
       case 'multiple-choice':
         fieldSchema = z.array(z.string()).refine(value => value.length > 0, {
@@ -130,39 +129,29 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
           <FormField
             control={control}
             name={question.id}
-            render={() => (
+            render={({ field }) => (
               <FormItem>
                 <div className="mb-4">
                   <FormLabel className="text-base">{question.label}</FormLabel>
                 </div>
                 {question.options?.map(option => (
-                    <FormField
-                        key={option.id}
-                        control={control}
-                        name={question.id}
-                        render={({field}) => {
-                            return (
-                                <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                        <Checkbox
-                                            checked={field.value?.includes(option.value)}
-                                            onCheckedChange={(checked) => {
-                                                const currentValue = Array.isArray(field.value) ? field.value : [];
-                                                const newValue = checked
-                                                    ? [...currentValue, option.value]
-                                                    : currentValue.filter((value: string) => value !== option.value);
-                                                return field.onChange(newValue);
-                                            }}
-                                            id={`${question.id}-${option.id}`}
-                                        />
-                                    </FormControl>
-                                    <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
-                                        {option.value}
-                                    </FormLabel>
-                                </FormItem>
-                            )
+                  <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0 mb-2">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value?.includes(option.value)}
+                        onCheckedChange={checked => {
+                          const currentValue = Array.isArray(field.value) ? field.value : [];
+                          return checked
+                            ? field.onChange([...currentValue, option.value])
+                            : field.onChange(currentValue.filter((value: string) => value !== option.value));
                         }}
-                    />
+                        id={`${question.id}-${option.id}`}
+                      />
+                    </FormControl>
+                    <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
+                      {option.value}
+                    </FormLabel>
+                  </FormItem>
                 ))}
                 <FormMessage />
               </FormItem>
@@ -239,26 +228,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     }
     return null;
   };
-
-  useEffect(() => {
-    if(open) {
-      const allQuestionIds = template.sections.flatMap(s => s.questions).flatMap(q => getAllQuestionIds([q]));
-      const defaultValues: Record<string, any> = {};
-      allQuestionIds.forEach(id => {
-        const question = findQuestionById(template.sections, id);
-        if (question?.type === 'multiple-choice') {
-            defaultValues[id] = [];
-        } else {
-            defaultValues[id] = undefined;
-        }
-      });
-
-      form.reset(defaultValues);
-      setCurrentStep(0);
-    }
-  }, [open, template, form]);
   
-
   const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
     let ids: string[] = [];
     questions.forEach(q => {
@@ -274,6 +244,23 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     return ids;
   };
 
+  useEffect(() => {
+    if(open) {
+      const allQuestionIds = template.sections.flatMap(s => getAllQuestionIds(s.questions));
+      const defaultValues: Record<string, any> = {};
+      allQuestionIds.forEach(id => {
+        const question = findQuestionById(template.sections, id);
+        if (question?.type === 'multiple-choice') {
+            defaultValues[id] = [];
+        } else {
+            defaultValues[id] = '';
+        }
+      });
+
+      form.reset(defaultValues);
+      setCurrentStep(0);
+    }
+  }, [open, template, form]);
 
   const getQuestionLabel = (sections: FormSection[], questionId: string): string | undefined => {
       const question = findQuestionById(sections, questionId);
