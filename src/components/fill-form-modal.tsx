@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/use-auth';
@@ -146,12 +147,10 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
               <FormControl>
                 <RadioGroup onValueChange={field.onChange} value={field.value ?? ''} className="flex flex-col space-y-1">
                   {question.options?.map(option => (
-                     <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                            <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
-                        </FormControl>
-                        <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</FormLabel>
-                     </FormItem>
+                     <div key={option.id} className="flex items-center space-x-3 space-y-0">
+                        <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">{option.value}</Label>
+                     </div>
                   ))}
                 </RadioGroup>
               </FormControl>
@@ -165,45 +164,30 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
         <FormField
           control={control}
           name={question.id}
-          render={() => (
+          render={({ field }) => (
             <FormItem>
               <div className="mb-4">
                 <FormLabel className="text-base">{question.label}</FormLabel>
               </div>
-              {question.options?.map(option => (
-                <FormField
-                  key={option.id}
-                  control={control}
-                  name={question.id}
-                  render={({ field }) => {
-                    return (
-                      <FormItem
-                        key={option.id}
-                        className="flex flex-row items-start space-x-3 space-y-0"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(option.value)}
-                            onCheckedChange={checked => {
-                              const currentValue = Array.isArray(field.value) ? field.value : [];
-                              return checked
-                                ? field.onChange([...currentValue, option.value])
-                                : field.onChange(
-                                    currentValue.filter(
-                                      (value) => value !== option.value
-                                    )
-                                  );
-                            }}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal">
-                          {option.value}
-                        </FormLabel>
-                      </FormItem>
-                    );
-                  }}
-                />
-              ))}
+              <div className="space-y-2">
+                {question.options?.map(option => (
+                    <div key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
+                      <Checkbox
+                        checked={Array.isArray(field.value) && field.value.includes(option.value)}
+                        onCheckedChange={checked => {
+                          const currentValue = Array.isArray(field.value) ? field.value : [];
+                          return checked
+                            ? field.onChange([...currentValue, option.value])
+                            : field.onChange(currentValue.filter(value => value !== option.value));
+                        }}
+                        id={`${question.id}-${option.id}`}
+                      />
+                      <Label htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
+                        {option.value}
+                      </Label>
+                    </div>
+                ))}
+              </div>
               <FormMessage />
             </FormItem>
           )}
