@@ -108,7 +108,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
             <FormItem className="space-y-3">
               <FormLabel className="text-base">{question.label}</FormLabel>
               <FormControl>
-                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                <RadioGroup onValueChange={field.onChange} value={field.value ?? ''} className="flex flex-col space-y-1">
                   {question.options?.map(option => (
                      <FormItem key={option.id} className="flex items-center space-x-3 space-y-0">
                         <FormControl>
@@ -135,7 +135,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                   <FormLabel className="text-base">{question.label}</FormLabel>
                 </div>
                 {question.options?.map(option => (
-                  <FormItem key={option.id} className="flex flex-row items-center space-x-3 space-y-0 mb-2">
+                  <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
                     <FormControl>
                       <Checkbox
                         checked={field.value?.includes(option.value)}
