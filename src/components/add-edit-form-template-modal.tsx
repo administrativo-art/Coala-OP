@@ -353,45 +353,51 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                         />
                     </div>
                     
-                    <h3 className="text-md font-medium pt-2">Seções e perguntas</h3>
-                    <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
-                        {sections.map((section, sectionIndex) => (
-                        <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted/50">
-                            <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
-                                <div className="flex items-center w-full gap-2 mr-4">
-                                    <Controller
-                                        control={form.control}
-                                        name={`sections.${sectionIndex}.name`}
-                                        render={({ field }) => (
-                                        <Input
-                                            {...field}
-                                            placeholder={`Nome da seção ${sectionIndex + 1} (Opcional)`}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
+                    <h3 className="text-md font-medium pt-2">Perguntas do formulário</h3>
+
+                    {sections.length > 1 ? (
+                        <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
+                            {sections.map((section, sectionIndex) => (
+                            <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted/50">
+                                <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
+                                    <div className="flex items-center w-full gap-2 mr-4">
+                                        <Controller
+                                            control={form.control}
+                                            name={`sections.${sectionIndex}.name`}
+                                            render={({ field }) => (
+                                            <Input
+                                                {...field}
+                                                placeholder={`Seção ${sectionIndex + 1} (Nome opcional)`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
+                                            />
+                                            )}
                                         />
-                                        )}
-                                    />
-                                    <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
-                                        <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}>
-                                        <span><ArrowUp className="h-4 w-4" /></span>
-                                        </Button>
-                                        <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}>
-                                        <span><ArrowDown className="h-4 w-4" /></span>
-                                        </Button>
-                                        {sections.length > 1 && (
+                                        <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                                            <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex - 1)} disabled={sectionIndex === 0}>
+                                            <span><ArrowUp className="h-4 w-4" /></span>
+                                            </Button>
+                                            <Button asChild variant="ghost" size="icon" onClick={() => moveSection(sectionIndex, sectionIndex + 1)} disabled={sectionIndex === sections.length - 1}>
+                                            <span><ArrowDown className="h-4 w-4" /></span>
+                                            </Button>
                                             <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeSection(sectionIndex)}>
                                             <span><Trash2 className="h-4 w-4" /></span>
                                             </Button>
-                                        )}
+                                        </div>
                                     </div>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4">
-                            <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
-                            </AccordionContent>
-                        </AccordionItem>
-                        ))}
-                    </Accordion>
+                                </AccordionTrigger>
+                                <AccordionContent className="p-4">
+                                    <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
+                                </AccordionContent>
+                            </AccordionItem>
+                            ))}
+                        </Accordion>
+                    ) : (
+                         <div className="border rounded-lg p-4 bg-muted/50">
+                            {sections[0] && <QuestionList control={form.control} namePrefix={`sections.0.questions`} level={0} />}
+                         </div>
+                    )}
+
 
                     <Button type="button" variant="outline" className="w-full" onClick={() => appendSection(createNewSection())}>
                         <PlusCircle className="mr-2" /> Adicionar seção

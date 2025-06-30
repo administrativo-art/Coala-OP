@@ -158,7 +158,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                                 checked={field.value?.includes(option.value)}
                                                 onCheckedChange={(checked) => {
                                                 return checked
-                                                    ? field.onChange([...field.value, option.value])
+                                                    ? field.onChange([...(field.value || []), option.value])
                                                     : field.onChange(field.value?.filter((value: string) => value !== option.value))
                                                 }}
                                             />
@@ -356,7 +356,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
                     <Button type="button" variant="outline" onClick={handlePrevStep}>Voltar</Button>
                 )}
               </div>
-              <div>
+              <div className="flex-grow flex justify-end">
                 {template.layout === 'stepped' && currentSectionIndex < template.sections.length - 1 ? (
                     <Button type="button" onClick={handleNextStep}>Próxima</Button>
                 ) : (
