@@ -53,7 +53,7 @@ type TemplateFormValues = z.infer<typeof templateSchema>;
 
 // Helper to create new objects
 const createNewQuestion = (): FormQuestionType => ({
-  id: new Date().toISOString() + Math.random(),
+  id: 'q-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2),
   label: '',
   type: 'text',
   isRequired: true,
@@ -61,7 +61,7 @@ const createNewQuestion = (): FormQuestionType => ({
 });
 
 const createNewSection = (): FormSection => ({
-  id: new Date().toISOString() + Math.random(),
+  id: 's-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2),
   name: '',
   questions: [createNewQuestion()]
 });
@@ -74,18 +74,19 @@ type QuestionListProps = {
 }
 
 const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level }) => {
-  const { fields, append, remove, move } = useFieldArray({ control, name: namePrefix });
+  const { fields, append, remove, move } = useFieldArray({ control, name: namePrefix, keyName: 'rhfId' });
 
   return (
     <div className={`space-y-4 ${level > 0 ? 'pl-4 border-l-2 border-dashed' : ''}`}>
       {fields.map((field, index) => (
         <QuestionItem
-          key={field.id}
+          key={field.rhfId}
           control={control}
           index={index}
           remove={() => remove(index)}
           namePrefix={`${namePrefix}.${index}`}
           level={level}
+          questionId={field.id}
           onMoveUp={() => move(index, index - 1)}
           onMoveDown={() => move(index, index + 1)}
           isFirst={index === 0}
@@ -106,28 +107,30 @@ type QuestionItemProps = {
   remove: () => void;
   namePrefix: string;
   level: number;
+  questionId: string;
   onMoveUp: () => void;
   onMoveDown: () => void;
   isFirst: boolean;
   isLast: boolean;
 }
 
-const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level, onMoveUp, onMoveDown, isFirst, isLast }) => {
-  const questionType = useWatch({ control, name: `${namePrefix}.type` });
+const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level, questionId, onMoveUp, onMoveDown, isFirst, isLast }) => {
+  const questionType = useWatch({ control, name: `${namePrefix}.type` as any });
   const hasOptions = ['yes-no', 'single-choice', 'multiple-choice'].includes(questionType);
 
   const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({
     control,
-    name: `${namePrefix}.options`
+    name: `${namePrefix}.options` as any,
+    keyName: 'rhfId'
   });
 
   useEffect(() => {
     if (hasOptions && options.length === 0) {
       if(questionType === 'yes-no') {
-        appendOption({ id: new Date().toISOString() + Math.random(), value: 'Sim', subQuestions: [] });
-        appendOption({ id: new Date().toISOString() + Math.random(), value: 'Não', subQuestions: [] });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Sim', subQuestions: [] });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Não', subQuestions: [] });
       } else {
-         appendOption({ id: new Date().toISOString() + Math.random(), value: '', subQuestions: [] });
+         appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [] });
       }
     }
   }, [hasOptions, questionType, options.length, appendOption]);
@@ -137,10 +140,17 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
     <div className="p-4 border rounded-lg space-y-3 bg-card">
       <div className="flex items-start gap-2">
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-2 flex-grow">
-          <FormField control={control} name={`${namePrefix}.label`} render={({ field }) => (
-            <FormItem><FormLabel>Texto da pergunta</FormLabel><FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl><FormMessage /></FormItem>
+          <FormField control={control} name={`${namePrefix}.label` as any} render={({ field }) => (
+            <FormItem>
+                <FormLabel>Texto da pergunta</FormLabel>
+                <FormControl><Input placeholder={`Pergunta ${index + 1}`} {...field} /></FormControl>
+                 <p className="text-xs text-muted-foreground pt-1">
+                    ID para título: <code className="bg-muted text-foreground font-mono p-1 rounded">{`{${questionId}}`}</code>
+                </p>
+                <FormMessage />
+            </FormItem>
           )}/>
-          <FormField control={control} name={`${namePrefix}.type`} render={({ field }) => (
+          <FormField control={control} name={`${namePrefix}.type` as any} render={({ field }) => (
             <FormItem><FormLabel>Tipo de resposta</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
@@ -157,7 +167,7 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
         <div className="flex items-center shrink-0 mt-8">
             <FormField
                 control={control}
-                name={`${namePrefix}.isRequired`}
+                name={`${namePrefix}.isRequired` as any}
                 render={({ field }) => (
                     <FormItem className="flex flex-col items-center justify-center space-y-2 pr-2">
                         <FormLabel className="text-xs">Obrigatória</FormLabel>
@@ -188,11 +198,11 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
         <div className="space-y-3 pt-2">
            <FormLabel>Opções de resposta e ramificações</FormLabel>
            {options.map((option, optionIndex) => (
-             <div key={option.id} className="pl-4">
+             <div key={option.rhfId} className="pl-4">
                 <div className="flex items-center gap-2">
                      <FormField
                         control={control}
-                        name={`${namePrefix}.options.${optionIndex}.value`}
+                        name={`${namePrefix}.options.${optionIndex}.value` as any}
                         render={({ field }) => (
                             <FormItem className="flex-grow">
                                 <FormControl><Input placeholder={`Opção ${optionIndex + 1}`} {...field} disabled={questionType === 'yes-no'} /></FormControl>
@@ -207,12 +217,12 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
                     )}
                 </div>
                 <div className="pt-2">
-                   <QuestionList control={control} namePrefix={`${namePrefix}.options.${optionIndex}.subQuestions`} level={level + 1} />
+                   <QuestionList control={control} namePrefix={`${namePrefix}.options.${optionIndex}.subQuestions` as any} level={level + 1} />
                 </div>
              </div>
            ))}
            {['single-choice', 'multiple-choice'].includes(questionType) && (
-              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: new Date().toISOString() + Math.random(), value: '', subQuestions: [] })}>
+              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [] })}>
                 Adicionar opção
               </Button>
            )}
@@ -245,7 +255,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
 
   const { fields: sections, append: appendSection, remove: removeSection, move: moveSection } = useFieldArray({
     control: form.control,
-    name: "sections"
+    name: "sections",
+    keyName: 'rhfId',
   });
 
   useEffect(() => {
@@ -345,7 +356,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                 <FormLabel>Formato do título da resposta (Opcional)</FormLabel>
                                 <FormControl><Textarea placeholder="ex: Checklist de Abertura - Quiosque {kioskName}" {...field} /></FormControl>
                                 <FormDescription>
-                                    Crie um título dinâmico. Use {'{kioskName}'}, {'{username}'}, {'{date}'}, ou o ID de uma pergunta entre chaves.
+                                    Crie um título dinâmico. Variáveis disponíveis: <code className="bg-muted p-1 rounded-sm text-xs">{'kioskName'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{username}'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{date}'}</code>. Para usar a resposta de uma pergunta, copie o ID dela, que aparece abaixo de cada pergunta criada.
                                 </FormDescription>
                                 <FormMessage />
                                 </FormItem>
@@ -358,7 +369,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                     {sections.length > 1 ? (
                         <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
                             {sections.map((section, sectionIndex) => (
-                            <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted/50">
+                            <AccordionItem value={section.id} key={section.rhfId} className="border rounded-md mb-2 bg-muted/50">
                                 <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
                                     <div className="flex items-center w-full gap-2 mr-4">
                                         <Controller
