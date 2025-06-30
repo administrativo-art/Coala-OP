@@ -96,7 +96,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                 return <FormField control={control} name={question.id} render={({ field }) => (
                     <FormItem>
                         <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                        <FormControl><Textarea {...field} /></FormControl>
+                        <FormControl><Textarea {...field} value={field.value || ''} /></FormControl>
                         <FormMessage />
                     </FormItem>
                 )} />;
@@ -104,7 +104,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                 return <FormField control={control} name={question.id} render={({ field }) => (
                     <FormItem>
                         <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                        <FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}/></FormControl>
+                        <FormControl><Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}/></FormControl>
                         <FormMessage />
                     </FormItem>
                 )} />;
@@ -116,10 +116,12 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                         <FormControl>
                             <RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
                                 {question.options?.map((option) => (
-                                    <div className="flex items-center space-x-3" key={option.id}>
-                                        <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
-                                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal">{option.value}</Label>
-                                    </div>
+                                    <FormItem className="flex items-center space-x-3" key={option.id}>
+                                        <FormControl>
+                                            <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                                        </FormControl>
+                                        <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal">{option.value}</FormLabel>
+                                    </FormItem>
                                 ))}
                             </RadioGroup>
                         </FormControl>
@@ -132,23 +134,23 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                         <div className="mb-4">
                             <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
                         </div>
-                        <div className="space-y-2">
-                            {question.options?.map((option) => (
-                                <div key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
-                                    <FormControl>
-                                        <Checkbox
-                                            checked={field.value?.includes(option.value)}
-                                            onCheckedChange={(checked) => {
-                                            return checked
-                                                ? field.onChange([...(field.value || []), option.value])
-                                                : field.onChange(field.value?.filter((value: string) => value !== option.value));
-                                            }}
-                                        />
-                                    </FormControl>
-                                    <Label className="font-normal">{option.value}</Label>
-                                </div>
-                            ))}
-                        </div>
+                        {question.options?.map((option) => (
+                            <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                                <FormControl>
+                                    <Checkbox
+                                        checked={field.value?.includes(option.value)}
+                                        onCheckedChange={(checked) => {
+                                        return checked
+                                            ? field.onChange([...(field.value || []), option.value])
+                                            : field.onChange(field.value?.filter((value: string) => value !== option.value));
+                                        }}
+                                    />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                    {option.value}
+                                </FormLabel>
+                            </FormItem>
+                        ))}
                         <FormMessage />
                     </FormItem>
                 )} />;
@@ -278,7 +280,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
               .map(questionId => {
                   const question = allQuestionsMap.get(questionId);
                   const value = values[questionId];
-                  if (!question || (value === '' || (Array.isArray(value) && value.length === 0))) return null;
+                  if (!question || (value === '' || value === undefined || (Array.isArray(value) && value.length === 0))) return null;
                   return {
                       questionId,
                       questionLabel: question.label,
@@ -292,12 +294,12 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     };
   
     const renderSection = (section: FormSection, index: number) => {
-        const showSectionTitle = template.sections.length > 1;
-        const sectionTitle = section.name?.trim() || `Seção ${index + 1}`;
+        const hasMultipleSections = template.sections.length > 1;
+        const sectionTitle = hasMultipleSections ? (section.name?.trim() || `Seção ${index + 1}`) : null;
         
         return (
             <div key={section.id} className="space-y-6">
-                {showSectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
+                {sectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
                 <QuestionRenderer questions={section.questions} control={form.control} />
             </div>
         )
@@ -323,7 +325,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <ScrollArea className="h-[60vh] p-4 -mx-4 pr-6">
               <div className="space-y-8 p-2">
-                 {template.layout === 'stepped' ? (
+                 {template.layout === 'stepped' && template.sections.length > 1 ? (
                     renderSection(template.sections[currentSectionIndex], currentSectionIndex)
                  ) : (
                     template.sections.map((section, index) => renderSection(section, index))
@@ -350,3 +352,5 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
+
+    
