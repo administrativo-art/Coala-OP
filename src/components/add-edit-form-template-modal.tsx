@@ -7,19 +7,23 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PlusCircle, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
+import { Switch } from './ui/switch';
+import { Textarea } from './ui/textarea';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 
 // Zod schema for a question, defined recursively
 const baseQuestionSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "A pergunta não pode estar em branco."),
   type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice']),
+  isRequired: z.boolean(),
 });
 
 const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() => 
@@ -34,13 +38,15 @@ const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() =>
 
 const sectionSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "O nome da seção é obrigatório."),
+  name: z.string().optional(),
   questions: z.array(questionSchema).min(1, "A seção precisa ter pelo menos uma pergunta."),
 });
 
 const templateSchema = z.object({
   name: z.string().min(1, 'O nome do formulário é obrigatório.'),
   sections: z.array(sectionSchema).min(1, "O formulário precisa ter pelo menos uma seção."),
+  layout: z.enum(['continuous', 'stepped']),
+  submissionTitleFormat: z.string().optional(),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
@@ -50,6 +56,7 @@ const createNewQuestion = (): FormQuestionType => ({
   id: new Date().toISOString() + Math.random(),
   label: '',
   type: 'text',
+  isRequired: true,
   options: []
 });
 
@@ -114,7 +121,6 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
     name: `${namePrefix}.options`
   });
 
-  // Effect to manage options based on question type
   useEffect(() => {
     if (hasOptions && options.length === 0) {
       if(questionType === 'yes-no') {
@@ -149,13 +155,30 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
           )}/>
         </div>
         <div className="flex items-center shrink-0 mt-8">
-            <Button type="button" variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
-                <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast}>
-                <ArrowDown className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={remove}>
+            <FormField
+                control={control}
+                name={`${namePrefix}.isRequired`}
+                render={({ field }) => (
+                    <FormItem className="flex flex-col items-center justify-center space-y-2 pr-2">
+                        <FormLabel className="text-xs">Obrigatória</FormLabel>
+                        <FormControl>
+                            <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                            />
+                        </FormControl>
+                    </FormItem>
+                )}
+            />
+            <div className="flex flex-col">
+                <Button type="button" variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
+                    <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast}>
+                    <ArrowDown className="h-4 w-4" />
+                </Button>
+            </div>
+            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive self-center" onClick={remove}>
                 <Trash2 className="h-4 w-4" />
             </Button>
         </div>
@@ -212,7 +235,12 @@ type AddEditFormTemplateModalProps = {
 export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
-    defaultValues: { name: '', sections: [] }
+    defaultValues: {
+        name: '', 
+        sections: [],
+        layout: 'continuous',
+        submissionTitleFormat: '',
+    }
   });
 
   const { fields: sections, append: appendSection, remove: removeSection, move: moveSection } = useFieldArray({
@@ -223,9 +251,18 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   useEffect(() => {
     if (open) {
       if (templateToEdit) {
-        form.reset(templateToEdit);
+        form.reset({
+            ...templateToEdit,
+            layout: templateToEdit.layout || 'continuous',
+            submissionTitleFormat: templateToEdit.submissionTitleFormat || '',
+        });
       } else {
-        form.reset({ name: '', sections: [createNewSection()] });
+        form.reset({
+            name: '',
+            sections: [createNewSection()],
+            layout: 'continuous',
+            submissionTitleFormat: '',
+        });
       }
     }
   }, [templateToEdit, open, form]);
@@ -250,8 +287,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ScrollArea className="h-[60vh] p-4 -m-4 pr-6">
-                <div className="space-y-4 p-2">
+            <ScrollArea className="h-[65vh] p-4 -m-4 pr-6">
+                <div className="space-y-6 p-2">
                     <FormField
                     control={form.control}
                     name="name"
@@ -263,11 +300,63 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                         </FormItem>
                     )}
                     />
+
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <h3 className="text-md font-medium">Configurações do Formulário</h3>
+                        <FormField
+                            control={form.control}
+                            name="layout"
+                            render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                <FormLabel>Apresentação do formulário</FormLabel>
+                                <FormControl>
+                                    <RadioGroup
+                                    onValueChange={field.onChange}
+                                    value={field.value}
+                                    className="flex flex-col space-y-1"
+                                    >
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                            <RadioGroupItem value="continuous" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">
+                                            Página única (Todas as seções em uma tela)
+                                        </FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                            <RadioGroupItem value="stepped" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">
+                                            Passo a passo (Uma seção por tela)
+                                        </FormLabel>
+                                    </FormItem>
+                                    </RadioGroup>
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="submissionTitleFormat"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Formato do título da resposta (Opcional)</FormLabel>
+                                <FormControl><Textarea placeholder="ex: Checklist de Abertura - Quiosque {kioskName}" {...field} /></FormControl>
+                                <FormDescription>
+                                    Crie um título dinâmico. Use {'{kioskName}'}, {'{username}'}, {'{date}'}, ou o ID de uma pergunta entre chaves.
+                                </FormDescription>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
                     
                     <h3 className="text-md font-medium pt-2">Seções e perguntas</h3>
                     <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
                         {sections.map((section, sectionIndex) => (
-                        <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted">
+                        <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-2 bg-muted/50">
                             <AccordionTrigger className="p-4 hover:no-underline [&[data-state=open]]:border-b [&>svg]:ml-auto">
                                 <div className="flex items-center w-full gap-2 mr-4">
                                     <Controller
@@ -276,7 +365,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                         render={({ field }) => (
                                         <Input
                                             {...field}
-                                            placeholder={`Nome da seção ${sectionIndex + 1}`}
+                                            placeholder={`Nome da seção ${sectionIndex + 1} (Opcional)`}
                                             onClick={(e) => e.stopPropagation()}
                                             className="text-lg font-semibold flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
                                         />

@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -120,8 +119,9 @@ export type FormQuestion = {
     id: string;
     label: string;
     type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice';
+    isRequired: boolean;
     options?: {
-        id: string; // For react hook form field array key
+        id: string;
         value: string;
         subQuestions: FormQuestion[];
     }[];
@@ -129,7 +129,7 @@ export type FormQuestion = {
 
 export type FormSection = {
   id: string;
-  name: string;
+  name?: string;
   questions: FormQuestion[];
 };
 
@@ -137,6 +137,8 @@ export type FormTemplate = {
     id: string;
     name: string;
     sections: FormSection[];
+    layout: 'continuous' | 'stepped';
+    submissionTitleFormat?: string;
 };
 
 export type FormAnswer = {
@@ -149,6 +151,7 @@ export type FormSubmission = {
     id: string;
     templateId: string;
     templateName: string;
+    title: string;
     userId: string;
     username: string;
     kioskId: string;

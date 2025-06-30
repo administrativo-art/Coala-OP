@@ -68,7 +68,7 @@ export function FormSubmissionsHistory({ submissions, loading, deleteSubmission,
                         <AccordionTrigger className="p-4 hover:no-underline w-full">
                             <div className="flex items-center justify-between gap-4 w-full">
                                 <div className="grid gap-1 text-left">
-                                    <p className="font-semibold">{submission.templateName}</p>
+                                    <p className="font-semibold">{submission.title || submission.templateName}</p>
                                     <p className="text-sm text-muted-foreground">
                                         Enviado por <strong>{submission.username}</strong> em {submission.kioskName}
                                     </p>
@@ -81,7 +81,7 @@ export function FormSubmissionsHistory({ submissions, loading, deleteSubmission,
                                         asChild 
                                         variant="ghost" 
                                         size="icon" 
-                                        className="text-destructive hover:text-destructive"
+                                        className="text-destructive hover:text-destructive shrink-0"
                                         onClick={(e) => { e.stopPropagation(); handleDeleteClick(submission); }}
                                     >
                                         <span><Trash2 className="h-4 w-4" /></span>
@@ -117,7 +117,7 @@ export function FormSubmissionsHistory({ submissions, loading, deleteSubmission,
                     open={!!submissionToDelete}
                     onOpenChange={() => setSubmissionToDelete(null)}
                     onConfirm={handleDeleteConfirm}
-                    itemName={`a resposta do formulário "${submissionToDelete.templateName}" enviado por ${submissionToDelete.username}`}
+                    itemName={`a resposta do formulário "${submissionToDelete.title || submissionToDelete.templateName}" enviado por ${submissionToDelete.username}`}
                 />
             )}
         </>
