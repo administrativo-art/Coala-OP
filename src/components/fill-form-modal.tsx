@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -129,31 +128,35 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                     </FormItem>
                 )}/>;
             case 'multiple-choice':
-                return <FormField control={control} name={question.id} render={({ field }) => (
-                    <FormItem>
-                        <div className="mb-4">
-                            <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                        </div>
-                        {question.options?.map((option) => (
-                            <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
-                                <FormControl>
-                                    <Checkbox
-                                        checked={field.value?.includes(option.value)}
-                                        onCheckedChange={(checked) => {
-                                        return checked
-                                            ? field.onChange([...(field.value || []), option.value])
-                                            : field.onChange(field.value?.filter((value: string) => value !== option.value));
-                                        }}
-                                    />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                    {option.value}
-                                </FormLabel>
+                return (
+                    <FormField
+                        control={control}
+                        name={question.id}
+                        render={({ field }) => (
+                            <FormItem>
+                                <div className="mb-4">
+                                    <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                                </div>
+                                {question.options?.map((option) => (
+                                    <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value?.includes(option.value)}
+                                                onCheckedChange={(checked) => {
+                                                    return checked
+                                                        ? field.onChange([...(field.value || []), option.value])
+                                                        : field.onChange(field.value?.filter((value: string) => value !== option.value));
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{option.value}</FormLabel>
+                                    </FormItem>
+                                ))}
+                                <FormMessage />
                             </FormItem>
-                        ))}
-                        <FormMessage />
-                    </FormItem>
-                )} />;
+                        )}
+                    />
+                );
             default:
                 return null;
         }
@@ -280,11 +283,13 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
               .map(questionId => {
                   const question = allQuestionsMap.get(questionId);
                   const value = values[questionId];
-                  if (!question || (value === '' || value === undefined || (Array.isArray(value) && value.length === 0))) return null;
+                  if (!question || value === undefined || value === null || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0)) {
+                    return null;
+                  }
                   return {
                       questionId,
                       questionLabel: question.label,
-                      value: values[questionId],
+                      value: value,
                   };
               }).filter((a): a is NonNullable<typeof a> => a !== null),
         };
@@ -352,5 +357,3 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
-
-    
