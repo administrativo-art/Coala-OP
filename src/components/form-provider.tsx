@@ -14,6 +14,7 @@ export interface FormContextType {
   updateTemplate: (template: FormTemplate) => Promise<void>;
   deleteTemplate: (templateId: string) => Promise<void>;
   addSubmission: (submission: Omit<FormSubmission, 'id'>) => Promise<void>;
+  deleteSubmission: (submissionId: string) => Promise<void>;
 }
 
 export const FormContext = createContext<FormContextType | undefined>(undefined);
@@ -140,6 +141,14 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const deleteSubmission = useCallback(async (submissionId: string) => {
+    try {
+        await deleteDoc(doc(db, "formSubmissions", submissionId));
+    } catch(error) {
+        console.error("Error deleting submission:", error);
+    }
+  }, []);
+
   const value: FormContextType = {
     templates,
     submissions,
@@ -148,6 +157,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     updateTemplate,
     deleteTemplate,
     addSubmission,
+    deleteSubmission,
   };
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;

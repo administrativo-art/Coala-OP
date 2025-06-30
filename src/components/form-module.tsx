@@ -2,21 +2,22 @@
 "use client"
 
 import { useState } from "react"
-import Image from "next/image"
 import { useForm as useFormHook } from "@/hooks/use-form"
 import { useAuth } from "@/hooks/use-auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PlusCircle, Edit, Trash2, FileText, ListChecks } from "lucide-react"
+import { PlusCircle, Edit, Trash2, FileText, ListChecks, History } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type FormTemplate } from "@/types"
 import { AddEditFormTemplateModal } from "./add-edit-form-template-modal"
 import { FillFormModal } from "./fill-form-modal"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
+import { FormSubmissionsHistory } from "./form-submissions-history"
 
 export function FormModule() {
-    const { templates, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission } = useFormHook()
+    const { templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission } = useFormHook()
     const { permissions } = useAuth()
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false)
@@ -49,10 +50,10 @@ export function FormModule() {
         }
     }
 
-    const renderContent = () => {
+    const renderAvailableForms = () => {
         if (loading) {
             return (
-                <div className="space-y-3 pt-8">
+                <div className="space-y-3 pt-4">
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
@@ -62,18 +63,16 @@ export function FormModule() {
         
         if (templates.length === 0) {
             return (
-                <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg text-muted-foreground">
+                <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg text-muted-foreground mt-6">
                     <FileText className="mx-auto h-12 w-12" />
-                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum formulário criado</h3>
-                    <p className="mt-1 text-sm">
-                        Clique no botão acima para criar o seu primeiro.
-                    </p>
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum formulário disponível</h3>
+                    {permissions.forms.manage && <p className="mt-1 text-sm">Clique no botão "Novo formulário" para criar o seu primeiro.</p>}
                 </div>
             )
         }
 
         return (
-             <ScrollArea className="h-96">
+             <ScrollArea className="h-96 mt-4">
                 <div className="space-y-2 pr-4">
                 {templates.map(template => {
                     const itemCount = template.sections.reduce((acc, section) => acc + section.questions.length, 0);
@@ -109,17 +108,37 @@ export function FormModule() {
             <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
                 <CardHeader>
                     <CardTitle className="font-headline flex items-center gap-2">
-                       <ListChecks /> Formulários
+                       <ListChecks /> Módulo de Formulários
                     </CardTitle>
-                    <CardDescription>Crie, preencha e gerencie formulários para as operações diárias.</CardDescription>
+                    <CardDescription>Crie, preencha e gerencie formulários para as operações diárias. Consulte o histórico de respostas.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {permissions.forms.manage && (
-                        <Button onClick={handleAddNew} className="w-full mb-6">
-                            <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
-                        </Button>
-                    )}
-                    {renderContent()}
+                    <Tabs defaultValue="available" className="w-full">
+                        <div className="flex justify-between items-center">
+                            <TabsList>
+                                <TabsTrigger value="available">Formulários Disponíveis</TabsTrigger>
+                                {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de Respostas</TabsTrigger>}
+                            </TabsList>
+                            {permissions.forms.manage && (
+                                <Button onClick={handleAddNew}>
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
+                                </Button>
+                            )}
+                        </div>
+                        <TabsContent value="available">
+                            {renderAvailableForms()}
+                        </TabsContent>
+                        {permissions.forms.viewHistory && (
+                            <TabsContent value="history">
+                                <FormSubmissionsHistory 
+                                    submissions={submissions}
+                                    loading={loading}
+                                    deleteSubmission={deleteSubmission}
+                                    canDelete={permissions.forms.deleteHistory}
+                                />
+                            </TabsContent>
+                        )}
+                    </Tabs>
                 </CardContent>
             </Card>
             

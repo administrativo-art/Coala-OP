@@ -83,7 +83,7 @@ export type PermissionSet = {
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
-    forms: { manage: boolean; fill: boolean; viewHistory: boolean };
+    forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean };
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
 };
@@ -163,7 +163,7 @@ export const defaultGuestPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
-    forms: { manage: false, fill: false, viewHistory: false },
+    forms: { manage: false, fill: false, viewHistory: false, deleteHistory: false },
     stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
 };
@@ -174,7 +174,7 @@ export const defaultUserPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
-    forms: { manage: false, fill: true, viewHistory: true },
+    forms: { manage: false, fill: true, viewHistory: true, deleteHistory: false },
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
 };
@@ -185,7 +185,7 @@ export const defaultAdminPermissions: PermissionSet = {
     users: { add: true, edit: true, delete: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
-    forms: { manage: true, fill: true, viewHistory: true },
+    forms: { manage: true, fill: true, viewHistory: true, deleteHistory: true },
     stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
 };

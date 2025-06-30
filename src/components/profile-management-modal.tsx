@@ -31,7 +31,7 @@ const permissionsSchema = z.object({
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-    forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean() }),
+    forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
 });
@@ -211,6 +211,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             {renderPermissionSwitch("permissions.forms.manage", "Gerenciar modelos", "Permite criar, editar e excluir modelos de formulário.")}
                             {renderPermissionSwitch("permissions.forms.fill", "Preencher formulários", "Permite preencher e enviar formulários.")}
                             {renderPermissionSwitch("permissions.forms.viewHistory", "Ver histórico", "Permite visualizar o histórico de formulários enviados.")}
+                            {renderPermissionSwitch("permissions.forms.deleteHistory", "Excluir histórico", "Permite excluir envios de formulários do histórico.")}
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="kiosks">
