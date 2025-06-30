@@ -412,5 +412,3 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
-
-    
