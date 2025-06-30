@@ -1,11 +1,9 @@
-
 "use client"
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Html5QrcodeScanner, Html5QrcodeError, Html5QrcodeResult, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from "@/hooks/use-toast"
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 type BarcodeScannerModalProps = {
     open: boolean;
@@ -16,16 +14,22 @@ type BarcodeScannerModalProps = {
 const QRCODE_REGION_ID = "barcode-scanner-region";
 
 export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: BarcodeScannerModalProps) {
-    const [hasPermission, setHasPermission] = useState(true);
-    const { toast } = useToast();
     const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         if (!open) {
+            // If the modal is closed, ensure the scanner is cleared.
+            if (scannerRef.current && scannerRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
+                scannerRef.current.clear().catch(err => console.error("Failed to clear scanner on close", err));
+                scannerRef.current = null;
+            }
             return;
         }
 
-        const timerId = setTimeout(() => {
+        // --- Scanner initialization logic ---
+        const initializeScanner = () => {
+            // Prevent re-initialization
             if (scannerRef.current) {
                 return;
             }
@@ -35,8 +39,15 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
             };
 
             const onScanFailureCallback = (error: Html5QrcodeError) => {
-                // Ignore non-fatal errors (e.g., QR code not found in a frame)
+                // This callback is called frequently, so we typically ignore errors here.
             };
+
+            // Ensure the container element is in the DOM
+            const container = document.getElementById(QRCODE_REGION_ID);
+            if (!container) {
+                console.error(`Scanner container #${QRCODE_REGION_ID} not found.`);
+                return;
+            }
             
             try {
                 const newScanner = new Html5QrcodeScanner(
@@ -45,35 +56,38 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                         fps: 10,
                         qrbox: { width: 250, height: 250 },
                         rememberLastUsedCamera: true,
+                        supportedScanTypes: [], // This forces file-based scanning to be hidden
                     },
-                    false 
+                    /* verbose= */ false 
                 );
                 
                 newScanner.render(onScanSuccessCallback, onScanFailureCallback);
                 scannerRef.current = newScanner;
 
             } catch (error) {
-                console.error('Error constructing or rendering scanner:', error);
-                setHasPermission(false);
+                console.error('Error initializing scanner:', error);
                 toast({
                     variant: 'destructive',
-                    title: 'Erro de câmera',
-                    description: 'Não foi possível iniciar o leitor. Verifique as permissões da câmera.',
+                    title: 'Erro de Câmera',
+                    description: 'Não foi possível iniciar o leitor. Verifique as permissões da câmera em seu navegador e atualize a página.',
                 });
             }
-        }, 200);
+        };
+
+        // A short timeout ensures the modal's animation is complete and the
+        // container div is ready in the DOM before we try to initialize the scanner.
+        const timerId = setTimeout(initializeScanner, 300);
 
         return () => {
             clearTimeout(timerId);
-            if (scannerRef.current) {
-                if (scannerRef.current.getState() !== Html5QrcodeScannerState.NOT_STARTED) {
-                    scannerRef.current.clear().catch(error => {
-                        console.error("Failed to clear scanner on cleanup.", error);
-                    });
-                }
+             if (scannerRef.current && scannerRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
+                scannerRef.current.clear().catch(error => {
+                    console.error("Failed to clear scanner on cleanup.", error);
+                });
                 scannerRef.current = null;
             }
         };
+
     }, [open, onScanSuccess, toast]);
 
     return (
@@ -85,16 +99,9 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                         Aponte a câmera para o código de barras do produto.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="py-4">
+                {/* The div needs a min-height to be visible before the scanner initializes */}
+                <div className="py-4 min-h-[300px]">
                     <div id={QRCODE_REGION_ID} className="w-full" />
-                    {!hasPermission && (
-                        <Alert variant="destructive" className="mt-4">
-                            <AlertTitle>Acesso à câmera negado</AlertTitle>
-                            <AlertDescription>
-                                Por favor, habilite o acesso à câmera nas configurações do seu navegador para usar esta funcionalidade.
-                            </AlertDescription>
-                        </Alert>
-                    )}
                 </div>
             </DialogContent>
         </Dialog>
