@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useMemo, useEffect, useState } from 'react';
-import { useForm, useWatch, Control, FieldPath, FieldValues } from 'react-hook-form';
+import { useForm, useWatch, Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,6 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
 import { Progress } from './ui/progress';
 
-// Helper to get all possible question IDs, including nested ones
 const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
     const questions: FormQuestion[] = [];
     const recurse = (qs: FormQuestion[] | undefined) => {
@@ -37,7 +36,6 @@ const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
     return questions;
 };
 
-// Helper to get only the IDs of questions that are currently visible based on answers
 const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<string, any>): Set<string> => {
     const visibleIds = new Set<string>();
     const recurse = (questions: FormQuestion[] | undefined) => {
@@ -59,10 +57,8 @@ const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<strin
     return visibleIds;
 };
 
-// Dynamically generate the Zod schema for validation
 const generateSchema = (allQuestions: FormQuestion[]) => {
     let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
-
     allQuestions.forEach(question => {
         switch (question.type) {
             case 'text':
@@ -80,11 +76,9 @@ const generateSchema = (allQuestions: FormQuestion[]) => {
                 break;
         }
     });
-    
     return z.object(schemaObject);
 }
 
-// ==================== Recursive Question Renderer ====================
 function RenderedQuestion({ question, control }: { question: FormQuestion; control: Control<any> }) {
     const answer = useWatch({ control, name: question.id });
     
@@ -99,80 +93,65 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
     const renderInput = () => {
          switch (question.type) {
             case 'text':
-                return (
-                    <FormField control={control} name={question.id} render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                            <FormControl><Textarea {...field} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                );
+                return <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                        <FormControl><Textarea {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />;
             case 'number':
-                return (
-                    <FormField control={control} name={question.id} render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                            <FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}/></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                );
+                return <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                        <FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}/></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />;
             case 'yes-no':
             case 'single-choice':
-                 return (
-                    <FormField control={control} name={question.id} render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                            <FormControl>
-                                <RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
-                                    {question.options?.map((option) => (
-                                    <FormItem className="flex items-center space-x-3 space-y-0" key={option.id}>
-                                        <FormControl><RadioGroupItem value={option.value} /></FormControl>
-                                        <Label className="font-normal">{option.value}</Label>
-                                    </FormItem>
-                                    ))}
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                );
+                 return <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem className="space-y-3">
+                        <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                        <FormControl>
+                            <RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
+                                {question.options?.map((option) => (
+                                    <div className="flex items-center space-x-3" key={option.id}>
+                                        <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal">{option.value}</Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}/>;
             case 'multiple-choice':
-                return (
-                    <FormField control={control} name={question.id} render={({ field }) => (
-                        <FormItem>
-                            <div className="mb-4">
-                                <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
-                            </div>
+                return <FormField control={control} name={question.id} render={({ field }) => (
+                    <FormItem>
+                        <div className="mb-4">
+                            <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                        </div>
+                        <div className="space-y-2">
                             {question.options?.map((option) => (
-                                <FormField
-                                    key={option.id}
-                                    control={control}
-                                    name={question.id}
-                                    render={({ field }) => {
-                                        return (
-                                        <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
-                                            <FormControl>
-                                            <Checkbox
-                                                checked={field.value?.includes(option.value)}
-                                                onCheckedChange={(checked) => {
-                                                return checked
-                                                    ? field.onChange([...(field.value || []), option.value])
-                                                    : field.onChange(field.value?.filter((value: string) => value !== option.value))
-                                                }}
-                                            />
-                                            </FormControl>
-                                            <Label className="font-normal">{option.value}</Label>
-                                        </FormItem>
-                                        )
-                                    }}
-                                />
+                                <div key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
+                                    <FormControl>
+                                        <Checkbox
+                                            checked={field.value?.includes(option.value)}
+                                            onCheckedChange={(checked) => {
+                                            return checked
+                                                ? field.onChange([...(field.value || []), option.value])
+                                                : field.onChange(field.value?.filter((value: string) => value !== option.value));
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <Label className="font-normal">{option.value}</Label>
+                                </div>
                             ))}
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                );
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                )} />;
             default:
                 return null;
         }
@@ -195,7 +174,6 @@ function QuestionRenderer({ questions, control }: { questions: FormQuestion[]; c
   return <>{questions.map(q => <RenderedQuestion key={q.id} question={q} control={control} />)}</>;
 }
 
-// ==================== Main Modal Component ====================
 type FillFormModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -315,9 +293,11 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   
     const renderSection = (section: FormSection, index: number) => {
         const showSectionTitle = template.sections.length > 1;
+        const sectionTitle = section.name?.trim() || `Seção ${index + 1}`;
+        
         return (
             <div key={section.id} className="space-y-6">
-                {showSectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{section.name?.trim() || `Seção ${index + 1}`}</h3>}
+                {showSectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
                 <QuestionRenderer questions={section.questions} control={form.control} />
             </div>
         )
