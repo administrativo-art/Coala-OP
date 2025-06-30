@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
 import { Progress } from './ui/progress';
+import { Label } from './ui/label';
 
 const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
     const questions: FormQuestion[] = [];
@@ -115,12 +116,10 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                         <FormControl>
                             <RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
                                 {question.options?.map((option) => (
-                                    <FormItem className="flex items-center space-x-3" key={option.id}>
-                                        <FormControl>
-                                            <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
-                                        </FormControl>
-                                        <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal">{option.value}</FormLabel>
-                                    </FormItem>
+                                    <div className="flex items-center space-x-3" key={option.id}>
+                                        <RadioGroupItem value={option.value} id={`${question.id}-${option.id}`} />
+                                        <Label htmlFor={`${question.id}-${option.id}`} className="font-normal">{option.value}</Label>
+                                    </div>
                                 ))}
                             </RadioGroup>
                         </FormControl>
@@ -143,9 +142,10 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                             <Checkbox
                                                 checked={field.value?.includes(option.value)}
                                                 onCheckedChange={(checked) => {
+                                                    const currentValue = field.value || [];
                                                     return checked
-                                                        ? field.onChange([...(field.value || []), option.value])
-                                                        : field.onChange(field.value?.filter((value: string) => value !== option.value));
+                                                        ? field.onChange([...currentValue, option.value])
+                                                        : field.onChange(currentValue.filter((value: string) => value !== option.value));
                                                 }}
                                             />
                                         </FormControl>
