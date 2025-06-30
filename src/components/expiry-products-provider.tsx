@@ -59,28 +59,28 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
-    // Check if a lot with the same product, lot number, and kiosk already exists
+    // A lot is defined by its product, lot number, expiry date, and kiosk.
     const q = query(
       collection(db, "lots"),
       where("productName", "==", lot.productName),
       where("lotNumber", "==", lot.lotNumber),
+      where("expiryDate", "==", lot.expiryDate),
       where("kioskId", "==", lot.kioskId)
     );
 
     try {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
-            // Update existing lot
+            // Lot already exists, just update quantity.
             const existingDoc = querySnapshot.docs[0];
             const existingLot = existingDoc.data() as LotEntry;
             const lotRef = doc(db, "lots", existingDoc.id);
             await updateDoc(lotRef, {
                 quantity: existingLot.quantity + lot.quantity,
-                expiryDate: lot.expiryDate, // Update expiry date and barcode as well
-                barcode: lot.barcode,
+                barcode: lot.barcode, // Also update barcode in case it changed
             });
         } else {
-            // Add new lot
+            // This is a new, unique lot entry. Add it.
             await addDoc(collection(db, "lots"), lot);
         }
     } catch (error) {
@@ -135,6 +135,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             collection(db, "lots"),
             where("productName", "==", sourceLot.productName),
             where("lotNumber", "==", sourceLot.lotNumber),
+            where("expiryDate", "==", sourceLot.expiryDate), // Ensure same expiry date
             where("kioskId", "==", toKioskId)
         );
         const destSnap = await getDocs(destQuery);
@@ -146,7 +147,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         } else {
             const newDestLotRef = doc(collection(db, "lots"));
             const newLotData: Omit<LotEntry, 'id'> = {
-                ...sourceLot,
+                productName: sourceLot.productName,
+                barcode: sourceLot.barcode,
+                lotNumber: sourceLot.lotNumber,
+                expiryDate: sourceLot.expiryDate,
                 kioskId: toKioskId,
                 quantity: quantityToMove,
             };

@@ -76,7 +76,7 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
         <Separator />
         <div className="p-4 space-y-2">
             {groupedLot.kiosks.map(kioskEntry => (
-                <div key={kioskEntry.id} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
+                <div key={`${kioskEntry.id}-${kioskEntry.kioskId}`} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
                     <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
