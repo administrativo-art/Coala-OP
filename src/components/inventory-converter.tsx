@@ -43,35 +43,10 @@ export function InventoryConverter() {
   useEffect(() => {
     if (selectedProduct) {
       const categoryUnits = getUnitsForCategory(selectedProduct.category);
-      // setFromUnit('Pacote(s)'); // This was causing issues when swapping
-      
-      const newFromUnit = 'Pacote(s)';
-      let newToUnit = categoryUnits[0];
-
-      // If fromUnit is already set to something other than package, keep it
-      // if it's still valid for the new product category
-      const currentFromUnitIsValid = fromUnit !== 'Pacote(s)' && availableUnits.includes(fromUnit);
-      const currentToUnitIsValid = toUnit !== 'Pacote(s)' && availableUnits.includes(toUnit);
-      
-      if (currentFromUnitIsValid) {
-        setFromUnit(fromUnit);
-        if (currentToUnitIsValid && toUnit !== fromUnit) {
-          setToUnit(toUnit);
-        } else {
-           const fallbackToUnit = availableUnits.find(u => u !== fromUnit) || 'Pacote(s)';
-           setToUnit(fallbackToUnit);
-        }
-      } else {
-        setFromUnit(newFromUnit);
-        setToUnit(newToUnit);
-      }
-
-
-    } else if (!loading && products.length === 0) {
-        setFromUnit('');
-        setToUnit('');
+      setFromUnit('Pacote(s)');
+      setToUnit(categoryUnits[0] || '');
     }
-  }, [selectedProduct, loading, products.length, availableUnits, fromUnit, toUnit]);
+  }, [selectedProduct]);
 
   const handleProductChange = (productId: string) => {
     setSelectedProductId(productId);
