@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useMemo, useEffect, useState } from 'react';
-import { useForm, useWatch, Control, FieldPath, FieldValues } from 'react-hook-form';
+import { useForm, useWatch, Control, FieldPath, FieldValues, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -19,12 +19,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
 
-// Helper to recursively build Zod schema from template
-// All fields are marked as optional at the schema level because their requirement
-// is conditional on their visibility, which is handled during form submission.
+
 const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
   let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
-  
+
   const buildSchemaPart = (question: FormQuestion) => {
     let fieldSchema: z.ZodType<any, any>;
     switch (question.type) {
@@ -32,7 +30,7 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
         fieldSchema = z.string().min(1, 'Este campo é obrigatório.');
         break;
       case 'number':
-        fieldSchema = z.coerce.number({invalid_type_error: 'Deve ser um número.'});
+        fieldSchema = z.coerce.number({ invalid_type_error: 'Deve ser um número.' });
         break;
       case 'yes-no':
       case 'single-choice':
@@ -46,25 +44,24 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
       default:
         fieldSchema = z.any();
     }
-     schemaObject[question.id] = fieldSchema.optional();
+    schemaObject[question.id] = fieldSchema.optional();
 
-    // Recursively add schemas for sub-questions
     question.options?.forEach(option => {
-        if (option.subQuestions) {
-            option.subQuestions.forEach(buildSchemaPart);
-        }
+      if (option.subQuestions) {
+        option.subQuestions.forEach(buildSchemaPart);
+      }
     });
   }
 
   sections.forEach(section => section.questions.forEach(buildSchemaPart));
-  
+
   return z.object(schemaObject);
 }
 
 
 // ==================== Recursive Question Renderer ====================
 
-const renderInput = (question: FormQuestion, field: any, control: Control<any>) => {
+const renderInput = (question: FormQuestion, field: any) => {
     switch (question.type) {
         case 'text':
             return <Textarea {...field} value={field.value ?? ''} />;
@@ -88,32 +85,22 @@ const renderInput = (question: FormQuestion, field: any, control: Control<any>) 
             return (
                 <div className="space-y-2">
                     {question.options?.map(option => (
-                        <FormField
-                            key={option.id}
-                            control={control}
-                            name={question.id}
-                            render={({ field }) => {
-                                return (
-                                    <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                            <Checkbox
-                                                checked={field.value?.includes(option.value)}
-                                                onCheckedChange={(checked) => {
-                                                    return checked
-                                                        ? field.onChange([...(field.value || []), option.value])
-                                                        : field.onChange(field.value?.filter((value: string) => value !== option.value))
-                                                }}
-                                            />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">
-                                            {option.value}
-                                        </FormLabel>
-                                    </FormItem>
-                                )
-                            }}
-                        />
+                        <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormControl>
+                                <Checkbox
+                                    checked={field.value?.includes(option.value)}
+                                    onCheckedChange={(checked) => {
+                                        return checked
+                                            ? field.onChange([...(field.value || []), option.value])
+                                            : field.onChange(field.value?.filter((value: string) => value !== option.value))
+                                    }}
+                                />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer">
+                                {option.value}
+                            </FormLabel>
+                        </FormItem>
                     ))}
-                    <FormMessage />
                 </div>
             );
         default:
@@ -149,7 +136,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
               <FormItem>
                   <FormLabel className="text-base">{question.label}</FormLabel>
                   <FormControl>
-                      {renderInput(question, field, control)}
+                      {renderInput(question, field)}
                   </FormControl>
                   <FormMessage />
               </FormItem>
@@ -190,26 +177,36 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
   const [currentStep, setCurrentStep] = useState(0);
   
   const formSchema = useMemo(() => generateSchema(template.sections), [template]);
-  
+
+  // Recursively get all possible question IDs and generate default values
+  const allDefaultValues = useMemo(() => {
+      const values: Record<string, any> = {};
+      const recurse = (questions: FormQuestion[]) => {
+          if (!questions) return;
+          questions.forEach(q => {
+              values[q.id] = q.type === 'multiple-choice' ? [] : '';
+              if (q.options) {
+                  q.options.forEach(opt => recurse(opt.subQuestions));
+              }
+          });
+      };
+      template.sections.forEach(section => recurse(section.questions));
+      return values;
+  }, [template]);
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     mode: 'onChange', 
+    defaultValues: allDefaultValues, // Initialize the form with all possible fields
   });
 
-  const getAllQuestionIds = (questions: FormQuestion[]): string[] => {
-    let ids: string[] = [];
-    questions.forEach(q => {
-      ids.push(q.id);
-      if (q.options) {
-        q.options.forEach(opt => {
-          if (opt.subQuestions) {
-            ids = [...ids, ...getAllQuestionIds(opt.subQuestions)];
-          }
-        });
-      }
-    });
-    return ids;
-  };
+  useEffect(() => {
+    if(open) {
+      // Reset the form to its initial default state when the modal opens
+      form.reset(allDefaultValues);
+      setCurrentStep(0);
+    }
+  }, [open, template, form, allDefaultValues]);
   
   const findQuestionById = (sections: FormSection[], questionId: string): FormQuestion | null => {
     for (const section of sections) {
@@ -232,23 +229,6 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     }
     return null;
   };
-
-  useEffect(() => {
-    if(open) {
-      const allQuestionIds = template.sections.flatMap(s => getAllQuestionIds(s.questions));
-      const defaultValues: Record<string, any> = {};
-      allQuestionIds.forEach(id => {
-        const question = findQuestionById(template.sections, id);
-        if (question?.type === 'multiple-choice') {
-            defaultValues[id] = [];
-        } else {
-            defaultValues[id] = '';
-        }
-      });
-      form.reset(defaultValues);
-      setCurrentStep(0);
-    }
-  }, [open, template, form]);
 
   const getQuestionLabel = (sections: FormSection[], questionId: string): string | undefined => {
       const question = findQuestionById(sections, questionId);
