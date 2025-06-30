@@ -122,13 +122,19 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
             <FormField
                 control={control}
                 name={question.id as FieldPath<FieldValues>}
-                render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="text-base">{question.label}</FormLabel>
-                        <FormControl>
-                             {question.type === 'text' && <Textarea {...field} value={field.value ?? ''} />}
-                             {question.type === 'number' && <Input type="number" {...field} value={field.value ?? ''} />}
-                             {(question.type === 'yes-no' || question.type === 'single-choice') && (
+                render={({ field }) => {
+                    let inputComponent;
+
+                    switch (question.type) {
+                        case 'text':
+                            inputComponent = <Textarea {...field} value={field.value ?? ''} />;
+                            break;
+                        case 'number':
+                            inputComponent = <Input type="number" {...field} value={field.value ?? ''} />;
+                            break;
+                        case 'yes-no':
+                        case 'single-choice':
+                            inputComponent = (
                                 <RadioGroup onValueChange={field.onChange} value={field.value ?? ''} className="flex flex-col space-y-1">
                                     {question.options?.map(option => (
                                         <div key={option.id} className="flex items-center space-x-3 space-y-0">
@@ -137,8 +143,10 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                         </div>
                                     ))}
                                 </RadioGroup>
-                             )}
-                             {question.type === 'multiple-choice' && (
+                            );
+                            break;
+                        case 'multiple-choice':
+                             inputComponent = (
                                 <div className="space-y-2">
                                     {question.options?.map(option => (
                                         <div key={option.id} className="flex flex-row items-start space-x-3 space-y-0">
@@ -157,11 +165,22 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                         </div>
                                     ))}
                                 </div>
-                             )}
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}
+                             );
+                            break;
+                        default:
+                            inputComponent = null;
+                    }
+                    
+                    return (
+                        <FormItem>
+                            <FormLabel className="text-base">{question.label}</FormLabel>
+                            <FormControl>
+                                {inputComponent}
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    );
+                }}
             />
             {subQuestions.length > 0 && (
                 <div className="pl-4 border-l-2 ml-2 space-y-6">
