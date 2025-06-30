@@ -57,7 +57,43 @@ const generateSchema = (sections: FormSection[]): z.ZodObject<any> => {
 
   sections.forEach(section => section.questions.forEach(buildSchemaPart));
   
-  return z.object(schemaObject);
+  return z.object(schemaObject).superRefine((data, ctx) => {
+    const getVisibleQuestionIds = (questions: FormQuestion[], formValues: Record<string, any>): string[] => {
+      let ids: string[] = [];
+      const recurse = (currentQuestions: FormQuestion[]) => {
+        currentQuestions.forEach(q => {
+          ids.push(q.id);
+          const answer = formValues[q.id];
+          if (q.options && answer) {
+            const selectedOptions = q.options.filter(opt => {
+              if (q.type === 'multiple-choice') return Array.isArray(answer) && answer.includes(opt.value);
+              return opt.value === answer;
+            });
+            selectedOptions.forEach(opt => {
+              if (opt.subQuestions) {
+                recurse(opt.subQuestions);
+              }
+            });
+          }
+        });
+      }
+      recurse(questions);
+      return ids;
+    }
+    
+    const allVisibleIds = sections.flatMap(sec => getVisibleQuestionIds(sec.questions, data));
+    
+    for (const id of allVisibleIds) {
+        const value = data[id];
+        if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: [id],
+                message: "Campo obrigatório.",
+            });
+        }
+    }
+  });
 }
 
 
@@ -125,40 +161,55 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
         );
         break;
     case 'multiple-choice':
-        inputComponent = (
-          <FormField
-            control={control}
-            name={question.id}
-            render={({ field }) => (
-              <FormItem>
-                <div className="mb-4">
-                  <FormLabel className="text-base">{question.label}</FormLabel>
-                </div>
-                {question.options?.map(option => (
-                  <FormItem key={option.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value?.includes(option.value)}
-                        onCheckedChange={checked => {
-                          const currentValue = Array.isArray(field.value) ? field.value : [];
-                          return checked
-                            ? field.onChange([...currentValue, option.value])
-                            : field.onChange(currentValue.filter((value: string) => value !== option.value));
-                        }}
-                        id={`${question.id}-${option.id}`}
-                      />
-                    </FormControl>
-                    <FormLabel htmlFor={`${question.id}-${option.id}`} className="font-normal cursor-pointer">
-                      {option.value}
-                    </FormLabel>
-                  </FormItem>
-                ))}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        );
-        break;
+      inputComponent = (
+        <FormField
+          control={control}
+          name={question.id}
+          render={() => (
+            <FormItem>
+              <div className="mb-4">
+                <FormLabel className="text-base">{question.label}</FormLabel>
+              </div>
+              {question.options?.map(option => (
+                <FormField
+                  key={option.id}
+                  control={control}
+                  name={question.id}
+                  render={({ field }) => {
+                    return (
+                      <FormItem
+                        key={option.id}
+                        className="flex flex-row items-start space-x-3 space-y-0"
+                      >
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value?.includes(option.value)}
+                            onCheckedChange={checked => {
+                              const currentValue = Array.isArray(field.value) ? field.value : [];
+                              return checked
+                                ? field.onChange([...currentValue, option.value])
+                                : field.onChange(
+                                    currentValue.filter(
+                                      (value) => value !== option.value
+                                    )
+                                  );
+                            }}
+                          />
+                        </FormControl>
+                        <FormLabel className="font-normal">
+                          {option.value}
+                        </FormLabel>
+                      </FormItem>
+                    );
+                  }}
+                />
+              ))}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      );
+      break;
     default:
         inputComponent = null;
   }
