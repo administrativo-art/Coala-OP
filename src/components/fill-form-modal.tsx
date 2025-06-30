@@ -19,6 +19,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormSection } from '@/types';
 
 
+// Helper to get all possible question IDs, including nested ones
 const getAllQuestionIds = (sections: FormSection[]): FormQuestion[] => {
     const questions: FormQuestion[] = [];
     const recurse = (qs: FormQuestion[]) => {
@@ -35,6 +36,7 @@ const getAllQuestionIds = (sections: FormSection[]): FormQuestion[] => {
     return questions;
 };
 
+// Helper to get only the IDs of questions that are currently visible based on answers
 const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<string, any>): Set<string> => {
     const visibleIds = new Set<string>();
     const recurse = (questions: FormQuestion[]) => {
@@ -59,10 +61,13 @@ const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<strin
     return visibleIds;
 };
 
+
+// Dynamically generate the Zod schema for validation
 const generateSchema = (template: FormTemplate) => {
     const allQuestions = getAllQuestionIds(template.sections);
     let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
 
+    // First, define all possible fields as optional
     allQuestions.forEach(question => {
         switch (question.type) {
             case 'text':
@@ -83,6 +88,7 @@ const generateSchema = (template: FormTemplate) => {
         }
     });
 
+    // Then, use superRefine to apply validation only to VISIBLE fields
     return z.object(schemaObject).superRefine((data, ctx) => {
         const visibleIds = getVisibleQuestionIds(template.sections, data);
         visibleIds.forEach(id => {
@@ -104,6 +110,7 @@ const generateSchema = (template: FormTemplate) => {
 function RenderedQuestion({ question, control }: { question: FormQuestion; control: Control<any> }) {
     const answer = useWatch({ control, name: question.id });
     
+    // Determine which sub-questions to show based on the current answer
     const subQuestions = useMemo(() => {
         if (!question.options || answer === undefined || answer === null || answer === '') {
             return [];
@@ -124,30 +131,26 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                 control={control}
                 name={question.id as FieldPath<FieldValues>}
                 render={({ field }) => {
-                    let finalInput;
-
                     switch (question.type) {
                         case 'text':
-                            finalInput = (
+                            return (
                                 <FormItem>
                                     <FormLabel className="text-base">{question.label}</FormLabel>
                                     <FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             );
-                            break;
                         case 'number':
-                             finalInput = (
+                             return (
                                 <FormItem>
                                     <FormLabel className="text-base">{question.label}</FormLabel>
                                     <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             );
-                            break;
                         case 'yes-no':
                         case 'single-choice':
-                            finalInput = (
+                            return (
                                 <FormItem>
                                     <FormLabel className="text-base">{question.label}</FormLabel>
                                     <FormControl>
@@ -163,9 +166,8 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                     <FormMessage />
                                 </FormItem>
                             );
-                            break;
                         case 'multiple-choice':
-                             finalInput = (
+                            return (
                                 <FormItem>
                                     <FormLabel className="text-base">{question.label}</FormLabel>
                                     <div className="space-y-2 pt-2">
@@ -184,18 +186,16 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                                         }}
                                                     />
                                                 </FormControl>
-                                                <FormLabel className="font-normal cursor-pointer">{option.value}</FormLabel>
+                                                <Label className="font-normal cursor-pointer">{option.value}</Label>
                                             </FormItem>
                                         ))}
                                     </div>
                                     <FormMessage />
                                 </FormItem>
                              );
-                            break;
                         default:
-                            finalInput = null;
+                            return null;
                     }
-                    return finalInput;
                 }}
             />
             {subQuestions.length > 0 && (
@@ -223,36 +223,39 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
     const { user } = useAuth();
     const { kiosks } = useKiosks();
-
-    const allQuestions = useMemo(() => getAllQuestionIds(template.sections), [template]);
     
+    // Create a memoized map of all questions for quick lookup
+    const allQuestionsMap = useMemo(() => {
+        const map = new Map<string, FormQuestion>();
+        getAllQuestionIds(template.sections).forEach(q => map.set(q.id, q));
+        return map;
+    }, [template]);
+    
+    // Memoize the schema generation
     const formSchema = useMemo(() => generateSchema(template), [template]);
     
+    // Create default values for ALL possible questions to make them "controlled" from the start
     const defaultValues = useMemo(() => {
         const values: Record<string, any> = {};
-        allQuestions.forEach(q => {
-            values[q.id] = q.type === 'multiple-choice' ? [] : '';
+        allQuestionsMap.forEach((q, id) => {
+            values[id] = q.type === 'multiple-choice' ? [] : '';
         });
         return values;
-    }, [allQuestions]);
+    }, [allQuestionsMap]);
 
     const form = useForm({
         resolver: zodResolver(formSchema),
         defaultValues,
-        mode: 'onChange',
+        mode: 'onChange', // Validate on change to provide immediate feedback
     });
     
+    // Reset form state whenever the modal is opened
     useEffect(() => {
         if (open) {
             form.reset(defaultValues);
         }
     }, [open, form, defaultValues]);
-
-    const getQuestionLabel = (questionId: string): string => {
-        const question = allQuestions.find(q => q.id === questionId);
-        return question?.label || '';
-    }
-
+    
     const onSubmit = (values: Record<string, any>) => {
         if (!user) return;
         const kiosk = kiosks.find(k => k.id === user.kioskId);
@@ -270,7 +273,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             answers: Array.from(visibleIds)
               .map(questionId => ({
                   questionId,
-                  questionLabel: getQuestionLabel(questionId),
+                  questionLabel: allQuestionsMap.get(questionId)?.label || '',
                   value: values[questionId],
               })),
         };
@@ -292,7 +295,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
               <div className="space-y-8 p-2">
                  {template.sections.map(section => (
                     <div key={section.id} className="space-y-6">
-                        <h2 className="text-xl font-semibold border-b pb-2">{section.name}</h2>
+                        <h3 className="text-lg font-semibold border-b pb-2 text-primary">{section.name}</h3>
                         <QuestionRenderer questions={section.questions} control={form.control} />
                     </div>
                  ))}
@@ -308,3 +311,5 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     </Dialog>
   );
 }
+
+    
