@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { useForm, useWatch, Control, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -252,7 +252,7 @@ type FillFormModalProps = {
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
-  const [currentStep, setCurrentStep] = React.useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   
   const formSchema = useMemo(() => generateSchema(template.sections), [template]);
   
@@ -270,7 +270,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         if (question?.type === 'multiple-choice') {
             defaultValues[id] = [];
         } else {
-            defaultValues[id] = undefined;
+            defaultValues[id] = '';
         }
       });
 
