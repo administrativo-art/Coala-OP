@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,7 +30,7 @@ const BarcodeScannerModal = dynamic(
   { ssr: false }
 );
 
-const lotSchema = z.object({
+const lotFormSchema = z.object({
   // Product fields
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   category: z.enum(unitCategories),
@@ -51,7 +51,7 @@ const lotSchema = z.object({
 });
 
 
-type LotFormValues = z.infer<typeof lotSchema>;
+type LotFormValues = z.infer<typeof lotFormSchema>;
 
 type AddEditLotModalProps = {
   open: boolean;
@@ -68,6 +68,29 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { products, findOrCreateProduct, updateProduct, getProductFullName } = useProducts();
   const { toast } = useToast();
+  const isEditing = !!lotToEdit;
+
+  const lotSchema = useMemo(() => {
+    return z.object({
+        // Product fields have strict validation only on creation
+        baseName: isEditing ? z.string() : z.string().min(1, 'O nome base é obrigatório.'),
+        category: z.enum(unitCategories),
+        packageSize: isEditing ? z.coerce.number() : z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+        unit: isEditing ? z.string() : z.string().min(1, 'A unidade é obrigatória.'),
+        
+        // Lot fields are always validated
+        barcode: z.string().optional(),
+        lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
+        expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
+        kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
+        quantity: z.coerce.number().min(0, 'A quantidade não pode ser negativa.'),
+        imageUrl: z.string().optional(),
+    
+        // Thresholds (optional, but part of the form)
+        alertThreshold: z.coerce.number().optional(),
+        urgentThreshold: z.coerce.number().optional(),
+    });
+  }, [isEditing]);
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
@@ -135,8 +158,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
   }, [lotToEdit, open, form, products]);
   
-  const isEditing = !!lotToEdit;
-
   const onSubmit = async (values: LotFormValues) => {
     if (!isEditing && values.quantity < 1) {
         form.setError('quantity', { message: 'Para um novo lote, a quantidade deve ser pelo menos 1.' });
