@@ -2,12 +2,13 @@
 "use client"
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PlusCircle, Search, ClipboardCheck, Inbox } from 'lucide-react';
+import { PlusCircle, Search, ClipboardCheck, Inbox, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -16,6 +17,11 @@ import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+
+const BarcodeScannerModal = dynamic(
+  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  { ssr: false }
+);
 
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
@@ -29,6 +35,7 @@ export function ExpiryControl() {
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
+  const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
@@ -113,6 +120,11 @@ export function ExpiryControl() {
     }
   };
 
+  const handleSearchScanSuccess = (decodedText: string) => {
+    setSearchTerm(decodedText);
+    setIsSearchScannerOpen(false);
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -192,13 +204,23 @@ export function ExpiryControl() {
             <div className="relative flex-grow">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por produto, lote, data, quiosque..."
-                className="pl-10"
+                placeholder="Buscar por produto, lote, código..."
+                className="pl-10 pr-12"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setIsSearchScannerOpen(true)}
+                aria-label="Escanear código de barras para busca"
+              >
+                <Camera className="h-4 w-4 text-muted-foreground" />
+              </Button>
             </div>
-            <Button onClick={handleAddClick} className="flex-grow" disabled={!permissions.lots.add}>
+            <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
               <PlusCircle className="mr-2" /> Adicionar lote
             </Button>
           </div>
@@ -232,6 +254,14 @@ export function ExpiryControl() {
             onOpenChange={() => setIsDeleteConfirmOpen(false)}
             onConfirm={handleDeleteConfirm}
             itemName={`a entrada de ${lotToDelete.quantity}x ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber})`}
+        />
+      )}
+
+      {isSearchScannerOpen && (
+        <BarcodeScannerModal
+          open={isSearchScannerOpen}
+          onOpenChange={setIsSearchScannerOpen}
+          onScanSuccess={handleSearchScanSuccess}
         />
       )}
     </>
