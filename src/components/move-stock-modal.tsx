@@ -56,6 +56,8 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         toKioskName: toKioskName,
         movedByUserId: user.id,
         movedByUsername: user.username,
+        productName: lotToMove.productName,
+        lotNumber: lotToMove.lotNumber,
     };
     onMoveConfirm(params);
     onOpenChange(false);

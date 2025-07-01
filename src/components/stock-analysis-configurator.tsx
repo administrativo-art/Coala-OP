@@ -10,19 +10,15 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormDescription, FormLabel } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
-import { Switch } from './ui/switch';
 import { Download } from 'lucide-react';
 
-// This will be the type for the form, including the calculated field.
 type FormProduct = Product & {
   formId?: string; // from useFieldArray
-  totalQuantityInPurchaseUnit?: number;
 };
-
 
 type FormValues = {
   products: FormProduct[];
@@ -43,8 +39,6 @@ export function StockAnalysisConfigurator() {
     keyName: "formId"
   });
 
-  const watchedProducts = form.watch('products');
-
   useEffect(() => {
     if (!productsLoading && !kiosksLoading) {
       const initialData: FormProduct[] = products.map(p => {
@@ -58,10 +52,6 @@ export function StockAnalysisConfigurator() {
 
         return {
             ...p,
-            hasPurchaseUnit: p.hasPurchaseUnit ?? !!p.purchaseUnitName,
-            purchaseUnitName: p.purchaseUnitName || '',
-            itemsPerPurchaseUnit: p.itemsPerPurchaseUnit || 1,
-            totalQuantityInPurchaseUnit: (p.itemsPerPurchaseUnit || 1) * p.packageSize,
             stockLevels: newStockLevels,
         };
       });
@@ -71,13 +61,7 @@ export function StockAnalysisConfigurator() {
   
   const onSubmit = (data: FormValues) => {
     const productsToUpdate: Product[] = data.products.map(p => {
-        const { formId, totalQuantityInPurchaseUnit, ...productData } = p;
-        if (productData.hasPurchaseUnit && totalQuantityInPurchaseUnit && productData.packageSize > 0) {
-            productData.itemsPerPurchaseUnit = Math.round(totalQuantityInPurchaseUnit / productData.packageSize);
-        } else if (!productData.hasPurchaseUnit) {
-            productData.purchaseUnitName = '';
-            productData.itemsPerPurchaseUnit = 1;
-        }
+        const { formId, ...productData } = p;
         return productData;
     });
 
@@ -115,7 +99,7 @@ export function StockAnalysisConfigurator() {
     doc.setTextColor(100);
     doc.text(`Exportado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
 
-    const head = [['Produto', 'Embalagem', 'Unidade de Compra', 'Itens/Unid.', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
+    const head = [['Produto', 'Unidade Base', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
     const body: any[] = [];
 
     data.forEach(product => {
@@ -126,27 +110,19 @@ export function StockAnalysisConfigurator() {
           styles: { valign: 'middle' },
         },
         {
-          content: `${product.packageSize} ${product.unit}`,
-          rowSpan: kiosks.length,
-          styles: { valign: 'middle' },
-        },
-        {
-          content: product.purchaseUnitName || '-',
-          rowSpan: kiosks.length,
-          styles: { valign: 'middle' },
-        },
-        {
-          content: product.hasPurchaseUnit ? (product.itemsPerPurchaseUnit || 1) : '-',
+          content: product.unit,
           rowSpan: kiosks.length,
           styles: { valign: 'middle' },
         },
       ];
 
       kiosks.forEach((kiosk, index) => {
+        const minStock = product.stockLevels?.[kiosk.id]?.min ?? 0;
+        const maxStock = product.stockLevels?.[kiosk.id]?.max ?? 0;
         const row = [
           kiosk.name,
-          product.stockLevels?.[kiosk.id]?.min ?? 0,
-          product.stockLevels?.[kiosk.id]?.max ?? 0,
+          `${minStock.toLocaleString()} ${product.unit}`,
+          `${maxStock.toLocaleString()} ${product.unit}`,
         ];
         if (index === 0) {
           body.push([...productInfo, ...row]);
@@ -194,94 +170,18 @@ export function StockAnalysisConfigurator() {
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                {getProductFullName(products.find(p => p.id === field.id)!)}
+                 {products.find(p => p.id === field.id)!.baseName}
               </AccordionTrigger>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
-                  
-                  <FormField
-                    control={form.control}
-                    name={`products.${index}.hasPurchaseUnit`}
-                    render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                            <FormLabel>Usar unidade de compra?</FormLabel>
-                            <FormDescription>
-                                Ative se você compra este produto em embalagens maiores (caixas, fardos).
-                            </FormDescription>
-                        </div>
-                        <FormControl>
-                            <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                            />
-                        </FormControl>
-                        </FormItem>
-                    )}
-                  />
-
-                  {form.watch(`products.${index}.hasPurchaseUnit`) && (
-                    <div className="space-y-4 pl-4 border-l-2 ml-2">
-                        <h4 className="font-medium text-sm text-muted-foreground">Detalhes da Unidade de Compra</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField
-                            control={form.control}
-                            name={`products.${index}.purchaseUnitName`}
-                            render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>Nome da unidade (ex: Caixa)</FormLabel>
-                                <FormControl><Input {...field} placeholder="Caixa" /></FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                            />
-                            <FormField
-                            control={form.control}
-                            name={`products.${index}.totalQuantityInPurchaseUnit`}
-                            render={({ field: inputField }) => {
-                                const currentProduct = watchedProducts[index];
-                                const productInfo = products.find(p => p.id === field.id);
-                                
-                                const itemsPerUnit = (
-                                    currentProduct &&
-                                    currentProduct.totalQuantityInPurchaseUnit &&
-                                    productInfo && productInfo.packageSize > 0
-                                ) ? Math.round(currentProduct.totalQuantityInPurchaseUnit / productInfo.packageSize)
-                                : (currentProduct?.itemsPerPurchaseUnit || 0);
-                                
-                                const purchaseUnitName = currentProduct?.purchaseUnitName || 'unidade de compra';
-
-                                return (
-                                    <FormItem>
-                                    <FormLabel>Total na unidade ({productInfo?.unit})</FormLabel>
-                                    <FormControl>
-                                        <Input 
-                                            type="number" 
-                                            {...inputField} 
-                                            onChange={e => inputField.onChange(parseFloat(e.target.value) || 0)}
-                                            step="any"
-                                        />
-                                    </FormControl>
-                                    <FormDescription>
-                                        Isso equivale a {itemsPerUnit} embalagens por {purchaseUnitName}.
-                                    </FormDescription>
-                                    <FormMessage />
-                                    </FormItem>
-                                )
-                            }}
-                            />
-                        </div>
-                    </div>
-                  )}
-
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em embalagens)</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {products.find(p=>p.id === field.id)!.unit})</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Quiosque</TableHead>
-                                <TableHead className="text-right w-[120px]">Estoque Mínimo</TableHead>
-                                <TableHead className="text-right w-[120px]">Estoque Máximo</TableHead>
+                                <TableHead className="text-right w-[150px]">Estoque Mínimo</TableHead>
+                                <TableHead className="text-right w-[150px]">Estoque Máximo</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -292,9 +192,9 @@ export function StockAnalysisConfigurator() {
                                         <FormField
                                             control={form.control}
                                             name={`products.${index}.stockLevels.${kiosk.id}.min`}
-                                            render={({ field }) => (
+                                            render={({ field: minField }) => (
                                                 <FormItem>
-                                                    <FormControl><Input type="number" className="text-right min-w-[80px]" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                                    <FormControl><Input type="number" className="text-right" {...minField} onChange={e => minField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
                                                     <FormMessage />
                                                 </FormItem>
                                             )}
@@ -304,9 +204,9 @@ export function StockAnalysisConfigurator() {
                                         <FormField
                                             control={form.control}
                                             name={`products.${index}.stockLevels.${kiosk.id}.max`}
-                                            render={({ field }) => (
+                                            render={({ field: maxField }) => (
                                                 <FormItem>
-                                                    <FormControl><Input type="number" className="text-right min-w-[80px]" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                                    <FormControl><Input type="number" className="text-right" {...maxField} onChange={e => maxField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
                                                     <FormMessage />
                                                 </FormItem>
                                             )}

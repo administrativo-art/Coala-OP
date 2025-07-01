@@ -27,10 +27,11 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         if (querySnapshot.empty && !localStorage.getItem('stockAnalysisProducts_seeded')) {
           console.log("No stock analysis products found. Seeding default products...");
-          const defaultProducts: Omit<Product, 'id'>[] = [
-            { baseName: 'Bebida Láctea Baunilha', category: 'Volume', packageSize: 2, unit: 'L', hasPurchaseUnit: true, purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 10 },
-            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L', hasPurchaseUnit: true, purchaseUnitName: 'Caixa', itemsPerPurchaseUnit: 12 },
-            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g', hasPurchaseUnit: true, purchaseUnitName: 'Fardo', itemsPerPurchaseUnit: 20 },
+          const defaultProducts: Omit<Product, 'id', 'stockLevels'>[] = [
+            { baseName: 'Bebida Láctea Baunilha', category: 'Volume', packageSize: 2, unit: 'L' },
+            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L' },
+            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g' },
+            { baseName: 'Ovomaltine', category: 'Massa', packageSize: 1, unit: 'g' }, // A 'base' product
           ];
           
           const batch = writeBatch(db);

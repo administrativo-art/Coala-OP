@@ -10,13 +10,8 @@ export type Product = {
   category: UnitCategory;
   packageSize: number;
   unit: string;
-  // New fields for stock analysis
   pdfUnit?: string;
-  hasPurchaseUnit?: boolean;
-  purchaseUnitName?: string;
-  itemsPerPurchaseUnit?: number;
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
-  // New fields for expiry
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
 };
@@ -55,15 +50,30 @@ export type MovementRecord = {
   movedAt: string; // ISO String
 };
 
-export type StockAnalysisResultItem = {
+// A single item suggested for distribution
+export type DistributionItem = {
+  lotId: string;
   productId: string;
-  productName: string;
+  productName: string; // Full name, e.g., Ovomaltine (250g)
+  fromKioskId: string;
+  quantityToMove: number; // Number of packages
+  baseUnitValue: number; // e.g., 250 (for a 250g package)
+  baseUnit: string; // e.g., g
+  lotNumber: string;
+  expiryDate: string;
+};
+
+export type StockAnalysisResultItem = {
+  productId: string; // ID of the product from analysis config
+  productName: string; // Base name, e.g., Ovomaltine
   kioskId: string;
   kioskName: string;
-  currentStock: number;
-  idealStock: number;
-  needed: number;
-  purchaseSuggestion: string;
+  currentStockInBaseUnit: number;
+  maxStockInBaseUnit: number;
+  neededInBaseUnit: number;
+  statusMessage: string; // e.g., "Suggestion generated" or "Not enough stock at origin"
+  isActionable: boolean;
+  distributionSuggestion: DistributionItem[];
 };
 
 export type StockAnalysisReport = {

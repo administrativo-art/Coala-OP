@@ -136,7 +136,7 @@ export function ProductManagementModal({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Gerenciar produtos</DialogTitle>
-            <DialogDescription>Adicione, edite ou exclua seus produtos de inventário.</DialogDescription>
+            <DialogDescription>Adicione, edite ou exclua seus produtos. Estes produtos serão usados tanto no Controle de Lotes quanto na Análise de Estoque.</DialogDescription>
           </DialogHeader>
           
           {showForm ? (
@@ -149,7 +149,8 @@ export function ProductManagementModal({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nome do produto</FormLabel>
-                      <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
+                      <FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl>
+                      <FormDescription>Se houver múltiplas embalagens, cadastre como produtos separados (ex: "Ovomaltine 250g", "Ovomaltine 500g").</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -220,8 +221,7 @@ export function ProductManagementModal({
                                 </SelectContent>
                             </Select>
                             <FormDescription>
-                                Especifique aqui a unidade (ex: mL, g) em que o estoque deste produto é listado no relatório PDF. 
-                                O sistema usará essa informação para converter o valor do relatório para a 'Unidade da embalagem' (ex: L, kg) e então calcular a quantidade de embalagens a serem repostas.
+                                Se a unidade no relatório PDF for diferente da unidade da embalagem, especifique aqui para a conversão correta.
                             </FormDescription>
                             <FormMessage />
                         </FormItem>
