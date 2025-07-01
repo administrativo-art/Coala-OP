@@ -12,7 +12,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useProducts } from '@/hooks/use-products';
-import { useExpiryProducts } from '@/hooks/use-expiry-products'; // For FEFO logic
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { analyzeStock } from '@/ai/flows/analyze-stock-flow';
 import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -63,7 +63,7 @@ export function StockAnalyzer() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
-    const { products, getProductFullName, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
+    const { products, getProductFullName, loading: productsLoading, addProduct, updateProduct, deleteProduct, updateMultipleProducts } = useProducts();
     const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
     const { toast } = useToast();
 
@@ -79,25 +79,23 @@ export function StockAnalyzer() {
         defaultValues: { month: String(new Date().getMonth()), year: String(currentYear), kioskId: '' }
     });
     
-    const findProductByName = (baseName: string): Product | undefined => {
+    const findProductByBaseName = (baseName: string): Product | undefined => {
         return products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
     }
 
     const generateDistributionSuggestion = (
         neededInBaseUnit: number,
-        productBaseName: string, // e.g., "Ovomaltine"
+        productBaseName: string,
         destinationKioskId: string
     ): DistributionSuggestion => {
-        const sourceKioskId = 'matriz'; // Central Distribution
+        const sourceKioskId = 'matriz';
 
-        // 1. Find all product variations for the given base name
         const productVariations = products.filter(p => p.baseName === productBaseName);
         if (productVariations.length === 0) {
              return { statusMessage: `Nenhuma variação de produto físico encontrada para "${productBaseName}".`, isActionable: false, distributionSuggestion: [] };
         }
         const productVariationIds = productVariations.map(p => p.id);
 
-        // 2. Find all available lots for these product variations at the source, and sort by FEFO
         const availableLots = allLots.filter(lot => 
             lot.kioskId === sourceKioskId && productVariationIds.includes(lot.productId)
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
@@ -109,7 +107,6 @@ export function StockAnalyzer() {
         let remainingNeeded = neededInBaseUnit;
         const suggestion: DistributionItem[] = [];
 
-        // 3. Iterate through sorted lots and build the suggestion
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
 
@@ -119,10 +116,7 @@ export function StockAnalyzer() {
             const packageValueInBaseUnit = productDetails.packageSize;
             const availablePackages = lot.quantity;
             
-            // How many packages are needed to satisfy the remaining need?
             const neededPackages = Math.ceil(remainingNeeded / packageValueInBaseUnit);
-            
-            // Take the minimum of what's available and what's needed
             const packagesToTake = Math.min(availablePackages, neededPackages);
             
             if (packagesToTake > 0) {
@@ -173,10 +167,10 @@ export function StockAnalyzer() {
                 });
                 
                 toast({ id: toastId, title: "Análise da IA completa!", description: "Gerando sugestões de distribuição..." });
-
+                
                 const finalResults: StockAnalysisResultItem[] = analysisResult.results.map(item => {
-                    const distribution = generateDistributionSuggestion(item.neededInBaseUnit, item.productName, item.kioskId);
-                    return { ...item, ...distribution };
+                    const distributionSuggestion = generateDistributionSuggestion(item.neededInBaseUnit, item.productName, item.kioskId);
+                    return { ...item, ...distributionSuggestion };
                 });
 
                 await addStockReport({
@@ -217,7 +211,6 @@ export function StockAnalyzer() {
         try {
             await moveMultipleLots(params);
 
-            // Update the report item in Firestore to mark it as executed
             const reportToUpdate = stockHistory.find(r => r.id === reportId);
             if (reportToUpdate) {
                 const updatedResults = reportToUpdate.results.map(r => {
@@ -236,7 +229,6 @@ export function StockAnalyzer() {
         }
     };
     
-    // Unchanged functions (handleUploadClick, handleConsumptionFileChange, etc.) are omitted for brevity
     const handleStockUploadClick = () => { if (isAnalyzing) return; stockFileInputRef.current?.click(); };
     const handleConsumptionUploadClick = () => { if (isAnalyzing) return; consumptionFileInputRef.current?.click(); };
     const handleConsumptionFileChange = async (event: React.ChangeEvent<HTMLInputElement>, values: ConsumptionFormValues) => { /* as before */ };
@@ -246,7 +238,6 @@ export function StockAnalyzer() {
     const handleDeleteStockReportConfirm = () => { if (stockReportToDelete) { deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
     const handleDeleteConsumptionReportConfirm = () => { if (consumptionReportToDelete) { deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
-    // --- Render functions ---
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canConfigureStock = permissions.stockAnalysis?.configure;
     const canViewStockHistory = permissions.stockAnalysis?.viewHistory;
@@ -288,7 +279,7 @@ export function StockAnalyzer() {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
-                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByBaseName(item.productName)?.unit}</span></p>
                                             </div>
                                             <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
