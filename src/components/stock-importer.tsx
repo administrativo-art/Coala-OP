@@ -52,6 +52,13 @@ const consumptionFormSchema = z.object({
 });
 type ConsumptionFormValues = z.infer<typeof consumptionFormSchema>;
 
+type DistributionSuggestion = {
+    statusMessage: string;
+    isActionable: boolean;
+    distributionSuggestion: DistributionItem[];
+};
+
+
 export function StockAnalyzer() {
     const { user, permissions } = useAuth();
     const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -82,7 +89,7 @@ export function StockAnalyzer() {
         neededInBaseUnit: number,
         productName: string,
         destinationKioskId: string
-    ): Omit<StockAnalysisResultItem, 'kioskId' | 'kioskName' | 'currentStockInBaseUnit' | 'maxStockInBaseUnit'> => {
+    ): DistributionSuggestion => {
         const sourceKioskId = 'matriz';
         const availableLots = allLots.filter(lot => {
             const product = physicalProducts.find(p => p.baseName === lot.productName);
@@ -90,7 +97,7 @@ export function StockAnalyzer() {
         }).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
         if (availableLots.length === 0) {
-            return { productId: '', productName, neededInBaseUnit, statusMessage: `Sem estoque de ${productName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
+            return { statusMessage: `Sem estoque de ${productName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
         }
 
         let remainingNeeded = neededInBaseUnit;
@@ -124,10 +131,11 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-            return { productId: '', productName, neededInBaseUnit, statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${suggestion[0]?.baseUnit || ''} de ${productName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
+             const productUnit = suggestion[0]?.baseUnit || findProductByName(productName)?.unit || '';
+            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
-        return { productId: '', productName, neededInBaseUnit, statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
+        return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
     };
 
     const handleStockFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -271,7 +279,7 @@ export function StockAnalyzer() {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
-                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{item.neededInBaseUnit.toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit || ''}</span></p>
                                             </div>
                                             <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
