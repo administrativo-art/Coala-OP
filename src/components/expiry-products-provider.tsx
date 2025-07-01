@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { type LotEntry, type MovementRecord } from '@/types';
+import { type LotEntry, type MovementRecord, type Product } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 
@@ -125,9 +125,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const deleteLot = useCallback(async (lotId: string) => {
     try {
-        await deleteDoc(doc(db, "lots", lotId));
-    } catch(error) {
-        console.error("Error deleting lot:", error);
+      await deleteDoc(doc(db, "lots", lotId));
+    } catch (error) {
+      console.error("Error deleting lot:", error);
     }
   }, []);
 
