@@ -37,43 +37,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const q = query(collection(db, "lots"));
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      // Seeding logic is complex due to dependencies, so we will simplify it
-      // and assume products are seeded first. This might not work on first-ever load.
-      if (querySnapshot.empty && !localStorage.getItem('lots_seeded')) {
-        console.log("No lots found. Seeding default lots...");
-        
-        const productsQuery = await getDocs(query(collection(db, "products")));
-        const productsData = productsQuery.docs.map(d => ({id: d.id, ...d.data()})) as Product[];
-        
-        const getProductId = (baseName: string, packageSize: number, unit: string) => {
-            return productsData.find(p => p.baseName === baseName && p.packageSize === packageSize && p.unit === unit)?.id || '';
-        }
-
-        const today = new Date();
-        const dummyLots: Omit<LotEntry, 'id'>[] = [
-           { productId: getProductId('Leite Integral', 1, 'L'), productName: 'Leite Integral (1L)', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), kioskId: 'tirirical', quantity: 50 },
-           { productId: getProductId('Leite Integral', 1, 'L'), productName: 'Leite Integral (1L)', barcode: '7890123456789', lotNumber: 'LT123', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), kioskId: 'joao-paulo', quantity: 25 },
-           { productId: getProductId('Ovomaltine', 250, 'g'), productName: 'Ovomaltine (250g)', barcode: '7899876543210', lotNumber: 'OV250-1', expiryDate: new Date(new Date().setDate(today.getDate() + 30)).toISOString(), kioskId: 'matriz', quantity: 4 },
-           { productId: getProductId('Ovomaltine', 750, 'g'), productName: 'Ovomaltine (750g)', barcode: '7899876543211', lotNumber: 'OV750-1', expiryDate: new Date(new Date().setDate(today.getDate() + 10)).toISOString(), kioskId: 'matriz', quantity: 2 },
-           { productId: getProductId('Ovomaltine', 500, 'g'), productName: 'Ovomaltine (500g)', barcode: '7899876543212', lotNumber: 'OV500-1', expiryDate: new Date(new Date().setDate(today.getDate() + 25)).toISOString(), kioskId: 'matriz', quantity: 1 },
-           { productId: getProductId('Queijo Minas', 1, 'kg'), productName: 'Queijo Minas (1kg)', barcode: '7891112223334', lotNumber: 'LT789', expiryDate: new Date(new Date().setDate(today.getDate() + 45)).toISOString(), kioskId: 'matriz', quantity: 15 },
-        ];
-        
-        const batch = writeBatch(db);
-        dummyLots.filter(lot => lot.productId).forEach(lot => { // Only seed lots where product was found
-            const docRef = doc(collection(db, "lots"));
-            batch.set(docRef, lot);
-        });
-        try {
-            await batch.commit();
-            localStorage.setItem('lots_seeded', 'true');
-        } catch(seedError) {
-            console.error("Error seeding lots:", seedError);
-        }
-        return; // Listener will re-run with new data
-      }
-      
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      // Seeding logic removed to give users a clean slate if needed.
       const lotsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotEntry));
       setLots(lotsData);
       setLoading(false);
