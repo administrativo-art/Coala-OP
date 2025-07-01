@@ -31,8 +31,8 @@ export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemNa
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <Button onClick={onConfirm} variant="destructive">
+          <AlertDialogAction onClick={onConfirm} asChild>
+            <Button variant="destructive">
                 Excluir
             </Button>
           </AlertDialogAction>
