@@ -54,7 +54,7 @@ type AddEditLotModalProps = {
 export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot, lots }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { products, updateProduct: updateProductInDB, addProduct: addProductInDB, getProductFullName } = useProducts();
+  const { products, updateProduct: updateProductInDB, getProductFullName } = useProducts();
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
@@ -160,6 +160,8 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   
   const imageUrl = form.watch('imageUrl');
 
+  const sortedProducts = [...products].sort((a,b) => getProductFullName(a).localeCompare(getProductFullName(b)));
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -232,7 +234,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                     </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                    {products.map(product => (
+                                    {sortedProducts.map(product => (
                                         <SelectItem key={product.id} value={product.id}>
                                         {getProductFullName(product)}
                                         </SelectItem>
