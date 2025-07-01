@@ -42,7 +42,7 @@ const lotSchema = z.object({
   lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
   expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
-  quantity: z.coerce.number().min(1, 'A quantidade deve ser de pelo menos 1.'),
+  quantity: z.coerce.number().min(0, 'A quantidade não pode ser negativa.'),
   imageUrl: z.string().optional(),
 
   // Thresholds (optional, but part of the form)
@@ -135,7 +135,14 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
   }, [lotToEdit, open, form, products]);
   
+  const isEditing = !!lotToEdit;
+
   const onSubmit = async (values: LotFormValues) => {
+    if (!isEditing && values.quantity < 1) {
+        form.setError('quantity', { message: 'Para um novo lote, a quantidade deve ser pelo menos 1.' });
+        return;
+    }
+
     // 1. Find or Create the Product
     const productDefinition = {
         baseName: values.baseName,
@@ -243,7 +250,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   };
   
   const imageUrl = form.watch('imageUrl');
-  const isEditing = !!lotToEdit;
 
   return (
     <>
