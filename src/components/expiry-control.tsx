@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, Search, ClipboardCheck, Inbox, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -32,6 +33,7 @@ export function ExpiryControl() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'expiring' | 'expired'>('all');
+  const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -46,8 +48,20 @@ export function ExpiryControl() {
     return lots.filter(lot => lot.kioskId === user.kioskId);
   }, [lots, user, loading, permissions]);
 
+  const sortedKiosks = useMemo(() => {
+    return [...kiosks].sort((a,b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
+  }, [kiosks]);
+
   const groupedLots = useMemo(() => {
-    const preFilteredLots = visibleLots.filter(lot => {
+    const kioskFilteredLots = (user?.username === 'master' && selectedKiosk !== 'all')
+        ? visibleLots.filter(lot => lot.kioskId === selectedKiosk)
+        : visibleLots;
+
+    const preFilteredLots = kioskFilteredLots.filter(lot => {
         const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
         const urgentThreshold = product?.urgentThreshold ?? 7;
 
@@ -102,7 +116,7 @@ export function ExpiryControl() {
     });
 
     return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-  }, [visibleLots, searchTerm, kiosks, activeFilter, products]);
+  }, [visibleLots, searchTerm, kiosks, activeFilter, products, selectedKiosk, user]);
   
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -252,6 +266,17 @@ export function ExpiryControl() {
                 {option.label}
               </Button>
             ))}
+             {user?.username === 'master' && (
+              <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosks.length === 0}>
+                <SelectTrigger className="h-9 w-auto min-w-[200px] rounded-full text-sm">
+                  <SelectValue placeholder="Filtrar por quiosque" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os quiosques</SelectItem>
+                  {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           {renderContent()}
         </CardContent>
@@ -296,3 +321,4 @@ export function ExpiryControl() {
     </>
   );
 }
+
