@@ -15,6 +15,9 @@ export type Product = {
   purchaseUnitName?: string;
   itemsPerPurchaseUnit?: number;
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
+  // New fields for expiry
+  alertThreshold?: number; // e.g., 30 days
+  urgentThreshold?: number; // e.g., 7 days
 };
 
 export type ConversionUnits = {

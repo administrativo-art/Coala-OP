@@ -10,14 +10,16 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera, Plus, X } from 'lucide-react';
-import { type LotEntry, type Kiosk } from '@/types';
+import { Calendar as CalendarIcon, Camera, Plus, X, ChevronsUpDown } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { type LotEntry, type Kiosk, type Product } from '@/types';
+import { useProducts } from '@/hooks/use-products';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -32,6 +34,8 @@ const lotSchema = z.object({
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   quantity: z.coerce.number().min(1, 'A quantidade deve ser de pelo menos 1.'),
   imageUrl: z.string().optional(),
+  alertThreshold: z.coerce.number().optional(),
+  urgentThreshold: z.coerce.number().optional(),
 });
 
 type LotFormValues = z.infer<typeof lotSchema>;
@@ -49,43 +53,82 @@ type AddEditLotModalProps = {
 export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot, lots }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { products, updateProduct: updateProductInDB, addProduct: addProductInDB } = useProducts();
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
   });
+  
+  const productNameWatch = form.watch('productName');
 
   useEffect(() => {
-    if (lotToEdit) {
-      form.reset({
-        ...lotToEdit,
-        expiryDate: new Date(lotToEdit.expiryDate),
-        imageUrl: lotToEdit.imageUrl || '',
-      });
-    } else {
-      form.reset({
-        productName: '',
-        barcode: '',
-        lotNumber: '',
-        expiryDate: undefined,
-        kioskId: '',
-        quantity: 1,
-        imageUrl: '',
-      });
+    if (open) {
+      if (lotToEdit) {
+        const product = products.find(p => p.baseName.toLowerCase() === lotToEdit.productName.toLowerCase());
+        form.reset({
+          ...lotToEdit,
+          expiryDate: new Date(lotToEdit.expiryDate),
+          imageUrl: lotToEdit.imageUrl || '',
+          alertThreshold: product?.alertThreshold,
+          urgentThreshold: product?.urgentThreshold,
+        });
+      } else {
+        form.reset({
+          productName: '',
+          barcode: '',
+          lotNumber: '',
+          expiryDate: undefined,
+          kioskId: '',
+          quantity: 1,
+          imageUrl: '',
+          alertThreshold: undefined,
+          urgentThreshold: undefined,
+        });
+      }
     }
-  }, [lotToEdit, form, open]);
+  }, [lotToEdit, open, form, products]);
+  
+  useEffect(() => {
+    if (productNameWatch) {
+      const product = products.find(p => p.baseName.toLowerCase() === productNameWatch.toLowerCase());
+      if (product) {
+        form.setValue('alertThreshold', product.alertThreshold);
+        form.setValue('urgentThreshold', product.urgentThreshold);
+      }
+    }
+  }, [productNameWatch, products, form]);
 
-  const onSubmit = (values: LotFormValues) => {
+  const onSubmit = async (values: LotFormValues) => {
     const lotData = {
-      ...values,
+      productName: values.productName,
       barcode: values.barcode || '',
-      imageUrl: values.imageUrl || undefined,
+      lotNumber: values.lotNumber,
       expiryDate: values.expiryDate.toISOString(),
+      kioskId: values.kioskId,
+      quantity: values.quantity,
+      imageUrl: values.imageUrl || undefined,
     };
+
     if (lotToEdit) {
       updateLot({ ...lotToEdit, ...lotData });
     } else {
       addLot(lotData);
     }
+    
+    // Side effect: update product parameters
+    const product = products.find(p => p.baseName.toLowerCase() === values.productName.toLowerCase());
+    if (product) {
+        const needsUpdate = product.alertThreshold !== values.alertThreshold || product.urgentThreshold !== values.urgentThreshold;
+        if (needsUpdate) {
+            const updatedProduct: Product = {
+                ...product,
+                alertThreshold: values.alertThreshold,
+                urgentThreshold: values.urgentThreshold,
+            };
+            await updateProductInDB(updatedProduct);
+        }
+    }
+
     onOpenChange(false);
   };
 
@@ -281,6 +324,41 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                   )}
                 />
               </div>
+
+               <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="item-1">
+                    <AccordionTrigger className="text-sm">Parâmetros de Vencimento (Opcional)</AccordionTrigger>
+                    <AccordionContent className="pt-4">
+                         <FormDescription className="mb-4">
+                            Defina os parâmetros de alerta para este produto. Eles serão salvos e aplicados a todos os lotes futuros com este mesmo nome de produto.
+                        </FormDescription>
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="alertThreshold"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Alerta (dias)</FormLabel>
+                                    <FormControl><Input type="number" placeholder="ex: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)} /></FormControl>
+                                </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="urgentThreshold"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Urgente (dias)</FormLabel>
+                                    <FormControl><Input type="number" placeholder="ex: 7" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)}/></FormControl>
+                                </FormItem>
+                                )}
+                            />
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
+
               <DialogFooter className="pt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <Button type="submit">{lotToEdit ? 'Salvar alterações' : 'Adicionar lote'}</Button>

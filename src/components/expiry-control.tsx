@@ -12,6 +12,7 @@ import { PlusCircle, Search, ClipboardCheck, Inbox, Camera } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useProducts } from '@/hooks/use-products';
 import { type LotEntry } from '@/types';
 import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
@@ -27,6 +28,7 @@ export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
+  const { products, loading: productsLoading } = useProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'expiring' | 'expired'>('all');
@@ -46,10 +48,13 @@ export function ExpiryControl() {
 
   const groupedLots = useMemo(() => {
     const preFilteredLots = visibleLots.filter(lot => {
+        const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
+        const urgentThreshold = product?.urgentThreshold ?? 7;
+
         if (activeFilter === 'all') return true;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
         if (activeFilter === 'expiring') {
-            return days >= 0 && days <= 7;
+            return days >= 0 && days <= urgentThreshold;
         }
         if (activeFilter === 'expired') {
             return days < 0;
@@ -75,6 +80,7 @@ export function ExpiryControl() {
     filteredLots.forEach(lot => {
       const key = `${lot.productName}-${lot.lotNumber}-${lot.expiryDate}`;
       if (!groups[key]) {
+        const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
         groups[key] = {
           productName: lot.productName,
           lotNumber: lot.lotNumber,
@@ -83,6 +89,8 @@ export function ExpiryControl() {
           imageUrl: lot.imageUrl,
           totalQuantity: 0,
           kiosks: [],
+          alertThreshold: product?.alertThreshold,
+          urgentThreshold: product?.urgentThreshold,
         };
       }
       groups[key].totalQuantity += lot.quantity;
@@ -94,7 +102,7 @@ export function ExpiryControl() {
     });
 
     return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-  }, [visibleLots, searchTerm, kiosks, activeFilter]);
+  }, [visibleLots, searchTerm, kiosks, activeFilter, products]);
   
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -145,7 +153,7 @@ export function ExpiryControl() {
   ];
 
   const renderContent = () => {
-    if (loading) {
+    if (loading || productsLoading) {
       return (
         <div className="space-y-4">
           <Skeleton className="h-16 w-full" />

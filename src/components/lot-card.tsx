@@ -11,6 +11,9 @@ import { Separator } from '@/components/ui/separator';
 import { Pencil, Trash2, Move, MapPin, Camera } from 'lucide-react';
 import { type Kiosk } from '@/types';
 
+const DEFAULT_URGENT_THRESHOLD = 7;
+const DEFAULT_ALERT_THRESHOLD = 30;
+
 export type GroupedLot = {
   productName: string;
   lotNumber: string;
@@ -18,6 +21,8 @@ export type GroupedLot = {
   expiryDate: string;
   totalQuantity: number;
   imageUrl?: string;
+  alertThreshold?: number;
+  urgentThreshold?: number;
   kiosks: {
     id: string; // This is the unique LotEntry ID
     kioskId: string;
@@ -41,15 +46,18 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
   now.setHours(0, 0, 0, 0);
   const expiry = parseISO(groupedLot.expiryDate);
   const daysUntilExpiry = differenceInDays(expiry, now);
+  
+  const urgentThreshold = groupedLot.urgentThreshold ?? DEFAULT_URGENT_THRESHOLD;
+  const alertThreshold = groupedLot.alertThreshold ?? DEFAULT_ALERT_THRESHOLD;
 
   let status: { color: string, text: string };
   if (daysUntilExpiry < 0) {
     status = { color: 'bg-red-600 hover:bg-red-700', text: `Vencido há ${Math.abs(daysUntilExpiry)} dias` };
   } else if (daysUntilExpiry === 0) {
     status = { color: 'bg-red-600 hover:bg-red-700', text: 'Vence hoje' };
-  } else if (daysUntilExpiry <= 7) {
+  } else if (daysUntilExpiry <= urgentThreshold) {
     status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
-  } else if (daysUntilExpiry <= 30) {
+  } else if (daysUntilExpiry <= alertThreshold) {
     status = { color: 'bg-orange-500 hover:bg-orange-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
   } else {
     status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
