@@ -12,6 +12,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
+import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products'; // For FEFO logic
 import { analyzeStock } from '@/ai/flows/analyze-stock-flow';
 import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
