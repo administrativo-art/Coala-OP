@@ -130,6 +130,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
         await deleteDoc(doc(db, "products", productId));
     } catch (error) {
         console.error("Error deleting product:", error);
+        throw error;
     }
   }, []);
   

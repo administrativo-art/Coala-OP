@@ -128,6 +128,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       await deleteDoc(doc(db, "lots", lotId));
     } catch (error) {
       console.error("Error deleting lot:", error);
+      throw error;
     }
   }, []);
 

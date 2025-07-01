@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -70,6 +71,7 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
         await deleteDoc(doc(db, "kiosks", kioskId));
     } catch(error) {
         console.error("Error deleting kiosk:", error);
+        throw error;
     }
   }, []);
   

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -56,6 +57,7 @@ export function PredefinedListsProvider({ children }: { children: React.ReactNod
         await deleteDoc(doc(db, "predefinedLists", listId));
     } catch(error) {
         console.error("Error deleting list:", error);
+        throw error;
     }
   }, []);
 

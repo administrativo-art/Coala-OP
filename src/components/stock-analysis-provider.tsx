@@ -62,6 +62,7 @@ export function StockAnalysisProvider({ children }: { children: React.ReactNode 
         await deleteDoc(doc(db, "stockAnalysisReports", reportId));
     } catch(error) {
         console.error("Error deleting analysis report:", error);
+        throw error;
     }
   }, []);
   

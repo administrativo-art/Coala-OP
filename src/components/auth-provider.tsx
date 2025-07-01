@@ -175,6 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await deleteDoc(doc(db, "users", userId));
     } catch (error) {
         console.error("Error deleting user:", error);
+        throw error;
     }
   };
   

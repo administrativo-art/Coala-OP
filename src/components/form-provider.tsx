@@ -135,6 +135,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
       await deleteDoc(doc(db, "formTemplates", templateId));
     } catch (error) {
       console.error("Error deleting template:", error);
+      throw error;
     }
   }, []);
   
@@ -151,6 +152,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
         await deleteDoc(doc(db, "formSubmissions", submissionId));
     } catch(error) {
         console.error("Error deleting submission:", error);
+        throw error;
     }
   }, []);
 

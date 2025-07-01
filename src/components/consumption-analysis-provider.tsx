@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -76,6 +77,7 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
         await deleteDoc(doc(db, "consumptionReports", reportId));
     } catch(error) {
         console.error("Error deleting consumption report:", error);
+        throw error;
     }
   }, []);
   
