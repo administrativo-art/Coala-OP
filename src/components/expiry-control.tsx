@@ -1,15 +1,16 @@
 
 "use client"
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Search, ClipboardCheck, Inbox, Camera } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -32,8 +33,10 @@ export function ExpiryControl() {
   const { products, loading: productsLoading } = useProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'expiring' | 'expired'>('all');
-  const [selectedKiosk, setSelectedKiosk] = useState<string>('all');
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
+  const [initialKioskSelectionMade, setInitialKioskSelectionMade] = useState(false);
+
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -55,25 +58,31 @@ export function ExpiryControl() {
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
+  
+  useEffect(() => {
+    if (!initialKioskSelectionMade && sortedKiosks.length > 0) {
+        setSelectedKiosks(sortedKiosks.map(k => k.id));
+        setInitialKioskSelectionMade(true);
+    }
+  }, [sortedKiosks, initialKioskSelectionMade]);
+
 
   const groupedLots = useMemo(() => {
-    const kioskFilteredLots = (user?.username === 'master' && selectedKiosk !== 'all')
-        ? visibleLots.filter(lot => lot.kioskId === selectedKiosk)
-        : visibleLots;
+    const kioskFilteredLots = (user?.username === 'master')
+      ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
+      : visibleLots;
 
     const preFilteredLots = kioskFilteredLots.filter(lot => {
+        if (statusFilters.length === 0) return true; // Show all if no filter is active
+
         const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
         const urgentThreshold = product?.urgentThreshold ?? 7;
-
-        if (activeFilter === 'all') return true;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
-        if (activeFilter === 'expiring') {
-            return days >= 0 && days <= urgentThreshold;
-        }
-        if (activeFilter === 'expired') {
-            return days < 0;
-        }
-        return true;
+
+        const isExpiring = statusFilters.includes('expiring') && (days >= 0 && days <= urgentThreshold);
+        const isExpired = statusFilters.includes('expired') && days < 0;
+
+        return isExpiring || isExpired;
     });
 
     const filteredLots = preFilteredLots.filter(lot => {
@@ -116,7 +125,7 @@ export function ExpiryControl() {
     });
 
     return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-  }, [visibleLots, searchTerm, kiosks, activeFilter, products, selectedKiosk, user]);
+  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKiosks, user]);
   
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -160,11 +169,26 @@ export function ExpiryControl() {
     setIsSearchScannerOpen(false);
   };
 
-  const filterOptions: {id: 'all' | 'expiring' | 'expired', label: string}[] = [
-    { id: 'all', label: 'Todos' },
-    { id: 'expiring', label: 'Vencendo em breve' },
-    { id: 'expired', label: 'Vencidos' }
-  ];
+  const handleStatusFilterChange = (filter: string, checked: boolean) => {
+    setStatusFilters(current => {
+        if (checked) {
+            return [...current, filter];
+        } else {
+            return current.filter(f => f !== filter);
+        }
+    });
+  };
+
+  const handleKioskFilterChange = (kioskId: string, checked: boolean) => {
+    setSelectedKiosks(current => {
+        if (checked) {
+            return [...current, kioskId];
+        } else {
+            return current.filter(id => id !== kioskId);
+        }
+    });
+  };
+
 
   const renderContent = () => {
     if (loading || productsLoading) {
@@ -254,28 +278,69 @@ export function ExpiryControl() {
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Filtros:</span>
-             {filterOptions.map(option => (
-              <Button
-                key={option.id}
-                variant={activeFilter === option.id ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setActiveFilter(option.id)}
-                className="rounded-full"
-              >
-                {option.label}
-              </Button>
-            ))}
-             {user?.username === 'master' && (
-              <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosks.length === 0}>
-                <SelectTrigger className="h-9 w-auto min-w-[200px] rounded-full text-sm">
-                  <SelectValue placeholder="Filtrar por quiosque" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os quiosques</SelectItem>
-                  {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                        <Filter className="mr-2 h-4 w-4" />
+                        Status {statusFilters.length > 0 && `(${statusFilters.length})`}
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                        checked={statusFilters.includes('expiring')}
+                        onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
+                        onSelect={(e) => e.preventDefault()}
+                    >
+                        Vencendo em breve
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                        checked={statusFilters.includes('expired')}
+                        onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
+                        onSelect={(e) => e.preventDefault()}
+                    >
+                        Vencidos
+                    </DropdownMenuCheckboxItem>
+                     <DropdownMenuSeparator />
+                     <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                        Limpar filtros
+                     </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            {user?.username === 'master' && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Filter className="mr-2 h-4 w-4" />
+                            Quiosques ({selectedKiosks.length})
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64" align="start">
+                        <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                         <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
+                            Selecionar Todos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                            Limpar Seleção
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <ScrollArea className="h-48">
+                        {sortedKiosks.map(kiosk => (
+                            <DropdownMenuCheckboxItem
+                                key={kiosk.id}
+                                checked={selectedKiosks.includes(kiosk.id)}
+                                onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                {kiosk.name}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                        </ScrollArea>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )}
           </div>
           {renderContent()}
