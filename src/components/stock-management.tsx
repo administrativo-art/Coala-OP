@@ -1,7 +1,7 @@
 "use client"
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StockImporter } from "@/components/stock-importer"; 
+import { StockAnalyzer } from "@/components/stock-importer"; 
 import { ExpiryControl } from "@/components/expiry-control"; 
 import { BarChart3, ClipboardCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,7 +46,7 @@ export function StockManagement() {
                 </TabsList>
 
                 {canManageLots && <TabsContent value="lot-control" className="mt-4"><ExpiryControl /></TabsContent>}
-                {canAnalyzeStock && <TabsContent value="stock-analysis" className="mt-4"><StockImporter /></TabsContent>}
+                {canAnalyzeStock && <TabsContent value="stock-analysis" className="mt-4"><StockAnalyzer /></TabsContent>}
             </Tabs>
         </div>
     );
