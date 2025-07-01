@@ -42,7 +42,6 @@ export function ExpiryControl() {
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
 
@@ -155,15 +154,12 @@ export function ExpiryControl() {
     const lot = lots.find(l => l.id === lotId);
     if (lot) {
       setLotToDelete(lot);
-      setIsDeleteConfirmOpen(true);
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (lotToDelete) {
       await deleteLot(lotToDelete.id);
-      setIsDeleteConfirmOpen(false);
-      setLotToDelete(null);
     }
   };
 
@@ -378,8 +374,8 @@ export function ExpiryControl() {
 
       {lotToDelete && (
         <DeleteConfirmationDialog 
-            open={isDeleteConfirmOpen}
-            onOpenChange={() => setIsDeleteConfirmOpen(false)}
+            open={!!lotToDelete}
+            onOpenChange={(open) => !open && setLotToDelete(null)}
             onConfirm={handleDeleteConfirm}
             itemName={`a entrada de ${lotToDelete.quantity}x ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber})`}
         />
