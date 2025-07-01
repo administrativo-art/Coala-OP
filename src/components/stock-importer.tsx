@@ -279,15 +279,15 @@ export function StockAnalyzer() {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
-                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit || ''}</span></p>
+                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                             </div>
                                             <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
                                             </Button>
                                         </div>
-                                        <p className={`text-sm mt-2 ${item.isActionable ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage}</p>
+                                        <p className={`text-sm mt-2 ${item.isActionable ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage || ''}</p>
                                         
-                                        {item.distributionSuggestion.length > 0 && (
+                                        {item.distributionSuggestion && item.distributionSuggestion.length > 0 && (
                                             <div className="rounded-md border mt-2">
                                                 <Table>
                                                     <TableHeader><TableRow><TableHead>Produto/Embalagem</TableHead><TableHead>Lote</TableHead><TableHead>Validade</TableHead><TableHead className="text-right">Qtd. a Mover</TableHead></TableRow></TableHeader>
