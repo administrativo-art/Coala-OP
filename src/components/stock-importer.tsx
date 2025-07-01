@@ -233,8 +233,8 @@ export function StockAnalyzer() {
     const onConsumptionFormSubmit = (values: ConsumptionFormValues) => { consumptionFileInputRef.current?.addEventListener('change', (event) => handleConsumptionFileChange(event as any, values), { once: true }); consumptionFileInputRef.current?.click(); };
     const handleDeleteStockReportClick = (report: StockAnalysisReport) => setStockReportToDelete(report);
     const handleDeleteConsumptionReportClick = (report: ConsumptionReport) => setConsumptionReportToDelete(report);
-    const handleDeleteStockReportConfirm = () => { if (stockReportToDelete) { deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
-    const handleDeleteConsumptionReportConfirm = () => { if (consumptionReportToDelete) { deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
+    const handleDeleteStockReportConfirm = async () => { if (stockReportToDelete) { await deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
+    const handleDeleteConsumptionReportConfirm = async () => { if (consumptionReportToDelete) { await deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canConfigureStock = permissions.stockAnalysis?.configure;

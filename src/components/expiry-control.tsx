@@ -159,9 +159,9 @@ export function ExpiryControl() {
     }
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (lotToDelete) {
-      deleteLot(lotToDelete.id);
+      await deleteLot(lotToDelete.id);
       setIsDeleteConfirmOpen(false);
       setLotToDelete(null);
     }

@@ -103,9 +103,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     setProfileToDelete(profile);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (profileToDelete) {
-      deleteProfile(profileToDelete.id);
+      await deleteProfile(profileToDelete.id);
       setProfileToDelete(null);
     }
   };

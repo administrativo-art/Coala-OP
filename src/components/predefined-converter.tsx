@@ -38,9 +38,9 @@ export function PredefinedConverter() {
     setListToDelete(list);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (listToDelete) {
-      deleteList(listToDelete.id);
+      await deleteList(listToDelete.id);
       setListToDelete(null);
     }
   };

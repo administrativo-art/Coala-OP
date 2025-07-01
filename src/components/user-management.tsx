@@ -78,9 +78,9 @@ export function UserManagement() {
     setUserToDelete(user);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (userToDelete) {
-      deleteUser(userToDelete.id);
+      await deleteUser(userToDelete.id);
       setUserToDelete(null);
     }
   };

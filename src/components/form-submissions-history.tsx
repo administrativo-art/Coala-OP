@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -29,9 +30,9 @@ export function FormSubmissionsHistory({ submissions, loading, deleteSubmission,
         setSubmissionToView(submission);
     }
 
-    const handleDeleteConfirm = () => {
+    const handleDeleteConfirm = async () => {
         if (submissionToDelete) {
-            deleteSubmission(submissionToDelete.id);
+            await deleteSubmission(submissionToDelete.id);
             setSubmissionToDelete(null);
         }
     };
