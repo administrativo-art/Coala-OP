@@ -27,7 +27,7 @@ export function Header() {
         { href: '/dashboard/import', label: 'Análise de Estoque', icon: BarChart3, show: canAnalyzeStock },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
-        { href: '/dashboard/expiry', label: 'Controle de validade', icon: CheckSquare, show: true },
+        { href: '/dashboard/expiry', label: 'Controle de estoque', icon: CheckSquare, show: true },
         { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
     ]
 

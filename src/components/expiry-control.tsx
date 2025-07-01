@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -182,7 +181,7 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <ClipboardCheck /> Controle de validade
+            <ClipboardCheck /> Controle de estoque
           </CardTitle>
           <CardDescription className="text-center">Gerencie os lotes e as datas de vencimento do seu estoque.</CardDescription>
         </CardHeader>
