@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ export function ExpiryControl() {
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'expiring' | 'expired'>('all');
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -44,7 +45,19 @@ export function ExpiryControl() {
   }, [lots, user, loading, permissions]);
 
   const groupedLots = useMemo(() => {
-    const filteredLots = visibleLots.filter(lot => {
+    const preFilteredLots = visibleLots.filter(lot => {
+        if (activeFilter === 'all') return true;
+        const days = differenceInDays(parseISO(lot.expiryDate), new Date());
+        if (activeFilter === 'expiring') {
+            return days >= 0 && days <= 7;
+        }
+        if (activeFilter === 'expired') {
+            return days < 0;
+        }
+        return true;
+    });
+
+    const filteredLots = preFilteredLots.filter(lot => {
       const search = searchTerm.toLowerCase();
       const expiryDateFormatted = format(parseISO(lot.expiryDate), 'dd/MM/yyyy');
       const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
@@ -81,7 +94,7 @@ export function ExpiryControl() {
     });
 
     return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-  }, [visibleLots, searchTerm, kiosks]);
+  }, [visibleLots, searchTerm, kiosks, activeFilter]);
   
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -125,6 +138,12 @@ export function ExpiryControl() {
     setIsSearchScannerOpen(false);
   };
 
+  const filterOptions: {id: 'all' | 'expiring' | 'expired', label: string}[] = [
+    { id: 'all', label: 'Todos' },
+    { id: 'expiring', label: 'Vencendo em breve' },
+    { id: 'expired', label: 'Vencidos' }
+  ];
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -151,26 +170,14 @@ export function ExpiryControl() {
         );
     }
 
-    if (groupedLots.length === 0 && searchTerm) {
+    if (groupedLots.length === 0) {
         return (
             <div className="text-center py-16 text-muted-foreground">
-                <p>Nenhum resultado encontrado para "{searchTerm}".</p>
+                <p>Nenhum resultado encontrado com os filtros e busca atuais.</p>
             </div>
         );
     }
     
-    if (groupedLots.length === 0) {
-        return (
-          <div className="text-center py-16 flex flex-col items-center">
-              <Search className="h-16 w-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-semibold">Nenhum lote visível</h3>
-              <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                  Não há lotes correspondentes à sua visão atual. Adicione um novo lote ou verifique os filtros.
-              </p>
-          </div>
-        );
-    }
-
     return (
       <div className="space-y-4">
         {groupedLots.map(group => (
@@ -223,6 +230,20 @@ export function ExpiryControl() {
             <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
               <PlusCircle className="mr-2" /> Adicionar lote
             </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Filtros:</span>
+             {filterOptions.map(option => (
+              <Button
+                key={option.id}
+                variant={activeFilter === option.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveFilter(option.id)}
+                className="rounded-full"
+              >
+                {option.label}
+              </Button>
+            ))}
           </div>
           {renderContent()}
         </CardContent>
