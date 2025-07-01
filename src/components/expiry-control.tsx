@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter, ClipboardList, History, PackagePlus } from 'lucide-react';
+import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter, PackagePlus } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -20,8 +20,6 @@ import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MovementAnalysis } from './movement-analysis';
 import { ProductManagementModal } from './product-management-modal';
 
 const BarcodeScannerModal = dynamic(
@@ -194,7 +192,6 @@ export function ExpiryControl() {
     });
   };
 
-  const canViewMovementHistory = permissions.lots.viewMovementHistory;
   const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
 
 
@@ -202,9 +199,9 @@ export function ExpiryControl() {
     if (loading || productsLoading) {
       return (
         <div className="space-y-4">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
         </div>
       );
     }
@@ -255,125 +252,112 @@ export function ExpiryControl() {
     <>
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
-          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
+          <CardTitle className="font-headline flex items-center gap-2">
             <ClipboardCheck /> Controle de estoque
           </CardTitle>
-          <CardDescription className="text-center">Gerencie os lotes, vencimentos e as transferências do seu estoque.</CardDescription>
+          <CardDescription>Gerencie os lotes, vencimentos e as transferências do seu estoque.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-          <Tabs defaultValue="management" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 max-w-lg mx-auto">
-                <TabsTrigger value="management"><ClipboardList className="mr-2 h-4 w-4" /> Gerenciamento de Lotes</TabsTrigger>
-                {canViewMovementHistory && <TabsTrigger value="analysis"><History className="mr-2 h-4 w-4" /> Análise de Movimentação</TabsTrigger>}
-            </TabsList>
-            <TabsContent value="management" className="mt-6">
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="relative flex-grow">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Buscar por produto, lote, código..."
-                            className="pl-10 pr-12"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                        <Button 
-                            type="button" 
-                            variant="ghost" 
-                            size="icon" 
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                            onClick={() => setIsSearchScannerOpen(true)}
-                            aria-label="Escanear código de barras para busca"
-                        >
-                            <Camera className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        {canManageProducts && (
-                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)} className="w-full sm:w-auto">
-                                <PackagePlus className="mr-2" /> Gerenciar Produtos
-                            </Button>
-                        )}
-                        <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                            <PlusCircle className="mr-2" /> Adicionar lote
-                        </Button>
-                    </div>
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="relative flex-grow">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por produto, lote, código..."
+                        className="pl-10 pr-12"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                        onClick={() => setIsSearchScannerOpen(true)}
+                        aria-label="Escanear código de barras para busca"
+                    >
+                        <Camera className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-4">
+                <div className="flex flex-col sm:flex-row gap-2">
+                    {canManageProducts && (
+                        <Button variant="outline" onClick={() => setIsProductModalOpen(true)} className="w-full sm:w-auto">
+                            <PackagePlus className="mr-2" /> Gerenciar Produtos
+                        </Button>
+                    )}
+                    <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
+                        <PlusCircle className="mr-2" /> Adicionar lote
+                    </Button>
+                </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Filter className="mr-2 h-4 w-4" />
+                            Status {statusFilters.length > 0 && `(${statusFilters.length})`}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilters.includes('expiring')}
+                            onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            Vencendo em breve
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilters.includes('expired')}
+                            onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            Vencidos
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                            Limpar filtros
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                {user?.username === 'master' && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline">
                                 <Filter className="mr-2 h-4 w-4" />
-                                Status {statusFilters.length > 0 && `(${statusFilters.length})`}
+                                Quiosques ({selectedKiosks.length})
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
+                        <DropdownMenuContent className="w-64" align="start">
+                            <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuCheckboxItem
-                                checked={statusFilters.includes('expiring')}
-                                onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
-                                onSelect={(e) => e.preventDefault()}
-                            >
-                                Vencendo em breve
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                                checked={statusFilters.includes('expired')}
-                                onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
-                                onSelect={(e) => e.preventDefault()}
-                            >
-                                Vencidos
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                Limpar filtros
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
+                                Selecionar Todos
                             </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                Limpar Seleção
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-48">
+                            {sortedKiosks.map(kiosk => (
+                                <DropdownMenuCheckboxItem
+                                    key={kiosk.id}
+                                    checked={selectedKiosks.includes(kiosk.id)}
+                                    onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {kiosk.name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
                         </DropdownMenuContent>
                     </DropdownMenu>
-
-                    {user?.username === 'master' && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline">
-                                    <Filter className="mr-2 h-4 w-4" />
-                                    Quiosques ({selectedKiosks.length})
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-64" align="start">
-                                <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
-                                    Selecionar Todos
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                    Limpar Seleção
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <ScrollArea className="h-48">
-                                {sortedKiosks.map(kiosk => (
-                                    <DropdownMenuCheckboxItem
-                                        key={kiosk.id}
-                                        checked={selectedKiosks.includes(kiosk.id)}
-                                        onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
-                                        onSelect={(e) => e.preventDefault()}
-                                    >
-                                        {kiosk.name}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                                </ScrollArea>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
-                </div>
-                <div className="mt-6">
-                    {renderContent()}
-                </div>
-            </TabsContent>
-            {canViewMovementHistory && (
-                <TabsContent value="analysis" className="mt-6">
-                    <MovementAnalysis />
-                </TabsContent>
-            )}
-          </Tabs>
+                )}
+            </div>
+            <div className="mt-6">
+                {renderContent()}
+            </div>
         </CardContent>
       </Card>
       

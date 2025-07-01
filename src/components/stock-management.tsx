@@ -41,8 +41,8 @@ export function StockManagement() {
             </div>
             <Tabs defaultValue={defaultTab} className="w-full">
                 <TabsList className={`grid w-full max-w-lg ${gridColsClass}`}>
-                    {canManageLots && <TabsTrigger value="lot-control"><ClipboardCheck className="mr-2 h-4 w-4" />Controle de Lotes</TabsTrigger>}
-                    {canAnalyzeStock && <TabsTrigger value="stock-analysis"><BarChart3 className="mr-2 h-4 w-4" />Análise de Estoque</TabsTrigger>}
+                    {canManageLots && <TabsTrigger value="lot-control"><ClipboardCheck className="mr-2 h-4 w-4" />Controle de Lote</TabsTrigger>}
+                    {canAnalyzeStock && <TabsTrigger value="stock-analysis"><BarChart3 className="mr-2 h-4 w-4" />Análise de Reposição</TabsTrigger>}
                 </TabsList>
 
                 {canManageLots && <TabsContent value="lot-control" className="mt-4"><ExpiryControl /></TabsContent>}
