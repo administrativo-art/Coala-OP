@@ -10,11 +10,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
 import { Download } from 'lucide-react';
+import { units } from '@/lib/conversion';
 
 type FormProduct = Product & {
   formId?: string; // from useFieldArray
@@ -25,7 +27,7 @@ type FormValues = {
 };
 
 export function StockAnalysisConfigurator() {
-  const { products, loading: productsLoading, updateMultipleProducts } = useProducts();
+  const { products, loading: productsLoading, updateMultipleProducts, getProductFullName } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
 
@@ -53,6 +55,7 @@ export function StockAnalysisConfigurator() {
         return {
             ...p,
             stockLevels: newStockLevels,
+            pdfUnit: p.pdfUnit || '',
         };
       });
       replace(initialData);
@@ -105,7 +108,7 @@ export function StockAnalysisConfigurator() {
     data.forEach(product => {
       const productInfo = [
         {
-          content: product.baseName,
+          content: getProductFullName(product),
           rowSpan: kiosks.length,
           styles: { valign: 'middle' },
         },
@@ -157,8 +160,8 @@ export function StockAnalysisConfigurator() {
   if (!productsLoading && products.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        <p>Nenhum produto configurado para análise.</p>
-        <p className="text-sm">Clique em "Gerenciar Produtos para Análise" para adicionar o primeiro.</p>
+        <p>Nenhum produto cadastrado para análise.</p>
+        <p className="text-sm">Clique em "Gerenciar Produtos" para adicionar o primeiro.</p>
       </div>
     )
   }
@@ -170,10 +173,41 @@ export function StockAnalysisConfigurator() {
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                 {products.find(p => p.id === field.id)!.baseName}
+                 {getProductFullName(products.find(p => p.id === field.id)!)}
               </AccordionTrigger>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
+                   <FormField
+                    control={form.control}
+                    name={`products.${index}.pdfUnit`}
+                    render={({ field: pdfUnitField }) => {
+                      const product = products.find(p => p.id === field.id)!;
+                      const categoryUnits = Object.keys(units[product.category]);
+                      return (
+                        <FormItem className="pt-2">
+                          <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
+                          <Select
+                            onValueChange={(value) => pdfUnitField.onChange(value === 'none' ? '' : value)}
+                            value={pdfUnitField.value || 'none'}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione a unidade do relatório" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">-- Mesma unidade da embalagem ({product.unit}) --</SelectItem>
+                              {categoryUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Se a unidade no relatório for diferente da unidade da embalagem, especifique aqui para a conversão correta.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )
+                    }}
+                  />
                   <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {products.find(p=>p.id === field.id)!.unit})</h4>
                    <div className="rounded-md border">
                     <Table>

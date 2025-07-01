@@ -29,7 +29,6 @@ const productSchema = z.object({
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho da embalagem deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
-  pdfUnit: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -66,7 +65,6 @@ export function ProductManagementModal({
       category: 'Volume',
       packageSize: 1,
       unit: 'L',
-      pdfUnit: '',
     },
   });
 
@@ -87,7 +85,7 @@ export function ProductManagementModal({
 
   const handleAddNew = () => {
     setEditingProduct(null);
-    form.reset({ baseName: '', category: 'Volume', packageSize: 1, unit: 'L', pdfUnit: '' });
+    form.reset({ baseName: '', category: 'Volume', packageSize: 1, unit: 'L' });
     setShowForm(true);
   };
 
@@ -98,7 +96,6 @@ export function ProductManagementModal({
       category: product.category,
       packageSize: product.packageSize,
       unit: product.unit,
-      pdfUnit: product.pdfUnit || '',
     });
     setShowForm(true);
   };
@@ -115,7 +112,7 @@ export function ProductManagementModal({
   };
 
   const onSubmit = (values: ProductFormValues) => {
-    const dataToSave = { ...values, pdfUnit: values.pdfUnit || undefined };
+    const dataToSave = { ...values };
     if (editingProduct) {
       updateProduct({ ...editingProduct, ...dataToSave });
     } else {
@@ -150,7 +147,7 @@ export function ProductManagementModal({
                     <FormItem>
                       <FormLabel>Nome do produto</FormLabel>
                       <FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl>
-                      <FormDescription>Se houver múltiplas embalagens, cadastre como produtos separados (ex: "Ovomaltine 250g", "Ovomaltine 500g").</FormDescription>
+                      <FormDescription>Este é o nome base do produto (ex: "Leite Integral"). As variações de tamanho serão adicionadas ao nome completo automaticamente.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -200,33 +197,6 @@ export function ProductManagementModal({
                     )}
                   />
                 </div>
-                <FormField
-                    control={form.control}
-                    name="pdfUnit"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Unidade de medida no relatório (PDF)</FormLabel>
-                            <Select 
-                                onValueChange={(value) => field.onChange(value === 'none' ? '' : value)} 
-                                value={field.value || 'none'}
-                            >
-                                <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecione a unidade do relatório" />
-                                    </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    <SelectItem value="none">-- Mesma unidade da embalagem --</SelectItem>
-                                    {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <FormDescription>
-                                Se a unidade no relatório PDF for diferente da unidade da embalagem, especifique aqui para a conversão correta.
-                            </FormDescription>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                   <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar produto'}</Button>
