@@ -23,6 +23,7 @@ import { useProducts } from '@/hooks/use-products';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { getUnitsForCategory } from '@/lib/conversion';
+import { Label } from '@/components/ui/label';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -197,21 +198,37 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
     onOpenChange(false);
   };
+  
+  const prefillFromBarcode = (barcode: string) => {
+      if (!barcode.trim()) return;
+      const existingLot = lots.find(l => l.barcode === barcode);
+      if (existingLot) {
+          const product = products.find(p => p.id === existingLot.productId);
+          if (product) {
+              form.setValue('baseName', product.baseName, { shouldValidate: true });
+              form.setValue('category', product.category, { shouldValidate: true });
+              form.setValue('packageSize', product.packageSize, { shouldValidate: true });
+              form.setValue('unit', product.unit, { shouldValidate: true });
+              if(existingLot.imageUrl) form.setValue('imageUrl', existingLot.imageUrl, { shouldValidate: true });
+              if(product.alertThreshold) form.setValue('alertThreshold', product.alertThreshold, { shouldValidate: true });
+              if(product.urgentThreshold) form.setValue('urgentThreshold', product.urgentThreshold, { shouldValidate: true });
+
+              toast({
+                  title: "Produto encontrado!",
+                  description: "Os dados do produto foram preenchidos. Complete as informações do lote.",
+              });
+          }
+      }
+  };
 
   const handleScanSuccess = (decodedText: string) => {
-    form.setValue('barcode', decodedText);
-    const existingLot = lots.find(l => l.barcode === decodedText);
-    if (existingLot) {
-        const product = products.find(p => p.id === existingLot.productId);
-        if (product) {
-            form.setValue('baseName', product.baseName);
-            form.setValue('category', product.category);
-            form.setValue('packageSize', product.packageSize);
-            form.setValue('unit', product.unit);
-            if(existingLot.imageUrl) form.setValue('imageUrl', existingLot.imageUrl);
-        }
-    }
+    form.setValue('barcode', decodedText, { shouldValidate: true });
+    prefillFromBarcode(decodedText);
     setIsScannerOpen(false);
+  };
+  
+  const handleBarcodeBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+      prefillFromBarcode(event.target.value);
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,6 +259,36 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             <form onSubmit={form.handleSubmit(onSubmit)}>
                 <ScrollArea className="h-[60vh] pr-4">
                     <div className="space-y-4 py-4">
+
+                        {!isEditing && (
+                            <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
+                                <Label className="text-sm font-medium">Comece por aqui</Label>
+                                <Button type="button" className="w-full" variant="outline" onClick={() => setIsScannerOpen(true)}>
+                                    <Camera className="mr-2 h-4 w-4" /> Escanear código de barras
+                                </Button>
+                                <div className="relative py-1">
+                                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">Ou</span></div>
+                                </div>
+                                <FormField
+                                    control={form.control}
+                                    name="barcode"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="Digite o código manualmente"
+                                                    {...field}
+                                                    onBlur={handleBarcodeBlur}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
+
                         <FormField
                             control={form.control}
                             name="imageUrl"
@@ -363,22 +410,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={form.control}
-                                name="barcode"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Código de barras (opcional)</FormLabel>
-                                    <div className="flex gap-2">
-                                    <FormControl><Input placeholder="ex: 7891234567890" {...field} /></FormControl>
-                                    <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
-                                        <Camera className="h-4 w-4" />
-                                    </Button>
-                                    </div>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
+                           
                             <FormField
                                 control={form.control}
                                 name="expiryDate"
