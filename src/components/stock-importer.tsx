@@ -79,7 +79,7 @@ export function StockAnalyzer() {
         defaultValues: { month: String(new Date().getMonth()), year: String(currentYear), kioskId: '' }
     });
     
-    const findProductByBaseName = (baseName: string): Product | undefined => {
+    const findProductByName = (baseName: string): Product | undefined => {
         return products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
     }
 
@@ -168,9 +168,9 @@ export function StockAnalyzer() {
                 
                 toast({ id: toastId, title: "Análise da IA completa!", description: "Gerando sugestões de distribuição..." });
                 
-                const finalResults: StockAnalysisResultItem[] = analysisResult.results.map(item => {
-                    const distributionSuggestion = generateDistributionSuggestion(item.neededInBaseUnit, item.productName, item.kioskId);
-                    return { ...item, ...distributionSuggestion };
+                const finalResults = analysisResult.results.map(item => {
+                    const suggestionDetails = generateDistributionSuggestion(item.neededInBaseUnit, item.productName, item.kioskId);
+                    return { ...item, ...suggestionDetails };
                 });
 
                 await addStockReport({
@@ -272,14 +272,14 @@ export function StockAnalyzer() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">
-                                {report.results.length > 0 ? (
+                                {report.results?.length > 0 ? (
                                 <div className="space-y-4">
                                 {report.results.map((item, index) => (
                                     <div key={index} className="border rounded-lg p-4">
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
-                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByBaseName(item.productName)?.unit}</span></p>
+                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                             </div>
                                             <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
@@ -287,7 +287,7 @@ export function StockAnalyzer() {
                                         </div>
                                         <p className={`text-sm mt-2 ${item.isActionable ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage || ''}</p>
                                         
-                                        {item.distributionSuggestion && item.distributionSuggestion.length > 0 && (
+                                        {item.distributionSuggestion?.length > 0 && (
                                             <div className="rounded-md border mt-2">
                                                 <Table>
                                                     <TableHeader><TableRow><TableHead>Produto/Embalagem</TableHead><TableHead>Lote</TableHead><TableHead>Validade</TableHead><TableHead className="text-right">Qtd. a Mover</TableHead></TableRow></TableHeader>
