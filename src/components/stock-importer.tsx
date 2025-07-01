@@ -23,13 +23,12 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, PackagePlus, Loader2, Download, TrendingUp, Info, Bot, Send } from 'lucide-react';
+import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, Loader2, Download, TrendingUp, Info, Bot, Send } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { ProductManagementModal } from './product-management-modal';
 import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type LotEntry, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
@@ -63,13 +62,12 @@ export function StockAnalyzer() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
-    const { products, getProductFullName, loading: productsLoading, addProduct, updateProduct, deleteProduct, updateMultipleProducts } = useProducts();
+    const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
-    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const stockFileInputRef = useRef<HTMLInputElement>(null);
     const consumptionFileInputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +85,7 @@ export function StockAnalyzer() {
         neededInBaseUnit: number,
         productBaseName: string,
         destinationKioskId: string
-    ): DistributionSuggestion => {
+    ): Omit<StockAnalysisResultItem, keyof Omit<StockAnalysisResultItem, 'statusMessage' | 'isActionable' | 'distributionSuggestion'>> => {
         const sourceKioskId = 'matriz';
 
         const productVariations = products.filter(p => p.baseName === productBaseName);
@@ -287,7 +285,7 @@ export function StockAnalyzer() {
                                         </div>
                                         <p className={`text-sm mt-2 ${item.isActionable ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage || ''}</p>
                                         
-                                        {item.distributionSuggestion?.length > 0 && (
+                                        {item.distributionSuggestion && item.distributionSuggestion.length > 0 && (
                                             <div className="rounded-md border mt-2">
                                                 <Table>
                                                     <TableHeader><TableRow><TableHead>Produto/Embalagem</TableHead><TableHead>Lote</TableHead><TableHead>Validade</TableHead><TableHead className="text-right">Qtd. a Mover</TableHead></TableRow></TableHeader>
@@ -334,24 +332,10 @@ export function StockAnalyzer() {
                 
                 {canConfigureStock && <TabsContent value="parameters" className="mt-4">
                     <Card><CardHeader><CardTitle>Configurar Parâmetros de Análise</CardTitle><CardDescription>Defina o estoque ideal por quiosque e gerencie os produtos que serão considerados na análise.</CardDescription></CardHeader><CardContent className="p-6">
-                        <div className="mb-6 flex flex-wrap gap-2">
-                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos</Button>
-                        </div>
                         <StockAnalysisConfigurator />
                     </CardContent></Card>
                 </TabsContent>}
             </Tabs>
-            
-            <ProductManagementModal
-                open={isProductModalOpen}
-                onOpenChange={setIsProductModalOpen}
-                products={products}
-                addProduct={addProduct}
-                updateProduct={updateProduct}
-                deleteProduct={deleteProduct}
-                getProductFullName={getProductFullName}
-                permissions={{ add: !!canConfigureStock, edit: !!canConfigureStock, delete: !!canConfigureStock }}
-            />
             
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
             {consumptionReportToDelete && <DeleteConfirmationDialog open={!!consumptionReportToDelete} onOpenChange={() => setConsumptionReportToDelete(null)} onConfirm={handleDeleteConsumptionReportConfirm} itemName={`a análise de consumo "${consumptionReportToDelete.reportName}"`} />}

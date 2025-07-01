@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter, ClipboardList, History } from 'lucide-react';
+import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter, ClipboardList, History, PackagePlus } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -22,6 +22,7 @@ import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MovementAnalysis } from './movement-analysis';
+import { ProductManagementModal } from './product-management-modal';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -32,7 +33,7 @@ export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
-  const { products, loading: productsLoading } = useProducts();
+  const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -46,6 +47,7 @@ export function ExpiryControl() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
@@ -193,6 +195,7 @@ export function ExpiryControl() {
   };
 
   const canViewMovementHistory = permissions.lots.viewMovementHistory;
+  const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
 
 
   const renderContent = () => {
@@ -284,9 +287,16 @@ export function ExpiryControl() {
                             <Camera className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </div>
-                    <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                    <PlusCircle className="mr-2" /> Adicionar lote
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        {canManageProducts && (
+                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)} className="w-full sm:w-auto">
+                                <PackagePlus className="mr-2" /> Gerenciar Produtos
+                            </Button>
+                        )}
+                        <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
+                            <PlusCircle className="mr-2" /> Adicionar lote
+                        </Button>
+                    </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-4">
                     <DropdownMenu>
@@ -403,6 +413,17 @@ export function ExpiryControl() {
           onScanSuccess={handleSearchScanSuccess}
         />
       )}
+
+      <ProductManagementModal
+        open={isProductModalOpen}
+        onOpenChange={setIsProductModalOpen}
+        products={products}
+        addProduct={addProduct}
+        updateProduct={updateProduct}
+        deleteProduct={deleteProduct}
+        getProductFullName={getProductFullName}
+        permissions={permissions.products}
+      />
     </>
   );
 }
