@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -160,6 +159,7 @@ export function ExpiryControl() {
   const handleDeleteConfirm = async () => {
     if (lotToDelete) {
       await deleteLot(lotToDelete.id);
+      setLotToDelete(null);
     }
   };
 

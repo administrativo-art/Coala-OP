@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react";
@@ -25,29 +24,27 @@ type DeleteConfirmationDialogProps = {
 export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemName }: DeleteConfirmationDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleConfirmClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault(); // Prevent dialog from closing immediately
+  const handleConfirmClick = async () => {
     setIsDeleting(true);
     try {
       await onConfirm();
+      // On success, the parent component will be responsible for closing the modal
+      // by updating its state, which will cause this component to unmount.
     } catch (error) {
       console.error("Confirmation action failed", error);
-    } finally {
-      // The loading state is set to false before closing,
-      // but the parent component will unmount this dialog,
-      // so it might not be visible. It's good practice regardless.
+      // If there's an error, we should stop the loading state to allow another attempt.
       setIsDeleting(false);
-      onOpenChange(false); // Manually close the dialog
     }
-  }
+  };
 
-  // Handle case where dialog is closed by user (ESC, overlay click)
+  // If the dialog is closed by the user (e.g., clicking cancel, overlay, or pressing ESC),
+  // we need to reset the loading state.
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
-      setIsDeleting(false); // Reset loading state if dialog is closed
+      setIsDeleting(false);
     }
     onOpenChange(isOpen);
-  }
+  };
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -60,7 +57,7 @@ export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemNa
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction 
+          <AlertDialogAction
             onClick={handleConfirmClick}
             disabled={isDeleting}
             className={buttonVariants({ variant: "destructive" })}

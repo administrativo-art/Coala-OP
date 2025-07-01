@@ -104,9 +104,9 @@ export function ProductManagementModal({
     setProductToDelete(product);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (productToDelete) {
-      deleteProduct(productToDelete.id);
+      await deleteProduct(productToDelete.id);
       setProductToDelete(null);
     }
   };

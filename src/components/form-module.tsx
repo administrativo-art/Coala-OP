@@ -43,9 +43,9 @@ export function FormModule() {
         setTemplateToFill(template);
     }
 
-    const handleDeleteConfirm = () => {
+    const handleDeleteConfirm = async () => {
         if (templateToDelete) {
-            deleteTemplate(templateToDelete.id)
+            await deleteTemplate(templateToDelete.id)
             setTemplateToDelete(null)
         }
     }

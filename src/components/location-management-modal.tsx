@@ -35,9 +35,9 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, addKiosk, 
     setKioskToDelete(kiosk);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (kioskToDelete) {
-      deleteKiosk(kioskToDelete.id);
+      await deleteKiosk(kioskToDelete.id);
       setKioskToDelete(null);
     }
   };
