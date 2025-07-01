@@ -2,7 +2,7 @@
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -25,7 +25,7 @@ type FormValues = {
 };
 
 export function StockAnalysisConfigurator() {
-  const { products, loading: productsLoading, getProductFullName, updateMultipleProducts } = useStockAnalysisProducts();
+  const { products, loading: productsLoading, updateMultipleProducts } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
 

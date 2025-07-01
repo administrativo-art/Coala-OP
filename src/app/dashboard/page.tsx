@@ -6,7 +6,6 @@ import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useProducts } from "@/hooks/use-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
-import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,7 +23,6 @@ export default function DashboardPage() {
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { products, loading: productsLoading } = useProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
-  const { products: stockProducts, loading: stockProductsLoading } = useStockAnalysisProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
@@ -33,11 +31,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Set initial selection only once when products are loaded.
-    if (!initialSelectionMade && stockProducts.length > 0) {
-      setSelectedProducts(stockProducts.map(p => p.id));
+    if (!initialSelectionMade && products.length > 0) {
+      setSelectedProducts(products.map(p => p.id));
       setInitialSelectionMade(true);
     }
-  }, [stockProducts, initialSelectionMade]);
+  }, [products, initialSelectionMade]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -58,8 +56,8 @@ export default function DashboardPage() {
   }, [lotsInKiosk, lotsLoading]);
 
   const chartData = useMemo(() => {
-    const loading = consumptionLoading || stockProductsLoading || kiosksLoading;
-    if (loading || !user || consumptionHistory.length === 0 || stockProducts.length === 0) {
+    const loading = consumptionLoading || productsLoading || kiosksLoading;
+    if (loading || !user || consumptionHistory.length === 0 || products.length === 0) {
       return [];
     }
 
@@ -113,7 +111,7 @@ export default function DashboardPage() {
     }
 
     // Step 3: Generate chart data for ALL selected products, maintaining a consistent alphabetical order.
-    const dataForChart = stockProducts
+    const dataForChart = products
       .filter(p => selectedProducts.includes(p.id))
       .map(product => {
         const avgPackages = relevantConsumptionData[product.id] || 0;
@@ -135,7 +133,7 @@ export default function DashboardPage() {
 
     return dataForChart;
 
-  }, [user, consumptionHistory, stockProducts, consumptionLoading, stockProductsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts]);
+  }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts]);
 
 
   const initialLoading = productsLoading || lotsLoading || kiosksLoading;
@@ -241,11 +239,11 @@ export default function DashboardPage() {
                         <DropdownMenuContent className="w-64">
                             <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setSelectedProducts(stockProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedProducts(products.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
-                            {stockProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                            {products.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
                                 <DropdownMenuCheckboxItem
                                     key={product.id}
                                     checked={selectedProducts.includes(product.id)}
@@ -272,7 +270,7 @@ export default function DashboardPage() {
                 </div>
             </CardHeader>
             <CardContent className="pl-2">
-                 { (consumptionLoading || stockProductsLoading || kiosksLoading) ? (
+                 { (consumptionLoading || productsLoading || kiosksLoading) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={350}>

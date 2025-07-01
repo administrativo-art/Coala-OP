@@ -10,7 +10,6 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products'; // For FEFO logic
@@ -64,9 +63,8 @@ export function StockAnalyzer() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
-    const { products: physicalProducts, getProductFullName, loading: physicalProductsLoading } = useProducts();
+    const { products, getProductFullName, loading: productsLoading, addProduct, updateProduct, deleteProduct } = useProducts();
     const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
-    const stockAnalysisProducts = useStockAnalysisProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
@@ -82,7 +80,7 @@ export function StockAnalyzer() {
     });
     
     const findProductByName = (baseName: string): Product | undefined => {
-        return stockAnalysisProducts.products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
+        return products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
     }
 
     const generateDistributionSuggestion = (
@@ -93,7 +91,7 @@ export function StockAnalyzer() {
         const sourceKioskId = 'matriz'; // Central Distribution
 
         // 1. Find all product variations for the given base name
-        const productVariations = physicalProducts.filter(p => p.baseName === productBaseName);
+        const productVariations = products.filter(p => p.baseName === productBaseName);
         if (productVariations.length === 0) {
              return { statusMessage: `Nenhuma variação de produto físico encontrada para "${productBaseName}".`, isActionable: false, distributionSuggestion: [] };
         }
@@ -115,7 +113,7 @@ export function StockAnalyzer() {
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
 
-            const productDetails = physicalProducts.find(p => p.id === lot.productId);
+            const productDetails = products.find(p => p.id === lot.productId);
             if (!productDetails) continue;
 
             const packageValueInBaseUnit = productDetails.packageSize;
@@ -170,7 +168,7 @@ export function StockAnalyzer() {
                 const analysisResult = await analyzeStock({
                     reportName: file.name,
                     pdfDataUri,
-                    products: stockAnalysisProducts.products,
+                    products: products,
                     kiosks: kiosks,
                 });
                 
@@ -346,7 +344,7 @@ export function StockAnalyzer() {
                 {canConfigureStock && <TabsContent value="parameters" className="mt-4">
                     <Card><CardHeader><CardTitle>Configurar Parâmetros de Análise</CardTitle><CardDescription>Defina o estoque ideal por quiosque e gerencie os produtos que serão considerados na análise.</CardDescription></CardHeader><CardContent className="p-6">
                         <div className="mb-6 flex flex-wrap gap-2">
-                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos para Análise</Button>
+                            <Button variant="outline" onClick={() => setIsProductModalOpen(true)}><PackagePlus className="mr-2" /> Gerenciar Produtos</Button>
                         </div>
                         <StockAnalysisConfigurator />
                     </CardContent></Card>
@@ -356,11 +354,11 @@ export function StockAnalyzer() {
             <ProductManagementModal
                 open={isProductModalOpen}
                 onOpenChange={setIsProductModalOpen}
-                products={stockAnalysisProducts.products}
-                addProduct={stockAnalysisProducts.addProduct}
-                updateProduct={stockAnalysisProducts.updateProduct}
-                deleteProduct={stockAnalysisProducts.deleteProduct}
-                getProductFullName={stockAnalysisProducts.getProductFullName}
+                products={products}
+                addProduct={addProduct}
+                updateProduct={updateProduct}
+                deleteProduct={deleteProduct}
+                getProductFullName={getProductFullName}
                 permissions={{ add: !!canConfigureStock, edit: !!canConfigureStock, delete: !!canConfigureStock }}
             />
             

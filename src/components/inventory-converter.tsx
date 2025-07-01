@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -8,16 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRight, Settings, PlusCircle, ArrowLeftRight, Boxes } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
+import { ArrowRight, ArrowLeftRight, Boxes } from 'lucide-react';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, getUnitsForCategory, units } from '@/lib/conversion';
-import { ProductManagementModal } from './product-management-modal';
 
 export function InventoryConverter() {
-  const { products, loading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
-  const { permissions } = useAuth();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { products, loading, getProductFullName } = useProducts();
   
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
   const [value, setValue] = useState<string>('1');
@@ -98,7 +93,6 @@ export function InventoryConverter() {
               <Label htmlFor="product">Produto</Label>
               <Skeleton className="h-10 w-full" />
             </div>
-            <Skeleton className="h-10 w-28" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">
             <div className="space-y-2">
@@ -120,21 +114,14 @@ export function InventoryConverter() {
       );
     }
 
-    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
-
     if (products.length === 0) {
       return (
         <div className="text-center py-8 flex flex-col items-center">
             <Boxes className="h-16 w-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-xl font-semibold">Nenhum produto cadastrado</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Adicione produtos ao seu inventário para começar a fazer conversões.
+                Cadastre os produtos na tela de "Gestão de Estoque" para poder fazer conversões aqui.
             </p>
-            {permissions.products.add && (
-                <Button size="lg" onClick={() => setIsModalOpen(true)}>
-                    <PlusCircle className="mr-2 h-5 w-5" /> Adicionar produto
-                </Button>
-            )}
         </div>
       );
     }
@@ -153,11 +140,6 @@ export function InventoryConverter() {
               </SelectContent>
             </Select>
           </div>
-          {canManageProducts && (
-            <Button variant="outline" onClick={() => setIsModalOpen(true)}>
-              <Settings className="mr-2 h-4 w-4" /> Gerenciar
-            </Button>
-          )}
         </div>
         
          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-4">
@@ -198,28 +180,16 @@ export function InventoryConverter() {
   };
 
   return (
-    <>
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <Boxes /> Conversão de inventário
-          </CardTitle>
-          <CardDescription className="text-center">Converta o inventário com base em seus produtos cadastrados.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6 p-6">
-          {renderContent()}
-        </CardContent>
-      </Card>
-      <ProductManagementModal 
-        open={isModalOpen} 
-        onOpenChange={setIsModalOpen}
-        products={products}
-        addProduct={addProduct}
-        updateProduct={updateProduct}
-        deleteProduct={deleteProduct}
-        getProductFullName={getProductFullName}
-        permissions={permissions.products}
-      />
-    </>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
+          <Boxes /> Conversão de inventário
+        </CardTitle>
+        <CardDescription className="text-center">Converta o inventário com base em seus produtos cadastrados.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6 p-6">
+        {renderContent()}
+      </CardContent>
+    </Card>
   );
 }

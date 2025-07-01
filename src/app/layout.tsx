@@ -10,7 +10,6 @@ import { PredefinedListsProvider } from '@/components/predefined-lists-provider'
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
-import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
 
@@ -40,14 +39,12 @@ export default function RootLayout({
                   <PredefinedListsProvider>
                     <FormProvider>
                       <StockAnalysisProvider>
-                        <StockAnalysisProductsProvider>
                           <ConsumptionAnalysisProvider>
                             <MovementHistoryProvider>
                               {children}
                               <Toaster />
                             </MovementHistoryProvider>
                           </ConsumptionAnalysisProvider>
-                        </StockAnalysisProductsProvider>
                       </StockAnalysisProvider>
                     </FormProvider>
                   </PredefinedListsProvider>

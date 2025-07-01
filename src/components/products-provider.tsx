@@ -13,6 +13,7 @@ export interface ProductsContextType {
   updateProduct: (updatedProduct: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
   getProductFullName: (product: Product) => string;
+  updateMultipleProducts: (products: Partial<Product>[]) => Promise<void>;
 }
 
 export const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
@@ -82,6 +83,23 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
         console.error("Error updating product:", error);
     }
   }, []);
+  
+  const updateMultipleProducts = useCallback(async (productsToUpdate: Partial<Product>[]) => {
+    const batch = writeBatch(db);
+    productsToUpdate.forEach(product => {
+      if(product.id) {
+        const productRef = doc(db, "products", product.id);
+        const { id, ...dataToUpdate } = product;
+        batch.update(productRef, dataToUpdate);
+      }
+    });
+    try {
+      await batch.commit();
+    } catch(error) {
+      console.error("Error updating multiple products:", error);
+      throw error;
+    }
+  }, []);
 
   const deleteProduct = useCallback(async (productId: string) => {
     try {
@@ -103,6 +121,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     updateProduct,
     deleteProduct,
     getProductFullName,
+    updateMultipleProducts,
   };
 
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>;
