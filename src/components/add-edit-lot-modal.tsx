@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
@@ -20,6 +19,7 @@ import { Calendar as CalendarIcon, Camera, Plus, X, ChevronsUpDown } from 'lucid
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { type LotEntry, type Kiosk, type Product } from '@/types';
 import { useProducts } from '@/hooks/use-products';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -168,198 +168,201 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                <FormField
-                    control={form.control}
-                    name="imageUrl"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Foto do Produto (Opcional)</FormLabel>
-                            <FormControl>
-                                <div className="w-full">
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        onChange={handleImageUpload}
-                                    />
-                                    {imageUrl ? (
-                                        <div className="relative w-32 h-32">
-                                            <Image src={imageUrl} alt="Pré-visualização" layout="fill" className="rounded-md object-cover" />
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                size="icon"
-                                                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
-                                                onClick={() => form.setValue('imageUrl', '')}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </Button>
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+                <ScrollArea className="h-[60vh] pr-4">
+                    <div className="space-y-4 py-4">
+                        <FormField
+                            control={form.control}
+                            name="imageUrl"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Foto do Produto (Opcional)</FormLabel>
+                                    <FormControl>
+                                        <div className="w-full">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                ref={fileInputRef}
+                                                className="hidden"
+                                                onChange={handleImageUpload}
+                                            />
+                                            {imageUrl ? (
+                                                <div className="relative w-32 h-32">
+                                                    <Image src={imageUrl} alt="Pré-visualização" layout="fill" className="rounded-md object-cover" />
+                                                    <Button
+                                                        type="button"
+                                                        variant="destructive"
+                                                        size="icon"
+                                                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                                        onClick={() => form.setValue('imageUrl', '')}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="h-32 w-32 flex flex-col items-center justify-center border-dashed"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                >
+                                                    <Plus className="h-8 w-8 text-muted-foreground" />
+                                                    <span>Adicionar foto</span>
+                                                </Button>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            className="h-32 w-32 flex flex-col items-center justify-center border-dashed"
-                                            onClick={() => fileInputRef.current?.click()}
-                                        >
-                                            <Plus className="h-8 w-8 text-muted-foreground" />
-                                            <span>Adicionar foto</span>
-                                        </Button>
-                                    )}
-                                </div>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-              <FormField
-                control={form.control}
-                name="productName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome do produto</FormLabel>
-                    <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="lotNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número do lote</FormLabel>
-                    <FormControl><Input placeholder="ex: L12345" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="barcode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código de barras (opcional)</FormLabel>
-                    <div className="flex gap-2">
-                      <FormControl><Input placeholder="ex: 7891234567890" {...field} /></FormControl>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
-                        <Camera className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="expiryDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de validade</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
                             )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy")
-                            ) : (
-                              <span>Escolha uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          initialFocus
                         />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="quantity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quantidade</FormLabel>
-                      <FormControl><Input type="number" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="kioskId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quiosque</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                      <FormField
+                        control={form.control}
+                        name="productName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome do produto</FormLabel>
+                            <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="lotNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Número do lote</FormLabel>
+                            <FormControl><Input placeholder="ex: L12345" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="barcode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Código de barras (opcional)</FormLabel>
+                            <div className="flex gap-2">
+                              <FormControl><Input placeholder="ex: 7891234567890" {...field} /></FormControl>
+                              <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                                <Camera className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="expiryDate"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Data de validade</FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                      "w-full pl-3 text-left font-normal",
+                                      !field.value && "text-muted-foreground"
+                                    )}
+                                  >
+                                    {field.value ? (
+                                      format(field.value, "dd/MM/yyyy")
+                                    ) : (
+                                      <span>Escolha uma data</span>
+                                    )}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={field.onChange}
+                                  disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="quantity"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Quantidade</FormLabel>
+                              <FormControl><Input type="number" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="kioskId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Quiosque</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
-               <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="item-1">
-                    <AccordionTrigger className="text-sm">Parâmetros de Vencimento (Opcional)</AccordionTrigger>
-                    <AccordionContent className="pt-4">
-                         <FormDescription className="mb-4">
-                            Defina os parâmetros de alerta para este produto. Eles serão salvos e aplicados a todos os lotes futuros com este mesmo nome de produto.
-                        </FormDescription>
-                        <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="alertThreshold"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Alerta (dias)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="ex: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)} /></FormControl>
-                                </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="urgentThreshold"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Urgente (dias)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="ex: 7" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)}/></FormControl>
-                                </FormItem>
-                                )}
-                            />
-                        </div>
-                    </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+                       <Accordion type="single" collapsible className="w-full">
+                        <AccordionItem value="item-1">
+                            <AccordionTrigger className="text-sm">Parâmetros de Vencimento (Opcional)</AccordionTrigger>
+                            <AccordionContent className="pt-4">
+                                 <FormDescription className="mb-4">
+                                    Defina os parâmetros de alerta para este produto. Eles serão salvos e aplicados a todos os lotes futuros com este mesmo nome de produto.
+                                </FormDescription>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="alertThreshold"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Alerta (dias)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="ex: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)} /></FormControl>
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="urgentThreshold"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Urgente (dias)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="ex: 7" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)}/></FormControl>
+                                        </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    </div>
+                </ScrollArea>
 
-
-              <DialogFooter className="pt-4">
+              <DialogFooter className="pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <Button type="submit">{lotToEdit ? 'Salvar alterações' : 'Adicionar lote'}</Button>
               </DialogFooter>
