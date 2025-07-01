@@ -10,17 +10,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/hooks/use-auth';
 import { type LotEntry, type Kiosk } from '@/types';
+import { type MoveLotParams } from './expiry-products-provider';
 
 type MoveStockModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lotToMove: LotEntry;
   kiosks: Kiosk[];
-  onMoveConfirm: (lotId: string, toKioskId: string, quantity: number) => void;
+  onMoveConfirm: (params: MoveLotParams) => void;
 };
 
 export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveConfirm }: MoveStockModalProps) {
+  const { user } = useAuth();
   const availableKiosks = kiosks.filter(l => l.id !== lotToMove.kioskId);
   
   const moveSchema = z.object({
@@ -39,7 +42,22 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
   });
 
   const onSubmit = (values: z.infer<typeof moveSchema>) => {
-    onMoveConfirm(lotToMove.id, values.destinationId, values.quantity);
+    if (!user) return;
+
+    const fromKioskName = kiosks.find(k => k.id === lotToMove.kioskId)?.name || 'Quiosque Desconhecido';
+    const toKioskName = kiosks.find(k => k.id === values.destinationId)?.name || 'Quiosque Desconhecido';
+
+    const params: MoveLotParams = {
+        lotId: lotToMove.id,
+        toKioskId: values.destinationId,
+        quantityToMove: values.quantity,
+        fromKioskId: lotToMove.kioskId,
+        fromKioskName: fromKioskName,
+        toKioskName: toKioskName,
+        movedByUserId: user.id,
+        movedByUsername: user.username,
+    };
+    onMoveConfirm(params);
     onOpenChange(false);
   };
   

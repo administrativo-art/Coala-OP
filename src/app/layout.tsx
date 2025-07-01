@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -11,6 +12,7 @@ import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
+import { MovementHistoryProvider } from '@/components/movement-history-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -40,8 +42,10 @@ export default function RootLayout({
                       <StockAnalysisProvider>
                         <StockAnalysisProductsProvider>
                           <ConsumptionAnalysisProvider>
-                            {children}
-                            <Toaster />
+                            <MovementHistoryProvider>
+                              {children}
+                              <Toaster />
+                            </MovementHistoryProvider>
                           </ConsumptionAnalysisProvider>
                         </StockAnalysisProductsProvider>
                       </StockAnalysisProvider>

@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -38,6 +39,20 @@ export type LotEntry = {
   kioskId: string;
   quantity: number;
   imageUrl?: string;
+};
+
+export type MovementRecord = {
+  id: string;
+  productName: string;
+  lotNumber: string;
+  quantityMoved: number;
+  fromKioskId: string;
+  fromKioskName: string;
+  toKioskId: string;
+  toKioskName: string;
+  movedByUserId: string;
+  movedByUsername: string;
+  movedAt: string; // ISO String
 };
 
 export type StockAnalysisResultItem = {
@@ -82,7 +97,7 @@ export type ConsumptionReport = {
 
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
-    lots: { add: boolean; edit: boolean; move: boolean; delete: boolean };
+    lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
     users: { add: boolean; edit: boolean; delete: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
@@ -167,7 +182,7 @@ export type FormSubmission = {
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false },
+    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
@@ -178,7 +193,7 @@ export const defaultGuestPermissions: PermissionSet = {
 
 export const defaultUserPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: true, edit: true, move: true, delete: false },
+    lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
@@ -189,7 +204,7 @@ export const defaultUserPermissions: PermissionSet = {
 
 export const defaultAdminPermissions: PermissionSet = {
     products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true },
+    lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
     users: { add: true, edit: true, delete: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },

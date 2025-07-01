@@ -1,9 +1,21 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { type LotEntry } from '@/types';
+import { type LotEntry, type MovementRecord } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+
+export type MoveLotParams = {
+  lotId: string;
+  toKioskId: string;
+  quantityToMove: number;
+  fromKioskId: string;
+  fromKioskName: string;
+  toKioskName: string;
+  movedByUserId: string;
+  movedByUsername: string;
+};
 
 export interface ExpiryProductsContextType {
   lots: LotEntry[];
@@ -11,7 +23,7 @@ export interface ExpiryProductsContextType {
   addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
   updateLot: (lot: LotEntry) => Promise<void>;
   deleteLot: (lotId: string) => Promise<void>;
-  moveLot: (lotId: string, toKioskId: string, quantityToMove: number) => Promise<void>;
+  moveLot: (params: MoveLotParams) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
@@ -107,7 +119,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const moveLot = useCallback(async (lotId: string, toKioskId: string, quantityToMove: number) => {
+  const moveLot = useCallback(async (params: MoveLotParams) => {
+    const { lotId, toKioskId, quantityToMove, fromKioskId, fromKioskName, toKioskName, movedByUserId, movedByUsername } = params;
     const sourceLotRef = doc(db, "lots", lotId);
 
     try {
@@ -158,6 +171,23 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             };
             batch.set(newDestLotRef, newLotData);
         }
+
+        // Create movement record
+        const movementRecord: Omit<MovementRecord, 'id'> = {
+            productName: sourceLot.productName,
+            lotNumber: sourceLot.lotNumber,
+            quantityMoved: quantityToMove,
+            fromKioskId: fromKioskId,
+            fromKioskName: fromKioskName,
+            toKioskId: toKioskId,
+            toKioskName: toKioskName,
+            movedByUserId: movedByUserId,
+            movedByUsername: movedByUsername,
+            movedAt: new Date().toISOString(),
+        };
+
+        const movementHistoryRef = doc(collection(db, "movementHistory"));
+        batch.set(movementHistoryRef, movementRecord);
 
         await batch.commit();
 

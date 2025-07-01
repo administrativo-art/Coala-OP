@@ -21,13 +21,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const permissionsSchema = z.object({
     products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-    lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean() }),
+    lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
@@ -194,6 +194,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             {renderPermissionSwitch("permissions.lots.add", "Adicionar lotes", "Permite adicionar novos lotes ao controle de validade.")}
                             {renderPermissionSwitch("permissions.lots.edit", "Editar lotes", "Permite editar informações de um lote, como data ou quantidade.")}
                             {renderPermissionSwitch("permissions.lots.move", "Mover estoque", "Permite mover estoque de um lote entre diferentes locais.")}
+                            {renderPermissionSwitch("permissions.lots.viewMovementHistory", "Ver histórico de movimentação", "Permite visualizar o histórico de transferências de estoque.")}
                             {renderPermissionSwitch("permissions.lots.delete", "Excluir lotes", "Permite excluir entradas de lote do controle de validade.")}
                         </AccordionContent>
                     </AccordionItem>
