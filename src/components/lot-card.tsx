@@ -1,12 +1,14 @@
+
 "use client"
 
+import Image from 'next/image';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Pencil, Trash2, Move, MapPin } from 'lucide-react';
+import { Pencil, Trash2, Move, MapPin, Camera } from 'lucide-react';
 import { type Kiosk } from '@/types';
 
 export type GroupedLot = {
@@ -15,6 +17,7 @@ export type GroupedLot = {
   barcode: string;
   expiryDate: string;
   totalQuantity: number;
+  imageUrl?: string;
   kiosks: {
     id: string; // This is the unique LotEntry ID
     kioskId: string;
@@ -59,15 +62,24 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
-        <div className="flex-grow">
-          <CardTitle className="text-xl">{groupedLot.productName}</CardTitle>
-          <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-            <span>Lote: <strong>{groupedLot.lotNumber}</strong></span>
-            {groupedLot.barcode && <span>Cód. Barras: <strong>{groupedLot.barcode}</strong></span>}
-            <span>Total: <strong>{groupedLot.totalQuantity} un.</strong></span>
-          </CardDescription>
+        <div className="flex flex-grow items-start gap-4">
+          {groupedLot.imageUrl ? (
+            <Image src={groupedLot.imageUrl} alt={groupedLot.productName} width={64} height={64} className="rounded-md object-cover aspect-square" />
+          ) : (
+            <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center bg-secondary rounded-md">
+              <Camera className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-grow">
+            <CardTitle className="text-xl">{groupedLot.productName}</CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+              <span>Lote: <strong>{groupedLot.lotNumber}</strong></span>
+              {groupedLot.barcode && <span>Cód. Barras: <strong>{groupedLot.barcode}</strong></span>}
+              <span>Total: <strong>{groupedLot.totalQuantity} un.</strong></span>
+            </CardDescription>
+          </div>
         </div>
-        <Badge className={`text-white text-sm ${status.color}`}>{status.text}</Badge>
+        <Badge className={`text-white text-sm ${status.color} self-start`}>{status.text}</Badge>
       </CardHeader>
       <CardContent className="p-0">
         <div className="px-4 pb-2 text-sm text-muted-foreground">
@@ -76,7 +88,7 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
         <Separator />
         <div className="p-4 space-y-2">
             {groupedLot.kiosks.map(kioskEntry => (
-                <div key={`${kioskEntry.id}-${kioskEntry.kioskId}`} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
+                <div key={kioskEntry.id} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
                     <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>

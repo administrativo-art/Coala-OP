@@ -1,12 +1,13 @@
 
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -15,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera } from 'lucide-react';
+import { Calendar as CalendarIcon, Camera, Plus, X } from 'lucide-react';
 import { type LotEntry, type Kiosk } from '@/types';
 
 const BarcodeScannerModal = dynamic(
@@ -30,6 +31,7 @@ const lotSchema = z.object({
   expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   quantity: z.coerce.number().min(1, 'A quantidade deve ser de pelo menos 1.'),
+  imageUrl: z.string().optional(),
 });
 
 type LotFormValues = z.infer<typeof lotSchema>;
@@ -41,10 +43,12 @@ type AddEditLotModalProps = {
   kiosks: Kiosk[];
   addLot: (lot: Omit<LotEntry, 'id'>) => void;
   updateLot: (lot: LotEntry) => void;
+  lots: LotEntry[];
 };
 
-export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot }: AddEditLotModalProps) {
+export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot, lots }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
@@ -55,6 +59,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       form.reset({
         ...lotToEdit,
         expiryDate: new Date(lotToEdit.expiryDate),
+        imageUrl: lotToEdit.imageUrl || '',
       });
     } else {
       form.reset({
@@ -64,6 +69,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         expiryDate: undefined,
         kioskId: '',
         quantity: 1,
+        imageUrl: '',
       });
     }
   }, [lotToEdit, form, open]);
@@ -72,6 +78,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     const lotData = {
       ...values,
       barcode: values.barcode || '',
+      imageUrl: values.imageUrl || undefined,
       expiryDate: values.expiryDate.toISOString(),
     };
     if (lotToEdit) {
@@ -84,8 +91,28 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
   const handleScanSuccess = (decodedText: string) => {
     form.setValue('barcode', decodedText);
+    const existingLot = lots.find(l => l.barcode === decodedText);
+    if (existingLot) {
+        form.setValue('productName', existingLot.productName);
+        if(existingLot.imageUrl) {
+            form.setValue('imageUrl', existingLot.imageUrl);
+        }
+    }
     setIsScannerOpen(false);
   };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        form.setValue('imageUrl', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  const imageUrl = form.watch('imageUrl');
 
   return (
     <>
@@ -99,6 +126,51 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+                <FormField
+                    control={form.control}
+                    name="imageUrl"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Foto do Produto (Opcional)</FormLabel>
+                            <FormControl>
+                                <div className="w-full">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        onChange={handleImageUpload}
+                                    />
+                                    {imageUrl ? (
+                                        <div className="relative w-32 h-32">
+                                            <Image src={imageUrl} alt="Pré-visualização" layout="fill" className="rounded-md object-cover" />
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                                onClick={() => form.setValue('imageUrl', '')}
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="h-32 w-32 flex flex-col items-center justify-center border-dashed"
+                                            onClick={() => fileInputRef.current?.click()}
+                                        >
+                                            <Plus className="h-8 w-8 text-muted-foreground" />
+                                            <span>Adicionar foto</span>
+                                        </Button>
+                                    )}
+                                </div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
               <FormField
                 control={form.control}
                 name="productName"

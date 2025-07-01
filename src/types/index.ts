@@ -34,6 +34,7 @@ export type LotEntry = {
   expiryDate: string; // ISO String
   kioskId: string;
   quantity: number;
+  imageUrl?: string;
 };
 
 export type StockAnalysisResultItem = {

@@ -71,13 +71,14 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     try {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
-            // Lot already exists, just update quantity.
+            // Lot already exists, just update quantity and potentially image.
             const existingDoc = querySnapshot.docs[0];
             const existingLot = existingDoc.data() as LotEntry;
             const lotRef = doc(db, "lots", existingDoc.id);
             await updateDoc(lotRef, {
                 quantity: existingLot.quantity + lot.quantity,
                 barcode: lot.barcode, // Also update barcode in case it changed
+                imageUrl: lot.imageUrl || existingLot.imageUrl, // Prioritize new image over existing
             });
         } else {
             // This is a new, unique lot entry. Add it.
@@ -153,6 +154,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 expiryDate: sourceLot.expiryDate,
                 kioskId: toKioskId,
                 quantity: quantityToMove,
+                imageUrl: sourceLot.imageUrl,
             };
             batch.set(newDestLotRef, newLotData);
         }

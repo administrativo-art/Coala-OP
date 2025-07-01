@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -59,6 +60,7 @@ export function ExpiryControl() {
           lotNumber: lot.lotNumber,
           barcode: lot.barcode,
           expiryDate: lot.expiryDate,
+          imageUrl: lot.imageUrl,
           totalQuantity: 0,
           kiosks: [],
         };
@@ -211,6 +213,7 @@ export function ExpiryControl() {
         kiosks={kiosks}
         addLot={addLot}
         updateLot={updateLot}
+        lots={lots}
       />
 
       {lotToMove && (
