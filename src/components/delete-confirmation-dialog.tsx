@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 type DeleteConfirmationDialogProps = {
   open: boolean;
@@ -26,15 +26,16 @@ export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemNa
         <AlertDialogHeader>
           <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
           <AlertDialogDescription>
-            Essa ação não pode ser desfeita. Isso excluirá permanentemente o produto "{itemName}".
+            Essa ação não pode ser desfeita. Isso excluirá permanentemente {itemName}.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} asChild>
-            <Button variant="destructive">
-                Excluir
-            </Button>
+          <AlertDialogAction 
+            onClick={onConfirm}
+            className={buttonVariants({ variant: "destructive" })}
+          >
+            Excluir
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
