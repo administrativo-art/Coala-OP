@@ -26,14 +26,20 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         if (querySnapshot.empty && !localStorage.getItem('products_seeded')) {
           console.log("No products found. Seeding default products...");
+          
+          const batch = writeBatch(db);
+
           const defaultProducts: Omit<Product, 'id'>[] = [
             { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L', urgentThreshold: 7, alertThreshold: 15 },
             { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g', urgentThreshold: 30, alertThreshold: 60 },
             { baseName: 'Açúcar Refinado', category: 'Massa', packageSize: 1, unit: 'kg', urgentThreshold: 60, alertThreshold: 90 },
             { baseName: 'Polpa de Morango', category: 'Volume', packageSize: 500, unit: 'mL', urgentThreshold: 5, alertThreshold: 10 },
+            { baseName: 'Ovomaltine', category: 'Massa', packageSize: 250, unit: 'g' },
+            { baseName: 'Ovomaltine', category: 'Massa', packageSize: 500, unit: 'g' },
+            { baseName: 'Ovomaltine', category: 'Massa', packageSize: 750, unit: 'g' },
+            { baseName: 'Queijo Minas', category: 'Massa', packageSize: 1, unit: 'kg' },
           ];
-          
-          const batch = writeBatch(db);
+
           defaultProducts.forEach(product => {
             const docRef = doc(collection(db, "products"));
             batch.set(docRef, product);

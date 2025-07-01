@@ -14,6 +14,9 @@ export type Product = {
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
+  hasPurchaseUnit?: boolean;
+  purchaseUnitName?: string;
+  itemsPerPurchaseUnit?: number;
 };
 
 export type ConversionUnits = {
@@ -27,6 +30,7 @@ export type Kiosk = {
 
 export type LotEntry = {
   id:string;
+  productId: string;
   productName: string;
   barcode: string;
   lotNumber: string;

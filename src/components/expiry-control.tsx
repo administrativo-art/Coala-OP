@@ -77,7 +77,7 @@ export function ExpiryControl() {
     const preFilteredLots = kioskFilteredLots.filter(lot => {
         if (statusFilters.length === 0) return true; // Show all if no filter is active
 
-        const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
+        const product = products.find(p => p.id === lot.productId);
         const urgentThreshold = product?.urgentThreshold ?? 7;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
 
@@ -103,10 +103,11 @@ export function ExpiryControl() {
 
     const groups: { [key: string]: GroupedLot } = {};
     filteredLots.forEach(lot => {
-      const key = `${lot.productName}-${lot.lotNumber}-${lot.expiryDate}`;
+      const key = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate}`;
       if (!groups[key]) {
-        const product = products.find(p => p.baseName.toLowerCase() === lot.productName.toLowerCase());
+        const product = products.find(p => p.id === lot.productId);
         groups[key] = {
+          productId: lot.productId,
           productName: lot.productName,
           lotNumber: lot.lotNumber,
           barcode: lot.barcode,
@@ -232,7 +233,7 @@ export function ExpiryControl() {
       <div className="space-y-4">
         {groupedLots.map(group => (
           <LotCard
-            key={`${group.productName}-${group.lotNumber}-${group.expiryDate}`}
+            key={`${group.productId}-${group.lotNumber}-${group.expiryDate}`}
             groupedLot={group}
             kiosks={kiosks}
             onEdit={handleEditClick}

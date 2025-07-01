@@ -87,38 +87,51 @@ export function StockAnalyzer() {
 
     const generateDistributionSuggestion = (
         neededInBaseUnit: number,
-        productName: string,
+        productBaseName: string, // e.g., "Ovomaltine"
         destinationKioskId: string
     ): DistributionSuggestion => {
-        const sourceKioskId = 'matriz';
-        const availableLots = allLots.filter(lot => {
-            const product = physicalProducts.find(p => p.baseName === lot.productName);
-            return lot.kioskId === sourceKioskId && product?.baseName === productName;
-        }).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
+        const sourceKioskId = 'matriz'; // Central Distribution
+
+        // 1. Find all product variations for the given base name
+        const productVariations = physicalProducts.filter(p => p.baseName === productBaseName);
+        if (productVariations.length === 0) {
+             return { statusMessage: `Nenhuma variação de produto físico encontrada para "${productBaseName}".`, isActionable: false, distributionSuggestion: [] };
+        }
+        const productVariationIds = productVariations.map(p => p.id);
+
+        // 2. Find all available lots for these product variations at the source, and sort by FEFO
+        const availableLots = allLots.filter(lot => 
+            lot.kioskId === sourceKioskId && productVariationIds.includes(lot.productId)
+        ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
         if (availableLots.length === 0) {
-            return { statusMessage: `Sem estoque de ${productName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
+            return { statusMessage: `Sem estoque de ${productBaseName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
         }
 
         let remainingNeeded = neededInBaseUnit;
         const suggestion: DistributionItem[] = [];
 
+        // 3. Iterate through sorted lots and build the suggestion
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
 
-            const productDetails = physicalProducts.find(p => p.baseName === lot.productName);
+            const productDetails = physicalProducts.find(p => p.id === lot.productId);
             if (!productDetails) continue;
 
             const packageValueInBaseUnit = productDetails.packageSize;
             const availablePackages = lot.quantity;
+            
+            // How many packages are needed to satisfy the remaining need?
             const neededPackages = Math.ceil(remainingNeeded / packageValueInBaseUnit);
+            
+            // Take the minimum of what's available and what's needed
             const packagesToTake = Math.min(availablePackages, neededPackages);
             
             if (packagesToTake > 0) {
                 suggestion.push({
                     lotId: lot.id,
                     productId: productDetails.id,
-                    productName: lot.productName,
+                    productName: getProductFullName(productDetails),
                     fromKioskId: sourceKioskId,
                     quantityToMove: packagesToTake,
                     baseUnitValue: packageValueInBaseUnit * packagesToTake,
@@ -131,8 +144,8 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-             const productUnit = suggestion[0]?.baseUnit || findProductByName(productName)?.unit || '';
-            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
+             const productUnit = productVariations[0]?.unit || '';
+            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productBaseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
         return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
@@ -143,10 +156,9 @@ export function StockAnalyzer() {
         if (!file) return;
 
         setIsAnalyzing(true);
-        const { dismiss, id: toastId } = toast({
+        const { id: toastId } = toast({
             title: "Analisando relatório de estoque...",
             description: "A nossa IA está lendo o PDF. Isso pode levar um momento.",
-            duration: Infinity,
         });
 
         try {
@@ -184,13 +196,12 @@ export function StockAnalyzer() {
             toast({ id: toastId, variant: "destructive", title: "Falha na análise", description: "Não foi possível analisar o relatório de estoque. Verifique o arquivo e tente novamente." });
         } finally {
             setIsAnalyzing(false);
-            if (!toastId) dismiss(); // Dismiss only if it wasn't updated
             if(stockFileInputRef.current) stockFileInputRef.current.value = "";
         }
     };
 
     const executeDistribution = async (reportId: string, resultItem: StockAnalysisResultItem) => {
-        if (!user || !resultItem.isActionable) return;
+        if (!user || !resultItem.isActionable || !resultItem.distributionSuggestion) return;
         
         const params: MoveLotParams[] = resultItem.distributionSuggestion.map(item => ({
             lotId: item.lotId,

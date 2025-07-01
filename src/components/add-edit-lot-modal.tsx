@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
@@ -27,7 +28,7 @@ const BarcodeScannerModal = dynamic(
 );
 
 const lotSchema = z.object({
-  productName: z.string().min(1, 'O nome do produto é obrigatório.'),
+  productId: z.string().min(1, 'O produto é obrigatório.'),
   barcode: z.string().optional(),
   lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
   expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
@@ -53,18 +54,18 @@ type AddEditLotModalProps = {
 export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot, lots }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { products, updateProduct: updateProductInDB, addProduct: addProductInDB } = useProducts();
+  const { products, updateProduct: updateProductInDB, addProduct: addProductInDB, getProductFullName } = useProducts();
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
   });
   
-  const productNameWatch = form.watch('productName');
+  const productIdWatch = form.watch('productId');
 
   useEffect(() => {
     if (open) {
       if (lotToEdit) {
-        const product = products.find(p => p.baseName.toLowerCase() === lotToEdit.productName.toLowerCase());
+        const product = products.find(p => p.id === lotToEdit.productId);
         form.reset({
           ...lotToEdit,
           expiryDate: new Date(lotToEdit.expiryDate),
@@ -74,7 +75,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         });
       } else {
         form.reset({
-          productName: '',
+          productId: '',
           barcode: '',
           lotNumber: '',
           expiryDate: undefined,
@@ -89,18 +90,22 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   }, [lotToEdit, open, form, products]);
   
   useEffect(() => {
-    if (productNameWatch) {
-      const product = products.find(p => p.baseName.toLowerCase() === productNameWatch.toLowerCase());
+    if (productIdWatch) {
+      const product = products.find(p => p.id === productIdWatch);
       if (product) {
         form.setValue('alertThreshold', product.alertThreshold);
         form.setValue('urgentThreshold', product.urgentThreshold);
       }
     }
-  }, [productNameWatch, products, form]);
+  }, [productIdWatch, products, form]);
 
   const onSubmit = async (values: LotFormValues) => {
+    const selectedProduct = products.find(p => p.id === values.productId);
+    if (!selectedProduct) return;
+
     const lotData = {
-      productName: values.productName,
+      productId: values.productId,
+      productName: getProductFullName(selectedProduct),
       barcode: values.barcode || '',
       lotNumber: values.lotNumber,
       expiryDate: values.expiryDate.toISOString(),
@@ -116,17 +121,14 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
     
     // Side effect: update product parameters
-    const product = products.find(p => p.baseName.toLowerCase() === values.productName.toLowerCase());
-    if (product) {
-        const needsUpdate = product.alertThreshold !== values.alertThreshold || product.urgentThreshold !== values.urgentThreshold;
-        if (needsUpdate) {
-            const updatedProduct: Product = {
-                ...product,
-                alertThreshold: values.alertThreshold,
-                urgentThreshold: values.urgentThreshold,
-            };
-            await updateProductInDB(updatedProduct);
-        }
+    const needsUpdate = selectedProduct.alertThreshold !== values.alertThreshold || selectedProduct.urgentThreshold !== values.urgentThreshold;
+    if (needsUpdate) {
+        const updatedProduct: Product = {
+            ...selectedProduct,
+            alertThreshold: values.alertThreshold,
+            urgentThreshold: values.urgentThreshold,
+        };
+        await updateProductInDB(updatedProduct);
     }
 
     onOpenChange(false);
@@ -134,9 +136,10 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
   const handleScanSuccess = (decodedText: string) => {
     form.setValue('barcode', decodedText);
+    // Try to find a product or lot with this barcode to pre-fill info
     const existingLot = lots.find(l => l.barcode === decodedText);
     if (existingLot) {
-        form.setValue('productName', existingLot.productName);
+        form.setValue('productId', existingLot.productId);
         if(existingLot.imageUrl) {
             form.setValue('imageUrl', existingLot.imageUrl);
         }
@@ -216,17 +219,33 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 </FormItem>
                             )}
                         />
-                      <FormField
-                        control={form.control}
-                        name="productName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome do produto</FormLabel>
-                            <FormControl><Input placeholder="ex: Leite Integral" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                        <FormField
+                            control={form.control}
+                            name="productId"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Produto</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione um produto..." />
+                                    </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                    {products.map(product => (
+                                        <SelectItem key={product.id} value={product.id}>
+                                        {getProductFullName(product)}
+                                        </SelectItem>
+                                    ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormDescription>
+                                    Não encontrou? Cadastre na tela de Conversão de Medidas.
+                                </FormDescription>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                       <FormField
                         control={form.control}
                         name="lotNumber"

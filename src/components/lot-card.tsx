@@ -15,6 +15,7 @@ const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
 
 export type GroupedLot = {
+  productId: string;
   productName: string;
   lotNumber: string;
   barcode: string;
