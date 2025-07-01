@@ -20,7 +20,7 @@ import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { ProductManagementModal } from './product-management-modal';
+
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -31,7 +31,7 @@ export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
-  const { products, loading: productsLoading, addProduct, updateProduct, deleteProduct, getProductFullName } = useProducts();
+  const { products, loading: productsLoading } = useProducts();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -45,7 +45,7 @@ export function ExpiryControl() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
@@ -279,11 +279,6 @@ export function ExpiryControl() {
                     </Button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    {canManageProducts && (
-                        <Button variant="outline" onClick={() => setIsProductModalOpen(true)} className="w-full sm:w-auto">
-                            <PackagePlus className="mr-2" /> Gerenciar Produtos
-                        </Button>
-                    )}
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
                         <PlusCircle className="mr-2" /> Adicionar lote
                     </Button>
@@ -397,17 +392,6 @@ export function ExpiryControl() {
           onScanSuccess={handleSearchScanSuccess}
         />
       )}
-
-      <ProductManagementModal
-        open={isProductModalOpen}
-        onOpenChange={setIsProductModalOpen}
-        products={products}
-        addProduct={addProduct}
-        updateProduct={updateProduct}
-        deleteProduct={deleteProduct}
-        getProductFullName={getProductFullName}
-        permissions={permissions.products}
-      />
     </>
   );
 }

@@ -2,9 +2,9 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { type Product } from '@/types';
+import { type Product, type ProductDefinition } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
 
 export interface ProductsContextType {
   products: Product[];
@@ -14,6 +14,7 @@ export interface ProductsContextType {
   deleteProduct: (productId: string) => Promise<void>;
   getProductFullName: (product: Product) => string;
   updateMultipleProducts: (products: Partial<Product>[]) => Promise<void>;
+  findOrCreateProduct: (productDef: ProductDefinition) => Promise<Product | null>;
 }
 
 export const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
@@ -64,6 +65,29 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  const findOrCreateProduct = useCallback(async (productDef: ProductDefinition): Promise<Product | null> => {
+    const q = query(
+        collection(db, "products"),
+        where("baseName", "==", productDef.baseName),
+        where("packageSize", "==", productDef.packageSize),
+        where("unit", "==", productDef.unit)
+    );
+
+    try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const existingDoc = querySnapshot.docs[0];
+            return { id: existingDoc.id, ...existingDoc.data() } as Product;
+        } else {
+            const docRef = await addDoc(collection(db, "products"), productDef);
+            return { id: docRef.id, ...productDef } as Product;
+        }
+    } catch (error) {
+        console.error("Error finding or creating product:", error);
+        return null;
+    }
   }, []);
 
   const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
@@ -122,6 +146,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     deleteProduct,
     getProductFullName,
     updateMultipleProducts,
+    findOrCreateProduct,
   };
 
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>;

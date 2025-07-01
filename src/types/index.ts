@@ -19,6 +19,13 @@ export type Product = {
   itemsPerPurchaseUnit?: number;
 };
 
+export type ProductDefinition = {
+    baseName: string;
+    category: UnitCategory;
+    packageSize: number;
+    unit: string;
+}
+
 export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
@@ -206,7 +213,7 @@ export const defaultGuestPermissions: PermissionSet = {
 };
 
 export const defaultUserPermissions: PermissionSet = {
-    products: { add: false, edit: false, delete: false },
+    products: { add: true, edit: false, delete: false },
     lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
     users: { add: false, edit: false, delete: false },
     kiosks: { add: false, delete: false },
