@@ -73,10 +73,10 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const lotSchema = useMemo(() => {
     return z.object({
         // Product fields have strict validation only on creation
-        baseName: isEditing ? z.string() : z.string().min(1, 'O nome base é obrigatório.'),
+        baseName: isEditing ? z.string().optional() : z.string().min(1, 'O nome base é obrigatório.'),
         category: z.enum(unitCategories),
-        packageSize: isEditing ? z.coerce.number() : z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
-        unit: isEditing ? z.string() : z.string().min(1, 'A unidade é obrigatória.'),
+        packageSize: isEditing ? z.coerce.number().optional() : z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+        unit: isEditing ? z.string().optional() : z.string().min(1, 'A unidade é obrigatória.'),
         
         // Lot fields are always validated
         barcode: z.string().optional(),
@@ -159,42 +159,67 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   }, [lotToEdit, open, form, products]);
   
   const onSubmit = async (values: LotFormValues) => {
+    // This validation only applies when creating a new lot from scratch.
     if (!isEditing && values.quantity < 1) {
         form.setError('quantity', { message: 'Para um novo lote, a quantidade deve ser pelo menos 1.' });
         return;
     }
 
-    // 1. Find or Create the Product
+    // --- EDITING AN EXISTING LOT ---
+    if (lotToEdit) { 
+        // We can trust lotToEdit to have the correct product ID and name.
+        // We don't need to re-find the product just to update the lot.
+        const lotData: Omit<LotEntry, 'id'> = {
+            productId: lotToEdit.productId,
+            productName: lotToEdit.productName, // Reuse existing name.
+            barcode: values.barcode || '',
+            lotNumber: values.lotNumber,
+            expiryDate: values.expiryDate.toISOString(),
+            kioskId: values.kioskId,
+            quantity: values.quantity,
+            imageUrl: values.imageUrl || lotToEdit.imageUrl,
+        };
+
+        // The updateLot function will handle deletion if quantity is 0.
+        await updateLot({ ...lotToEdit, ...lotData });
+
+        // As a secondary action, try to update product thresholds.
+        // If the product doesn't exist anymore, this part will be skipped,
+        // but the lot update will still succeed.
+        const productToUpdate = products.find(p => p.id === lotToEdit.productId);
+        if (productToUpdate) {
+            const needsUpdate = productToUpdate.alertThreshold !== values.alertThreshold || productToUpdate.urgentThreshold !== values.urgentThreshold;
+            if (needsUpdate) {
+                await updateProduct({
+                    ...productToUpdate,
+                    alertThreshold: values.alertThreshold,
+                    urgentThreshold: values.urgentThreshold,
+                });
+            }
+        }
+        
+        onOpenChange(false);
+        return;
+    }
+
+    // --- CREATING A NEW LOT ---
     const productDefinition = {
         baseName: values.baseName,
         category: values.category,
         packageSize: values.packageSize,
         unit: values.unit,
     };
-
-    let product: Product | null;
-    let productToUpdate: Product | null = null;
-    
-    if (lotToEdit) {
-      // If editing, the product already exists. Find it.
-      product = products.find(p => p.id === lotToEdit.productId) || null;
-      productToUpdate = product;
-    } else {
-      // If adding, find or create the product.
-      product = await findOrCreateProduct(productDefinition);
-      productToUpdate = product;
-    }
+    const product = await findOrCreateProduct(productDefinition);
 
     if (!product) {
       toast({
         variant: "destructive",
         title: "Erro de Produto",
-        description: "Não foi possível encontrar ou criar o produto associado a este lote.",
+        description: "Não foi possível encontrar ou criar o produto para este novo lote.",
       });
       return;
     }
 
-    // 2. Prepare Lot Data
     const lotData: Omit<LotEntry, 'id'> = {
       productId: product.id,
       productName: getProductFullName(product),
@@ -206,22 +231,16 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       imageUrl: values.imageUrl || undefined,
     };
 
-    if (lotToEdit) {
-      updateLot({ ...lotToEdit, ...lotData });
-    } else {
-      addLot(lotData);
-    }
+    await addLot(lotData);
     
-    // 3. Side effect: update product thresholds if they changed
-    if (productToUpdate) {
-        const needsUpdate = productToUpdate.alertThreshold !== values.alertThreshold || productToUpdate.urgentThreshold !== values.urgentThreshold;
-        if (needsUpdate) {
-            await updateProduct({
-                ...productToUpdate,
-                alertThreshold: values.alertThreshold,
-                urgentThreshold: values.urgentThreshold,
-            });
-        }
+    // Update thresholds for the newly found/created product if they were changed.
+    const needsUpdate = product.alertThreshold !== values.alertThreshold || product.urgentThreshold !== values.urgentThreshold;
+    if (needsUpdate) {
+        await updateProduct({
+            ...product,
+            alertThreshold: values.alertThreshold,
+            urgentThreshold: values.urgentThreshold,
+        });
     }
 
     onOpenChange(false);
@@ -565,3 +584,5 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
+
+    
