@@ -21,6 +21,7 @@ import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProductManagement } from './product-management';
+import { useToast } from "@/hooks/use-toast";
 
 
 const BarcodeScannerModal = dynamic(
@@ -33,6 +34,7 @@ export function ExpiryControl() {
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
+  const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -161,8 +163,21 @@ export function ExpiryControl() {
 
   const handleDeleteConfirm = async () => {
     if (lotToDelete) {
-      await deleteLot(lotToDelete.id);
-      setLotToDelete(null);
+      try {
+        await deleteLot(lotToDelete.id);
+        toast({
+            title: "Insumo excluído",
+            description: `O insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) foi removido.`,
+        });
+      } catch (error) {
+          toast({
+              variant: "destructive",
+              title: "Erro ao excluir",
+              description: "Não foi possível remover o insumo. Tente novamente.",
+          });
+      } finally {
+        setLotToDelete(null);
+      }
     }
   };
 
