@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -161,7 +160,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const onSubmit = async (values: LotFormValues) => {
     // This validation only applies when creating a new lot from scratch.
     if (!isEditing && values.quantity < 1) {
-        form.setError('quantity', { message: 'Para um novo item, a quantidade deve ser pelo menos 1.' });
+        form.setError('quantity', { message: 'Para um novo insumo, a quantidade deve ser pelo menos 1.' });
         return;
     }
 
@@ -296,9 +295,9 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar item' : 'Adicionar novo item ao estoque'}</DialogTitle>
+            <DialogTitle>{isEditing ? 'Editar insumo' : 'Adicionar novo insumo ao estoque'}</DialogTitle>
             <DialogDescription>
-              {isEditing ? 'Atualize as informações do item em estoque.' : 'Preencha os detalhes do produto e do item que está entrando no estoque.'}
+              {isEditing ? 'Atualize as informações do insumo em estoque.' : 'Preencha os detalhes do produto e do insumo que está entrando no estoque.'}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -444,7 +443,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                         </div>
                         
                         <div className="p-4 border rounded-lg space-y-4">
-                            <h4 className="text-sm font-medium text-muted-foreground">Detalhes do Item</h4>
+                            <h4 className="text-sm font-medium text-muted-foreground">Detalhes do Insumo</h4>
                             <FormField
                                 control={form.control}
                                 name="lotNumber"
@@ -569,7 +568,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
               <DialogFooter className="pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting ? "Salvando..." : (isEditing ? 'Salvar alterações' : 'Adicionar item')}
+                  {form.formState.isSubmitting ? "Salvando..." : (isEditing ? 'Salvar alterações' : 'Adicionar insumo')}
                 </Button>
               </DialogFooter>
             </form>
