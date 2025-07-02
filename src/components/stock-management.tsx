@@ -1,4 +1,3 @@
-
 "use client"
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -8,7 +7,7 @@ import { usePredefinedLists } from "@/hooks/use-predefined-lists";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StockAnalyzer } from "@/components/stock-importer"; 
 import { ExpiryControl } from "@/components/expiry-control"; 
-import { BarChart3, ClipboardCheck, Package } from "lucide-react";
+import { BarChart3, ClipboardCheck, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductManagementModal } from "./product-management-modal";
 import { Button } from "./ui/button";
@@ -55,7 +54,7 @@ export function StockManagement() {
                  <div className="mb-4">
                     {canManageProducts && (
                         <Button onClick={() => setIsProductModalOpen(true)}>
-                            <Package className="mr-2 h-4 w-4" />
+                            <Settings className="mr-2 h-4 w-4" />
                             Gerenciar Produtos
                         </Button>
                     )}

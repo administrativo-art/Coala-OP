@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Search, ClipboardCheck, Inbox, Camera, Filter, PackagePlus } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -211,7 +211,7 @@ export function ExpiryControl() {
                   Comece adicionando um novo lote de produtos para monitorar a validade.
               </p>
               <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.add}>
-                  <PlusCircle className="mr-2 h-5 w-5" /> Adicionar lote
+                  <Plus className="mr-2 h-5 w-5" /> Adicionar lote
               </Button>
           </div>
         );
@@ -276,7 +276,7 @@ export function ExpiryControl() {
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                        <PlusCircle className="mr-2" /> Adicionar lote
+                        <Plus className="mr-2" /> Adicionar lote
                     </Button>
                 </div>
             </div>
