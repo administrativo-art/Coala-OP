@@ -73,8 +73,8 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
         if (messages.length > 0) {
             toast({
                 variant: "destructive",
-                title: "Não é possível excluir o item",
-                description: `Este item não pode ser excluído pois ${messages.join(' e ')}.`,
+                title: "Não é possível excluir o insumo",
+                description: `Este insumo não pode ser excluído pois ${messages.join(' e ')}.`,
                 duration: 8000,
             });
             return;
@@ -140,7 +140,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                 .join('; ');
             toast({
                 variant: "destructive",
-                title: `${nonDeletable.length} iten(s) não podem ser excluídos`,
+                title: `${nonDeletable.length} insumo(s) não podem ser excluídos`,
                 description: `Detalhes: ${description}`,
                 duration: 8000,
             });
@@ -168,9 +168,9 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             <Dialog open={open} onOpenChange={handleOpenChangeAndReset}>
                 <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Gerenciar itens</DialogTitle>
+                        <DialogTitle>Gerenciar Insumos</DialogTitle>
                         <DialogDescription>
-                            Defina os itens e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
+                            Defina os insumos e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -231,7 +231,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                     open={productsToDelete.length > 0}
                     onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
                     onConfirm={handleDeleteMultipleConfirm}
-                    itemName={`os ${productsToDelete.length} iten(s) selecionado(s)`}
+                    itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`}
                 />
             )}
         </>

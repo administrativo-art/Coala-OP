@@ -20,7 +20,7 @@ import { type Product, unitCategories, UnitCategory } from '@/types';
 import { units } from '@/lib/conversion';
 
 const productSchema = z.object({
-  baseName: z.string().min(1, 'O nome do item é obrigatório.'),
+  baseName: z.string().min(1, 'O nome do insumo é obrigatório.'),
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
 });
@@ -90,7 +90,7 @@ export function ProductManagementModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{productToEdit ? 'Editar item' : 'Adicionar novo item'}</DialogTitle>
+            <DialogTitle>{productToEdit ? 'Editar insumo' : 'Adicionar novo insumo'}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
@@ -99,9 +99,9 @@ export function ProductManagementModal({
                   name="baseName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome do item</FormLabel>
+                      <FormLabel>Nome do insumo</FormLabel>
                       <FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl>
-                      <FormDescription>Este nome deve ser idêntico ao nome do item nos relatórios de estoque para que a IA possa identificá-lo.</FormDescription>
+                      <FormDescription>Este nome deve ser idêntico ao nome do insumo nos relatórios de estoque para que a IA possa identificá-lo.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -141,7 +141,7 @@ export function ProductManagementModal({
                   />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                  <Button type="submit">{productToEdit ? 'Salvar alterações' : 'Adicionar item'}</Button>
+                  <Button type="submit">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
                 </DialogFooter>
               </form>
             </Form>

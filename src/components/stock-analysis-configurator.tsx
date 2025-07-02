@@ -104,7 +104,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
       toast({
         variant: 'destructive',
         title: 'Sem dados para exportar',
-        description: 'Não há produtos configurados para análise.',
+        description: 'Não há insumos configurados para análise.',
       });
       return;
     }
@@ -117,7 +117,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     doc.setTextColor(100);
     doc.text(`Exportado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
 
-    const head = [['Produto', 'Unidade Base', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
+    const head = [['Insumo', 'Unidade Base', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
     const body: any[] = [];
 
     data.forEach(product => {
@@ -180,7 +180,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     ];
 
     const exampleRow = [
-        'Exemplo de Produto', // baseName
+        'Exemplo de Insumo', // baseName
         'Massa', // category
         'kg', // unit
         'g', // pdfUnit
@@ -199,7 +199,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     }
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.setAttribute('download', 'modelo_importacao_itens.csv');
+    link.setAttribute('download', 'modelo_importacao_insumos.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -283,7 +283,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
           toast({
             id: toastId,
             title: "Importação concluída!",
-            description: `${productsToAdd.length} itens adicionados e ${productsToUpdate.length} itens atualizados.`,
+            description: `${productsToAdd.length} insumos adicionados e ${productsToUpdate.length} insumos atualizados.`,
           });
 
         } catch (error: any) {
@@ -337,7 +337,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Alert>
           <Info className="h-4 w-4" />
-          <AlertTitle>Como importar itens em massa?</AlertTitle>
+          <AlertTitle>Como importar insumos em massa?</AlertTitle>
           <AlertDescription>
             Clique em "Baixar Modelo" para obter uma planilha CSV com as colunas corretas.
             Os nomes dos quiosques devem corresponder aos cadastrados no sistema. A coluna `pdfUnit` é opcional.
@@ -354,7 +354,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
              </Button>
              {onAddNew && (
                 <Button type="button" onClick={onAddNew}>
-                    <PlusCircle className="mr-2" /> Adicionar Novo Item
+                    <PlusCircle className="mr-2" /> Adicionar Novo Insumo
                 </Button>
             )}
         </div>
@@ -365,7 +365,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
                     id="select-all"
                     checked={allProductsSelected}
                     onCheckedChange={(checked) => onSelectAllChange(!!checked)}
-                    aria-label="Selecionar todos os itens"
+                    aria-label="Selecionar todos os insumos"
                 />
                 <label
                     htmlFor="select-all"
@@ -378,8 +378,8 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
 
         {fields.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhum produto cadastrado para análise.</p>
-                <p className="text-sm">Clique em "Adicionar Novo Item" para começar.</p>
+                <p>Nenhum insumo cadastrado para análise.</p>
+                <p className="text-sm">Clique em "Adicionar Novo Insumo" para começar.</p>
             </div>
         ) : (
         <Accordion type="multiple" className="w-full space-y-4" defaultValue={fields.map(field => field.id)}>

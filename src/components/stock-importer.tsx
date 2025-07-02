@@ -256,7 +256,7 @@ export function StockAnalyzer() {
                         
                         const suggestionDetails = neededInBaseUnit > 0 
                             ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
-                            : { statusMessage: 'Estoque OK (item não estava no relatório).', isActionable: false, distributionSuggestion: [] };
+                            : { statusMessage: 'Estoque OK (insumo não estava no relatório).', isActionable: false, distributionSuggestion: [] };
                         
                         analysisResults.push({
                             productId: product.id,
@@ -273,7 +273,7 @@ export function StockAnalyzer() {
                     const displayName = `${kiosk.name} - ${format(new Date(), "dd/MM/yyyy")}`;
                     
                     const actionableItems = analysisResults.filter(r => r.neededInBaseUnit > 0);
-                    const summary = `${actionableItems.length} de ${analysisResults.length} itens precisam de reposição.`;
+                    const summary = `${actionableItems.length} de ${analysisResults.length} insumos precisam de reposição.`;
 
                     const newReport: Omit<StockAnalysisReport, 'id'> = {
                         reportName: file.name,
@@ -290,8 +290,8 @@ export function StockAnalyzer() {
                     if (unmatchedItems.length > 0) {
                         toast({
                             variant: "destructive",
-                            title: "Itens não encontrados",
-                            description: `Os seguintes itens da planilha não foram encontrados no sistema e foram ignorados: ${unmatchedItems.join(', ')}`,
+                            title: "Insumos não encontrados",
+                            description: `Os seguintes insumos da planilha não foram encontrados no sistema e foram ignorados: ${unmatchedItems.join(', ')}`,
                             duration: 8000
                         });
                     }
@@ -506,7 +506,7 @@ export function StockAnalyzer() {
                                     </div>
                                 ))}
                                 </div>
-                                ) : (<p className="text-center text-muted-foreground text-sm pt-4">Nenhum item analisado para este relatório.</p>)}
+                                ) : (<p className="text-center text-muted-foreground text-sm pt-4">Nenhum insumo analisado para este relatório.</p>)}
                             </AccordionContent>
                         </Card>
                     </AccordionItem>
@@ -527,7 +527,7 @@ export function StockAnalyzer() {
                          {canManageProducts && (
                             <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
                                 <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar itens
+                                Gerenciar Insumos
                             </Button>
                         )}
                     </div>
