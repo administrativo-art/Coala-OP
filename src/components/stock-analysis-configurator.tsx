@@ -7,7 +7,8 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import * as RadixAccordion from "@radix-ui/react-accordion";
+import { Accordion, AccordionContent, AccordionItem } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
-import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info } from 'lucide-react';
+import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown } from 'lucide-react';
 import { units } from '@/lib/conversion';
 import { Checkbox } from './ui/checkbox';
 
@@ -314,12 +315,10 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
   }
   
   const handleEditClick = (e: React.MouseEvent, product: Product) => {
-    e.stopPropagation();
     onEdit?.(product);
   }
 
   const handleDeleteClick = (e: React.MouseEvent, product: Product) => {
-    e.stopPropagation();
     onDelete?.(product);
   }
 
@@ -358,25 +357,29 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
         <Accordion type="multiple" className="w-full space-y-4" defaultValue={fields.map(field => field.id)}>
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
-              <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                 <div className="flex items-center gap-4 flex-grow text-left">
-                     <Checkbox
-                        onClick={(e) => e.stopPropagation()}
-                        onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
-                        checked={selectedProducts.has(field.id)}
-                        aria-label={`Selecionar ${getProductFullName(field)}`}
-                    />
-                    <span className="flex-grow text-left">{getProductFullName(field)}</span>
-                 </div>
-                 <div className="flex items-center gap-1">
-                    {onEdit && (
-                         <Button asChild type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}><span><Edit className="h-4 w-4" /></span></Button>
-                    )}
-                     {onDelete && (
-                         <Button asChild type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}><span><Trash2 className="h-4 w-4" /></span></Button>
-                    )}
-                 </div>
-              </AccordionTrigger>
+              <RadixAccordion.Header className="flex w-full items-center p-4">
+                  <Checkbox
+                      onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
+                      checked={selectedProducts.has(field.id)}
+                      aria-label={`Selecionar ${getProductFullName(field)}`}
+                  />
+                  <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-4 py-0 [&[data-state=open]>svg]:rotate-180">
+                      <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                  </RadixAccordion.Trigger>
+                  <div className="flex items-center gap-1">
+                      {onEdit && (
+                          <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
+                              <Edit className="h-4 w-4" />
+                          </Button>
+                      )}
+                      {onDelete && (
+                          <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}>
+                              <Trash2 className="h-4 w-4" />
+                          </Button>
+                      )}
+                  </div>
+              </RadixAccordion.Header>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
                    <FormField
@@ -465,3 +468,5 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     </Form>
   );
 }
+
+    
