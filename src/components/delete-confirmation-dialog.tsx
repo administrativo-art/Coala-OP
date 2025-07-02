@@ -1,6 +1,6 @@
+
 "use client"
 
-import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,38 +16,15 @@ import { Loader2 } from "lucide-react";
 
 type DeleteConfirmationDialogProps = {
   open: boolean;
+  isDeleting: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: () => void;
   itemName: string;
 }
 
-export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemName }: DeleteConfirmationDialogProps) {
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const handleConfirmClick = async () => {
-    setIsDeleting(true);
-    try {
-      await onConfirm();
-      // On success, the parent component will be responsible for closing the modal
-      // by updating its state, which will cause this component to unmount.
-    } catch (error) {
-      console.error("Confirmation action failed", error);
-      // If there's an error, we should stop the loading state to allow another attempt.
-      setIsDeleting(false);
-    }
-  };
-
-  // If the dialog is closed by the user (e.g., clicking cancel, overlay, or pressing ESC),
-  // we need to reset the loading state.
-  const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen) {
-      setIsDeleting(false);
-    }
-    onOpenChange(isOpen);
-  };
-
+export function DeleteConfirmationDialog({ open, isDeleting, onOpenChange, onConfirm, itemName }: DeleteConfirmationDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
@@ -58,7 +35,7 @@ export function DeleteConfirmationDialog({ open, onOpenChange, onConfirm, itemNa
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
-            onClick={handleConfirmClick}
+            onClick={onConfirm}
             disabled={isDeleting}
             className={buttonVariants({ variant: "destructive" })}
           >

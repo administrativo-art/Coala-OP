@@ -46,6 +46,7 @@ export function ExpiryControl() {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
 
@@ -162,22 +163,25 @@ export function ExpiryControl() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (lotToDelete) {
-      try {
-        await deleteLot(lotToDelete.id);
-        toast({
-            title: "Insumo excluído",
-            description: `O insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) foi removido.`,
-        });
-      } catch (error) {
-          toast({
-              variant: "destructive",
-              title: "Erro ao excluir",
-              description: "Não foi possível remover o insumo. Tente novamente.",
-          });
-      } finally {
-        setLotToDelete(null);
-      }
+    if (!lotToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteLot(lotToDelete.id);
+      toast({
+        title: "Insumo excluído",
+        description: `O insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) foi removido.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir",
+        description: "Não foi possível remover o insumo. Tente novamente.",
+      });
+      console.error("Deletion failed:", error);
+    } finally {
+      setIsDeleting(false);
+      setLotToDelete(null);
     }
   };
 
@@ -400,6 +404,7 @@ export function ExpiryControl() {
       {lotToDelete && (
         <DeleteConfirmationDialog 
             open={!!lotToDelete}
+            isDeleting={isDeleting}
             onOpenChange={(open) => !open && setLotToDelete(null)}
             onConfirm={handleDeleteConfirm}
             itemName={`o insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) com ${lotToDelete.quantity} unidades`}
