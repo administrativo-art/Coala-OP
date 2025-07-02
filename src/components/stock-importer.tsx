@@ -169,9 +169,15 @@ export function StockAnalyzer() {
                     return { ...item, ...suggestionDetails };
                 });
 
+                const kioskNames = [...new Set(finalResults.map(r => r.kioskName))];
+                const reportKioskName = kioskNames.length === 1 ? kioskNames[0] : (kioskNames.length > 1 ? "Múltiplos Quiosques" : "Relatório de Análise");
+                const analysisDate = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
+                const displayName = `${reportKioskName} - ${analysisDate}`;
+
                 await addStockReport({
                     ...analysisResult,
                     results: finalResults,
+                    displayName: displayName,
                     createdAt: new Date().toISOString(),
                     status: 'completed',
                 });
@@ -236,9 +242,11 @@ export function StockAnalyzer() {
 
     const handleExportReportPdf = (report: StockAnalysisReport) => {
         const doc = new jsPDF();
+        const reportTitle = report.displayName || report.reportName;
+        const filename = `${reportTitle.replace(/\//g, '-').replace(/\s/g, '_')}.pdf`;
 
         doc.setFontSize(18);
-        doc.text(`Análise de Reposição: ${report.reportName}`, 14, 22);
+        doc.text(reportTitle, 14, 22);
         doc.setFontSize(11);
         doc.setTextColor(100);
         doc.text(`Analisado em: ${format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 29);
@@ -295,7 +303,7 @@ export function StockAnalyzer() {
             }
         });
 
-        doc.save(`analise_${report.reportName.replace('.pdf', '')}.pdf`);
+        doc.save(filename);
     };
 
     const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
@@ -320,7 +328,7 @@ export function StockAnalyzer() {
                             <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full">
                                 <div className="flex items-center justify-between gap-4 w-full">
                                     <div className="grid gap-1 flex-grow text-left">
-                                        <p className="font-semibold">{report.reportName}</p>
+                                        <p className="font-semibold">{report.displayName || report.reportName}</p>
                                         <p className="text-sm text-muted-foreground">{format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                                         <p className="text-sm">{report.summary}</p>
                                     </div>

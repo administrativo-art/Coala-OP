@@ -90,6 +90,7 @@ export type StockAnalysisResultItem = {
 export type StockAnalysisReport = {
   id: string;
   reportName: string;
+  displayName?: string;
   createdAt: string; // ISO String
   status: 'completed' | 'processing' | 'error';
   summary: string;
