@@ -218,7 +218,7 @@ export function UserManagement() {
                     <div key={user.id} className="flex items-center justify-between rounded-md border p-3">
                         <div>
                             <span className="font-medium">{user.username}</span>
-                            <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary'}`}>{getProfileName(user.profileId)}</span>
+                            <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>{getProfileName(user.profileId)}</span>
                         </div>
                       <div className="flex gap-2">
                         {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}

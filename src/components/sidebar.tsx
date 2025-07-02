@@ -60,8 +60,8 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
-                        pathname === item.href && "bg-muted text-primary",
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground",
+                        pathname === item.href && "bg-secondary text-secondary-foreground",
                         isCollapsed && "h-9 w-9 justify-center"
                       )}
                     >
