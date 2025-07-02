@@ -59,9 +59,19 @@ export function StockAnalyzer() {
         defaultValues: { kioskId: '' }
     });
     
+    const normalizeString = (str: string) => {
+        if (!str) return '';
+        return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
+    };
+    
     const findProductByName = (baseName: string): Product | undefined => {
-        const cleanedBaseName = baseName.trim().toLowerCase();
-        return products.find(p => p.baseName.trim().toLowerCase() === cleanedBaseName);
+        const normalizedName = normalizeString(baseName);
+        if (!normalizedName) return undefined;
+        return products.find(p => normalizeString(p.baseName) === normalizedName);
     }
 
     const generateDistributionSuggestion = (
@@ -167,10 +177,7 @@ export function StockAnalyzer() {
                         const originalItemName = (row['Item'] || row['Produto'] || row['Descrição']);
                         if (!originalItemName) continue;
                         
-                        const itemName = originalItemName.trim().toLowerCase();
-                        if (!itemName) continue;
-
-                        const product = findProductByName(itemName);
+                        const product = findProductByName(originalItemName);
                         if (!product) {
                             unmatchedItems.push(originalItemName);
                             continue;
