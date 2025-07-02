@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings } from 'lucide-react';
+import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
@@ -234,6 +234,67 @@ export function StockAnalyzer() {
     const handleDeleteStockReportConfirm = async () => { if (stockReportToDelete) { await deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
     const handleDeleteConsumptionReportConfirm = async () => { if (consumptionReportToDelete) { await deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
+    const handleExportReportPdf = (report: StockAnalysisReport) => {
+        const doc = new jsPDF();
+
+        doc.setFontSize(18);
+        doc.text(`Análise de Reposição: ${report.reportName}`, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Analisado em: ${format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 29);
+        doc.text(`Resumo da IA: ${report.summary}`, 14, 35);
+        
+        let yPos = 45;
+
+        const addPageIfNeeded = () => {
+            if (yPos > 260) {
+                doc.addPage();
+                yPos = 20;
+            }
+        }
+
+        report.results.forEach(item => {
+            addPageIfNeeded();
+
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${item.productName} para ${item.kioskName}`, 14, yPos);
+            yPos += 7;
+            addPageIfNeeded();
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Necessidade: ${(item.neededInBaseUnit || 0).toLocaleString()} ${findProductByName(item.productName)?.unit || ''}`, 14, yPos);
+            yPos += 5;
+            doc.text(`Status: ${item.statusMessage}`, 14, yPos);
+            yPos += 8;
+            addPageIfNeeded();
+
+            if (item.distributionSuggestion && item.distributionSuggestion.length > 0) {
+                autoTable(doc, {
+                    startY: yPos,
+                    head: [['Produto/Embalagem', 'Lote', 'Validade', 'Qtd. a Mover']],
+                    body: item.distributionSuggestion.map(dist => [
+                        dist.productName,
+                        dist.lotNumber,
+                        format(parseISO(dist.expiryDate), "dd/MM/yy"),
+                        dist.quantityToMove.toString()
+                    ]),
+                    theme: 'grid',
+                    headStyles: { fillColor: '#3F51B5' },
+                    didDrawPage: (data) => {
+                        yPos = (data.table.finalY ?? yPos) + 10;
+                    }
+                });
+                yPos = (doc as any).lastAutoTable.finalY + 10;
+            } else {
+                 yPos += 5;
+            }
+        });
+
+        doc.save(`analise_${report.reportName.replace('.pdf', '')}.pdf`);
+    };
+
     const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canViewStockHistory = permissions.stockAnalysis?.viewHistory;
@@ -261,6 +322,9 @@ export function StockAnalyzer() {
                                         <p className="text-sm">{report.summary}</p>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                        <Button asChild variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleExportReportPdf(report); }}>
+                                            <span><Download className="h-4 w-4" /></span>
+                                        </Button>
                                         {canDeleteStockHistory && <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteStockReportClick(report); }}><span><Trash2 className="h-4 w-4" /></span></Button>}
                                     </div>
                                 </div>
