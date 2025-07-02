@@ -273,10 +273,15 @@ export function StockAnalyzer() {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             const productUnit = findProductByName(item.productName)?.unit || '';
-            doc.text(`Necessidade: ${(item.neededInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
+            doc.text(`Estoque Apurado: ${(item.currentStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
+            addPageIfNeeded();
             doc.text(`Estoque Máximo Configurado: ${(item.maxStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
+            addPageIfNeeded();
+            doc.text(`Necessidade: ${(item.neededInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
+            yPos += 5;
+            addPageIfNeeded();
             doc.text(`Status: ${item.statusMessage}`, 14, yPos);
             yPos += 8;
             addPageIfNeeded();
@@ -348,7 +353,11 @@ export function StockAnalyzer() {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
-                                                <p className="text-sm text-muted-foreground">Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                <div className="text-sm text-muted-foreground space-y-1 mt-1">
+                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Máximo: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                </div>
                                             </div>
                                             <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
