@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -155,6 +154,50 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
 
     doc.save('parametros_de_analise.pdf');
   };
+  
+  const handleDownloadTemplate = () => {
+    if (kiosksLoading || kiosks.length === 0) {
+        toast({
+            variant: 'destructive',
+            title: 'Quiosques não carregados',
+            description: 'Aguarde os quiosques carregarem para gerar o modelo.',
+        });
+        return;
+    }
+
+    const headers = [
+        'baseName',
+        'category',
+        'unit',
+        'pdfUnit',
+        ...kiosks.flatMap(kiosk => [`min_${kiosk.name}`, `max_${kiosk.name}`])
+    ];
+
+    const exampleRow = [
+        'Exemplo de Produto', // baseName
+        'Massa', // category
+        'kg', // unit
+        'g', // pdfUnit
+        ...kiosks.flatMap(kiosk => ['10', '20']) // example min/max for each kiosk
+    ];
+
+    const csvContent = [
+        headers.join(','),
+        exampleRow.join(',')
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.href) {
+        URL.revokeObjectURL(link.href);
+    }
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.setAttribute('download', 'modelo_importacao_itens.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -283,12 +326,14 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
           <Info className="h-4 w-4" />
           <AlertTitle>Como importar itens em massa?</AlertTitle>
           <AlertDescription>
-            Crie uma planilha CSV com as seguintes colunas: `baseName`, `category`, `unit`, `pdfUnit` (opcional).
-            Para os estoques, adicione colunas para cada quiosque no formato `min_NOME DO QUIOSQUE` e `max_NOME DO QUIOSQUE`.
-            Exemplo: `min_Quiosque Tirirical`, `max_Quiosque Tirirical`.
+            Clique em "Baixar Modelo" para obter uma planilha CSV com as colunas corretas.
+            Os nomes dos quiosques devem corresponder aos cadastrados no sistema. A coluna `pdfUnit` é opcional.
           </AlertDescription>
         </Alert>
         <div className="flex justify-end gap-2 p-1">
+             <Button type="button" variant="outline" onClick={handleDownloadTemplate}>
+                <Download className="mr-2" /> Baixar Modelo
+             </Button>
              <input type="file" accept=".csv" ref={importFileRef} onChange={handleFileImport} className="hidden" />
              <Button type="button" variant="outline" onClick={() => importFileRef.current?.click()} disabled={isImporting}>
                 {isImporting ? <Loader2 className="mr-2 animate-spin" /> : <FileUp className="mr-2" />}
@@ -352,7 +397,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
                       )
                     }}
                   />
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {products.find(p=>p.id === field.id)!.unit})</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
