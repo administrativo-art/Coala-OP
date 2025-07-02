@@ -143,9 +143,7 @@ export default function DashboardPage() {
         <div>
             <Skeleton className="h-8 w-64 mb-2" />
             <Skeleton className="h-5 w-96 mb-6" />
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Skeleton className="h-32 w-full" />
-                <Skeleton className="h-32 w-full" />
+            <div className="grid gap-4 md:grid-cols-2">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-32 w-full" />
             </div>
@@ -176,25 +174,7 @@ export default function DashboardPage() {
     <div>
       <h1 className="text-3xl font-bold mb-2">Bem-vindo, {user?.username}!</h1>
       <p className="text-muted-foreground mb-6">Aqui está um resumo da sua operação.</p>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos cadastrados</CardTitle>
-            <Package className="h-6 w-6 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{products.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lotes no seu quiosque</CardTitle>
-            <Box className="h-6 w-6 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{lotsInKiosk.length}</div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
