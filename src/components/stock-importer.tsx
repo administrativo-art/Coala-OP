@@ -1,7 +1,7 @@
+
 "use client"
 
 import React, { useState, useRef } from 'react';
-import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -29,6 +29,7 @@ import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisRes
 import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { ItemManagement } from './item-management';
 
 const months = [
   { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' }, { value: 3, label: 'Março' },
@@ -67,6 +68,7 @@ export function StockAnalyzer() {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const stockFileInputRef = useRef<HTMLInputElement>(null);
     const consumptionFileInputRef = useRef<HTMLInputElement>(null);
+    const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
 
     const consumptionForm = useForm<ConsumptionFormValues>({
         resolver: zodResolver(consumptionFormSchema),
@@ -318,11 +320,9 @@ export function StockAnalyzer() {
                             <CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription>
                         </div>
                          {canManageProducts && (
-                            <Button asChild variant="outline" className="shrink-0">
-                                <Link href="/dashboard/items">
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    Gerenciar Itens
-                                </Link>
+                            <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                Gerenciar itens
                             </Button>
                         )}
                     </div>
@@ -353,6 +353,8 @@ export function StockAnalyzer() {
                     {renderStockHistory()}
                 </div>
             )}
+            
+            <ItemManagement open={isItemManagementOpen} onOpenChange={setIsItemManagementOpen} />
             
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
             {consumptionReportToDelete && <DeleteConfirmationDialog open={!!consumptionReportToDelete} onOpenChange={() => setConsumptionReportToDelete(null)} onConfirm={handleDeleteConsumptionReportConfirm} itemName={`a análise de consumo "${consumptionReportToDelete.reportName}"`} />}

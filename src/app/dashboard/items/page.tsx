@@ -1,6 +1,5 @@
 
-import { ItemManagement } from '@/components/item-management'
-
 export default function ItemsPage() {
-    return <ItemManagement />
+    // This page is no longer used and its content has been moved to a modal.
+    return null;
 }
