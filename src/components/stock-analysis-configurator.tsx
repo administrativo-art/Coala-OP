@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -16,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { type Product } from '@/types';
+import { type Product, unitCategories } from '@/types';
 import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown } from 'lucide-react';
 import { units } from '@/lib/conversion';
 import { Checkbox } from './ui/checkbox';
@@ -228,6 +229,11 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
           const productsToUpdate: Partial<Product>[] = [];
           const productsToAdd: Omit<Product, 'id'>[] = [];
 
+          const capitalize = (s: string) => {
+              if (!s) return '';
+              return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+          };
+
           for (const row of rows) {
             const baseName = row.baseName?.trim();
             if (!baseName) continue; // Skip rows without a baseName
@@ -247,9 +253,11 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
               }
             }
             
+            const category = capitalize(row.category?.trim() || 'Unidade');
+            
             const productData = {
               baseName,
-              category: row.category?.trim() || 'Unidade',
+              category: unitCategories.includes(category as any) ? category : 'Unidade',
               unit: row.unit?.trim() || 'un',
               pdfUnit: row.pdfUnit?.trim() || '',
               packageSize: 1, // Always 1 for analysis items
@@ -378,17 +386,19 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <RadixAccordion.Header className="flex w-full items-center p-4">
-                  <Checkbox
-                      className="mr-3"
-                      onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
-                      checked={selectedProducts.has(field.id)}
-                      aria-label={`Selecionar ${getProductFullName(field)}`}
-                  />
+                  <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                        className="mr-3"
+                        onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
+                        checked={selectedProducts.has(field.id)}
+                        aria-label={`Selecionar ${getProductFullName(field)}`}
+                    />
+                  </div>
                   <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
                       <span className="flex-grow text-left">{getProductFullName(field)}</span>
                       <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
                   </RadixAccordion.Trigger>
-                  <div className="flex items-center gap-1 ml-2">
+                  <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                       {onEdit && (
                           <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
                               <Edit className="h-4 w-4" />
