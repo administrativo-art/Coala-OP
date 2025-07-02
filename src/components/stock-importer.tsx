@@ -5,6 +5,7 @@ import React, { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
@@ -13,8 +14,7 @@ import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { analyzeStock } from '@/ai/flows/analyze-stock-flow';
-import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -22,6 +22,8 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -31,28 +33,11 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ItemManagement } from './item-management';
 
-const months = [
-  { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' }, { value: 3, label: 'Março' },
-  { value: 4, label: 'Abril' }, { value: 5, label: 'Maio' }, { value: 6, 'label': 'Junho' },
-  { value: 7, label: 'Julho' }, { value: 8, label: 'Agosto' }, { value: 9, 'label': 'Setembro' },
-  { value: 10, label: 'Outubro' }, { value: 11, 'label': 'Novembro' }, { value: 12, 'label': 'Dezembro' },
-];
-const currentYear = new Date().getFullYear();
-const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-
-const consumptionFormSchema = z.object({
-    month: z.string().min(1, "O mês é obrigatório."),
-    year: z.string().min(1, "O ano é obrigatório."),
-    kioskId: z.string().min(1, "O quiosque é obrigatório."),
+const importSchema = z.object({
+  kioskId: z.string().min(1, { message: "Por favor, selecione um quiosque." }),
 });
-type ConsumptionFormValues = z.infer<typeof consumptionFormSchema>;
 
-type DistributionSuggestion = {
-    statusMessage: string;
-    isActionable: boolean;
-    distributionSuggestion: DistributionItem[];
-};
-
+type ImportFormValues = z.infer<typeof importSchema>;
 
 export function StockAnalyzer() {
     const { user, permissions } = useAuth();
@@ -66,13 +51,12 @@ export function StockAnalyzer() {
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const stockFileInputRef = useRef<HTMLInputElement>(null);
-    const consumptionFileInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
 
-    const consumptionForm = useForm<ConsumptionFormValues>({
-        resolver: zodResolver(consumptionFormSchema),
-        defaultValues: { month: String(new Date().getMonth()), year: String(currentYear), kioskId: '' }
+    const form = useForm<ImportFormValues>({
+        resolver: zodResolver(importSchema),
+        defaultValues: { kioskId: '' }
     });
     
     const findProductByName = (baseName: string): Product | undefined => {
@@ -139,59 +123,118 @@ export function StockAnalyzer() {
         return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
     };
 
-    const handleStockFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const parseQuantity = (qtyString: string | number) => {
+        if (typeof qtyString === 'number') return qtyString;
+        if (typeof qtyString !== 'string') return 0;
+        return parseFloat(qtyString.replace(/\./g, '').replace(',', '.')) || 0;
+    };
+
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        const kioskId = form.getValues('kioskId');
+
+        if (!file || !kioskId) {
+            toast({ variant: "destructive", title: "Erro", description: "Selecione um quiosque e um arquivo." });
+            return;
+        }
 
         setIsAnalyzing(true);
         const { id: toastId } = toast({
-            title: "Analisando relatório de estoque...",
-            description: "A nossa IA está lendo o PDF. Isso pode levar um momento.",
+            title: "Processando planilha...",
+            description: "Aguarde enquanto analisamos seu relatório de estoque.",
         });
 
-        try {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const pdfDataUri = reader.result as string;
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                try {
+                    const rows = results.data as any[];
+                    if (rows.length === 0) throw new Error("A planilha está vazia ou em formato inválido.");
+                    
+                    const kiosk = kiosks.find(k => k.id === kioskId);
+                    if (!kiosk) throw new Error("Quiosque selecionado não foi encontrado.");
 
-                const analysisResult = await analyzeStock({
-                    reportName: file.name,
-                    pdfDataUri,
-                    products: products,
-                    kiosks: kiosks,
-                });
-                
-                toast({ id: toastId, title: "Análise da IA completa!", description: "Gerando sugestões de distribuição..." });
-                
-                const finalResults = analysisResult.results.map(item => {
-                    const suggestionDetails = generateDistributionSuggestion(item.neededInBaseUnit, item.productName, item.kioskId);
-                    return { ...item, ...suggestionDetails };
-                });
+                    const analysisResults: StockAnalysisResultItem[] = [];
+                    const unmatchedItems: string[] = [];
 
-                const kioskNames = [...new Set(finalResults.map(r => r.kioskName))];
-                const reportKioskName = kioskNames.length === 1 ? kioskNames[0] : (kioskNames.length > 1 ? "Múltiplos Quiosques" : "Relatório de Análise");
-                const analysisDate = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
-                const displayName = `${reportKioskName} - ${analysisDate}`;
+                    for (const row of rows) {
+                        const itemName = row['Item']?.trim();
+                        if (!itemName) continue;
 
-                await addStockReport({
-                    ...analysisResult,
-                    results: finalResults,
-                    displayName: displayName,
-                    createdAt: new Date().toISOString(),
-                    status: 'completed',
-                });
+                        const product = findProductByName(itemName);
+                        if (!product) {
+                            unmatchedItems.push(itemName);
+                            continue;
+                        }
 
-                toast({ id: toastId, title: "Análise de estoque concluída!", description: analysisResult.summary });
-            };
-            reader.onerror = () => { throw new Error("Falha ao ler o arquivo."); }
-        } catch (error) {
-            console.error("Stock analysis failed:", error);
-            toast({ id: toastId, variant: "destructive", title: "Falha na análise", description: "Não foi possível analisar o relatório de estoque. Verifique o arquivo e tente novamente." });
-        } finally {
-            setIsAnalyzing(false);
-            if(stockFileInputRef.current) stockFileInputRef.current.value = "";
-        }
+                        const currentStockInBaseUnit = parseQuantity(row['Qtde.']);
+                        const stockLevels = product.stockLevels?.[kiosk.id];
+                        const minStock = stockLevels?.min ?? 0;
+                        const maxStock = stockLevels?.max ?? 0;
+
+                        const neededInBaseUnit = currentStockInBaseUnit < minStock ? maxStock - currentStockInBaseUnit : 0;
+                        
+                        const suggestionDetails = neededInBaseUnit > 0 
+                            ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
+                            : { statusMessage: 'Estoque OK.', isActionable: false, distributionSuggestion: [] };
+                        
+                        analysisResults.push({
+                            productId: product.id,
+                            productName: product.baseName,
+                            kioskId: kiosk.id,
+                            kioskName: kiosk.name,
+                            currentStockInBaseUnit,
+                            maxStockInBaseUnit: maxStock,
+                            neededInBaseUnit,
+                            ...suggestionDetails,
+                        });
+                    }
+
+                    if (unmatchedItems.length > 0) {
+                        toast({
+                            variant: "destructive",
+                            title: "Itens não encontrados",
+                            description: `Os seguintes itens da planilha não foram encontrados no sistema e foram ignorados: ${unmatchedItems.join(', ')}`,
+                            duration: 8000
+                        });
+                    }
+
+                    const itemsWithNeed = analysisResults.filter(r => r.neededInBaseUnit > 0).length;
+                    const summary = `Analisados ${analysisResults.length} itens do relatório, dos quais ${itemsWithNeed} precisam de reposição.`;
+                    
+                    const analysisDate = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
+                    const displayName = `${kiosk.name} - ${analysisDate}`;
+
+                    await addStockReport({
+                        reportName: file.name,
+                        displayName,
+                        createdAt: new Date().toISOString(),
+                        status: 'completed',
+                        summary,
+                        results: analysisResults,
+                    });
+
+                    toast({ id: toastId, title: "Análise concluída!", description: summary });
+
+                } catch (error: any) {
+                    console.error("Stock analysis failed:", error);
+                    toast({ id: toastId, variant: "destructive", title: "Falha na análise", description: error.message || "Não foi possível processar o relatório de estoque." });
+                } finally {
+                    setIsAnalyzing(false);
+                    if(fileInputRef.current) fileInputRef.current.value = "";
+                }
+            }
+        });
+    };
+
+    const handleImportClick = () => {
+        form.trigger('kioskId').then(isValid => {
+            if (isValid) {
+                fileInputRef.current?.click();
+            }
+        });
     };
 
     const executeDistribution = async (reportId: string, resultItem: StockAnalysisResultItem) => {
@@ -231,10 +274,6 @@ export function StockAnalyzer() {
         }
     };
     
-    const handleStockUploadClick = () => { if (isAnalyzing) return; stockFileInputRef.current?.click(); };
-    const handleConsumptionUploadClick = () => { if (isAnalyzing) return; consumptionFileInputRef.current?.click(); };
-    const handleConsumptionFileChange = async (event: React.ChangeEvent<HTMLInputElement>, values: ConsumptionFormValues) => { /* as before */ };
-    const onConsumptionFormSubmit = (values: ConsumptionFormValues) => { consumptionFileInputRef.current?.addEventListener('change', (event) => handleConsumptionFileChange(event as any, values), { once: true }); consumptionFileInputRef.current?.click(); };
     const handleDeleteStockReportClick = (report: StockAnalysisReport) => setStockReportToDelete(report);
     const handleDeleteConsumptionReportClick = (report: ConsumptionReport) => setConsumptionReportToDelete(report);
     const handleDeleteStockReportConfirm = async () => { if (stockReportToDelete) { await deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
@@ -250,7 +289,7 @@ export function StockAnalyzer() {
         doc.setFontSize(11);
         doc.setTextColor(100);
         doc.text(`Analisado em: ${format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 29);
-        doc.text(`Resumo da IA: ${report.summary}`, 14, 35);
+        doc.text(`Resumo: ${report.summary}`, 14, 35);
         
         let yPos = 45;
 
@@ -400,8 +439,8 @@ export function StockAnalyzer() {
                 <CardHeader>
                     <div className="flex justify-between items-start gap-4">
                         <div>
-                            <CardTitle>Análise Inteligente de Reposição</CardTitle>
-                            <CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription>
+                            <CardTitle>Análise de Reposição por Planilha</CardTitle>
+                            <CardDescription>Importe sua planilha de estoque para calcular as necessidades e gerar sugestões de distribuição.</CardDescription>
                         </div>
                          {canManageProducts && (
                             <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
@@ -413,18 +452,46 @@ export function StockAnalyzer() {
                 </CardHeader>
                 {canUploadStock ? (
                     <CardContent className="space-y-4 text-center p-6">
-                        <input type="file" accept=".pdf" ref={stockFileInputRef} onChange={handleStockFileChange} className="hidden" />
-                        <Button size="lg" onClick={handleStockUploadClick} className="mt-4" disabled={isAnalyzing}>
-                            {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} 
-                            {isAnalyzing ? 'Analisando...' : 'Fazer Upload de Relatório'}
-                        </Button>
+                         <Form {...form}>
+                            <form className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end text-left">
+                                <FormField
+                                    control={form.control}
+                                    name="kioskId"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>1. Selecione o quiosque do relatório</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione..." />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
+                                        </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                <div>
+                                    <input type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                                    <Button size="lg" onClick={handleImportClick} type="button" className="w-full" disabled={isAnalyzing}>
+                                        {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} 
+                                        {isAnalyzing ? 'Analisando...' : '2. Importar Planilha de Estoque'}
+                                    </Button>
+                                </div>
+                                </div>
+                            </form>
+                        </Form>
                     </CardContent>
                 ) : (
                     <CardContent>
                         <Alert>
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>Permissão Necessária</AlertTitle>
-                            <AlertDescription>Você não tem permissão para fazer upload de relatórios.</AlertDescription>
+                            <AlertDescription>Você não tem permissão para importar relatórios de estoque.</AlertDescription>
                         </Alert>
                     </CardContent>
                 )}
