@@ -1,6 +1,5 @@
 
-import { StockAnalyzer } from '@/components/stock-importer'
-
 export default function ImportPage() {
-    return <StockAnalyzer />
+    // This page is deprecated and its functionality has been moved to /dashboard/stock/analysis/restock
+    return null;
 }
