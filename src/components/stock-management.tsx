@@ -1,3 +1,4 @@
+
 "use client"
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,7 +44,7 @@ export function StockManagement() {
                 </div>
                 <Tabs defaultValue={defaultTab} className="w-full">
                     <TabsList className={`grid w-full max-w-lg ${gridColsClass}`}>
-                        {canManageLots && <TabsTrigger value="lot-control"><ClipboardCheck className="mr-2 h-4 w-4" />Controle de Lote</TabsTrigger>}
+                        {canManageLots && <TabsTrigger value="lot-control"><ClipboardCheck className="mr-2 h-4 w-4" />Controle de itens</TabsTrigger>}
                         {canAnalyzeStock && <TabsTrigger value="stock-analysis"><BarChart3 className="mr-2 h-4 w-4" />Análise de Reposição</TabsTrigger>}
                     </TabsList>
 

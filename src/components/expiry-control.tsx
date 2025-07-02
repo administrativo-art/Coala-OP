@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -206,12 +207,12 @@ export function ExpiryControl() {
         return (
           <div className="text-center py-16 flex flex-col items-center">
               <Inbox className="h-16 w-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-semibold">Nenhum lote no estoque</h3>
+              <h3 className="text-xl font-semibold">Nenhum item no estoque</h3>
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                  Comece adicionando um novo lote de produtos para monitorar a validade.
+                  Comece adicionando um novo item ao estoque para monitorar sua validade.
               </p>
               <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.add}>
-                  <Plus className="mr-2 h-5 w-5" /> Adicionar lote
+                  <Plus className="mr-2 h-5 w-5" /> Adicionar item
               </Button>
           </div>
         );
@@ -249,9 +250,9 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            <ClipboardCheck /> Controle de estoque
+            <ClipboardCheck /> Controle de itens em estoque
           </CardTitle>
-          <CardDescription>Gerencie os lotes, vencimentos e as transferências do seu estoque.</CardDescription>
+          <CardDescription>Gerencie os itens em estoque, seus vencimentos e transferências.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
@@ -276,7 +277,7 @@ export function ExpiryControl() {
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                        <Plus className="mr-2" /> Adicionar lote
+                        <Plus className="mr-2" /> Adicionar item
                     </Button>
                 </div>
             </div>
@@ -377,7 +378,7 @@ export function ExpiryControl() {
             open={!!lotToDelete}
             onOpenChange={(open) => !open && setLotToDelete(null)}
             onConfirm={handleDeleteConfirm}
-            itemName={`a entrada de ${lotToDelete.quantity}x ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber})`}
+            itemName={`o item ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) com ${lotToDelete.quantity} unidades`}
         />
       )}
 

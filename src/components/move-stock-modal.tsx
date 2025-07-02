@@ -74,7 +74,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         <DialogHeader>
           <DialogTitle>Mover estoque</DialogTitle>
           <DialogDescription>
-            Mova itens do lote <strong>{lotToMove.lotNumber}</strong> de <strong>{sourceKioskName}</strong>.
+            Mova unidades do item <strong>{lotToMove.productName}</strong> (Lote: {lotToMove.lotNumber}) de <strong>{sourceKioskName}</strong>.
           </DialogDescription>
         </DialogHeader>
         <div className="py-2">
