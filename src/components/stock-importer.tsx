@@ -264,7 +264,10 @@ export function StockAnalyzer() {
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
-            doc.text(`Necessidade: ${(item.neededInBaseUnit || 0).toLocaleString()} ${findProductByName(item.productName)?.unit || ''}`, 14, yPos);
+            const productUnit = findProductByName(item.productName)?.unit || '';
+            doc.text(`Necessidade: ${(item.neededInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
+            yPos += 5;
+            doc.text(`Estoque Máximo Configurado: ${(item.maxStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
             doc.text(`Status: ${item.statusMessage}`, 14, yPos);
             yPos += 8;
