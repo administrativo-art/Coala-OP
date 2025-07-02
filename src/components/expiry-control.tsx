@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -45,7 +45,7 @@ export function ExpiryControl() {
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
-  const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
+  const [lotToDelete, setLotToDelete] = useState<{ id: string, name: string; quantity: number } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
@@ -158,7 +158,11 @@ export function ExpiryControl() {
   const handleDeleteClick = (lotId: string) => {
     const lot = lots.find(l => l.id === lotId);
     if (lot) {
-      setLotToDelete(lot);
+      setLotToDelete({
+        id: lot.id,
+        name: `${lot.productName} (Lote: ${lot.lotNumber})`,
+        quantity: lot.quantity,
+      });
     }
   };
 
@@ -170,7 +174,7 @@ export function ExpiryControl() {
       await deleteLot(lotToDelete.id);
       toast({
         title: "Insumo excluído",
-        description: `O insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) foi removido.`,
+        description: `${lotToDelete.name} foi removido.`,
       });
     } catch (error) {
       toast({
@@ -407,7 +411,7 @@ export function ExpiryControl() {
             isDeleting={isDeleting}
             onOpenChange={(open) => !open && setLotToDelete(null)}
             onConfirm={handleDeleteConfirm}
-            itemName={`o insumo ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) com ${lotToDelete.quantity} unidades`}
+            itemName={`o insumo ${lotToDelete.name} com ${lotToDelete.quantity} unidades`}
         />
       )}
 

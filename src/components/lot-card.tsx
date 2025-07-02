@@ -1,3 +1,4 @@
+
 "use client"
 
 import Image from 'next/image';
@@ -104,7 +105,7 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
                     </div>
                     {(canMove || canEdit || canDelete) && (
                       <div className="flex gap-1">
-                          {canMove && (
+                          {canMove && kioskEntry.quantity > 0 && (
                             <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
                                 <Truck className="h-4 w-4" />
                             </Button>

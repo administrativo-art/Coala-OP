@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type LotEntry, type MovementRecord, type Product } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 
 export type MoveLotParams = {
   lotId: string;
@@ -89,11 +89,18 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLot = async (lotId: string) => {
-    if (!lotId) {
+    if (!lotId || typeof lotId !== 'string' || lotId.trim() === '') {
       throw new Error("ID do lote é inválido.");
     }
     const lotRef = doc(db, "lots", lotId);
     try {
+      const docSnap = await getDoc(lotRef);
+      if (!docSnap.exists()) {
+        console.warn(`Tentativa de excluir lote que não existe mais: ${lotId}`);
+        // Se o documento não existe, a operação de exclusão é considerada bem-sucedida
+        // pois o estado final desejado (documento não existente) foi alcançado.
+        return;
+      }
       await deleteDoc(lotRef);
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
