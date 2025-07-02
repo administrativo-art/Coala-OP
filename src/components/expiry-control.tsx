@@ -20,6 +20,7 @@ import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { ProductManagement } from './product-management';
 
 
 const BarcodeScannerModal = dynamic(
@@ -44,6 +45,7 @@ export function ExpiryControl() {
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
+  const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
 
 
   const visibleLots = useMemo(() => {
@@ -279,6 +281,11 @@ export function ExpiryControl() {
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
                         <Plus className="mr-2" /> Adicionar insumo
                     </Button>
+                    {canManageProducts && (
+                        <Button variant="outline" onClick={() => setIsProductManagementOpen(true)} className="w-full sm:w-auto">
+                            <Settings className="mr-2" /> Gerenciar Insumos
+                        </Button>
+                    )}
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -362,6 +369,8 @@ export function ExpiryControl() {
         updateLot={updateLot}
         lots={lots}
       />
+
+      <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
 
       {lotToMove && (
         <MoveStockModal 

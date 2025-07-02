@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
-import { ProductManagementModal } from './product-management-modal';
+import { AnalysisItemFormModal } from './product-management-modal';
 import { type Product, type LotEntry, type PredefinedList } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -59,26 +59,6 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
     };
     
     const handleDeleteClick = (product: Product) => {
-        const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
-        const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
-
-        let messages = [];
-        if (usedInLotsCount > 0) {
-            messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
-        }
-        if (usedInLists.length > 0) {
-            messages.push(`está nas listas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
-        }
-
-        if (messages.length > 0) {
-            toast({
-                variant: "destructive",
-                title: "Não é possível excluir o insumo",
-                description: `Este insumo não pode ser excluído pois ${messages.join(' e ')}.`,
-                duration: 8000,
-            });
-            return;
-        }
         setProductToDelete(product);
     };
 
@@ -111,44 +91,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
 
     const handleDeleteSelectedClick = () => {
         const productsToPotentiallyDelete = products.filter(p => selectedProducts.has(p.id));
-        
-        const nonDeletable: { name: string; reasons: string[] }[] = [];
-        const deletable: Product[] = [];
-
-        productsToPotentiallyDelete.forEach(product => {
-            const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
-            const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
-            
-            const reasons: string[] = [];
-            if (usedInLotsCount > 0) {
-                reasons.push(`usado em ${usedInLotsCount} lote(s)`);
-            }
-            if (usedInLists.length > 0) {
-                reasons.push(`usado em lista(s)`);
-            }
-
-            if (reasons.length > 0) {
-                nonDeletable.push({ name: getProductFullName(product), reasons });
-            } else {
-                deletable.push(product);
-            }
-        });
-
-        if (nonDeletable.length > 0) {
-            const description = nonDeletable
-                .map(item => `${item.name}: ${item.reasons.join(' e ')}`)
-                .join('; ');
-            toast({
-                variant: "destructive",
-                title: `${nonDeletable.length} insumo(s) não podem ser excluídos`,
-                description: `Detalhes: ${description}`,
-                duration: 8000,
-            });
-        }
-
-        if (deletable.length > 0) {
-            setProductsToDelete(deletable);
-        }
+        setProductsToDelete(productsToPotentiallyDelete);
     };
 
     const handleDeleteMultipleConfirm = async () => {
@@ -168,9 +111,9 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             <Dialog open={open} onOpenChange={handleOpenChangeAndReset}>
                 <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Gerenciar Insumos para Análise</DialogTitle>
+                        <DialogTitle>Gerenciar Itens para Análise</DialogTitle>
                         <DialogDescription>
-                            Defina os insumos e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
+                            Defina os itens e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -209,7 +152,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                 </DialogContent>
             </Dialog>
 
-            <ProductManagementModal
+            <AnalysisItemFormModal
                 open={isProductModalOpen}
                 onOpenChange={setIsProductModalOpen}
                 addProduct={addProduct}
@@ -222,7 +165,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                 open={!!productToDelete}
                 onOpenChange={() => setProductToDelete(null)}
                 onConfirm={handleDeleteConfirm}
-                itemName={getProductFullName(productToDelete)}
+                itemName={`o item de análise "${getProductFullName(productToDelete)}"`}
                 />
             )}
             
@@ -231,7 +174,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                     open={productsToDelete.length > 0}
                     onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
                     onConfirm={handleDeleteMultipleConfirm}
-                    itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`}
+                    itemName={`os ${productsToDelete.length} item(s) selecionado(s)`}
                 />
             )}
         </>
