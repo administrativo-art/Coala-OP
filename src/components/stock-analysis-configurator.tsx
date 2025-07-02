@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -173,7 +172,7 @@ export function StockAnalysisConfigurator() {
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                 {getProductFullName(products.find(p => p.id === field.id)!)}
+                 {getProductFullName(field)}
               </AccordionTrigger>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
@@ -181,8 +180,7 @@ export function StockAnalysisConfigurator() {
                     control={form.control}
                     name={`products.${index}.pdfUnit`}
                     render={({ field: pdfUnitField }) => {
-                      const product = products.find(p => p.id === field.id)!;
-                      const categoryUnits = Object.keys(units[product.category]);
+                      const categoryUnits = Object.keys(units[field.category]);
                       return (
                         <FormItem className="pt-2">
                           <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
@@ -196,7 +194,7 @@ export function StockAnalysisConfigurator() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="none">-- Mesma unidade da embalagem ({product.unit}) --</SelectItem>
+                              <SelectItem value="none">-- Mesma unidade da embalagem ({field.unit}) --</SelectItem>
                               {categoryUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
                             </SelectContent>
                           </Select>
@@ -208,7 +206,7 @@ export function StockAnalysisConfigurator() {
                       )
                     }}
                   />
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {products.find(p=>p.id === field.id)!.unit})</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
