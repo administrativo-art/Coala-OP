@@ -143,35 +143,24 @@ export function StockAnalyzer() {
             return 0;
         }
 
-        let cleanedString = qtyString.trim();
+        let numStr = qtyString.trim();
 
-        // Handle negative numbers in parentheses e.g. (1.234,56)
-        const isNegative = cleanedString.startsWith('(') && cleanedString.endsWith(')');
+        // Handle negative values in parentheses e.g. (5,00)
+        const isNegative = numStr.startsWith('(') && numStr.endsWith(')');
         if (isNegative) {
-            cleanedString = '-' + cleanedString.substring(1, cleanedString.length - 1);
+            numStr = '-' + numStr.substring(1, numStr.length - 1);
         }
 
-        // Remove any characters that are not digits, comma, dot or minus sign
-        cleanedString = cleanedString.replace(/[^\d,.-]/g, '');
+        // Standardize to use '.' as decimal separator by removing thousand separators (dots) 
+        // and replacing the decimal separator (comma) with a dot.
+        // This is optimized for Brazilian and other comma-decimal formats.
+        const standardizedStr = numStr.replace(/\./g, '').replace(',', '.');
+        
+        // Remove any other non-numeric characters that might remain, 
+        // except for the decimal point and the negative sign.
+        const finalStr = standardizedStr.replace(/[^\d.-]/g, '');
 
-        const lastDot = cleanedString.lastIndexOf('.');
-        const lastComma = cleanedString.lastIndexOf(',');
-
-        // Handle cases like "1.234,56" (Brazilian format) or "1,234.56" (American format)
-        if (lastDot > -1 && lastComma > -1) {
-            if (lastComma > lastDot) {
-                // Brazilian format detected: remove dots, replace comma with dot
-                cleanedString = cleanedString.replace(/\./g, '').replace(',', '.');
-            } else {
-                // American format detected: remove commas
-                cleanedString = cleanedString.replace(/,/g, '');
-            }
-        } else if (lastComma > -1) {
-            // Only a comma is present, assume it's a decimal separator
-            cleanedString = cleanedString.replace(',', '.');
-        }
-
-        const parsed = parseFloat(cleanedString);
+        const parsed = parseFloat(finalStr);
         return isNaN(parsed) ? 0 : parsed;
     };
 
@@ -226,7 +215,6 @@ export function StockAnalyzer() {
 
                         const quantityFromCsv = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
                         
-                        // The quantity from the CSV is the final stock in its base unit. No conversion needed.
                         const currentStockInBaseUnit = quantityFromCsv;
                         
                         const stockLevels = product.stockLevels?.[kiosk.id];
@@ -599,5 +587,7 @@ export function StockAnalyzer() {
         </>
     );
 }
+
+    
 
     
