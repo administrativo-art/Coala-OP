@@ -137,37 +137,29 @@ export function StockAnalyzer() {
 
     const parseQuantity = (qtyString: string | number): number => {
         if (typeof qtyString === 'number') {
-            return qtyString;
+            return isNaN(qtyString) ? 0 : qtyString;
         }
+
         if (typeof qtyString !== 'string' || !qtyString.trim()) {
             return 0;
         }
 
         let numStr = qtyString.trim();
 
-        const isNegative = numStr.startsWith('(') && numStr.endsWith(')');
-        if (isNegative) {
+        if (numStr.startsWith('(') && numStr.endsWith(')')) {
             numStr = '-' + numStr.substring(1, numStr.length - 1);
         }
-        
-        // Remove any non-numeric characters except for ',', '.', and '-'
+
         numStr = numStr.replace(/[^0-9.,-]/g, '');
 
         const lastComma = numStr.lastIndexOf(',');
         const lastDot = numStr.lastIndexOf('.');
 
-        // If comma is the decimal separator (e.g., "1.234,56")
         if (lastComma > lastDot) {
-            // Remove all dots (thousand separators), then replace comma with a dot for parsing
             numStr = numStr.replace(/\./g, '').replace(',', '.');
-        } 
-        // If dot is the decimal separator (e.g., "1,234.56")
-        else if (lastDot > lastComma) {
-            // Remove all commas (thousand separators)
+        } else if (lastDot > lastComma) {
             numStr = numStr.replace(/,/g, '');
-        }
-        // If only a comma exists, it's the decimal separator
-        else if (lastComma !== -1) {
+        } else if (lastComma !== -1) {
             numStr = numStr.replace(',', '.');
         }
 
