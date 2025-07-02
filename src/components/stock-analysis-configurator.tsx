@@ -358,10 +358,10 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
                  <span className="flex-grow text-left">{getProductFullName(field)}</span>
                  <div className="flex items-center gap-1">
                     {onEdit && (
-                         <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}><Edit className="h-4 w-4" /></Button>
+                         <Button asChild type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}><span><Edit className="h-4 w-4" /></span></Button>
                     )}
                      {onDelete && (
-                         <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}><Trash2 className="h-4 w-4" /></Button>
+                         <Button asChild type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}><span><Trash2 className="h-4 w-4" /></span></Button>
                     )}
                  </div>
               </AccordionTrigger>
