@@ -1,11 +1,12 @@
 
 "use client"
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import Papa from 'papaparse';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
-import { Download, PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info } from 'lucide-react';
 import { units } from '@/lib/conversion';
 
 type FormProduct = Product & {
@@ -33,9 +35,11 @@ interface StockAnalysisConfiguratorProps {
 }
 
 export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockAnalysisConfiguratorProps) {
-  const { products, loading: productsLoading, updateMultipleProducts, getProductFullName } = useProducts();
+  const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
+  const [isImporting, setIsImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<FormValues>({
     defaultValues: { products: [] },
@@ -152,6 +156,105 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
     doc.save('parametros_de_analise.pdf');
   };
 
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const { id: toastId } = toast({
+      title: "Importando planilha...",
+      description: "Aguarde enquanto processamos o arquivo.",
+    });
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows = results.data as any[];
+          if (rows.length === 0) {
+            throw new Error("A planilha está vazia ou em formato inválido.");
+          }
+
+          const kioskNameMap = new Map<string, string>(kiosks.map(k => [k.name.toLowerCase(), k.id]));
+          const productsToUpdate: Partial<Product>[] = [];
+          const productsToAdd: Omit<Product, 'id'>[] = [];
+
+          for (const row of rows) {
+            const baseName = row.baseName?.trim();
+            if (!baseName) continue; // Skip rows without a baseName
+
+            const stockLevels: { [kioskId: string]: { min: number; max: number } } = {};
+            for (const key in row) {
+              if (key.startsWith('min_') || key.startsWith('max_')) {
+                const parts = key.split('_');
+                const type = parts[0];
+                const kioskName = parts.slice(1).join('_').toLowerCase();
+                const kioskId = kioskNameMap.get(kioskName);
+
+                if (kioskId) {
+                  if (!stockLevels[kioskId]) stockLevels[kioskId] = { min: 0, max: 0 };
+                  stockLevels[kioskId][type as 'min' | 'max'] = parseInt(row[key], 10) || 0;
+                }
+              }
+            }
+            
+            const productData = {
+              baseName,
+              category: row.category?.trim() || 'Unidade',
+              unit: row.unit?.trim() || 'un',
+              pdfUnit: row.pdfUnit?.trim() || '',
+              packageSize: 1, // Always 1 for analysis items
+              stockLevels,
+            };
+
+            const existingProduct = products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
+
+            if (existingProduct) {
+              productsToUpdate.push({ id: existingProduct.id, ...productData });
+            } else {
+              productsToAdd.push(productData);
+            }
+          }
+
+          if (productsToUpdate.length > 0) {
+            await updateMultipleProducts(productsToUpdate);
+          }
+          if (productsToAdd.length > 0) {
+            await Promise.all(productsToAdd.map(p => addProduct(p)));
+          }
+
+          toast({
+            id: toastId,
+            title: "Importação concluída!",
+            description: `${productsToAdd.length} itens adicionados e ${productsToUpdate.length} itens atualizados.`,
+          });
+
+        } catch (error: any) {
+          toast({
+            id: toastId,
+            variant: "destructive",
+            title: "Erro na importação",
+            description: error.message || "Verifique o formato da planilha e tente novamente.",
+          });
+        } finally {
+          setIsImporting(false);
+          if (event.target) event.target.value = "";
+        }
+      },
+      error: (error: any) => {
+        toast({
+          id: toastId,
+          variant: "destructive",
+          title: "Erro ao ler o arquivo",
+          description: error.message,
+        });
+        setIsImporting(false);
+        if (event.target) event.target.value = "";
+      }
+    });
+  };
+
   if (productsLoading || kiosksLoading) {
     return (
       <div className="space-y-4">
@@ -176,7 +279,21 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="flex justify-end p-1">
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>Como importar itens em massa?</AlertTitle>
+          <AlertDescription>
+            Crie uma planilha CSV com as seguintes colunas: `baseName`, `category`, `unit`, `pdfUnit` (opcional).
+            Para os estoques, adicione colunas para cada quiosque no formato `min_NOME DO QUIOSQUE` e `max_NOME DO QUIOSQUE`.
+            Exemplo: `min_Quiosque Tirirical`, `max_Quiosque Tirirical`.
+          </AlertDescription>
+        </Alert>
+        <div className="flex justify-end gap-2 p-1">
+             <input type="file" accept=".csv" ref={importFileRef} onChange={handleFileImport} className="hidden" />
+             <Button type="button" variant="outline" onClick={() => importFileRef.current?.click()} disabled={isImporting}>
+                {isImporting ? <Loader2 className="mr-2 animate-spin" /> : <FileUp className="mr-2" />}
+                {isImporting ? 'Importando...' : 'Importar de planilha'}
+             </Button>
              {onAddNew && (
                 <Button type="button" onClick={onAddNew}>
                     <PlusCircle className="mr-2" /> Adicionar Novo Item
@@ -235,7 +352,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
                       )
                     }}
                   />
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
+                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {products.find(p=>p.id === field.id)!.unit})</h4>
                    <div className="rounded-md border">
                     <Table>
                         <TableHeader>
