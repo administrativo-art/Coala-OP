@@ -144,20 +144,25 @@ export function StockAnalyzer() {
 
         let cleanedString = qtyString.trim();
 
-        // Handle parenthesis for negative numbers e.g. (1.234,56)
-        if (cleanedString.startsWith('(') && cleanedString.endsWith(')')) {
+        const isNegative = cleanedString.startsWith('(') && cleanedString.endsWith(')');
+        if (isNegative) {
             cleanedString = '-' + cleanedString.substring(1, cleanedString.length - 1);
         }
 
-        // Remove any characters that are not digits, a comma, a dot, or a minus sign
-        // This will strip currency symbols, spaces, etc.
-        cleanedString = cleanedString.replace(/[^\d,\.-]/g, '');
+        cleanedString = cleanedString.replace(/[^\d,.-]/g, '');
 
-        // Standardize number format (assuming Brazilian: '.' for thousands, ',' for decimal)
-        // Remove thousand separators
-        cleanedString = cleanedString.replace(/\./g, '');
-        // Replace decimal comma with dot
-        cleanedString = cleanedString.replace(',', '.');
+        const lastDot = cleanedString.lastIndexOf('.');
+        const lastComma = cleanedString.lastIndexOf(',');
+
+        if (lastDot > -1 && lastComma > -1) {
+            if (lastComma > lastDot) {
+                cleanedString = cleanedString.replace(/\./g, '').replace(',', '.');
+            } else {
+                cleanedString = cleanedString.replace(/,/g, '');
+            }
+        } else if (lastComma > -1) {
+            cleanedString = cleanedString.replace(',', '.');
+        }
 
         const parsed = parseFloat(cleanedString);
         return isNaN(parsed) ? 0 : parsed;
@@ -260,13 +265,16 @@ export function StockAnalyzer() {
                     }
                     
                     const displayName = `${kiosk.name} - ${format(new Date(), "dd/MM/yyyy")}`;
+                    
+                    const actionableItems = analysisResults.filter(r => r.neededInBaseUnit > 0);
+                    const summary = `${actionableItems.length} de ${analysisResults.length} itens precisam de reposição.`;
 
                     const newReport: Omit<StockAnalysisReport, 'id'> = {
                         reportName: file.name,
                         displayName,
                         createdAt: new Date().toISOString(),
                         status: 'completed',
-                        summary: `${analysisResults.length} itens analisados. ${analysisResults.filter(r => r.neededInBaseUnit > 0).length} precisam de reposição.`,
+                        summary: summary,
                         results: analysisResults,
                     };
 
@@ -580,5 +588,7 @@ export function StockAnalyzer() {
         </>
     );
 }
+
+    
 
     
