@@ -148,6 +148,7 @@ export function StockAnalyzer() {
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
+            transformHeader: header => header.trim(),
             complete: async (results) => {
                 try {
                     const rows = results.data as any[];
@@ -158,9 +159,11 @@ export function StockAnalyzer() {
 
                     const analysisResults: StockAnalysisResultItem[] = [];
                     const unmatchedItems: string[] = [];
+                    const allConfiguredProducts = [...products];
 
+                    // Process rows from CSV
                     for (const row of rows) {
-                        const itemName = row['Item']?.trim();
+                        const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
                         if (!itemName) continue;
 
                         const product = findProductByName(itemName);
@@ -169,11 +172,16 @@ export function StockAnalyzer() {
                             continue;
                         }
 
-                        const currentStockInBaseUnit = parseQuantity(row['Qtde.']);
+                        // Remove from the list of products to check for zero stock later
+                        const productIndex = allConfiguredProducts.findIndex(p => p.id === product.id);
+                        if (productIndex > -1) {
+                            allConfiguredProducts.splice(productIndex, 1);
+                        }
+
+                        const currentStockInBaseUnit = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
                         const stockLevels = product.stockLevels?.[kiosk.id];
                         const minStock = stockLevels?.min ?? 0;
                         const maxStock = stockLevels?.max ?? 0;
-
                         const neededInBaseUnit = currentStockInBaseUnit < minStock ? maxStock - currentStockInBaseUnit : 0;
                         
                         const suggestionDetails = neededInBaseUnit > 0 
@@ -192,6 +200,29 @@ export function StockAnalyzer() {
                         });
                     }
 
+                    // Process products not in CSV, assuming they are zero
+                    for (const product of allConfiguredProducts) {
+                         const stockLevels = product.stockLevels?.[kiosk.id];
+                        const minStock = stockLevels?.min ?? 0;
+                        const maxStock = stockLevels?.max ?? 0;
+                        const neededInBaseUnit = maxStock; // If it's zero, we need the max to restock
+                        
+                        if (neededInBaseUnit > 0) {
+                            const suggestionDetails = generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id);
+                            
+                            analysisResults.push({
+                                productId: product.id,
+                                productName: product.baseName,
+                                kioskId: kiosk.id,
+                                kioskName: kiosk.name,
+                                currentStockInBaseUnit: 0,
+                                maxStockInBaseUnit: maxStock,
+                                neededInBaseUnit,
+                                ...suggestionDetails,
+                            });
+                        }
+                    }
+
                     if (unmatchedItems.length > 0) {
                         toast({
                             variant: "destructive",
@@ -200,10 +231,8 @@ export function StockAnalyzer() {
                             duration: 8000
                         });
                     }
-
-                    const itemsWithNeed = analysisResults.filter(r => r.neededInBaseUnit > 0).length;
-                    const summary = `Analisados ${analysisResults.length} itens do relatório, dos quais ${itemsWithNeed} precisam de reposição.`;
                     
+                    const summary = `Analisados ${analysisResults.length} itens do relatório, dos quais ${analysisResults.filter(r => r.neededInBaseUnit > 0).length} precisam de reposição.`;
                     const analysisDate = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
                     const displayName = `${kiosk.name} - ${analysisDate}`;
 
@@ -398,11 +427,11 @@ export function StockAnalyzer() {
                                                     <p>Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                 </div>
                                             </div>
-                                            <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
+                                            {item.isActionable && item.neededInBaseUnit > 0 && <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
                                                 <Send className="mr-2 h-4 w-4" /> Efetivar Movimentação
-                                            </Button>
+                                            </Button>}
                                         </div>
-                                        <p className={`text-sm mt-2 ${item.isActionable ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage || ''}</p>
+                                        <p className={`text-sm mt-2 ${item.isActionable && item.neededInBaseUnit > 0 ? 'text-primary' : 'text-amber-600'}`}>{item.statusMessage || ''}</p>
                                         
                                         {item.distributionSuggestion && item.distributionSuggestion.length > 0 && (
                                             <div className="rounded-md border mt-2">
