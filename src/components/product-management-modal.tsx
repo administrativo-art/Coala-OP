@@ -26,7 +26,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
 
 const productSchema = z.object({
-  baseName: z.string().min(1, 'O nome do produto é obrigatório.'),
+  baseName: z.string().min(1, 'O nome do item é obrigatório.'),
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho da embalagem deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
@@ -121,8 +121,8 @@ export function ProductManagementModal({
     if (messages.length > 0) {
         toast({
             variant: "destructive",
-            title: "Não é possível excluir o produto",
-            description: `Este produto não pode ser excluído pois ${messages.join(' e ')}.`,
+            title: "Não é possível excluir o item",
+            description: `Este item não pode ser excluído pois ${messages.join(' e ')}.`,
             duration: 8000,
         });
         return;
@@ -158,22 +158,22 @@ export function ProductManagementModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Gerenciar produtos</DialogTitle>
-            <DialogDescription>Adicione, edite ou exclua seus produtos. Estes produtos serão usados tanto no Controle de Lotes quanto na Análise de Estoque.</DialogDescription>
+            <DialogTitle>Gerenciar itens</DialogTitle>
+            <DialogDescription>Adicione, edite ou exclua seus itens. Estes itens serão usados tanto no Controle de Lotes quanto na Análise de Estoque.</DialogDescription>
           </DialogHeader>
           
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <h3 className="text-lg font-medium">{editingProduct ? 'Editar produto' : 'Adicionar novo produto'}</h3>
+                <h3 className="text-lg font-medium">{editingProduct ? 'Editar item' : 'Adicionar novo item'}</h3>
                 <FormField
                   control={form.control}
                   name="baseName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome do produto</FormLabel>
+                      <FormLabel>Nome do item</FormLabel>
                       <FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl>
-                      <FormDescription>Este é o nome base do produto (ex: "Leite Integral"). As variações de tamanho serão adicionadas ao nome completo automaticamente.</FormDescription>
+                      <FormDescription>Este é o nome base do item (ex: "Leite Integral"). As variações de tamanho serão adicionadas ao nome completo automaticamente.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -225,7 +225,7 @@ export function ProductManagementModal({
                 </div>
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar produto'}</Button>
+                  <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar item'}</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -233,7 +233,7 @@ export function ProductManagementModal({
             <>
               {permissions.add && (
                 <Button onClick={handleAddNew} className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo item
                 </Button>
               )}
               <Separator className="my-4" />
@@ -248,7 +248,7 @@ export function ProductManagementModal({
                       </div>
                     </div>
                   )) : (
-                    <p className="text-center text-muted-foreground py-8">Nenhum produto ainda. Adicione um para começar!</p>
+                    <p className="text-center text-muted-foreground py-8">Nenhum item ainda. Adicione um para começar!</p>
                   )}
                 </div>
               </ScrollArea>

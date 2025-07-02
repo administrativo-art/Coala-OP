@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,27 +16,23 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { analyzeStock } from '@/ai/flows/analyze-stock-flow';
 import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, UploadCloud, Settings, AlertCircle, FileClock, Trash2, Loader2, Download, TrendingUp, Info, Bot, Send } from 'lucide-react';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type LotEntry, type Product } from '@/types';
+import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const months = [
   { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' }, { value: 3, label: 'Março' },
-  { value: 4, label: 'Abril' }, { value: 5, label: 'Maio' }, { value: 6, label: 'Junho' },
+  { value: 4, label: 'Abril' }, { value: 5, label: 'Maio' }, { value: 6, 'label': 'Junho' },
   { value: 7, label: 'Julho' }, { value: 8, label: 'Agosto' }, { value: 9, 'label': 'Setembro' },
   { value: 10, label: 'Outubro' }, { value: 11, 'label': 'Novembro' }, { value: 12, 'label': 'Dezembro' },
 ];
@@ -59,7 +55,7 @@ type DistributionSuggestion = {
 
 export function StockAnalyzer() {
     const { user, permissions } = useAuth();
-    const { kiosks, loading: kiosksLoading } = useKiosks();
+    const { kiosks } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
@@ -237,11 +233,8 @@ export function StockAnalyzer() {
     const handleDeleteConsumptionReportConfirm = async () => { if (consumptionReportToDelete) { await deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
     const canUploadStock = permissions.stockAnalysis?.upload;
-    const canConfigureStock = permissions.stockAnalysis?.configure;
     const canViewStockHistory = permissions.stockAnalysis?.viewHistory;
     const canDeleteStockHistory = permissions.stockAnalysis?.deleteHistory;
-    const canUploadConsumption = permissions.consumptionAnalysis?.upload;
-    const defaultTab = canUploadStock ? "replenishment" : "parameters";
 
     const renderStockHistory = () => {
         if (stockHistoryLoading) return <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
@@ -316,26 +309,37 @@ export function StockAnalyzer() {
 
     return (
         <>
-            <Tabs defaultValue={defaultTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    {canUploadStock && <TabsTrigger value="replenishment"><Bot className="mr-2" /> Análise de Reposição</TabsTrigger>}
-                    {canConfigureStock && <TabsTrigger value="parameters"><Settings className="mr-2" /> Configurar Parâmetros</TabsTrigger>}
-                </TabsList>
-                
-                {canUploadStock && <TabsContent value="replenishment" className="mt-4">
-                    <Card><CardHeader><CardTitle>Análise Inteligente de Reposição</CardTitle><CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription></CardHeader><CardContent className="space-y-4 text-center p-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Análise Inteligente de Reposição</CardTitle>
+                    <CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription>
+                </CardHeader>
+                {canUploadStock ? (
+                    <CardContent className="space-y-4 text-center p-6">
                         <input type="file" accept=".pdf" ref={stockFileInputRef} onChange={handleStockFileChange} className="hidden" />
-                        <Button size="lg" onClick={handleStockUploadClick} className="mt-4" disabled={isAnalyzing}>{isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} {isAnalyzing ? 'Analisando...' : 'Fazer Upload de Relatório'}</Button>
-                    </CardContent></Card>
-                    {canViewStockHistory && <div className="mt-6"><Separator className="mb-4" /><h3 className="text-lg font-semibold mb-4">Histórico de Análises</h3>{renderStockHistory()}</div>}
-                </TabsContent>}
-                
-                {canConfigureStock && <TabsContent value="parameters" className="mt-4">
-                    <Card><CardHeader><CardTitle>Configurar Parâmetros de Análise</CardTitle><CardDescription>Defina o estoque ideal por quiosque e gerencie os produtos que serão considerados na análise.</CardDescription></CardHeader><CardContent className="p-6">
-                        <StockAnalysisConfigurator />
-                    </CardContent></Card>
-                </TabsContent>}
-            </Tabs>
+                        <Button size="lg" onClick={handleStockUploadClick} className="mt-4" disabled={isAnalyzing}>
+                            {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />} 
+                            {isAnalyzing ? 'Analisando...' : 'Fazer Upload de Relatório'}
+                        </Button>
+                    </CardContent>
+                ) : (
+                    <CardContent>
+                        <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Permissão Necessária</AlertTitle>
+                            <AlertDescription>Você não tem permissão para fazer upload de relatórios.</AlertDescription>
+                        </Alert>
+                    </CardContent>
+                )}
+            </Card>
+            
+            {canViewStockHistory && (
+                <div className="mt-6">
+                    <Separator className="mb-4" />
+                    <h3 className="text-lg font-semibold mb-4">Histórico de Análises</h3>
+                    {renderStockHistory()}
+                </div>
+            )}
             
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
             {consumptionReportToDelete && <DeleteConfirmationDialog open={!!consumptionReportToDelete} onOpenChange={() => setConsumptionReportToDelete(null)} onConfirm={handleDeleteConsumptionReportConfirm} itemName={`a análise de consumo "${consumptionReportToDelete.reportName}"`} />}

@@ -1,23 +1,17 @@
+
 "use client"
 import { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { useProducts } from "@/hooks/use-products";
-import { useExpiryProducts } from "@/hooks/use-expiry-products";
-import { usePredefinedLists } from "@/hooks/use-predefined-lists";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StockAnalyzer } from "@/components/stock-importer"; 
 import { ExpiryControl } from "@/components/expiry-control"; 
 import { BarChart3, ClipboardCheck, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProductManagementModal } from "./product-management-modal";
 import { Button } from "./ui/button";
 
 export function StockManagement() {
     const { permissions, loading } = useAuth();
-    const { products, getProductFullName, addProduct, updateProduct, deleteProduct } = useProducts();
-    const { lots } = useExpiryProducts();
-    const { lists } = usePredefinedLists();
-    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     
     if (loading) {
         return (
@@ -53,9 +47,11 @@ export function StockManagement() {
                 </div>
                  <div className="mb-4">
                     {canManageProducts && (
-                        <Button onClick={() => setIsProductModalOpen(true)}>
-                            <Settings className="mr-2 h-4 w-4" />
-                            Gerenciar Produtos
+                        <Button asChild>
+                            <Link href="/dashboard/items">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Gerenciar Itens
+                            </Link>
                         </Button>
                     )}
                 </div>
@@ -69,19 +65,6 @@ export function StockManagement() {
                     {canAnalyzeStock && <TabsContent value="stock-analysis" className="mt-4"><StockAnalyzer /></TabsContent>}
                 </Tabs>
             </div>
-
-            <ProductManagementModal
-                open={isProductModalOpen}
-                onOpenChange={setIsProductModalOpen}
-                products={products}
-                addProduct={addProduct}
-                updateProduct={updateProduct}
-                deleteProduct={deleteProduct}
-                getProductFullName={getProductFullName}
-                permissions={permissions.products}
-                lots={lots}
-                lists={lists}
-            />
         </>
     );
 }
