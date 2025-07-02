@@ -22,35 +22,6 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
   useEffect(() => {
     const q = query(collection(db, "consumptionReports"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      // Seed data if the collection is empty
-      if (querySnapshot.empty && !localStorage.getItem('consumptionReports_seeded')) {
-        console.log("No consumption reports found. Seeding default report...");
-        const today = new Date();
-        const dummyReport: Omit<ConsumptionReport, 'id'> = {
-          reportName: 'Vendas de Maio de 2024.pdf',
-          month: 5,
-          year: 2024,
-          kioskId: 'tirirical',
-          kioskName: 'Quiosque Tirirical',
-          createdAt: today.toISOString(),
-          status: 'completed',
-          results: [
-            { productId: 'some-id-1', productName: 'Bebida Láctea Baunilha (2L)', consumedQuantity: 150, consumedPackages: 75 },
-            { productId: 'some-id-2', productName: 'Leite Integral (1L)', consumedQuantity: 240, consumedPackages: 240 },
-          ]
-        };
-        const batch = writeBatch(db);
-        const docRef = doc(collection(db, "consumptionReports"));
-        batch.set(docRef, dummyReport);
-        try {
-            await batch.commit();
-            localStorage.setItem('consumptionReports_seeded', 'true');
-        } catch(seedError) {
-            console.error("Error seeding consumption report:", seedError);
-        }
-        return;
-      }
-      
       const historyData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConsumptionReport));
       setHistory(historyData.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       setLoading(false);

@@ -25,30 +25,6 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
   useEffect(() => {
     const q = query(collection(db, "stockAnalysisProducts")); // New collection
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        if (querySnapshot.empty && !localStorage.getItem('stockAnalysisProducts_seeded')) {
-          console.log("No stock analysis products found. Seeding default products...");
-          const defaultProducts: Omit<Product, 'id', 'stockLevels'>[] = [
-            { baseName: 'Bebida Láctea Baunilha', category: 'Volume', packageSize: 2, unit: 'L' },
-            { baseName: 'Leite Integral', category: 'Volume', packageSize: 1, unit: 'L' },
-            { baseName: 'Chocolate em Pó', category: 'Massa', packageSize: 400, unit: 'g' },
-            { baseName: 'Ovomaltine', category: 'Massa', packageSize: 1, unit: 'g' }, // A 'base' product
-          ];
-          
-          const batch = writeBatch(db);
-          defaultProducts.forEach(product => {
-            const docRef = doc(collection(db, "stockAnalysisProducts"));
-            batch.set(docRef, product);
-          });
-          
-          try {
-            await batch.commit();
-            localStorage.setItem('stockAnalysisProducts_seeded', 'true');
-          } catch(seedError) {
-            console.error("Error seeding stock analysis products:", seedError);
-          }
-          return;
-        }
-
         const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
         setProducts(productsData.sort((a,b) => a.baseName.localeCompare(b.baseName)));
         setLoading(false);
