@@ -137,7 +137,10 @@ export function StockAnalyzer() {
     const parseQuantity = (qtyString: string | number) => {
         if (typeof qtyString === 'number') return qtyString;
         if (typeof qtyString !== 'string') return 0;
-        return parseFloat(qtyString.replace(/\./g, '').replace(',', '.')) || 0;
+        // Remove thousand separators (dots), then replace decimal comma with a dot.
+        const cleanedString = qtyString.replace(/\./g, '').replace(',', '.');
+        // Use parseFloat and default to 0 if it results in NaN.
+        return parseFloat(cleanedString) || 0;
     };
 
 
@@ -174,7 +177,7 @@ export function StockAnalyzer() {
 
                     // Process rows from CSV
                     for (const row of rows) {
-                        const originalItemName = (row['Item'] || row['Produto'] || row['Descrição']);
+                        const originalItemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
                         if (!originalItemName) continue;
                         
                         const product = findProductByName(originalItemName);
@@ -216,23 +219,24 @@ export function StockAnalyzer() {
                          const stockLevels = product.stockLevels?.[kiosk.id];
                          if (!stockLevels) continue;
 
+                        const minStock = stockLevels.min ?? 0;
                         const maxStock = stockLevels.max ?? 0;
-                        const neededInBaseUnit = maxStock; // If it's zero, we need the max to restock
+                        const neededInBaseUnit = 0 < minStock ? maxStock - 0 : 0;
                         
-                        if (neededInBaseUnit > 0) {
-                            const suggestionDetails = generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id);
-                            
-                            analysisResults.push({
-                                productId: product.id,
-                                productName: product.baseName,
-                                kioskId: kiosk.id,
-                                kioskName: kiosk.name,
-                                currentStockInBaseUnit: 0,
-                                maxStockInBaseUnit: maxStock,
-                                neededInBaseUnit,
-                                ...suggestionDetails,
-                            });
-                        }
+                        const suggestionDetails = neededInBaseUnit > 0 
+                            ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
+                            : { statusMessage: 'Estoque OK (item não estava no relatório).', isActionable: false, distributionSuggestion: [] };
+                        
+                        analysisResults.push({
+                            productId: product.id,
+                            productName: product.baseName,
+                            kioskId: kiosk.id,
+                            kioskName: kiosk.name,
+                            currentStockInBaseUnit: 0,
+                            maxStockInBaseUnit: maxStock,
+                            neededInBaseUnit,
+                            ...suggestionDetails,
+                        });
                     }
                     
                     const displayName = `${kiosk.name} - ${format(new Date(), "dd/MM/yyyy")}`;
@@ -429,9 +433,9 @@ export function StockAnalyzer() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">
-                                {report.results?.filter(item => item.neededInBaseUnit > 0).length > 0 ? (
+                                {report.results && report.results.length > 0 ? (
                                 <div className="space-y-4">
-                                {report.results.filter(item => item.neededInBaseUnit > 0).map((item, index) => (
+                                {report.results.map((item, index) => (
                                     <div key={index} className="border rounded-lg p-4">
                                         <div className="flex justify-between items-start">
                                             <div>
@@ -439,7 +443,7 @@ export function StockAnalyzer() {
                                                 <div className="text-sm text-muted-foreground space-y-1 mt-1">
                                                     <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                     <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                 </div>
                                             </div>
                                             {item.isActionable && item.neededInBaseUnit > 0 && <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
@@ -468,7 +472,7 @@ export function StockAnalyzer() {
                                     </div>
                                 ))}
                                 </div>
-                                ) : (<p className="text-center text-muted-foreground text-sm pt-4">Nenhum item precisou de reposição nesta análise.</p>)}
+                                ) : (<p className="text-center text-muted-foreground text-sm pt-4">Nenhum item analisado para este relatório.</p>)}
                             </AccordionContent>
                         </Card>
                     </AccordionItem>
