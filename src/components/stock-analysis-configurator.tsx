@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -14,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
-import { Download } from 'lucide-react';
+import { Download, PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { units } from '@/lib/conversion';
 
 type FormProduct = Product & {
@@ -25,7 +26,13 @@ type FormValues = {
   products: FormProduct[];
 };
 
-export function StockAnalysisConfigurator() {
+interface StockAnalysisConfiguratorProps {
+    onAddNew?: () => void;
+    onEdit?: (product: Product) => void;
+    onDelete?: (product: Product) => void;
+}
+
+export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockAnalysisConfiguratorProps) {
   const { products, loading: productsLoading, updateMultipleProducts, getProductFullName } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
@@ -156,23 +163,45 @@ export function StockAnalysisConfigurator() {
     );
   }
   
-  if (!productsLoading && products.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <p>Nenhum produto cadastrado para análise.</p>
-        <p className="text-sm">Clique em "Gerenciar Produtos" para adicionar o primeiro.</p>
-      </div>
-    )
+  const handleEditClick = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    onEdit?.(product);
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    onDelete?.(product);
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="flex justify-end p-1">
+             {onAddNew && (
+                <Button type="button" onClick={onAddNew}>
+                    <PlusCircle className="mr-2" /> Adicionar Novo Item
+                </Button>
+            )}
+        </div>
+        {fields.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+                <p>Nenhum produto cadastrado para análise.</p>
+                <p className="text-sm">Clique em "Adicionar Novo Item" para começar.</p>
+            </div>
+        ) : (
         <Accordion type="multiple" className="w-full space-y-4" defaultValue={fields.map(field => field.id)}>
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                 {getProductFullName(field)}
+                 <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                 <div className="flex items-center gap-1">
+                    {onEdit && (
+                         <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}><Edit className="h-4 w-4" /></Button>
+                    )}
+                     {onDelete && (
+                         <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}><Trash2 className="h-4 w-4" /></Button>
+                    )}
+                 </div>
               </AccordionTrigger>
               <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4">
@@ -254,7 +283,8 @@ export function StockAnalysisConfigurator() {
             </AccordionItem>
           ))}
         </Accordion>
-        <div className="flex justify-between items-center pt-4 border-t">
+        )}
+        <div className="flex justify-between items-center pt-4 mt-6 border-t">
           <Button type="button" variant="outline" onClick={handleExportPdf}>
             <Download className="mr-2" /> Exportar para PDF
           </Button>

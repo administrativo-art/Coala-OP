@@ -11,19 +11,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-import { type Product, unitCategories, UnitCategory, type LotEntry, type PredefinedList } from '@/types';
+import { type Product, unitCategories, UnitCategory } from '@/types';
 import { units } from '@/lib/conversion';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { useToast } from '@/hooks/use-toast';
 
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do item é obrigatório.'),
@@ -36,32 +30,18 @@ type ProductFormValues = z.infer<typeof productSchema>;
 type ProductManagementModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  products: Product[];
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (updatedProduct: Product) => void;
-  deleteProduct: (productId: string) => void;
-  getProductFullName: (product: Product) => string;
-  permissions: { add: boolean; edit: boolean; delete: boolean };
-  lots: LotEntry[];
-  lists: PredefinedList[];
+  productToEdit: Product | null;
 };
 
 export function ProductManagementModal({ 
   open, 
   onOpenChange,
-  products,
   addProduct,
   updateProduct,
-  deleteProduct,
-  getProductFullName,
-  permissions,
-  lots,
-  lists
+  productToEdit
 }: ProductManagementModalProps) {
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const { toast } = useToast();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -76,97 +56,44 @@ export function ProductManagementModal({
 
   useEffect(() => {
     if (open) {
-      setShowForm(false);
-      setEditingProduct(null);
+      if (productToEdit) {
+        form.reset({
+          baseName: productToEdit.baseName,
+          category: productToEdit.category,
+          unit: productToEdit.unit,
+        });
+      } else {
+        form.reset({ baseName: '', category: 'Volume', unit: 'L' });
+      }
     }
-  }, [open]);
+  }, [open, productToEdit, form]);
 
   useEffect(() => {
-      if (category) {
+      const isDirty = form.formState.isDirty;
+      if (category && (isDirty || !productToEdit)) {
           form.setValue('unit', Object.keys(units[category])[0]);
       }
-  }, [category, form]);
+  }, [category, form, productToEdit]);
 
-  const handleAddNew = () => {
-    setEditingProduct(null);
-    form.reset({ baseName: '', category: 'Volume', unit: 'L' });
-    setShowForm(true);
-  };
-
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
-    form.reset({
-      baseName: product.baseName,
-      category: product.category,
-      unit: product.unit,
-    });
-    setShowForm(true);
-  };
-  
-  const handleDeleteClick = (product: Product) => {
-    const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
-    const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
-
-    let messages = [];
-    if (usedInLotsCount > 0) {
-        messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
-    }
-    if (usedInLists.length > 0) {
-        messages.push(`está nas listas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
-    }
-
-    if (messages.length > 0) {
-        toast({
-            variant: "destructive",
-            title: "Não é possível excluir o item",
-            description: `Este item não pode ser excluído pois ${messages.join(' e ')}.`,
-            duration: 8000,
-        });
-        return;
-    }
-    setProductToDelete(product);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (productToDelete) {
-      try {
-        await deleteProduct(productToDelete.id);
-        setProductToDelete(null);
-      } catch (error) {
-        console.error("Deletion failed", error)
-      }
-    }
-  };
 
   const onSubmit = (values: ProductFormValues) => {
     const dataToSave = { ...values, packageSize: 1 };
-    if (editingProduct) {
-      updateProduct({ ...editingProduct, ...dataToSave });
+    if (productToEdit) {
+      updateProduct({ ...productToEdit, ...dataToSave });
     } else {
       addProduct(dataToSave);
     }
-    setShowForm(false);
-    setEditingProduct(null);
+    onOpenChange(false);
   };
 
-  const canManageAnything = permissions.add || permissions.edit || permissions.delete;
-  if (!canManageAnything) {
-    return null;
-  }
-
   return (
-    <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Gerenciar itens</DialogTitle>
-            <DialogDescription>Adicione ou edite os itens genéricos para a Análise de Estoque. Esta lista de itens servirá para o sistema identificar os itens nos relatórios.</DialogDescription>
+            <DialogTitle>{productToEdit ? 'Editar item' : 'Adicionar novo item'}</DialogTitle>
           </DialogHeader>
-          
-          {showForm ? (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <h3 className="text-lg font-medium">{editingProduct ? 'Editar item' : 'Adicionar novo item'}</h3>
+          <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
                 <FormField
                   control={form.control}
                   name="baseName"
@@ -213,46 +140,12 @@ export function ProductManagementModal({
                     )}
                   />
                 <DialogFooter className="pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar item'}</Button>
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                  <Button type="submit">{productToEdit ? 'Salvar alterações' : 'Adicionar item'}</Button>
                 </DialogFooter>
               </form>
             </Form>
-          ) : (
-            <>
-              {permissions.add && (
-                <Button onClick={handleAddNew} className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo item
-                </Button>
-              )}
-              <Separator className="my-4" />
-              <ScrollArea className="h-72">
-                <div className="space-y-2 pr-4">
-                  {products.length > 0 ? products.map(product => (
-                    <div key={product.id} className="flex items-center justify-between rounded-md border p-3">
-                      <span className="font-medium">{getProductFullName(product)}</span>
-                      <div className="flex gap-2">
-                        {permissions.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>}
-                        {permissions.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>}
-                      </div>
-                    </div>
-                  )) : (
-                    <p className="text-center text-muted-foreground py-8">Nenhum item ainda. Adicione um para começar!</p>
-                  )}
-                </div>
-              </ScrollArea>
-            </>
-          )}
         </DialogContent>
       </Dialog>
-      {productToDelete && (
-        <DeleteConfirmationDialog
-          open={!!productToDelete}
-          onOpenChange={() => setProductToDelete(null)}
-          onConfirm={handleDeleteConfirm}
-          itemName={getProductFullName(productToDelete)}
-        />
-      )}
-    </>
   );
 }
