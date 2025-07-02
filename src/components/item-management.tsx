@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useProducts } from '@/hooks/use-products';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ interface ItemManagementProps {
 
 export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
     const { permissions, loading: authLoading } = useAuth();
-    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
+    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useStockAnalysisProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -168,7 +168,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             <Dialog open={open} onOpenChange={handleOpenChangeAndReset}>
                 <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Gerenciar Insumos</DialogTitle>
+                        <DialogTitle>Gerenciar Insumos para Análise</DialogTitle>
                         <DialogDescription>
                             Defina os insumos e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
                         </DialogDescription>
@@ -183,9 +183,9 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                         <div className="flex-1 flex flex-col min-h-0">
                             <ScrollArea className="flex-1 pr-1">
                                 <StockAnalysisConfigurator 
-                                    onAddNew={permissions.products.add ? handleAddNew : undefined}
-                                    onEdit={permissions.products.edit ? handleEdit : undefined}
-                                    onDelete={permissions.products.delete ? handleDeleteClick : undefined}
+                                    onAddNew={permissions.stockAnalysis.configure ? handleAddNew : undefined}
+                                    onEdit={permissions.stockAnalysis.configure ? handleEdit : undefined}
+                                    onDelete={permissions.stockAnalysis.configure ? handleDeleteClick : undefined}
                                     selectedProducts={selectedProducts}
                                     onProductSelectionChange={handleProductSelectionChange}
                                     onSelectAllChange={handleSelectAllChange}
@@ -199,7 +199,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                             type="button"
                             variant="destructive"
                             onClick={handleDeleteSelectedClick}
-                            disabled={selectedProducts.size === 0 || !permissions.products.delete}
+                            disabled={selectedProducts.size === 0 || !permissions.stockAnalysis.configure}
                         >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Excluir Selecionados ({selectedProducts.size})

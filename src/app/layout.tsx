@@ -12,6 +12,7 @@ import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
+import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -35,20 +36,22 @@ export default function RootLayout({
           <AuthProvider>
             <KiosksProvider>
               <ProductsProvider>
-                <ExpiryProductsProvider>
-                  <PredefinedListsProvider>
-                    <FormProvider>
-                      <StockAnalysisProvider>
-                          <ConsumptionAnalysisProvider>
-                            <MovementHistoryProvider>
-                              {children}
-                              <Toaster />
-                            </MovementHistoryProvider>
-                          </ConsumptionAnalysisProvider>
-                      </StockAnalysisProvider>
-                    </FormProvider>
-                  </PredefinedListsProvider>
-                </ExpiryProductsProvider>
+                <StockAnalysisProductsProvider>
+                  <ExpiryProductsProvider>
+                    <PredefinedListsProvider>
+                      <FormProvider>
+                        <StockAnalysisProvider>
+                            <ConsumptionAnalysisProvider>
+                              <MovementHistoryProvider>
+                                {children}
+                                <Toaster />
+                              </MovementHistoryProvider>
+                            </ConsumptionAnalysisProvider>
+                        </StockAnalysisProvider>
+                      </FormProvider>
+                    </PredefinedListsProvider>
+                  </ExpiryProductsProvider>
+                </StockAnalysisProductsProvider>
               </ProductsProvider>
             </KiosksProvider>
           </AuthProvider>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -19,7 +20,6 @@ import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { ItemManagement } from './item-management';
 
 
 const BarcodeScannerModal = dynamic(
@@ -44,7 +44,6 @@ export function ExpiryControl() {
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
-  const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
 
 
   const visibleLots = useMemo(() => {
@@ -277,9 +276,6 @@ export function ExpiryControl() {
                     </Button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <Button variant="outline" onClick={() => setIsItemManagementOpen(true)} className="w-full sm:w-auto" disabled={!canManageProducts}>
-                        <Settings className="mr-2 h-4 w-4" /> Gerenciar Insumos
-                    </Button>
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
                         <Plus className="mr-2" /> Adicionar insumo
                     </Button>
@@ -393,7 +389,6 @@ export function ExpiryControl() {
           onScanSuccess={handleSearchScanSuccess}
         />
       )}
-      <ItemManagement open={isItemManagementOpen} onOpenChange={setIsItemManagementOpen} />
     </>
   );
 }

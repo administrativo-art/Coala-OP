@@ -2,7 +2,7 @@
 "use client"
 import React, { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { useProducts } from '@/hooks/use-products';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -40,7 +40,7 @@ interface StockAnalysisConfiguratorProps {
 }
 
 export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange, onSelectAllChange }: StockAnalysisConfiguratorProps) {
-  const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useProducts();
+  const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useStockAnalysisProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
   const [isImporting, setIsImporting] = useState(false);

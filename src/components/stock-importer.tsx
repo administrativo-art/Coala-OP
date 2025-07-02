@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
-import { useProducts } from '@/hooks/use-products';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -45,8 +45,8 @@ export function StockAnalyzer() {
     const { kiosks } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
-    const { products, getProductFullName, loading: productsLoading } = useProducts();
-    const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
+    const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
+    const { lots: allLots, loading: lotsLoading, moveMultipleLots, getProductFullName } = useExpiryProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
@@ -69,10 +69,10 @@ export function StockAnalyzer() {
             .trim();
     };
     
-    const findProductByName = (baseName: string): Product | undefined => {
+    const findAnalysisProductByName = (baseName: string): Product | undefined => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
-        return products.find(p => normalizeString(p.baseName) === normalizedName);
+        return analysisProducts.find(p => normalizeString(p.baseName) === normalizedName);
     }
 
     const generateDistributionSuggestion = (
@@ -82,15 +82,10 @@ export function StockAnalyzer() {
     ): Omit<StockAnalysisResultItem, keyof Omit<StockAnalysisResultItem, 'statusMessage' | 'isActionable' | 'distributionSuggestion'>> => {
         const sourceKioskId = 'matriz';
 
-        const productVariations = products.filter(p => p.baseName === productBaseName);
-        if (productVariations.length === 0) {
-             return { statusMessage: `Nenhuma variação de produto físico encontrada para "${productBaseName}".`, isActionable: false, distributionSuggestion: [] };
-        }
-        const productVariationIds = productVariations.map(p => p.id);
-
         const availableLots = allLots.filter(lot => 
-            lot.kioskId === sourceKioskId && productVariationIds.includes(lot.productId)
+            lot.kioskId === sourceKioskId && normalizeString(lot.productName.split('(')[0]) === normalizeString(productBaseName)
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
+
 
         if (availableLots.length === 0) {
             return { statusMessage: `Sem estoque de ${productBaseName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
@@ -101,11 +96,8 @@ export function StockAnalyzer() {
 
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
-
-            const productDetails = products.find(p => p.id === lot.productId);
-            if (!productDetails) continue;
-
-            const packageValueInBaseUnit = productDetails.packageSize;
+            
+            const packageValueInBaseUnit = lot.quantity * (findAnalysisProductByName(productBaseName)?.packageSize || 1);
             const availablePackages = lot.quantity;
             
             const neededPackages = Math.ceil(remainingNeeded / packageValueInBaseUnit);
@@ -114,12 +106,12 @@ export function StockAnalyzer() {
             if (packagesToTake > 0) {
                 suggestion.push({
                     lotId: lot.id,
-                    productId: productDetails.id,
-                    productName: getProductFullName(productDetails),
+                    productId: lot.productId,
+                    productName: lot.productName,
                     fromKioskId: sourceKioskId,
                     quantityToMove: packagesToTake,
                     baseUnitValue: packageValueInBaseUnit * packagesToTake,
-                    baseUnit: productDetails.unit,
+                    baseUnit: findAnalysisProductByName(productBaseName)?.unit || '',
                     lotNumber: lot.lotNumber,
                     expiryDate: lot.expiryDate,
                 });
@@ -128,7 +120,7 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-             const productUnit = productVariations[0]?.unit || '';
+             const productUnit = findAnalysisProductByName(productBaseName)?.unit || '';
             return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productBaseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
@@ -154,17 +146,13 @@ export function StockAnalyzer() {
         const lastDot = numStr.lastIndexOf('.');
     
         if (lastComma > lastDot) {
-            // Brazilian format: "1.234,56" -> remove dots, replace comma with dot
             numStr = numStr.replace(/\./g, '').replace(',', '.');
         } else if (lastDot > lastComma) {
-            // US format: "1,234.56" -> remove commas
             numStr = numStr.replace(/,/g, '');
         } else if (lastComma !== -1) {
-            // No dots, just a comma: "1234,56" -> replace comma with dot
             numStr = numStr.replace(',', '.');
         }
     
-        // Remove any remaining non-numeric characters except for the decimal point and minus sign
         numStr = numStr.replace(/[^0-9.-]/g, '');
     
         const parsed = parseFloat(numStr);
@@ -201,14 +189,14 @@ export function StockAnalyzer() {
 
                     const analysisResults: StockAnalysisResultItem[] = [];
                     const unmatchedItems: string[] = [];
-                    const allConfiguredProducts = [...products];
+                    const allConfiguredProducts = [...analysisProducts];
 
                     // Process rows from CSV
                     for (const row of rows) {
                         const originalItemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
                         if (!originalItemName) continue;
                         
-                        const product = findProductByName(originalItemName);
+                        const product = findAnalysisProductByName(originalItemName);
                         if (!product) {
                             unmatchedItems.push(originalItemName);
                             continue;
@@ -393,7 +381,7 @@ export function StockAnalyzer() {
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
-            const productUnit = findProductByName(item.productName)?.unit || '';
+            const productUnit = findAnalysisProductByName(item.productName)?.unit || '';
             doc.text(`Estoque Apurado: ${(item.currentStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
             addPageIfNeeded();
@@ -432,7 +420,7 @@ export function StockAnalyzer() {
         doc.save(filename);
     };
 
-    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
+    const canManageAnalysisProducts = permissions.stockAnalysis.configure;
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canViewStockHistory = permissions.stockAnalysis?.viewHistory;
     const canDeleteStockHistory = permissions.stockAnalysis?.deleteHistory;
@@ -475,9 +463,9 @@ export function StockAnalyzer() {
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
                                                 <div className="text-sm text-muted-foreground space-y-1 mt-1">
-                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
                                                 </div>
                                             </div>
                                             {item.isActionable && item.neededInBaseUnit > 0 && <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
@@ -524,10 +512,10 @@ export function StockAnalyzer() {
                             <CardTitle>Análise de Reposição por Planilha</CardTitle>
                             <CardDescription>Importe sua planilha de estoque para calcular as necessidades e gerar sugestões de distribuição.</CardDescription>
                         </div>
-                         {canManageProducts && (
+                         {canManageAnalysisProducts && (
                             <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
                                 <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar Insumos
+                                Gerenciar Insumos para Análise
                             </Button>
                         )}
                     </div>
