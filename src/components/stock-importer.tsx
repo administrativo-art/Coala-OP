@@ -145,22 +145,33 @@ export function StockAnalyzer() {
 
         let numStr = qtyString.trim();
 
-        // Handle negative values in parentheses e.g. (5,00)
         const isNegative = numStr.startsWith('(') && numStr.endsWith(')');
         if (isNegative) {
             numStr = '-' + numStr.substring(1, numStr.length - 1);
         }
-
-        // Standardize to use '.' as decimal separator by removing thousand separators (dots) 
-        // and replacing the decimal separator (comma) with a dot.
-        // This is optimized for Brazilian and other comma-decimal formats.
-        const standardizedStr = numStr.replace(/\./g, '').replace(',', '.');
         
-        // Remove any other non-numeric characters that might remain, 
-        // except for the decimal point and the negative sign.
-        const finalStr = standardizedStr.replace(/[^\d.-]/g, '');
+        // Remove any non-numeric characters except for ',', '.', and '-'
+        numStr = numStr.replace(/[^0-9.,-]/g, '');
 
-        const parsed = parseFloat(finalStr);
+        const lastComma = numStr.lastIndexOf(',');
+        const lastDot = numStr.lastIndexOf('.');
+
+        // If comma is the decimal separator (e.g., "1.234,56")
+        if (lastComma > lastDot) {
+            // Remove all dots (thousand separators), then replace comma with a dot for parsing
+            numStr = numStr.replace(/\./g, '').replace(',', '.');
+        } 
+        // If dot is the decimal separator (e.g., "1,234.56")
+        else if (lastDot > lastComma) {
+            // Remove all commas (thousand separators)
+            numStr = numStr.replace(/,/g, '');
+        }
+        // If only a comma exists, it's the decimal separator
+        else if (lastComma !== -1) {
+            numStr = numStr.replace(',', '.');
+        }
+
+        const parsed = parseFloat(numStr);
         return isNaN(parsed) ? 0 : parsed;
     };
 
@@ -587,7 +598,3 @@ export function StockAnalyzer() {
         </>
     );
 }
-
-    
-
-    
