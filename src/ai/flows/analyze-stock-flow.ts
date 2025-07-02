@@ -72,12 +72,12 @@ const analyzeStockPrompt = ai.definePrompt({
     3.  **Calculate Current Stock in Base Unit:** Extract the current stock quantity for each matched product from the PDF. The PDF may list quantities in a specific unit (e.g., 'ml') or as a count of packages. Use the \`pdfUnit\` field from the product configuration to correctly interpret the PDF quantity. Convert this quantity to the product's main base unit (e.g., convert 'ml' to 'L', 'g' to 'kg'). The final \`currentStockInBaseUnit\` MUST be in this base unit.
         - **IMPORTANT**: If a product's \`packageSize\` is exactly \`1\`, it represents a generic, non-packaged item. In this case, you MUST assume the quantity found in the PDF is already in the product's base \`unit\`. Do NOT attempt to multiply by package size.
         - If the product's \`packageSize\` is greater than \`1\`, and the PDF gives a number of packages (e.g., "10 caixas"), multiply that number by the product's \`packageSize\` to get the total in the base unit.
-    4.  **Calculate Needs:** For each product and kiosk combination found in the PDF, calculate the replenishment need. A product needs replenishment only if its \`currentStockInBaseUnit\` is BELOW the configured \`min\` stock level for that kiosk.
-        - The \`neededInBaseUnit\` is the difference between the \`max\` stock level and the \`currentStockInBaseUnit\`.
-        - If \`currentStockInBaseUnit\` is at or above the \`min\` level, the \`neededInBaseUnit\` is 0.
+    4.  **Calculate Needs:** For each product and kiosk combination found in the PDF, calculate the replenishment need. A product needs replenishment **only if** its \`currentStockInBaseUnit\` is **BELOW** the configured \`min\` stock level for that kiosk.
+        - If \`currentStockInBaseUnit\` is less than the configured \`min\`, then the \`neededInBaseUnit\` is the difference between the \`max\` stock level and the \`currentStockInBaseUnit\`.
+        - If \`currentStockInBaseUnit\` is at or above the \`min\` level, then the \`neededInBaseUnit\` is **exactly 0**.
         - The \`maxStockInBaseUnit\` is the \`max\` value from the configuration.
-    5.  **Filter Results:** Your final output in the \`results\` array should ONLY include products that require replenishment (where \`neededInBaseUnit\` > 0).
-    6.  **Summarize:** Create a concise \`summary\` of the findings, like "3 produtos precisam de reposição em 2 quiosques.". If nothing is needed, say so.
+    5.  **Filter Results:** CRITICAL: The final \`results\` array in your JSON output MUST ONLY contain products where \`neededInBaseUnit\` is strictly greater than 0. If a product's \`neededInBaseUnit\` is 0, it MUST be excluded from the \`results\` array.
+    6.  **Summarize:** Create a concise \`summary\` based on the FINAL filtered results. For example, "3 produtos precisam de reposição em 2 quiosques.". If the final \`results\` array is empty, the summary must state that nothing needs replenishment.
     7.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema.
 
     **CONFIGURATION DATA:**
