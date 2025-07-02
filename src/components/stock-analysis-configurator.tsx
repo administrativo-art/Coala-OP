@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { type Product } from '@/types';
 import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info } from 'lucide-react';
 import { units } from '@/lib/conversion';
+import { Checkbox } from './ui/checkbox';
 
 type FormProduct = Product & {
   formId?: string; // from useFieldArray
@@ -32,9 +33,11 @@ interface StockAnalysisConfiguratorProps {
     onAddNew?: () => void;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
+    selectedProducts: Set<string>;
+    onProductSelectionChange: (id: string, isSelected: boolean) => void;
 }
 
-export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockAnalysisConfiguratorProps) {
+export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange }: StockAnalysisConfiguratorProps) {
   const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
@@ -356,7 +359,15 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
           {fields.map((field, index) => (
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <AccordionTrigger className="p-4 hover:no-underline font-semibold text-base">
-                 <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                 <div className="flex items-center gap-4 flex-grow text-left">
+                     <Checkbox
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
+                        checked={selectedProducts.has(field.id)}
+                        aria-label={`Selecionar ${getProductFullName(field)}`}
+                    />
+                    <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                 </div>
                  <div className="flex items-center gap-1">
                     {onEdit && (
                          <Button asChild type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}><span><Edit className="h-4 w-4" /></span></Button>
@@ -447,10 +458,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
           ))}
         </Accordion>
         )}
-        <div className="flex justify-between items-center pt-4 mt-6 border-t">
-          <Button type="button" variant="outline" onClick={handleExportPdf}>
-            <Download className="mr-2" /> Exportar para PDF
-          </Button>
+        <div className="flex justify-end pt-4 mt-6 border-t">
           <Button type="submit" disabled={form.formState.isSubmitting}>Salvar Alterações Gerais</Button>
         </div>
       </form>

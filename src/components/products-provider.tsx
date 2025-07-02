@@ -12,6 +12,7 @@ export interface ProductsContextType {
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (updatedProduct: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
+  deleteMultipleProducts: (productIds: string[]) => Promise<void>;
   getProductFullName: (product: Product) => string;
   updateMultipleProducts: (products: Partial<Product>[]) => Promise<void>;
   findOrCreateProduct: (productDef: ProductDefinition) => Promise<Product | null>;
@@ -103,6 +104,20 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
         throw error;
     }
   }, []);
+
+  const deleteMultipleProducts = useCallback(async (productIds: string[]) => {
+    const batch = writeBatch(db);
+    productIds.forEach(productId => {
+        const productRef = doc(db, "products", productId);
+        batch.delete(productRef);
+    });
+    try {
+        await batch.commit();
+    } catch(error) {
+        console.error("Error deleting multiple products:", error);
+        throw error;
+    }
+  }, []);
   
   const getProductFullName = useCallback((product: Product) => {
     if (!product) return '';
@@ -115,6 +130,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     addProduct,
     updateProduct,
     deleteProduct,
+    deleteMultipleProducts,
     getProductFullName,
     updateMultipleProducts,
     findOrCreateProduct,

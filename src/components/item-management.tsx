@@ -15,6 +15,7 @@ import { ProductManagementModal } from './product-management-modal';
 import { type Product, type LotEntry, type PredefinedList } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { Trash2 } from 'lucide-react';
 
 
 interface ItemManagementProps {
@@ -24,12 +25,14 @@ interface ItemManagementProps {
 
 export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
     const { permissions, loading: authLoading } = useAuth();
-    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct } = useProducts();
+    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
     const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+    const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
+    const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     const { toast } = useToast();
     
     const loading = authLoading || productsLoading || lotsLoading || listsLoading;
@@ -39,6 +42,8 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             setIsProductModalOpen(false);
             setProductToEdit(null);
             setProductToDelete(null);
+            setProductsToDelete([]);
+            setSelectedProducts(new Set());
         }
         onOpenChange(isOpen);
     };
@@ -83,6 +88,69 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             setProductToDelete(null);
         }
     };
+    
+    const handleProductSelectionChange = (id: string, isSelected: boolean) => {
+        setSelectedProducts(prev => {
+            const newSet = new Set(prev);
+            if (isSelected) {
+                newSet.add(id);
+            } else {
+                newSet.delete(id);
+            }
+            return newSet;
+        });
+    };
+
+    const handleDeleteSelectedClick = () => {
+        const productsToPotentiallyDelete = products.filter(p => selectedProducts.has(p.id));
+        
+        const nonDeletable: { name: string; reasons: string[] }[] = [];
+        const deletable: Product[] = [];
+
+        productsToPotentiallyDelete.forEach(product => {
+            const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
+            const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
+            
+            const reasons: string[] = [];
+            if (usedInLotsCount > 0) {
+                reasons.push(`usado em ${usedInLotsCount} lote(s)`);
+            }
+            if (usedInLists.length > 0) {
+                reasons.push(`usado em lista(s)`);
+            }
+
+            if (reasons.length > 0) {
+                nonDeletable.push({ name: getProductFullName(product), reasons });
+            } else {
+                deletable.push(product);
+            }
+        });
+
+        if (nonDeletable.length > 0) {
+            const description = nonDeletable
+                .map(item => `${item.name}: ${item.reasons.join(' e ')}`)
+                .join('; ');
+            toast({
+                variant: "destructive",
+                title: `${nonDeletable.length} iten(s) não podem ser excluídos`,
+                description: `Detalhes: ${description}`,
+                duration: 8000,
+            });
+        }
+
+        if (deletable.length > 0) {
+            setProductsToDelete(deletable);
+        }
+    };
+
+    const handleDeleteMultipleConfirm = async () => {
+        if (productsToDelete.length > 0) {
+            const idsToDelete = productsToDelete.map(p => p.id);
+            await deleteMultipleProducts(idsToDelete);
+            setSelectedProducts(new Set());
+            setProductsToDelete([]);
+        }
+    };
 
 
     if (!open) return null;
@@ -110,12 +178,23 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                                     onAddNew={permissions.products.add ? handleAddNew : undefined}
                                     onEdit={permissions.products.edit ? handleEdit : undefined}
                                     onDelete={permissions.products.delete ? handleDeleteClick : undefined}
+                                    selectedProducts={selectedProducts}
+                                    onProductSelectionChange={handleProductSelectionChange}
                                 />
                             </ScrollArea>
                         </div>
                     )}
                     
-                    <DialogFooter className="pt-4 border-t">
+                    <DialogFooter className="pt-4 border-t flex justify-between">
+                         <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleDeleteSelectedClick}
+                            disabled={selectedProducts.size === 0 || !permissions.products.delete}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir Selecionados ({selectedProducts.size})
+                        </Button>
                         <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
                     </DialogFooter>
                 </DialogContent>
@@ -135,6 +214,15 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                 onOpenChange={() => setProductToDelete(null)}
                 onConfirm={handleDeleteConfirm}
                 itemName={getProductFullName(productToDelete)}
+                />
+            )}
+            
+            {productsToDelete.length > 0 && (
+                <DeleteConfirmationDialog
+                    open={productsToDelete.length > 0}
+                    onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
+                    onConfirm={handleDeleteMultipleConfirm}
+                    itemName={`os ${productsToDelete.length} iten(s) selecionado(s)`}
                 />
             )}
         </>
