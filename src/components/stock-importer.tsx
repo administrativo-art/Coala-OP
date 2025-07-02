@@ -139,30 +139,34 @@ export function StockAnalyzer() {
         if (typeof qtyString === 'number') {
             return isNaN(qtyString) ? 0 : qtyString;
         }
-
+    
         if (typeof qtyString !== 'string' || !qtyString.trim()) {
             return 0;
         }
-
+    
         let numStr = qtyString.trim();
-
+    
         if (numStr.startsWith('(') && numStr.endsWith(')')) {
             numStr = '-' + numStr.substring(1, numStr.length - 1);
         }
-
-        numStr = numStr.replace(/[^0-9.,-]/g, '');
-
+    
         const lastComma = numStr.lastIndexOf(',');
         const lastDot = numStr.lastIndexOf('.');
-
+    
         if (lastComma > lastDot) {
+            // Brazilian format: "1.234,56" -> remove dots, replace comma with dot
             numStr = numStr.replace(/\./g, '').replace(',', '.');
         } else if (lastDot > lastComma) {
+            // US format: "1,234.56" -> remove commas
             numStr = numStr.replace(/,/g, '');
         } else if (lastComma !== -1) {
+            // No dots, just a comma: "1234,56" -> replace comma with dot
             numStr = numStr.replace(',', '.');
         }
-
+    
+        // Remove any remaining non-numeric characters except for the decimal point and minus sign
+        numStr = numStr.replace(/[^0-9.-]/g, '');
+    
         const parsed = parseFloat(numStr);
         return isNaN(parsed) ? 0 : parsed;
     };

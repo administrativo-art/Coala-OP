@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -169,7 +170,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                     <DialogHeader>
                         <DialogTitle>Gerenciar itens</DialogTitle>
                         <DialogDescription>
-                            Defina os itens e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados pela IA para analisar os relatórios.
+                            Defina os itens e seus níveis de estoque mínimo e máximo para cada quiosque. Estes dados são usados para analisar os relatórios.
                         </DialogDescription>
                     </DialogHeader>
 
