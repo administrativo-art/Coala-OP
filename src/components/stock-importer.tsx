@@ -32,6 +32,7 @@ import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ItemManagement } from './item-management';
+import { convertValue } from '@/lib/conversion';
 
 const importSchema = z.object({
   kioskId: z.string().min(1, { message: "Por favor, selecione um quiosque." }),
@@ -217,7 +218,14 @@ export function StockAnalyzer() {
                             allConfiguredProducts.splice(productIndex, 1);
                         }
 
-                        const currentStockInBaseUnit = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
+                        const quantityFromCsv = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
+                        const unitFromCsv = (row['Unidade'] || row['Unit'])?.trim() || product.unit;
+
+                        let currentStockInBaseUnit = quantityFromCsv;
+                        if (unitFromCsv.toLowerCase() !== product.unit.toLowerCase()) {
+                            currentStockInBaseUnit = convertValue(quantityFromCsv, unitFromCsv, product.unit, product.category);
+                        }
+                        
                         const stockLevels = product.stockLevels?.[kiosk.id];
                         const minStock = stockLevels?.min ?? 0;
                         const maxStock = stockLevels?.max ?? 0;
@@ -588,7 +596,3 @@ export function StockAnalyzer() {
         </>
     );
 }
-
-    
-
-    
