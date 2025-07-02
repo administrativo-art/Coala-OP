@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Pencil, Trash2, Plus, MapPin, Camera } from 'lucide-react';
+import { Pencil, Trash2, Truck, MapPin, Camera } from 'lucide-react';
 import { type Kiosk } from '@/types';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
@@ -106,7 +106,7 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
                       <div className="flex gap-1">
                           {canMove && (
                             <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
-                                <Plus className="h-4 w-4" />
+                                <Truck className="h-4 w-4" />
                             </Button>
                           )}
                           {canEdit && (
