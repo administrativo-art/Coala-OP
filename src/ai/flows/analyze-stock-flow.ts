@@ -69,7 +69,9 @@ const analyzeStockPrompt = ai.definePrompt({
     Here are the business rules:
     1.  **Identify Kiosk:** The PDF is for a specific kiosk. Identify which kiosk the stock report belongs to by matching names from the PDF with the provided \`kiosks\` list.
     2.  **Match Products & Extract Stock:** For each product listed in the PDF, find a matching product from the provided \`products\` configuration list using the product name (\`baseName\`).
-    3.  **Calculate Current Stock in Base Unit:** Extract the current stock quantity for each matched product from the PDF. The PDF may list quantities in a specific unit (e.g., 'ml') or as a count of packages. Use the \`pdfUnit\` field from the product configuration to correctly interpret the PDF quantity. Convert this quantity to the product's main base unit (e.g., convert 'ml' to 'L', 'g' to 'kg'). The final \`currentStockInBaseUnit\` MUST be in this base unit. If the PDF just gives a number of packages, multiply it by the product's \`packageSize\` to get the total in the base unit.
+    3.  **Calculate Current Stock in Base Unit:** Extract the current stock quantity for each matched product from the PDF. The PDF may list quantities in a specific unit (e.g., 'ml') or as a count of packages. Use the \`pdfUnit\` field from the product configuration to correctly interpret the PDF quantity. Convert this quantity to the product's main base unit (e.g., convert 'ml' to 'L', 'g' to 'kg'). The final \`currentStockInBaseUnit\` MUST be in this base unit.
+        - **IMPORTANT**: If a product's \`packageSize\` is exactly \`1\`, it represents a generic, non-packaged item. In this case, you MUST assume the quantity found in the PDF is already in the product's base \`unit\`. Do NOT attempt to multiply by package size.
+        - If the product's \`packageSize\` is greater than \`1\`, and the PDF gives a number of packages (e.g., "10 caixas"), multiply that number by the product's \`packageSize\` to get the total in the base unit.
     4.  **Calculate Needs:** For each product and kiosk combination found in the PDF, calculate the replenishment need. A product needs replenishment only if its \`currentStockInBaseUnit\` is BELOW the configured \`min\` stock level for that kiosk.
         - The \`neededInBaseUnit\` is the difference between the \`max\` stock level and the \`currentStockInBaseUnit\`.
         - If \`currentStockInBaseUnit\` is at or above the \`min\` level, the \`neededInBaseUnit\` is 0.
@@ -100,4 +102,3 @@ const analyzeStockFlow = ai.defineFlow(
     return output!;
   }
 );
-

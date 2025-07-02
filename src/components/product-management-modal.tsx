@@ -28,7 +28,6 @@ import { useToast } from '@/hooks/use-toast';
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do item é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho da embalagem deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
 });
 
@@ -69,7 +68,6 @@ export function ProductManagementModal({
     defaultValues: {
       baseName: '',
       category: 'Volume',
-      packageSize: 1,
       unit: 'L',
     },
   });
@@ -91,7 +89,7 @@ export function ProductManagementModal({
 
   const handleAddNew = () => {
     setEditingProduct(null);
-    form.reset({ baseName: '', category: 'Volume', packageSize: 1, unit: 'L' });
+    form.reset({ baseName: '', category: 'Volume', unit: 'L' });
     setShowForm(true);
   };
 
@@ -100,7 +98,6 @@ export function ProductManagementModal({
     form.reset({
       baseName: product.baseName,
       category: product.category,
-      packageSize: product.packageSize,
       unit: product.unit,
     });
     setShowForm(true);
@@ -132,13 +129,17 @@ export function ProductManagementModal({
 
   const handleDeleteConfirm = async () => {
     if (productToDelete) {
-      await deleteProduct(productToDelete.id);
-      setProductToDelete(null);
+      try {
+        await deleteProduct(productToDelete.id);
+        setProductToDelete(null);
+      } catch (error) {
+        console.error("Deletion failed", error)
+      }
     }
   };
 
   const onSubmit = (values: ProductFormValues) => {
-    const dataToSave = { ...values };
+    const dataToSave = { ...values, packageSize: 1 };
     if (editingProduct) {
       updateProduct({ ...editingProduct, ...dataToSave });
     } else {
@@ -159,7 +160,7 @@ export function ProductManagementModal({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Gerenciar itens</DialogTitle>
-            <DialogDescription>Adicione, edite ou exclua seus itens. Estes itens serão usados tanto no Controle de Lotes quanto na Análise de Estoque.</DialogDescription>
+            <DialogDescription>Adicione ou edite os itens genéricos para a Análise de Estoque. Esta lista de itens servirá para o sistema identificar os itens nos relatórios.</DialogDescription>
           </DialogHeader>
           
           {showForm ? (
@@ -173,7 +174,7 @@ export function ProductManagementModal({
                     <FormItem>
                       <FormLabel>Nome do item</FormLabel>
                       <FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl>
-                      <FormDescription>Este é o nome base do item (ex: "Leite Integral"). As variações de tamanho serão adicionadas ao nome completo automaticamente.</FormDescription>
+                      <FormDescription>Este nome deve ser idêntico ao nome do item nos relatórios de estoque para que a IA possa identificá-lo.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -194,35 +195,23 @@ export function ProductManagementModal({
                     </FormItem>
                     )}
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="packageSize"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tamanho da embalagem</FormLabel>
-                        <FormControl><Input type="number" step="any" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
+                <FormField
                     control={form.control}
                     name="unit"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unidade da embalagem</FormLabel>
+                        <FormLabel>Unidade de Medida</FormLabel>
                          <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
                           <SelectContent>
                              {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                        <FormDescription>Esta é a unidade base que será usada para os cálculos de estoque mínimo e máximo.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                   <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar item'}</Button>
