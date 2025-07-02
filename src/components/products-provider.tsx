@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { type Product, type ProductDefinition } from '@/types';
+import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
 
@@ -27,7 +27,24 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const q = query(collection(db, "products"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+        const productsData = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            const originalCategory = data.category as string | undefined;
+            let category: UnitCategory = 'Unidade'; // Default value
+
+            if (originalCategory) {
+                const formatted = originalCategory.charAt(0).toUpperCase() + originalCategory.slice(1).toLowerCase();
+                if (unitCategories.includes(formatted as UnitCategory)) {
+                    category = formatted as UnitCategory;
+                }
+            }
+            
+            return {
+                id: doc.id,
+                ...data,
+                category,
+            } as Product
+        });
         setProducts(productsData.sort((a,b) => a.baseName.localeCompare(b.baseName)));
         setLoading(false);
     }, (error) => {
