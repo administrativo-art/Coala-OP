@@ -60,7 +60,8 @@ export function StockAnalyzer() {
     });
     
     const findProductByName = (baseName: string): Product | undefined => {
-        return products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
+        const cleanedBaseName = baseName.trim().toLowerCase();
+        return products.find(p => p.baseName.trim().toLowerCase() === cleanedBaseName);
     }
 
     const generateDistributionSuggestion = (
@@ -222,6 +223,20 @@ export function StockAnalyzer() {
                             });
                         }
                     }
+                    
+                    const displayName = `${kiosk.name} - ${format(new Date(), "dd/MM/yyyy")}`;
+
+                    const newReport: Omit<StockAnalysisReport, 'id'> = {
+                        reportName: file.name,
+                        displayName,
+                        createdAt: new Date().toISOString(),
+                        status: 'completed',
+                        summary: `${analysisResults.length} itens analisados. ${analysisResults.filter(r => r.neededInBaseUnit > 0).length} precisam de reposição.`,
+                        results: analysisResults,
+                    };
+
+                    await addStockReport(newReport);
+
 
                     if (unmatchedItems.length > 0) {
                         toast({
@@ -232,20 +247,7 @@ export function StockAnalyzer() {
                         });
                     }
                     
-                    const summary = `Analisados ${analysisResults.length} itens do relatório, dos quais ${analysisResults.filter(r => r.neededInBaseUnit > 0).length} precisam de reposição.`;
-                    const analysisDate = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
-                    const displayName = `${kiosk.name} - ${analysisDate}`;
-
-                    await addStockReport({
-                        reportName: file.name,
-                        displayName,
-                        createdAt: new Date().toISOString(),
-                        status: 'completed',
-                        summary,
-                        results: analysisResults,
-                    });
-
-                    toast({ id: toastId, title: "Análise concluída!", description: summary });
+                    toast({ id: toastId, title: "Análise concluída!", description: newReport.summary });
 
                 } catch (error: any) {
                     console.error("Stock analysis failed:", error);
@@ -330,6 +332,8 @@ export function StockAnalyzer() {
         }
 
         report.results.forEach(item => {
+            if (item.neededInBaseUnit <= 0) return;
+
             addPageIfNeeded();
 
             doc.setFontSize(14);
@@ -414,9 +418,9 @@ export function StockAnalyzer() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">
-                                {report.results?.length > 0 ? (
+                                {report.results?.filter(item => item.neededInBaseUnit > 0).length > 0 ? (
                                 <div className="space-y-4">
-                                {report.results.map((item, index) => (
+                                {report.results.filter(item => item.neededInBaseUnit > 0).map((item, index) => (
                                     <div key={index} className="border rounded-lg p-4">
                                         <div className="flex justify-between items-start">
                                             <div>
