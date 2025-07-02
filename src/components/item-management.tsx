@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from 'react';
@@ -101,6 +100,14 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
         });
     };
 
+    const handleSelectAllChange = (isSelected: boolean) => {
+        if (isSelected) {
+            setSelectedProducts(new Set(products.map(p => p.id)));
+        } else {
+            setSelectedProducts(new Set());
+        }
+    };
+
     const handleDeleteSelectedClick = () => {
         const productsToPotentiallyDelete = products.filter(p => selectedProducts.has(p.id));
         
@@ -180,6 +187,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
                                     onDelete={permissions.products.delete ? handleDeleteClick : undefined}
                                     selectedProducts={selectedProducts}
                                     onProductSelectionChange={handleProductSelectionChange}
+                                    onSelectAllChange={handleSelectAllChange}
                                 />
                             </ScrollArea>
                         </div>

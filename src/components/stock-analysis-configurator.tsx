@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -36,9 +35,10 @@ interface StockAnalysisConfiguratorProps {
     onDelete?: (product: Product) => void;
     selectedProducts: Set<string>;
     onProductSelectionChange: (id: string, isSelected: boolean) => void;
+    onSelectAllChange: (isSelected: boolean) => void;
 }
 
-export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange }: StockAnalysisConfiguratorProps) {
+export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange, onSelectAllChange }: StockAnalysisConfiguratorProps) {
   const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
@@ -321,6 +321,8 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
   const handleDeleteClick = (e: React.MouseEvent, product: Product) => {
     onDelete?.(product);
   }
+  
+  const allProductsSelected = fields.length > 0 && selectedProducts.size === fields.length;
 
   return (
     <Form {...form}>
@@ -348,6 +350,24 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
                 </Button>
             )}
         </div>
+        
+        {fields.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 border-y bg-muted/50">
+                <Checkbox
+                    id="select-all"
+                    checked={allProductsSelected}
+                    onCheckedChange={(checked) => onSelectAllChange(!!checked)}
+                    aria-label="Selecionar todos os itens"
+                />
+                <label
+                    htmlFor="select-all"
+                    className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                    Selecionar todos
+                </label>
+            </div>
+        )}
+
         {fields.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
                 <p>Nenhum produto cadastrado para análise.</p>
@@ -359,15 +379,16 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
             <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
               <RadixAccordion.Header className="flex w-full items-center p-4">
                   <Checkbox
+                      className="mr-3"
                       onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
                       checked={selectedProducts.has(field.id)}
                       aria-label={`Selecionar ${getProductFullName(field)}`}
                   />
-                  <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-4 py-0 [&[data-state=open]>svg]:rotate-180">
+                  <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
                       <span className="flex-grow text-left">{getProductFullName(field)}</span>
                       <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
                   </RadixAccordion.Trigger>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 ml-2">
                       {onEdit && (
                           <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
                               <Edit className="h-4 w-4" />
@@ -386,7 +407,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
                     control={form.control}
                     name={`products.${index}.pdfUnit`}
                     render={({ field: pdfUnitField }) => {
-                      const categoryUnits = field.category && units[field.category] ? Object.keys(units[field.category]) : [];
+                      const categoryUnits = (field.category && units[field.category]) ? Object.keys(units[field.category]) : [];
                       return (
                         <FormItem className="pt-2">
                           <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
@@ -468,5 +489,3 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     </Form>
   );
 }
-
-    
