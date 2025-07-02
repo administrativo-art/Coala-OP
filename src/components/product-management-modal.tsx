@@ -20,9 +20,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-import { type Product, unitCategories, UnitCategory } from '@/types';
+import { type Product, unitCategories, UnitCategory, type LotEntry, type PredefinedList } from '@/types';
 import { units } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do produto é obrigatório.'),
@@ -42,6 +43,8 @@ type ProductManagementModalProps = {
   deleteProduct: (productId: string) => void;
   getProductFullName: (product: Product) => string;
   permissions: { add: boolean; edit: boolean; delete: boolean };
+  lots: LotEntry[];
+  lists: PredefinedList[];
 };
 
 export function ProductManagementModal({ 
@@ -53,10 +56,13 @@ export function ProductManagementModal({
   deleteProduct,
   getProductFullName,
   permissions,
+  lots,
+  lists
 }: ProductManagementModalProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const { toast } = useToast();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -101,6 +107,26 @@ export function ProductManagementModal({
   };
   
   const handleDeleteClick = (product: Product) => {
+    const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
+    const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
+
+    let messages = [];
+    if (usedInLotsCount > 0) {
+        messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
+    }
+    if (usedInLists.length > 0) {
+        messages.push(`está nas listas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
+    }
+
+    if (messages.length > 0) {
+        toast({
+            variant: "destructive",
+            title: "Não é possível excluir o produto",
+            description: `Este produto não pode ser excluído pois ${messages.join(' e ')}.`,
+            duration: 8000,
+        });
+        return;
+    }
     setProductToDelete(product);
   };
 
