@@ -50,7 +50,7 @@ export function StockAnalyzer() {
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(isAnalyzing);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
 
@@ -431,7 +431,7 @@ export function StockAnalyzer() {
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
                                                 <div className="text-sm text-muted-foreground space-y-1 mt-1">
                                                     <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Estoque Máximo: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                     <p>Necessidade: <span className="font-bold text-destructive">{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                 </div>
                                             </div>
@@ -549,5 +549,3 @@ export function StockAnalyzer() {
         </>
     );
 }
-
-    
