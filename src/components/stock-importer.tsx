@@ -1,7 +1,7 @@
-
 "use client"
 
 import React, { useState, useRef } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send } from 'lucide-react';
+import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
@@ -232,6 +232,7 @@ export function StockAnalyzer() {
     const handleDeleteStockReportConfirm = async () => { if (stockReportToDelete) { await deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
     const handleDeleteConsumptionReportConfirm = async () => { if (consumptionReportToDelete) { await deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
+    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
     const canUploadStock = permissions.stockAnalysis?.upload;
     const canViewStockHistory = permissions.stockAnalysis?.viewHistory;
     const canDeleteStockHistory = permissions.stockAnalysis?.deleteHistory;
@@ -311,8 +312,20 @@ export function StockAnalyzer() {
         <>
             <Card>
                 <CardHeader>
-                    <CardTitle>Análise Inteligente de Reposição</CardTitle>
-                    <CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription>
+                    <div className="flex justify-between items-start gap-4">
+                        <div>
+                            <CardTitle>Análise Inteligente de Reposição</CardTitle>
+                            <CardDescription>Faça upload de um relatório de estoque para que a IA calcule as necessidades e gere sugestões de distribuição otimizadas.</CardDescription>
+                        </div>
+                         {canManageProducts && (
+                            <Button asChild variant="outline" className="shrink-0">
+                                <Link href="/dashboard/items">
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    Gerenciar Itens
+                                </Link>
+                            </Button>
+                        )}
+                    </div>
                 </CardHeader>
                 {canUploadStock ? (
                     <CardContent className="space-y-4 text-center p-6">

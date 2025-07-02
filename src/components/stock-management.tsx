@@ -1,14 +1,11 @@
-
 "use client"
 import { useState } from "react";
-import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StockAnalyzer } from "@/components/stock-importer"; 
 import { ExpiryControl } from "@/components/expiry-control"; 
-import { BarChart3, ClipboardCheck, Settings } from "lucide-react";
+import { BarChart3, ClipboardCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "./ui/button";
 
 export function StockManagement() {
     const { permissions, loading } = useAuth();
@@ -23,7 +20,6 @@ export function StockManagement() {
     
     const canManageLots = permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory;
     const canAnalyzeStock = permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory;
-    const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
 
     const defaultTab = canManageLots ? "lot-control" : "stock-analysis";
 
@@ -44,16 +40,6 @@ export function StockManagement() {
                 <div className="mb-6">
                     <h1 className="text-3xl font-bold">Gestão de Estoque</h1>
                     <p className="text-muted-foreground">Gerencie lotes, vencimentos, reposição e consumo do seu estoque em um só lugar.</p>
-                </div>
-                 <div className="mb-4">
-                    {canManageProducts && (
-                        <Button asChild>
-                            <Link href="/dashboard/items">
-                                <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar Itens
-                            </Link>
-                        </Button>
-                    )}
                 </div>
                 <Tabs defaultValue={defaultTab} className="w-full">
                     <TabsList className={`grid w-full max-w-lg ${gridColsClass}`}>
