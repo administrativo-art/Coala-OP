@@ -50,7 +50,7 @@ export function StockAnalyzer() {
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(isAnalyzing);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
 
@@ -164,12 +164,15 @@ export function StockAnalyzer() {
 
                     // Process rows from CSV
                     for (const row of rows) {
-                        const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
+                        const originalItemName = (row['Item'] || row['Produto'] || row['Descrição']);
+                        if (!originalItemName) continue;
+                        
+                        const itemName = originalItemName.trim().toLowerCase();
                         if (!itemName) continue;
 
                         const product = findProductByName(itemName);
                         if (!product) {
-                            unmatchedItems.push(itemName);
+                            unmatchedItems.push(originalItemName);
                             continue;
                         }
 
@@ -204,8 +207,9 @@ export function StockAnalyzer() {
                     // Process products not in CSV, assuming they are zero
                     for (const product of allConfiguredProducts) {
                          const stockLevels = product.stockLevels?.[kiosk.id];
-                        const minStock = stockLevels?.min ?? 0;
-                        const maxStock = stockLevels?.max ?? 0;
+                         if (!stockLevels) continue;
+
+                        const maxStock = stockLevels.max ?? 0;
                         const neededInBaseUnit = maxStock; // If it's zero, we need the max to restock
                         
                         if (neededInBaseUnit > 0) {
@@ -545,3 +549,5 @@ export function StockAnalyzer() {
         </>
     );
 }
+
+    
