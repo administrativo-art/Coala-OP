@@ -372,7 +372,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete }: StockA
                     control={form.control}
                     name={`products.${index}.pdfUnit`}
                     render={({ field: pdfUnitField }) => {
-                      const categoryUnits = field.category ? Object.keys(units[field.category]) : [];
+                      const categoryUnits = field.category && units[field.category] ? Object.keys(units[field.category]) : [];
                       return (
                         <FormItem className="pt-2">
                           <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
