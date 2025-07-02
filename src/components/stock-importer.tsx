@@ -134,13 +134,33 @@ export function StockAnalyzer() {
         return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
     };
 
-    const parseQuantity = (qtyString: string | number) => {
-        if (typeof qtyString === 'number') return qtyString;
-        if (typeof qtyString !== 'string') return 0;
-        // Remove thousand separators (dots), then replace decimal comma with a dot.
-        const cleanedString = qtyString.replace(/\./g, '').replace(',', '.');
-        // Use parseFloat and default to 0 if it results in NaN.
-        return parseFloat(cleanedString) || 0;
+    const parseQuantity = (qtyString: string | number): number => {
+        if (typeof qtyString === 'number') {
+            return qtyString;
+        }
+        if (typeof qtyString !== 'string' || !qtyString.trim()) {
+            return 0;
+        }
+
+        let cleanedString = qtyString.trim();
+
+        // Handle parenthesis for negative numbers e.g. (1.234,56)
+        if (cleanedString.startsWith('(') && cleanedString.endsWith(')')) {
+            cleanedString = '-' + cleanedString.substring(1, cleanedString.length - 1);
+        }
+
+        // Remove any characters that are not digits, a comma, a dot, or a minus sign
+        // This will strip currency symbols, spaces, etc.
+        cleanedString = cleanedString.replace(/[^\d,\.-]/g, '');
+
+        // Standardize number format (assuming Brazilian: '.' for thousands, ',' for decimal)
+        // Remove thousand separators
+        cleanedString = cleanedString.replace(/\./g, '');
+        // Replace decimal comma with dot
+        cleanedString = cleanedString.replace(',', '.');
+
+        const parsed = parseFloat(cleanedString);
+        return isNaN(parsed) ? 0 : parsed;
     };
 
 
@@ -560,3 +580,5 @@ export function StockAnalyzer() {
         </>
     );
 }
+
+    
