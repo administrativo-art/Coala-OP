@@ -51,8 +51,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
     let q;
-    // Firestore queries with `where` do not handle `undefined` values correctly. 
-    // We must query for `null` if the locationId is not present.
     if (lot.locationId) {
         q = query(
           collection(db, "lots"),
@@ -103,22 +101,14 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLot = useCallback(async (lotId: string): Promise<boolean> => {
-    const lotToDelete = lots.find(l => l.id === lotId);
-    if (!lotToDelete) return false;
-
-    // Optimistic update
-    setLots(currentLots => currentLots.filter(l => l.id !== lotId));
-
     try {
       await deleteDoc(doc(db, "lots", lotId));
       return true;
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
-      // Revert on failure
-      setLots(currentLots => [...currentLots, lotToDelete]);
       return false;
     }
-  }, [lots]);
+  }, []);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
