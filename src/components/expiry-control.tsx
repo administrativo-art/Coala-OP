@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,7 +50,7 @@ export function ExpiryControl() {
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
-  const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [lotForHistory, setLotForHistory] = useState<GroupedLot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
@@ -167,16 +168,7 @@ export function ExpiryControl() {
   }
 
   const handleDeleteClick = (lotId: string) => {
-    const lot = lots.find(l => l.id === lotId);
-    if (lot) {
-        setLotToDelete(lot);
-    } else {
-        toast({
-            variant: "destructive",
-            title: "Erro ao encontrar lote",
-            description: `O lote com o ID especificado não foi encontrado na lista atual.`,
-        });
-    }
+    setDeleteTargetId(lotId);
   };
   
   const handleViewHistoryClick = (lot: GroupedLot) => {
@@ -184,19 +176,19 @@ export function ExpiryControl() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!lotToDelete) {
+    if (!deleteTargetId) {
       toast({ variant: "destructive", title: "Erro", description: "Nenhum lote selecionado para exclusão." });
       return;
     }
 
     setIsDeleting(true);
     try {
-      await deleteLot(lotToDelete.id);
+      await deleteLot(deleteTargetId);
       toast({
         title: "Lote excluído",
-        description: `O lote de ${lotToDelete.productName} foi removido com sucesso.`,
+        description: `O lote selecionado foi removido com sucesso.`,
       });
-      setLotToDelete(null); // Only reset on success
+      setDeleteTargetId(null);
     } catch (error: any) {
       console.error("Deletion failed:", error);
       toast({
@@ -435,13 +427,13 @@ export function ExpiryControl() {
         />
       )}
 
-      {lotToDelete && (
+      {deleteTargetId && (
         <DeleteConfirmationDialog 
-            open={!!lotToDelete}
+            open={!!deleteTargetId}
             isDeleting={isDeleting}
-            onOpenChange={(open) => !open && setLotToDelete(null)}
+            onOpenChange={(open) => !open && setDeleteTargetId(null)}
             onConfirm={handleDeleteConfirm}
-            itemName={`o lote de ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) com ${lotToDelete.quantity} unidades`}
+            itemName={`o lote selecionado`}
         />
       )}
 
@@ -460,3 +452,5 @@ export function ExpiryControl() {
     </>
   );
 }
+
+    
