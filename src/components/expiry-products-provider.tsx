@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -24,7 +23,7 @@ export interface ExpiryProductsContextType {
   loading: boolean;
   addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
   updateLot: (lot: LotEntry) => Promise<void>;
-  deleteLot: (lotId: string) => Promise<boolean>;
+  deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   moveLot: (params: MoveLotParams) => Promise<void>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
 }
@@ -100,59 +99,25 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const deleteLot = useCallback(async (lotId: string): Promise<boolean> => {
-    const primaryLot = lots.find(l => l.id === lotId);
-    if (!primaryLot) {
-      console.error(`Lot with ID ${lotId} not found in local state. It might have been deleted already.`);
-      return true;
-    }
-
-    const { productId, lotNumber, expiryDate, productName } = primaryLot;
-
-    // Guard against undefined values that would crash the where() query.
-    if (!productId || !lotNumber || !expiryDate) {
-      console.error(`Attempted to delete lot group with incomplete data for lot ID: ${lotId}. Deleting by ID only as a fallback.`, { productId, lotNumber, expiryDate });
-      try {
-        await deleteDoc(doc(db, "lots", lotId));
-        return true;
-      } catch (error) {
-        console.error(`Fallback deletion for lot ID ${lotId} failed:`, error);
+  const deleteLotsByIds = useCallback(async (lotIds: string[]): Promise<boolean> => {
+    if (!lotIds || lotIds.length === 0) {
+        console.error("deleteLotsByIds called with an empty array.");
         return false;
-      }
     }
+    
+    const batch = writeBatch(db);
+    lotIds.forEach(id => {
+        batch.delete(doc(db, "lots", id));
+    });
 
     try {
-      const q = query(
-        collection(db, "lots"),
-        where("productId", "==", productId),
-        where("lotNumber", "==", lotNumber),
-        where("expiryDate", "==", expiryDate)
-      );
-
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        console.warn(`No lots found in Firestore for lot group: ${productName}, ${lotNumber}. They may have been deleted already.`);
-        const docExists = lots.some(l => l.id === lotId);
-        if (docExists) {
-            await deleteDoc(doc(db, "lots", lotId));
-        }
+        await batch.commit();
         return true;
-      }
-
-      const batch = writeBatch(db);
-      querySnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-
-      await batch.commit();
-      return true;
-
     } catch (error) {
-      console.error(`Failed to delete lot group for lotId ${lotId}:`, error);
-      return false;
+        console.error("Error deleting lots by IDs:", error);
+        return false;
     }
-  }, [lots]);
+  }, []);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
@@ -245,7 +210,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       loading,
       addLot,
       updateLot,
-      deleteLot,
+      deleteLotsByIds,
       moveLot,
       moveMultipleLots
   };

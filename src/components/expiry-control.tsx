@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -11,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -36,7 +35,7 @@ const BarcodeScannerModal = dynamic(
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
   const { toast } = useToast();
@@ -177,13 +176,27 @@ export function ExpiryControl() {
 
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
+
+    const groupToDelete = groupedLots.find(group => group.kiosks.some(k => k.id === deleteTargetId));
+
+    if (!groupToDelete) {
+        toast({
+            variant: "destructive",
+            title: "Erro ao excluir",
+            description: "Não foi possível encontrar o grupo do lote. Tente atualizar a página.",
+        });
+        setDeleteTargetId(null);
+        return;
+    }
+
     setIsDeleting(true);
-    const success = await deleteLot(deleteTargetId);
+    const idsToDelete = groupToDelete.kiosks.map(k => k.id);
+    const success = await deleteLotsByIds(idsToDelete);
     
     if (success) {
       toast({
         title: "Lote excluído",
-        description: `O lote selecionado foi removido com sucesso.`,
+        description: `O lote foi removido com sucesso.`,
       });
       setDeleteTargetId(null);
     } else {
