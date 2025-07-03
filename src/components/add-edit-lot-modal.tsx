@@ -113,7 +113,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         const location = locations.find(l => l.id === values.locationId);
     
         if (lotToEdit) {
-            const targetProduct = products.find(p => p.id === lotToEdit.productId);
+            // Start with the existing lot data and apply form values
             const updatedLotData: LotEntry = {
                 ...lotToEdit,
                 ...values,
@@ -123,17 +123,26 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 locationCode: location?.code || null,
             };
     
+            // Try to find the associated product. This is the "orphan lot" check.
+            const targetProduct = products.find(p => p.id === lotToEdit.productId);
+    
+            // ONLY if the product still exists, try to sync its data (name, image).
+            // This prevents the app from crashing on an orphan lot.
             if (targetProduct) {
                 updatedLotData.productName = getProductFullName(targetProduct);
                 updatedLotData.imageUrl = values.imageUrl || targetProduct.imageUrl;
     
+                // And only if it exists, try to update its image URL.
                 if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
                     await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
                 }
             }
+            // If the product doesn't exist, we proceed with the data we have, which is safe.
             await updateLot(updatedLotData);
             toast({ title: "Lote atualizado", description: "As informações do lote foram salvas." });
+
         } else {
+            // This is the logic for adding a NEW lot, which requires a selected product.
             if (!selectedProduct) {
                 toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
                 return;
@@ -247,9 +256,9 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                           )}
                                           <div className="flex-grow">
                                             <p className="font-semibold text-lg">
-                                                {isEditing ? (selectedProduct ? getProductFullName(selectedProduct) : lotToEdit.productName) : (selectedProduct ? getProductFullName(selectedProduct) : 'N/A')}
+                                                {isEditing ? lotToEdit.productName : (selectedProduct ? getProductFullName(selectedProduct) : 'N/A')}
                                             </p>
-                                            <p className="text-sm text-muted-foreground">Código: {selectedProduct?.barcode || 'N/A'}</p>
+                                            <p className="text-sm text-muted-foreground">Código: {isEditing ? (products.find(p => p.id === lotToEdit.productId)?.barcode || 'N/A') : (selectedProduct?.barcode || 'N/A')}</p>
                                             {isEditing && !selectedProduct && (
                                                 <p className="text-sm text-destructive mt-1">Atenção: O insumo deste lote foi removido.</p>
                                             )}
