@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -44,7 +45,7 @@ export function ExpiryControl() {
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
-  const [lotToDelete, setLotToDelete] = useState<{ id: string, name: string; quantity: number } | null>(null);
+  const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
@@ -156,15 +157,8 @@ export function ExpiryControl() {
     }
   }
 
-  const handleDeleteClick = (lotId: string) => {
-    const lot = lots.find(l => l.id === lotId);
-    if (lot) {
-      setLotToDelete({
-        id: lot.id,
-        name: `${lot.productName} (Lote: ${lot.lotNumber})`,
-        quantity: lot.quantity,
-      });
-    }
+  const handleDeleteClick = (lot: LotEntry) => {
+    setLotToDelete(lot);
   };
 
   const handleDeleteConfirm = async () => {
@@ -173,14 +167,14 @@ export function ExpiryControl() {
     try {
       await deleteLot(lotToDelete.id);
       toast({
-        title: "Insumo excluído",
-        description: `${lotToDelete.name} foi removido.`,
+        title: "Lote excluído",
+        description: `O lote de ${lotToDelete.productName} foi removido.`,
       });
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Erro ao excluir",
-        description: "Não foi possível remover o insumo. Tente novamente.",
+        description: "Não foi possível remover o lote. Tente novamente.",
       });
       console.error("Deletion failed:", error);
     } finally {
@@ -232,12 +226,12 @@ export function ExpiryControl() {
         return (
           <div className="text-center py-16 flex flex-col items-center">
               <Inbox className="h-16 w-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-semibold">Nenhum insumo no estoque</h3>
+              <h3 className="text-xl font-semibold">Nenhum lote no estoque</h3>
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                  Comece adicionando um novo insumo ao estoque para monitorar sua validade.
+                  Comece adicionando um novo lote ao estoque para monitorar sua validade.
               </p>
               <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.add}>
-                  <Plus className="mr-2 h-5 w-5" /> Adicionar insumo
+                  <Plus className="mr-2 h-5 w-5" /> Adicionar lote
               </Button>
           </div>
         );
@@ -302,7 +296,7 @@ export function ExpiryControl() {
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                        <Plus className="mr-2" /> Adicionar insumo
+                        <Plus className="mr-2" /> Adicionar lote
                     </Button>
                     {canManageProducts && (
                         <Button variant="outline" onClick={() => setIsProductManagementOpen(true)} className="w-full sm:w-auto">
@@ -411,7 +405,7 @@ export function ExpiryControl() {
             isDeleting={isDeleting}
             onOpenChange={(open) => !open && setLotToDelete(null)}
             onConfirm={handleDeleteConfirm}
-            itemName={`o insumo ${lotToDelete.name} com ${lotToDelete.quantity} unidades`}
+            itemName={`o lote de ${lotToDelete.productName} (Lote: ${lotToDelete.lotNumber}) com ${lotToDelete.quantity} unidades`}
         />
       )}
 
@@ -425,3 +419,5 @@ export function ExpiryControl() {
     </>
   );
 }
+
+    

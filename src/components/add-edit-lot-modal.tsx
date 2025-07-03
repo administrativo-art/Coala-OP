@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
@@ -320,3 +321,5 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
+
+    
