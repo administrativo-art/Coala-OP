@@ -61,7 +61,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const { toast } = useToast();
   const isEditing = !!lotToEdit;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [barcodeSearch, setBarcodeSearch] = useState('');
+  const [productSearchTerm, setProductSearchTerm] = useState('');
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotFormSchema),
@@ -103,7 +103,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             imageUrl: '',
         });
         setSelectedProduct(null);
-        setBarcodeSearch('');
+        setProductSearchTerm('');
       }
     }
   }, [lotToEdit, open, form, products]);
@@ -113,7 +113,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         const location = locations.find(l => l.id === values.locationId);
     
         if (lotToEdit) {
-            // Start with the existing lot data and apply form values
             const updatedLotData: LotEntry = {
                 ...lotToEdit,
                 ...values,
@@ -122,27 +121,22 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 locationName: location?.name || null,
                 locationCode: location?.code || null,
             };
-    
-            // Try to find the associated product. This is the "orphan lot" check.
+
             const targetProduct = products.find(p => p.id === lotToEdit.productId);
-    
-            // ONLY if the product still exists, try to sync its data (name, image).
-            // This prevents the app from crashing on an orphan lot.
+            
             if (targetProduct) {
                 updatedLotData.productName = getProductFullName(targetProduct);
                 updatedLotData.imageUrl = values.imageUrl || targetProduct.imageUrl;
-    
-                // And only if it exists, try to update its image URL.
+
                 if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
                     await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
                 }
             }
-            // If the product doesn't exist, we proceed with the data we have, which is safe.
+            
             await updateLot(updatedLotData);
             toast({ title: "Lote atualizado", description: "As informações do lote foram salvas." });
 
         } else {
-            // This is the logic for adding a NEW lot, which requires a selected product.
             if (!selectedProduct) {
                 toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
                 return;
@@ -182,22 +176,29 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
   };
   
-  const handleBarcodeSearch = (barcode: string) => {
-    if (!barcode.trim()) return;
-    const product = products.find(p => p.barcode === barcode.trim());
+  const handleProductSearch = (term: string) => {
+    if (!term.trim()) return;
+    const normalizedTerm = term.trim().toLowerCase();
+    
+    let product = products.find(p => p.barcode?.toLowerCase() === normalizedTerm);
+    
+    if (!product) {
+      product = products.find(p => p.baseName.toLowerCase().includes(normalizedTerm));
+    }
+
     if (product) {
         setSelectedProduct(product);
         form.setValue('imageUrl', product.imageUrl || '');
         toast({ title: "Insumo encontrado!", description: `Insumo "${getProductFullName(product)}" selecionado. Preencha os dados do lote.` });
     } else {
-        toast({ variant: "destructive", title: "Insumo não encontrado", description: "Nenhum insumo cadastrado com este código de barras." });
+        toast({ variant: "destructive", title: "Insumo não encontrado", description: "Nenhum insumo cadastrado com este nome ou código de barras." });
         setSelectedProduct(null);
     }
   };
 
   const handleScanSuccess = (decodedText: string) => {
-    setBarcodeSearch(decodedText);
-    handleBarcodeSearch(decodedText);
+    setProductSearchTerm(decodedText);
+    handleProductSearch(decodedText);
     setIsScannerOpen(false);
   };
 
@@ -224,17 +225,17 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 <div className="flex gap-2">
                                     <div className="relative flex-grow">
                                         <Input
-                                            placeholder="Digite o código de barras"
-                                            value={barcodeSearch}
-                                            onChange={(e) => setBarcodeSearch(e.target.value)}
-                                            onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleBarcodeSearch(barcodeSearch) }}}
+                                            placeholder="Digite o nome ou código de barras"
+                                            value={productSearchTerm}
+                                            onChange={(e) => setProductSearchTerm(e.target.value)}
+                                            onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleProductSearch(productSearchTerm) }}}
                                         />
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon"
                                             className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                                            onClick={() => handleBarcodeSearch(barcodeSearch)}
+                                            onClick={() => handleProductSearch(productSearchTerm)}
                                         >
                                             <Search className="h-4 w-4" />
                                         </Button>
@@ -259,7 +260,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                 {isEditing ? lotToEdit.productName : (selectedProduct ? getProductFullName(selectedProduct) : 'N/A')}
                                             </p>
                                             <p className="text-sm text-muted-foreground">Código: {isEditing ? (products.find(p => p.id === lotToEdit.productId)?.barcode || 'N/A') : (selectedProduct?.barcode || 'N/A')}</p>
-                                            {isEditing && !selectedProduct && (
+                                            {isEditing && !products.find(p => p.id === lotToEdit.productId) && (
                                                 <p className="text-sm text-destructive mt-1">Atenção: O insumo deste lote foi removido.</p>
                                             )}
                                           </div>
@@ -406,3 +407,5 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
+
+    
