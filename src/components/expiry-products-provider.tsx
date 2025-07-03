@@ -101,18 +101,27 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLot = useCallback(async (lotId: string): Promise<boolean> => {
-    // Find the primary lot from the current state to get its identifying properties
     const primaryLot = lots.find(l => l.id === lotId);
     if (!primaryLot) {
       console.error(`Lot with ID ${lotId} not found in local state. It might have been deleted already.`);
-      // If it's not in the state, it's effectively deleted from the user's view.
       return true;
     }
 
     const { productId, lotNumber, expiryDate, productName } = primaryLot;
 
+    // Guard against undefined values that would crash the where() query.
+    if (!productId || !lotNumber || !expiryDate) {
+      console.error(`Attempted to delete lot group with incomplete data for lot ID: ${lotId}. Deleting by ID only as a fallback.`, { productId, lotNumber, expiryDate });
+      try {
+        await deleteDoc(doc(db, "lots", lotId));
+        return true;
+      } catch (error) {
+        console.error(`Fallback deletion for lot ID ${lotId} failed:`, error);
+        return false;
+      }
+    }
+
     try {
-      // Find all documents in Firestore that belong to this lot group
       const q = query(
         collection(db, "lots"),
         where("productId", "==", productId),
@@ -123,11 +132,14 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
-        console.warn(`No lots found in Firestore for lot group: ${productName}, ${lotNumber}. Already deleted?`);
+        console.warn(`No lots found in Firestore for lot group: ${productName}, ${lotNumber}. They may have been deleted already.`);
+        const docExists = lots.some(l => l.id === lotId);
+        if (docExists) {
+            await deleteDoc(doc(db, "lots", lotId));
+        }
         return true;
       }
 
-      // Use a batch to delete all documents atomically
       const batch = writeBatch(db);
       querySnapshot.forEach((doc) => {
         batch.delete(doc.ref);
