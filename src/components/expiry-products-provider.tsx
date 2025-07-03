@@ -106,8 +106,11 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       return false;
     }
     try {
-      const deletePromises = lotIds.map(id => deleteDoc(doc(db, "lots", id)));
-      await Promise.all(deletePromises);
+      const batch = writeBatch(db);
+      lotIds.forEach(id => {
+        batch.delete(doc(db, "lots", id));
+      });
+      await batch.commit();
       return true;
     } catch (error) {
       console.error("Error deleting lots by IDs:", error);

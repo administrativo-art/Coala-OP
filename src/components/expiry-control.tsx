@@ -199,7 +199,6 @@ export function ExpiryControl() {
         title: "Lote excluído",
         description: `O lote foi removido com sucesso.`,
       });
-      setDeleteTargetId(null);
     } else {
       toast({
         variant: "destructive",
@@ -208,6 +207,8 @@ export function ExpiryControl() {
         duration: 9000,
       });
     }
+    
+    setDeleteTargetId(null);
     setIsDeleting(false);
     setForceDelete(false);
   };
@@ -441,7 +442,12 @@ export function ExpiryControl() {
         <DeleteConfirmationDialog 
             open={!!deleteTargetId}
             isDeleting={isDeleting}
-            onOpenChange={(open) => !open && setDeleteTargetId(null)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setDeleteTargetId(null);
+                setForceDelete(false);
+              }
+            }}
             onConfirm={handleDeleteConfirm}
             itemName={`o lote selecionado`}
             showForceDeleteOption={true}
