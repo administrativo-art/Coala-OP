@@ -1,4 +1,3 @@
-
 "use client"
 
 import Image from 'next/image';
@@ -71,13 +70,6 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
     return kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   };
   
-  const getLocationInfo = (id?: string) => {
-    if (!id) return '';
-    const location = locations.find(l => l.id === id);
-    if (!location) return '';
-    return location.code ? `${location.name} (${location.code})` : location.name;
-  };
-
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
@@ -106,35 +98,38 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
         </div>
         <Separator />
         <div className="p-4 space-y-2">
-            {groupedLot.kiosks.map(kioskEntry => (
-                <div key={`${kioskEntry.id}-${kioskEntry.kioskId}`} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
-                    <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
-                        {kioskEntry.locationId && <span className="text-muted-foreground text-xs">({getLocationInfo(kioskEntry.locationId)})</span>}
-                        <span>{kioskEntry.quantity} un.</span>
+            {groupedLot.kiosks.map(kioskEntry => {
+                const locationCode = kioskEntry.locationId ? locations.find(l => l.id === kioskEntry.locationId)?.code : null;
+                return (
+                    <div key={`${kioskEntry.id}-${kioskEntry.kioskId}`} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
+                        <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
+                            <span>{kioskEntry.quantity} un.</span>
+                            {locationCode && <span className="text-muted-foreground text-xs font-semibold">{locationCode}</span>}
+                        </div>
+                        {(canMove || canEdit || canDelete) && (
+                          <div className="flex gap-1">
+                              {canMove && kioskEntry.quantity > 0 && (
+                                <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
+                                    <Truck className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {canEdit && (
+                                <Button variant="ghost" size="icon" onClick={() => onEdit(kioskEntry.id)}>
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(kioskEntry.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                          </div>
+                        )}
                     </div>
-                    {(canMove || canEdit || canDelete) && (
-                      <div className="flex gap-1">
-                          {canMove && kioskEntry.quantity > 0 && (
-                            <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
-                                <Truck className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => onEdit(kioskEntry.id)}>
-                                <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(kioskEntry.id)}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                      </div>
-                    )}
-                </div>
-            ))}
+                )
+            })}
         </div>
       </CardContent>
     </Card>
