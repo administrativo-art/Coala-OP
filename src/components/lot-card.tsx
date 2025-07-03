@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Pencil, Trash2, Truck, MapPin, Camera } from 'lucide-react';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Pencil, Trash2, Truck, MapPin, Camera, History } from 'lucide-react';
 import { type Kiosk } from '@/types';
 import { useLocations } from '@/hooks/use-locations';
 
@@ -38,12 +39,14 @@ type LotCardProps = {
   onEdit: (lotId: string) => void;
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
+  onViewHistory: (lot: GroupedLot) => void;
   canEdit: boolean;
   canMove: boolean;
   canDelete: boolean;
+  canViewHistory: boolean;
 };
 
-export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit, canMove, canDelete }: LotCardProps) {
+export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHistory, canEdit, canMove, canDelete, canViewHistory }: LotCardProps) {
   const { locations } = useLocations();
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -90,7 +93,23 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
             </CardDescription>
           </div>
         </div>
-        <Badge className={`text-white text-sm ${status.color} self-start`}>{status.text}</Badge>
+        <div className="flex items-center gap-2">
+            {canViewHistory && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onViewHistory(groupedLot)}>
+                                <History className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Ver Histórico de Movimentação</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            )}
+            <Badge className={`text-white text-sm ${status.color} self-start`}>{status.text}</Badge>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="px-4 pb-2 text-sm text-muted-foreground">

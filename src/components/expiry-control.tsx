@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -23,6 +22,7 @@ import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProductManagement } from './product-management';
 import { useToast } from "@/hooks/use-toast";
+import { LotMovementHistoryModal } from './lot-movement-history-modal';
 
 
 const BarcodeScannerModal = dynamic(
@@ -48,6 +48,7 @@ export function ExpiryControl() {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [lotToDelete, setLotToDelete] = useState<LotEntry | null>(null);
+  const [lotForHistory, setLotForHistory] = useState<GroupedLot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
@@ -172,6 +173,10 @@ export function ExpiryControl() {
         });
     }
   };
+  
+  const handleViewHistoryClick = (lot: GroupedLot) => {
+    setLotForHistory(lot);
+  };
 
   const handleDeleteConfirm = async () => {
     if (!lotToDelete || !lotToDelete.id) {
@@ -276,9 +281,11 @@ export function ExpiryControl() {
             onEdit={handleEditClick}
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
+            onViewHistory={handleViewHistoryClick}
             canEdit={permissions.lots.edit}
             canMove={permissions.lots.move}
             canDelete={permissions.lots.delete}
+            canViewHistory={permissions.lots.viewMovementHistory}
           />
         ))}
       </div>
@@ -409,6 +416,8 @@ export function ExpiryControl() {
       />
 
       <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
+      
+      <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
 
       {lotToMove && (
         <MoveStockModal 
