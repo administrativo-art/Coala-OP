@@ -101,14 +101,46 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLot = useCallback(async (lotId: string): Promise<boolean> => {
-    try {
-      await deleteDoc(doc(db, "lots", lotId));
+    // Find the primary lot from the current state to get its identifying properties
+    const primaryLot = lots.find(l => l.id === lotId);
+    if (!primaryLot) {
+      console.error(`Lot with ID ${lotId} not found in local state. It might have been deleted already.`);
+      // If it's not in the state, it's effectively deleted from the user's view.
       return true;
+    }
+
+    const { productId, lotNumber, expiryDate, productName } = primaryLot;
+
+    try {
+      // Find all documents in Firestore that belong to this lot group
+      const q = query(
+        collection(db, "lots"),
+        where("productId", "==", productId),
+        where("lotNumber", "==", lotNumber),
+        where("expiryDate", "==", expiryDate)
+      );
+
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        console.warn(`No lots found in Firestore for lot group: ${productName}, ${lotNumber}. Already deleted?`);
+        return true;
+      }
+
+      // Use a batch to delete all documents atomically
+      const batch = writeBatch(db);
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      return true;
+
     } catch (error) {
-      console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
+      console.error(`Failed to delete lot group for lotId ${lotId}:`, error);
       return false;
     }
-  }, []);
+  }, [lots]);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
