@@ -85,31 +85,6 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
             }
         }
     };
-    
-    const renderContent = () => {
-        switch (permissionState) {
-            case 'loading':
-                return (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
-                        <Loader2 className="h-8 w-8 animate-spin mb-4" />
-                        <p>Acessando a câmera...</p>
-                    </div>
-                );
-            case 'denied':
-                 return (
-                    <Alert variant="destructive">
-                        <CameraOff className="h-4 w-4" />
-                        <AlertTitle>Acesso à câmera negado</AlertTitle>
-                        <AlertDescription>
-                            Para tirar fotos, você precisa permitir o acesso à câmera nas configurações do seu navegador.
-                        </AlertDescription>
-                    </Alert>
-                );
-            case 'granted':
-                return <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay playsInline muted />;
-        }
-    };
-
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -121,7 +96,34 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4 min-h-[350px]">
-                    {renderContent()}
+                    <div className="w-full aspect-video rounded-md bg-muted overflow-hidden relative">
+                        <video
+                        ref={videoRef}
+                        className="w-full h-full object-cover"
+                        autoPlay
+                        playsInline
+                        muted
+                        />
+
+                        {permissionState === 'loading' && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+                            <Loader2 className="h-8 w-8 animate-spin mb-4 text-muted-foreground" />
+                            <p className="text-muted-foreground">Acessando a câmera...</p>
+                        </div>
+                        )}
+                    </div>
+
+                    {permissionState === 'denied' && (
+                        <Alert variant="destructive" className="mt-4">
+                        <CameraOff className="h-4 w-4" />
+                        <AlertTitle>Acesso à câmera negado</AlertTitle>
+                        <AlertDescription>
+                            Para tirar fotos, você precisa permitir o acesso à câmera nas
+                            configurações do seu navegador.
+                        </AlertDescription>
+                        </Alert>
+                    )}
+
                     <canvas ref={canvasRef} className="hidden" />
                 </div>
                  <DialogFooter>
@@ -134,3 +136,4 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
         </Dialog>
     );
 }
+
