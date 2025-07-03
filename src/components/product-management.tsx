@@ -16,6 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
@@ -40,7 +41,7 @@ interface ProductManagementProps {
 }
 
 export function ProductManagement({ open, onOpenChange }: ProductManagementProps) {
-    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct } = useProducts();
+    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
     const { toast } = useToast();
@@ -48,6 +49,9 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+    const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
+    const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -62,16 +66,19 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const categoryWatch = form.watch('category');
     
     useEffect(() => {
-        if (!form.formState.isDirty) {
+        if (form.formState.isDirty || !editingProduct) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
         }
-    }, [categoryWatch, form]);
+    }, [categoryWatch, form, editingProduct]);
 
     const handleOpenChangeAndReset = (isOpen: boolean) => {
         if (!isOpen) {
             setShowForm(false);
             setEditingProduct(null);
             setProductToDelete(null);
+            setProductsToDelete([]);
+            setSelectedProducts(new Set());
+            setIsDeleting(false);
         }
         onOpenChange(isOpen);
     };
@@ -124,8 +131,39 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     
     const handleDeleteConfirm = async () => {
         if (productToDelete) {
+            setIsDeleting(true);
             await deleteProduct(productToDelete.id);
             setProductToDelete(null);
+            setIsDeleting(false);
+        }
+    };
+    
+    const handleProductSelectionChange = (id: string, isSelected: boolean) => {
+        setSelectedProducts(prev => {
+            const newSet = new Set(prev);
+            if (isSelected) newSet.add(id);
+            else newSet.delete(id);
+            return newSet;
+        });
+    };
+
+    const handleSelectAllChange = (isSelected: boolean) => {
+        setSelectedProducts(isSelected ? new Set(products.map(p => p.id)) : new Set());
+    };
+
+    const handleDeleteSelectedClick = () => {
+        const toDelete = products.filter(p => selectedProducts.has(p.id));
+        setProductsToDelete(toDelete);
+    };
+
+    const handleDeleteMultipleConfirm = async () => {
+        if (productsToDelete.length > 0) {
+            setIsDeleting(true);
+            const idsToDelete = productsToDelete.map(p => p.id);
+            await deleteMultipleProducts(idsToDelete);
+            setSelectedProducts(new Set());
+            setProductsToDelete([]);
+            setIsDeleting(false);
         }
     };
 
@@ -187,15 +225,36 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                             </form>
                         </Form>
                     ) : (
-                       <>
+                       <div className="flex flex-col h-[60vh]">
                             <Button onClick={handleAddNew} className="w-full mt-4"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo insumo</Button>
-                            <Separator className="my-4" />
-                            <ScrollArea className="h-72">
+                            
+                             {products.length > 0 && (
+                                <div className="flex items-center gap-3 px-1 py-2 my-4 border-y bg-muted/50">
+                                    <Checkbox
+                                        id="select-all-products"
+                                        checked={selectedProducts.size === products.length && products.length > 0}
+                                        onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
+                                        aria-label="Selecionar todos os insumos"
+                                    />
+                                    <label htmlFor="select-all-products" className="text-sm font-medium leading-none cursor-pointer">
+                                        Selecionar todos
+                                    </label>
+                                </div>
+                            )}
+
+                            <ScrollArea className="flex-grow">
                                 <div className="space-y-2 pr-4">
                                     {products.map(product => (
-                                        <div key={product.id} className="flex items-center justify-between rounded-md border p-3">
-                                            <span className="font-medium">{getProductFullName(product)}</span>
-                                            <div className="flex gap-2">
+                                        <div key={product.id} className="flex items-center justify-between rounded-md border p-2">
+                                            <div className="flex items-center gap-3">
+                                                 <Checkbox
+                                                    id={`product-${product.id}`}
+                                                    checked={selectedProducts.has(product.id)}
+                                                    onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
+                                                />
+                                                <label htmlFor={`product-${product.id}`} className="font-medium cursor-pointer">{getProductFullName(product)}</label>
+                                            </div>
+                                            <div className="flex gap-1">
                                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
@@ -203,7 +262,19 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     ))}
                                 </div>
                             </ScrollArea>
-                       </>
+                            <DialogFooter className="pt-4 mt-auto border-t !justify-between">
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={handleDeleteSelectedClick}
+                                    disabled={selectedProducts.size === 0}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Excluir Selecionados ({selectedProducts.size})
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => handleOpenChangeAndReset(false)}>Fechar</Button>
+                           </DialogFooter>
+                       </div>
                     )}
                 </DialogContent>
             </Dialog>
@@ -211,9 +282,20 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
             {productToDelete && (
                 <DeleteConfirmationDialog
                     open={!!productToDelete}
+                    isDeleting={isDeleting}
                     onOpenChange={() => setProductToDelete(null)}
                     onConfirm={handleDeleteConfirm}
                     itemName={`o insumo "${getProductFullName(productToDelete)}"`}
+                />
+            )}
+            
+            {productsToDelete.length > 0 && (
+                <DeleteConfirmationDialog
+                    open={productsToDelete.length > 0}
+                    isDeleting={isDeleting}
+                    onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
+                    onConfirm={handleDeleteMultipleConfirm}
+                    itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`}
                 />
             )}
         </>
