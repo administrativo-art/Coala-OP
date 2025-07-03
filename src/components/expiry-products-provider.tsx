@@ -94,17 +94,16 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   const updateLot = useCallback(async (updatedLot: LotEntry) => {
     const lotRef = doc(db, "lots", updatedLot.id);
     const { id, ...dataToUpdate } = updatedLot;
-    if (dataToUpdate.quantity <= 0) {
-        await deleteDoc(lotRef);
-    } else {
-        await updateDoc(lotRef, dataToUpdate);
-    }
+    // A lot is now never deleted on update, only when explicitly deleted.
+    // A quantity of 0 means it's a zeroed-out lot available for audit.
+    await updateDoc(lotRef, dataToUpdate);
   }, []);
 
   const deleteLot = useCallback(async (lotId: string) => {
-    if (!lotId || typeof lotId !== 'string' || lotId.trim() === '') {
-      console.error("ID do lote é inválido. Ação cancelada.", lotId);
-      throw new Error("ID do lote é inválido.");
+    const lotToDelete = lots.find(l => l.id === lotId);
+    if (!lotToDelete) {
+        console.error("ID do lote é inválido ou lote não encontrado. Ação cancelada.", lotId);
+        throw new Error("ID do lote é inválido ou não foi encontrado.");
     }
     const lotRef = doc(db, "lots", lotId);
     try {
@@ -113,7 +112,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
       throw error;
     }
-  }, []);
+  }, [lots]);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
@@ -129,11 +128,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       }
 
       const newSourceQuantity = sourceLot.quantity - quantityToMove;
-      if (newSourceQuantity > 0) {
-          batch.update(sourceLotRef, { quantity: newSourceQuantity });
-      } else {
-          batch.delete(sourceLotRef);
-      }
+      batch.update(sourceLotRef, { quantity: newSourceQuantity });
 
       const destQuery = query(
           collection(db, "lots"),

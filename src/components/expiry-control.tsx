@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -23,6 +24,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProductManagement } from './product-management';
 import { useToast } from "@/hooks/use-toast";
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
+import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 
 
 const BarcodeScannerModal = dynamic(
@@ -52,6 +54,7 @@ export function ExpiryControl() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
 
   const visibleLots = useMemo(() => {
@@ -81,7 +84,9 @@ export function ExpiryControl() {
       ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
       : visibleLots;
 
-    const preFilteredLots = kioskFilteredLots.filter(lot => {
+    const activeLots = kioskFilteredLots.filter(lot => lot.quantity > 0);
+
+    const preFilteredLots = activeLots.filter(lot => {
         if (statusFilters.length === 0) return true; // Show all if no filter is active
 
         const product = products.find(p => p.id === lot.productId);
@@ -331,6 +336,11 @@ export function ExpiryControl() {
                             <Settings className="mr-2" /> Gerenciar Insumos
                         </Button>
                     )}
+                    {permissions.lots.viewMovementHistory && (
+                        <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
+                            <Archive className="mr-2" /> Auditar Lotes Zerados
+                        </Button>
+                    )}
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -446,6 +456,11 @@ export function ExpiryControl() {
           onScanSuccess={handleSearchScanSuccess}
         />
       )}
+      
+      <ZeroedLotsAuditModal
+        open={isAuditModalOpen}
+        onOpenChange={setIsAuditModalOpen}
+      />
     </>
   );
 }
