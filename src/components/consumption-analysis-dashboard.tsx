@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -24,12 +25,14 @@ export function ConsumptionAnalysisDashboard() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
 
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+
   useEffect(() => {
-    if (!initialSelectionMade && products.length > 0) {
-      setSelectedProducts(products.map(p => p.id));
+    if (!initialSelectionMade && activeProducts.length > 0) {
+      setSelectedProducts(activeProducts.map(p => p.id));
       setInitialSelectionMade(true);
     }
-  }, [products, initialSelectionMade]);
+  }, [activeProducts, initialSelectionMade]);
 
   const chartData = useMemo(() => {
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -75,7 +78,7 @@ export function ConsumptionAnalysisDashboard() {
         }
     }
 
-    const dataForChart = products
+    const dataForChart = activeProducts
       .filter(p => selectedProducts.includes(p.id))
       .map(product => {
         const avgPackages = relevantConsumptionData[product.id] || 0;
@@ -95,7 +98,7 @@ export function ConsumptionAnalysisDashboard() {
 
     return dataForChart;
 
-  }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts]);
+  }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
 
   const handleProductSelection = (productId: string, checked: boolean) => {
     setSelectedProducts(current => checked ? [...current, productId] : current.filter(id => id !== productId));
@@ -133,11 +136,11 @@ export function ConsumptionAnalysisDashboard() {
                   <DropdownMenuContent className="w-64">
                       <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => setSelectedProducts(products.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <ScrollArea className="h-60">
-                      {products.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                      {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
                           <DropdownMenuCheckboxItem
                               key={product.id}
                               checked={selectedProducts.includes(product.id)}
