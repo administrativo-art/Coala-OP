@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -17,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, PlusCircle } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { useToast } from '@/hooks/use-toast';
@@ -228,8 +229,16 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                         </Form>
                     ) : (
                        <div className="flex flex-col h-[60vh]">
+                            <div className="p-1">
+                                <Button type="button" className="w-full" onClick={() => setShowForm(true)}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Adicionar Novo Insumo
+                                </Button>
+                            </div>
+                            <Separator className="my-4" />
+
                              {products.length > 0 && (
-                                <div className="flex items-center gap-3 px-1 py-2 my-4 border-y bg-muted/50">
+                                <div className="flex items-center gap-3 px-1 py-2 mb-2 border-y bg-muted/50">
                                     <Checkbox
                                         id="select-all-products"
                                         checked={selectedProducts.size === products.length && products.length > 0}
@@ -244,7 +253,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
 
                             <ScrollArea className="flex-grow">
                                 <div className="space-y-2 pr-4">
-                                    {products.map(product => (
+                                    {products.length > 0 ? products.map(product => (
                                         <div key={product.id} className="flex items-center justify-between rounded-md border p-2">
                                             <div className="flex items-center gap-3">
                                                  <Checkbox
@@ -259,7 +268,12 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                         </div>
-                                    ))}
+                                    )) : (
+                                        <div className="text-center py-12 text-muted-foreground">
+                                            <p>Nenhum insumo cadastrado.</p>
+                                            <p className="text-sm">Clique em "Adicionar Novo Insumo" para começar.</p>
+                                        </div>
+                                    )}
                                 </div>
                             </ScrollArea>
                             <DialogFooter className="pt-4 mt-auto border-t !justify-between">
