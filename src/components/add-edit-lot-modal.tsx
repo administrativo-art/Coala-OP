@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -329,7 +328,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <FormItem>
                                             <FormLabel>Localização (Opcional)</FormLabel>
                                             <div className="flex gap-2 items-center">
-                                                <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedKioskId || availableLocations.length === 0}>
+                                                <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedKioskId}>
                                                     <FormControl>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Selecione o local" />
