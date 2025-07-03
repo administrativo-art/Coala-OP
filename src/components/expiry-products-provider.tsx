@@ -88,25 +88,21 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const deleteLot = async (lotId: string) => {
+  const deleteLot = useCallback(async (lotId: string) => {
     if (!lotId || typeof lotId !== 'string' || lotId.trim() === '') {
+      console.error("ID do lote é inválido. Ação cancelada.", lotId);
       throw new Error("ID do lote é inválido.");
     }
     const lotRef = doc(db, "lots", lotId);
     try {
-      const docSnap = await getDoc(lotRef);
-      if (!docSnap.exists()) {
-        console.warn(`Tentativa de excluir lote que não existe mais: ${lotId}`);
-        // Se o documento não existe, a operação de exclusão é considerada bem-sucedida
-        // pois o estado final desejado (documento não existente) foi alcançado.
-        return;
-      }
+      // Direct deletion attempt. deleteDoc() does not throw an error if the doc doesn't exist.
+      // This is more robust than checking for existence first, which can cause race conditions.
       await deleteDoc(lotRef);
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
-      throw error;
+      throw error; // Re-throw to be caught by the UI component for user feedback.
     }
-  };
+  }, []);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
