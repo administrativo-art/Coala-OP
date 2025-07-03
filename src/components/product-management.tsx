@@ -278,7 +278,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                         </FormItem>
                                     )}/>
                                     <FormField control={form.control} name="packageSize" render={({ field }) => (
-                                        <FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} /></FormControl><FormMessage /></FormItem>
+                                        <FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <FormField control={form.control} name="unit" render={({ field }) => (
                                         <FormItem><FormLabel>Unidade</FormLabel>
@@ -298,7 +298,18 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                     ) : (
                        <div className="flex flex-col h-[60vh]">
                             <div className="p-1">
-                                <Button type="button" className="w-full" onClick={() => setShowForm(true)}>
+                                <Button type="button" className="w-full" onClick={() => {
+                                    setEditingProduct(null);
+                                    form.reset({
+                                        baseName: '',
+                                        barcode: '',
+                                        imageUrl: '',
+                                        category: 'Massa',
+                                        packageSize: undefined,
+                                        unit: 'g'
+                                    });
+                                    setShowForm(true);
+                                }}>
                                     <PlusCircle className="mr-2 h-4 w-4" />
                                     Adicionar Novo Insumo
                                 </Button>
