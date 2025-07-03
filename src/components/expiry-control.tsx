@@ -164,17 +164,21 @@ export function ExpiryControl() {
     const lot = lots.find(l => l.id === lotId);
     if (lot) {
         setLotToDelete(lot);
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Erro ao encontrar lote",
+            description: `O lote com o ID especificado não foi encontrado na lista atual.`,
+        });
     }
   };
 
   const handleDeleteConfirm = async () => {
-    if (!lotToDelete) return;
-    
-    if (!lotToDelete.id) {
+    if (!lotToDelete || !lotToDelete.id) {
         toast({
             variant: "destructive",
             title: "Erro ao Excluir",
-            description: "A referência ao lote é inválida (ID não encontrado).",
+            description: "A referência ao lote é inválida. Tente atualizar a página.",
         });
         setLotToDelete(null);
         return;
