@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -7,6 +8,7 @@ export type Product = {
   id: string;
   baseName: string;
   barcode?: string;
+  imageUrl?: string;
   category: UnitCategory;
   packageSize: number;
   unit: string;

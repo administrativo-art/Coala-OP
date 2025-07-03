@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -18,16 +19,22 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, PlusCircle } from 'lucide-react';
+import { Edit, Trash2, PlusCircle, Camera } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 
+const BarcodeScannerModal = dynamic(
+  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  { ssr: false }
+);
+
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   barcode: z.string().optional(),
+  imageUrl: z.string().url({ message: "Por favor, insira uma URL de imagem válida." }).optional().or(z.literal('')),
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
@@ -53,12 +60,14 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
         defaultValues: {
             baseName: '',
             barcode: '',
+            imageUrl: '',
             category: 'Massa',
             packageSize: undefined,
             unit: 'g',
@@ -90,6 +99,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         form.reset({
             baseName: product.baseName,
             barcode: product.barcode || '',
+            imageUrl: product.imageUrl || '',
             category: product.category,
             packageSize: product.packageSize,
             unit: product.unit
@@ -165,6 +175,11 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         }
     };
 
+    const handleScanSuccess = (decodedText: string) => {
+        form.setValue('barcode', decodedText, { shouldValidate: true });
+        setIsScannerOpen(false);
+    };
+
     const onSubmit = (values: ProductFormValues) => {
         if (editingProduct) {
             updateProduct({ ...editingProduct, ...values });
@@ -196,10 +211,26 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     <FormField control={form.control} name="baseName" render={({ field }) => (
                                         <FormItem><FormLabel>Nome base</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
                                     )}/>
-                                     <FormField control={form.control} name="barcode" render={({ field }) => (
-                                        <FormItem><FormLabel>Código de Barras</FormLabel><FormControl><Input placeholder="Escanear ou digitar" {...field} /></FormControl><FormMessage /></FormItem>
+                                    <FormField control={form.control} name="barcode" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Código de Barras (Opcional)</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormControl>
+                                                    <Input placeholder="Escanear ou digitar" {...field} />
+                                                </FormControl>
+                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                                                    <Camera className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
                                     )}/>
                                 </div>
+                                
+                                <FormField control={form.control} name="imageUrl" render={({ field }) => (
+                                    <FormItem><FormLabel>URL da Imagem (Opcional)</FormLabel><FormControl><Input placeholder="https://exemplo.com/imagem.png" {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (
                                         <FormItem><FormLabel>Categoria</FormLabel>
@@ -292,6 +323,14 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                     )}
                 </DialogContent>
             </Dialog>
+
+            {isScannerOpen && (
+                <BarcodeScannerModal
+                    open={isScannerOpen}
+                    onOpenChange={setIsScannerOpen}
+                    onScanSuccess={handleScanSuccess}
+                />
+            )}
 
             {productToDelete && (
                 <DeleteConfirmationDialog
