@@ -96,6 +96,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     const { id, ...dataToUpdate } = updatedLot;
     try {
       await setDoc(lotRef, dataToUpdate, { merge: true });
+      // Manually update local state for immediate feedback, ensuring UI consistency.
+      setLots(prev => prev.map(lot => (lot.id === id ? updatedLot : lot)));
     } catch (error) {
       console.error(`Error updating lot with ID ${id}:`, error);
       throw error; 
@@ -106,6 +108,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     const lotRef = doc(db, "lots", lotId);
     try {
       await deleteDoc(lotRef);
+      // Manually update local state for immediate UI feedback.
+      setLots(prev => prev.filter(lot => lot.id !== lotId));
       return true;
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
