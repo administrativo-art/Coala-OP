@@ -109,64 +109,68 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   }, [lotToEdit, open, form, products]);
   
   const onSubmit = async (values: LotFormValues) => {
-    const location = locations.find(l => l.id === values.locationId);
-
-    if (lotToEdit) {
-        // EDITING
-        const targetProduct = products.find(p => p.id === lotToEdit.productId);
-        
-        const updatedLotData: LotEntry = {
-            ...lotToEdit, // Start with existing data
-            ...values,    // Overwrite with form values
-            expiryDate: values.expiryDate.toISOString(), // Convert date to string
-            locationId: values.locationId || null,
-            locationName: location?.name || null,
-            locationCode: location?.code || null,
-        };
-
-        if (targetProduct) {
-            // If product exists, ensure name is synced and update product image if needed
-            updatedLotData.productName = getProductFullName(targetProduct);
-            updatedLotData.imageUrl = values.imageUrl || targetProduct.imageUrl;
-
+    try {
+        const location = locations.find(l => l.id === values.locationId);
+    
+        if (lotToEdit) {
+            const targetProduct = products.find(p => p.id === lotToEdit.productId);
+            const updatedLotData: LotEntry = {
+                ...lotToEdit,
+                ...values,
+                expiryDate: values.expiryDate.toISOString(),
+                locationId: values.locationId || null,
+                locationName: location?.name || null,
+                locationCode: location?.code || null,
+            };
+    
+            if (targetProduct) {
+                updatedLotData.productName = getProductFullName(targetProduct);
+                updatedLotData.imageUrl = values.imageUrl || targetProduct.imageUrl;
+    
+                if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
+                    await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
+                }
+            }
+            await updateLot(updatedLotData);
+            toast({ title: "Lote atualizado", description: "As informações do lote foram salvas." });
+        } else {
+            if (!selectedProduct) {
+                toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
+                return;
+            }
+          
+            const targetProduct = selectedProduct;
+          
             if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
                 await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
             }
+    
+            const lotData: Omit<LotEntry, 'id'> = {
+                productId: targetProduct.id,
+                productName: getProductFullName(targetProduct),
+                lotNumber: values.lotNumber,
+                expiryDate: values.expiryDate.toISOString(),
+                kioskId: values.kioskId,
+                quantity: values.quantity,
+                imageUrl: values.imageUrl || targetProduct.imageUrl,
+                locationId: values.locationId || null,
+                locationName: location?.name || null,
+                locationCode: location?.code || null,
+            };
+            await addLot(lotData);
+            toast({ title: "Lote adicionado", description: "O novo lote foi adicionado ao estoque." });
         }
-        // If product doesn't exist, the original productName from lotToEdit is preserved,
-        // and the submitted quantity (e.g., 0) is correctly applied.
+    
+        onOpenChange(false);
 
-        await updateLot(updatedLotData);
-
-    } else {
-      // ADDING
-      if (!selectedProduct) {
-        toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
-        return;
-      }
-      
-      const targetProduct = selectedProduct;
-      
-      if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
-        await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
-      }
-
-      const lotData: Omit<LotEntry, 'id'> = {
-        productId: targetProduct.id,
-        productName: getProductFullName(targetProduct),
-        lotNumber: values.lotNumber,
-        expiryDate: values.expiryDate.toISOString(),
-        kioskId: values.kioskId,
-        quantity: values.quantity,
-        imageUrl: values.imageUrl || targetProduct.imageUrl,
-        locationId: values.locationId || null,
-        locationName: location?.name || null,
-        locationCode: location?.code || null,
-      };
-      await addLot(lotData);
+    } catch (error) {
+        console.error("Failed to save lot:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro ao salvar",
+            description: "Não foi possível salvar as informações do lote. Tente novamente."
+        });
     }
-
-    onOpenChange(false);
   };
   
   const handleBarcodeSearch = (barcode: string) => {

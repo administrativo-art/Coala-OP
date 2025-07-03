@@ -184,24 +184,8 @@ export function ExpiryControl() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!lotToDelete || !lotToDelete.id) {
-        toast({
-            variant: "destructive",
-            title: "Erro ao Excluir",
-            description: "A referência ao lote é inválida. Tente atualizar a página.",
-        });
-        setLotToDelete(null);
-        return;
-    }
-    
-    const lotExists = lots.some(l => l.id === lotToDelete.id);
-    if (!lotExists) {
-      toast({
-          variant: "destructive",
-          title: "Lote não encontrado",
-          description: "O lote pode já ter sido excluído. A lista será atualizada.",
-      });
-      setLotToDelete(null);
+    if (!lotToDelete) {
+      toast({ variant: "destructive", title: "Erro", description: "Nenhum lote selecionado para exclusão." });
       return;
     }
 
@@ -210,13 +194,13 @@ export function ExpiryControl() {
       await deleteLot(lotToDelete.id);
       toast({
         title: "Lote excluído",
-        description: `O lote de ${lotToDelete.productName} foi removido.`,
+        description: `O lote de ${lotToDelete.productName} foi removido com sucesso.`,
       });
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Erro ao excluir",
-        description: "Não foi possível remover o lote. Tente novamente.",
+        description: "Ocorreu um erro ao tentar remover o lote. Verifique sua conexão e tente novamente.",
       });
       console.error("Deletion failed:", error);
     } finally {
