@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type LotEntry, type MovementRecord, type Product } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc } from 'firebase/firestore';
 
 export type MoveLotParams = {
   lotId: string;
@@ -94,9 +94,16 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   const updateLot = useCallback(async (updatedLot: LotEntry) => {
     const lotRef = doc(db, "lots", updatedLot.id);
     const { id, ...dataToUpdate } = updatedLot;
-    // A lot is now never deleted on update, only when explicitly deleted.
-    // A quantity of 0 means it's a zeroed-out lot available for audit.
-    await updateDoc(lotRef, dataToUpdate);
+    try {
+      // Using setDoc with merge: true acts as an "upsert".
+      // It will update the document if it exists, or create it if it doesn't.
+      // This prevents the "No document to update" error if the lot was deleted
+      // by another process or client.
+      await setDoc(lotRef, dataToUpdate, { merge: true });
+    } catch (error) {
+      console.error(`Error updating lot with ID ${id}:`, error);
+      throw error; // Re-throw to allow the UI to handle it if needed
+    }
   }, []);
 
   const deleteLot = useCallback(async (lotId: string) => {
