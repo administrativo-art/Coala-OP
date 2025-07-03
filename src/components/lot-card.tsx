@@ -1,3 +1,4 @@
+
 "use client"
 
 import Image from 'next/image';
@@ -9,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Pencil, Trash2, Truck, MapPin, Camera } from 'lucide-react';
 import { type Kiosk } from '@/types';
+import { useLocations } from '@/hooks/use-locations';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -27,6 +29,7 @@ export type GroupedLot = {
     id: string; // This is the unique LotEntry ID
     kioskId: string;
     quantity: number;
+    locationId?: string;
   }[];
 };
 
@@ -42,6 +45,7 @@ type LotCardProps = {
 };
 
 export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit, canMove, canDelete }: LotCardProps) {
+  const { locations } = useLocations();
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const expiry = parseISO(groupedLot.expiryDate);
@@ -65,6 +69,13 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
 
   const getKioskName = (id: string) => {
     return kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
+  };
+  
+  const getLocationInfo = (id?: string) => {
+    if (!id) return '';
+    const location = locations.find(l => l.id === id);
+    if (!location) return '';
+    return location.code ? `${location.name} (${location.code})` : location.name;
   };
 
   return (
@@ -100,6 +111,7 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, canEdit,
                     <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
+                        {kioskEntry.locationId && <span className="text-muted-foreground text-xs">({getLocationInfo(kioskEntry.locationId)})</span>}
                         <span>{kioskEntry.quantity} un.</span>
                     </div>
                     {(canMove || canEdit || canDelete) && (

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
+import { LocationsProvider } from '@/components/locations-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
@@ -35,24 +36,26 @@ export default function RootLayout({
         <ProfilesProvider>
           <AuthProvider>
             <KiosksProvider>
-              <ProductsProvider>
-                <StockAnalysisProductsProvider>
-                  <ExpiryProductsProvider>
-                    <PredefinedListsProvider>
-                      <FormProvider>
-                        <StockAnalysisProvider>
-                            <ConsumptionAnalysisProvider>
-                              <MovementHistoryProvider>
-                                {children}
-                                <Toaster />
-                              </MovementHistoryProvider>
-                            </ConsumptionAnalysisProvider>
-                        </StockAnalysisProvider>
-                      </FormProvider>
-                    </PredefinedListsProvider>
-                  </ExpiryProductsProvider>
-                </StockAnalysisProductsProvider>
-              </ProductsProvider>
+              <LocationsProvider>
+                <ProductsProvider>
+                  <StockAnalysisProductsProvider>
+                    <ExpiryProductsProvider>
+                      <PredefinedListsProvider>
+                        <FormProvider>
+                          <StockAnalysisProvider>
+                              <ConsumptionAnalysisProvider>
+                                <MovementHistoryProvider>
+                                  {children}
+                                  <Toaster />
+                                </MovementHistoryProvider>
+                              </ConsumptionAnalysisProvider>
+                          </StockAnalysisProvider>
+                        </FormProvider>
+                      </PredefinedListsProvider>
+                    </ExpiryProductsProvider>
+                  </StockAnalysisProductsProvider>
+                </ProductsProvider>
+              </LocationsProvider>
             </KiosksProvider>
           </AuthProvider>
         </ProfilesProvider>

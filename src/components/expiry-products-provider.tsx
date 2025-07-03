@@ -1,9 +1,10 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type LotEntry, type MovementRecord, type Product } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 
 export type MoveLotParams = {
   lotId: string;
@@ -37,7 +38,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   useEffect(() => {
     const q = query(collection(db, "lots"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      // Seeding logic removed to give users a clean slate if needed.
       const lotsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotEntry));
       setLots(lotsData);
       setLoading(false);
@@ -50,13 +50,28 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
-    const q = query(
-      collection(db, "lots"),
-      where("productId", "==", lot.productId),
-      where("lotNumber", "==", lot.lotNumber),
-      where("expiryDate", "==", lot.expiryDate),
-      where("kioskId", "==", lot.kioskId)
-    );
+    let q;
+    // Firestore queries with `where` do not handle `undefined` values correctly. 
+    // We must query for `null` if the locationId is not present.
+    if (lot.locationId) {
+        q = query(
+          collection(db, "lots"),
+          where("productId", "==", lot.productId),
+          where("lotNumber", "==", lot.lotNumber),
+          where("expiryDate", "==", lot.expiryDate),
+          where("kioskId", "==", lot.kioskId),
+          where("locationId", "==", lot.locationId)
+        );
+    } else {
+        q = query(
+          collection(db, "lots"),
+          where("productId", "==", lot.productId),
+          where("lotNumber", "==", lot.lotNumber),
+          where("expiryDate", "==", lot.expiryDate),
+          where("kioskId", "==", lot.kioskId),
+          where("locationId", "==", null)
+        );
+    }
 
     try {
         const querySnapshot = await getDocs(q);
@@ -125,7 +140,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
           where("productId", "==", sourceLot.productId),
           where("lotNumber", "==", sourceLot.lotNumber),
           where("expiryDate", "==", sourceLot.expiryDate),
-          where("kioskId", "==", toKioskId)
+          where("kioskId", "==", toKioskId),
+          where("locationId", "==", null) // Moved stock arrives without a location
       );
       const destSnap = await getDocs(destQuery);
       
@@ -143,6 +159,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               kioskId: toKioskId,
               quantity: quantityToMove,
               imageUrl: sourceLot.imageUrl,
+              locationId: null,
+              locationName: null,
+              locationCode: null,
           };
           batch.set(newDestLotRef, newLotData);
       }

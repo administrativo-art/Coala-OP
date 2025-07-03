@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
+import { useLocations } from '@/hooks/use-locations';
 import { type LotEntry } from '@/types';
 import { LotCard, type GroupedLot } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
@@ -34,6 +35,7 @@ export function ExpiryControl() {
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLot, moveLot } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
+  const { locations, loading: locationsLoading } = useLocations();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -130,6 +132,7 @@ export function ExpiryControl() {
         id: lot.id,
         kioskId: lot.kioskId,
         quantity: lot.quantity,
+        locationId: lot.locationId || undefined,
       });
     });
 
@@ -215,7 +218,7 @@ export function ExpiryControl() {
 
 
   const renderContent = () => {
-    if (loading || productsLoading) {
+    if (loading || productsLoading || locationsLoading) {
       return (
         <div className="space-y-4">
           <Skeleton className="h-40 w-full" />
@@ -422,5 +425,3 @@ export function ExpiryControl() {
     </>
   );
 }
-
-    

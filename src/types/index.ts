@@ -4,6 +4,13 @@ export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as c
 
 export type UnitCategory = (typeof unitCategories)[number];
 
+export type Location = {
+  id: string;
+  name: string; // e.g., "Prateleira A1"
+  code?: string; // e.g., "PA1"
+  kioskId: string;
+};
+
 export type Product = {
   id: string;
   baseName: string;
@@ -46,6 +53,9 @@ export type LotEntry = {
   kioskId: string;
   quantity: number;
   imageUrl?: string;
+  locationId?: string | null;
+  locationName?: string | null;
+  locationCode?: string | null;
 };
 
 export type MovementRecord = {

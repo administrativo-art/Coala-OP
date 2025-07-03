@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,19 +11,21 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera, Plus, X, Search } from 'lucide-react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Calendar as CalendarIcon, Camera, Search, Settings } from 'lucide-react';
 import { type LotEntry, type Kiosk, type Product } from '@/types';
 import { useProducts } from '@/hooks/use-products';
+import { useLocations } from '@/hooks/use-locations';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StorageLocationManagementModal } from './storage-location-management-modal';
+
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -34,6 +36,7 @@ const lotFormSchema = z.object({
   lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
   expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
+  locationId: z.string().optional(),
   quantity: z.coerce.number().min(0, 'A quantidade não pode ser negativa.'),
   imageUrl: z.string().optional(),
 });
@@ -47,12 +50,14 @@ type AddEditLotModalProps = {
   kiosks: Kiosk[];
   addLot: (lot: Omit<LotEntry, 'id'>) => void;
   updateLot: (lot: LotEntry) => void;
-  lots: LotEntry[]; // Kept for future logic if needed, but not used for prefill now
+  lots: LotEntry[];
 };
 
 export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot, updateLot }: AddEditLotModalProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const { products, getProductFullName, updateProduct } = useProducts();
+  const { locations } = useLocations();
   const { toast } = useToast();
   const isEditing = !!lotToEdit;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -64,10 +69,18 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       lotNumber: '',
       expiryDate: undefined,
       kioskId: '',
+      locationId: '',
       quantity: 1,
       imageUrl: '',
     }
   });
+  
+  const selectedKioskId = form.watch('kioskId');
+  
+  const availableLocations = useMemo(() => {
+    if (!selectedKioskId) return [];
+    return locations.filter(loc => loc.kioskId === selectedKioskId);
+  }, [locations, selectedKioskId]);
 
   useEffect(() => {
     if (open) {
@@ -77,6 +90,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         form.reset({
           ...lotToEdit,
           expiryDate: new Date(lotToEdit.expiryDate),
+          locationId: lotToEdit.locationId || '',
           imageUrl: lotToEdit.imageUrl || product?.imageUrl || '',
         });
       } else {
@@ -84,6 +98,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             lotNumber: '',
             expiryDate: undefined,
             kioskId: '',
+            locationId: '',
             quantity: 1,
             imageUrl: '',
         });
@@ -105,13 +120,14 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
        return;
     }
     
-    // Logic for updating the product's image URL if it changed in the lot form
     if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
         await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
     }
 
+    const location = locations.find(l => l.id === values.locationId);
+
     if (lotToEdit) {
-        const lotData: Omit<LotEntry, 'id'> = {
+        const lotData = {
             productId: lotToEdit.productId,
             productName: getProductFullName(targetProduct),
             lotNumber: values.lotNumber,
@@ -119,6 +135,9 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             kioskId: values.kioskId,
             quantity: values.quantity,
             imageUrl: values.imageUrl || targetProduct.imageUrl,
+            locationId: values.locationId || null,
+            locationName: location?.name || null,
+            locationCode: location?.code || null,
         };
         await updateLot({ ...lotToEdit, ...lotData });
     } else {
@@ -130,6 +149,9 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
           kioskId: values.kioskId,
           quantity: values.quantity,
           imageUrl: values.imageUrl || targetProduct.imageUrl,
+          locationId: values.locationId || null,
+          locationName: location?.name || null,
+          locationCode: location?.code || null,
         };
         await addLot(lotData);
     }
@@ -163,7 +185,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar lote de insumo' : 'Adicionar novo lote ao estoque'}</DialogTitle>
             <DialogDescription>
-              {isEditing ? 'Atualize as informações do lote em estoque.' : 'Primeiro, encontre o insumo pelo código de barras e depois adicione os detalhes do lote.'}
+              {isEditing ? 'Atualize as informações do lote em estoque.' : 'Primeiro, encontre o insumo e depois adicione os detalhes do lote.'}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -244,7 +266,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                     )}
                                                 >
                                                     {field.value ? (
-                                                    format(field.value, "dd/MM/yyyy")
+                                                    format(field.value, "dd/MM/yyyy", { locale: ptBR })
                                                     ) : (
                                                     <span>Escolha uma data</span>
                                                     )}
@@ -300,6 +322,31 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                         )}
                                         />
                                     </div>
+                                    <FormField
+                                        control={form.control}
+                                        name="locationId"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>Localização (Opcional)</FormLabel>
+                                            <div className="flex gap-2 items-center">
+                                                <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedKioskId || availableLocations.length === 0}>
+                                                    <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione o local" />
+                                                    </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                    {availableLocations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name} {loc.code && `(${loc.code})`}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsLocationModalOpen(true)}>
+                                                    <Settings className="h-4 w-4"/>
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                 </div>
                             </>
                         )}
@@ -321,8 +368,11 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         onOpenChange={setIsScannerOpen}
         onScanSuccess={handleScanSuccess}
       />}
+       <StorageLocationManagementModal
+        open={isLocationModalOpen}
+        onOpenChange={setIsLocationModalOpen}
+        kiosks={kiosks}
+      />
     </>
   );
 }
-
-    
