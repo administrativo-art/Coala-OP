@@ -176,15 +176,10 @@ export function ExpiryControl() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!deleteTargetId) {
-      toast({ variant: "destructive", title: "Erro", description: "Nenhum lote selecionado para exclusão." });
-      return;
-    }
-
+    if (!deleteTargetId) return;
     setIsDeleting(true);
     const success = await deleteLot(deleteTargetId);
-    setIsDeleting(false);
-
+    
     if (success) {
       toast({
         title: "Lote excluído",
@@ -199,6 +194,7 @@ export function ExpiryControl() {
         duration: 9000,
       });
     }
+    setIsDeleting(false);
   };
 
   const handleSearchScanSuccess = (decodedText: string) => {
@@ -294,8 +290,8 @@ export function ExpiryControl() {
           <CardDescription>Gerencie os insumos em estoque, seus vencimentos e transferências.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <div className="relative flex-grow">
+            <div className="mb-4">
+                <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Buscar por produto, lote, código..."
@@ -314,21 +310,21 @@ export function ExpiryControl() {
                         <Camera className="h-4 w-4 text-muted-foreground" />
                     </Button>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                        <Plus className="mr-2" /> Adicionar lote
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
+                    <Plus className="mr-2" /> Adicionar lote
+                </Button>
+                {canManageProducts && (
+                    <Button variant="outline" onClick={() => setIsProductManagementOpen(true)} className="w-full sm:w-auto">
+                        <Settings className="mr-2" /> Gerenciar Insumos
                     </Button>
-                    {canManageProducts && (
-                        <Button variant="outline" onClick={() => setIsProductManagementOpen(true)} className="w-full sm:w-auto">
-                            <Settings className="mr-2" /> Gerenciar Insumos
-                        </Button>
-                    )}
-                    {permissions.lots.viewMovementHistory && (
-                        <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
-                            <Archive className="mr-2" /> Auditar Lotes Zerados
-                        </Button>
-                    )}
-                </div>
+                )}
+                {permissions.lots.viewMovementHistory && (
+                    <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
+                        <Archive className="mr-2" /> Auditar lotes arquivados
+                    </Button>
+                )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
                 <DropdownMenu>
@@ -451,5 +447,3 @@ export function ExpiryControl() {
     </>
   );
 }
-
-    

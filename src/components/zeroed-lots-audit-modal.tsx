@@ -37,9 +37,9 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Auditoria de Lotes Zerados</DialogTitle>
+          <DialogTitle>Auditoria de Lotes Arquivados</DialogTitle>
           <DialogDescription>
-            Consulte todos os lotes cujo estoque chegou a zero.
+            Consulte todos os lotes cujo estoque chegou a zero e foram arquivados.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-hidden">
@@ -79,8 +79,8 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
               ) : (
                 <div className="flex h-60 flex-col items-center justify-center text-center text-muted-foreground">
                   <History className="h-12 w-12 mb-4" />
-                  <p className="font-semibold">Nenhum lote zerado encontrado</p>
-                  <p className="text-sm">O histórico de lotes com estoque zerado aparecerá aqui.</p>
+                  <p className="font-semibold">Nenhum lote arquivado encontrado</p>
+                  <p className="text-sm">O histórico de lotes com estoque zerado (arquivados) aparecerá aqui.</p>
                 </div>
               )}
             </div>
