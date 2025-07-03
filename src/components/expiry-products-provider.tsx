@@ -100,11 +100,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLot = useCallback(async (lotId: string) => {
-    const lotToDelete = lots.find(l => l.id === lotId);
-    if (!lotToDelete) {
-        console.error("ID do lote é inválido ou lote não encontrado. Ação cancelada.", lotId);
-        throw new Error("ID do lote é inválido ou não foi encontrado.");
-    }
     const lotRef = doc(db, "lots", lotId);
     try {
       await deleteDoc(lotRef);
@@ -112,7 +107,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
       throw error;
     }
-  }, [lots]);
+  }, []);
 
   const executeMove = async (batch: any, params: MoveLotParams) => {
       const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;

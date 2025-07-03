@@ -194,6 +194,17 @@ export function ExpiryControl() {
         return;
     }
     
+    const lotExists = lots.some(l => l.id === lotToDelete.id);
+    if (!lotExists) {
+      toast({
+          variant: "destructive",
+          title: "Lote não encontrado",
+          description: "O lote pode já ter sido excluído. A lista será atualizada.",
+      });
+      setLotToDelete(null);
+      return;
+    }
+
     setIsDeleting(true);
     try {
       await deleteLot(lotToDelete.id);
