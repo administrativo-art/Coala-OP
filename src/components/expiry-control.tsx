@@ -169,6 +169,17 @@ export function ExpiryControl() {
 
   const handleDeleteConfirm = async () => {
     if (!lotToDelete) return;
+    
+    if (!lotToDelete.id) {
+        toast({
+            variant: "destructive",
+            title: "Erro ao Excluir",
+            description: "A referência ao lote é inválida (ID não encontrado).",
+        });
+        setLotToDelete(null);
+        return;
+    }
+    
     setIsDeleting(true);
     try {
       await deleteLot(lotToDelete.id);
