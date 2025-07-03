@@ -26,6 +26,7 @@ export type Product = {
   hasPurchaseUnit?: boolean;
   purchaseUnitName?: string;
   itemsPerPurchaseUnit?: number;
+  isArchived?: boolean;
 };
 
 export type ProductDefinition = {

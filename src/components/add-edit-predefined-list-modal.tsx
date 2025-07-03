@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -51,6 +51,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
     name: "items"
   });
   
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
   const watchedItems = form.watch('items');
 
   useEffect(() => {
@@ -120,7 +121,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                                 <FormLabel>Produto</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                  <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}</SelectContent>
+                                  <SelectContent>{activeProducts.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}</SelectContent>
                                 </Select>
                                 <FormMessage />
                               </FormItem>

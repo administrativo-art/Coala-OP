@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -18,12 +19,14 @@ export function InventoryConverter() {
   const [value, setValue] = useState<string>('1');
   const [fromUnit, setFromUnit] = useState<string>('Pacote(s)');
   const [toUnit, setToUnit] = useState<string>('');
+  
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
 
   useEffect(() => {
-    if (!loading && products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
+    if (!loading && activeProducts.length > 0 && !selectedProductId) {
+      setSelectedProductId(activeProducts[0].id);
     }
-  }, [products, loading, selectedProductId]);
+  }, [activeProducts, loading, selectedProductId]);
 
   const selectedProduct = useMemo(() => {
     return products.find(p => p.id === selectedProductId);
@@ -114,13 +117,13 @@ export function InventoryConverter() {
       );
     }
 
-    if (products.length === 0) {
+    if (activeProducts.length === 0) {
       return (
         <div className="text-center py-8 flex flex-col items-center">
             <Boxes className="h-16 w-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-xl font-semibold">Nenhum produto cadastrado</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Cadastre os produtos na tela de "Gestão de Estoque" para poder fazer conversões aqui.
+                Cadastre ou desarquive insumos na tela de "Gestão de Estoque" para poder fazer conversões aqui.
             </p>
         </div>
       );
@@ -131,12 +134,12 @@ export function InventoryConverter() {
         <div className="flex gap-4 items-end">
           <div className="flex-grow space-y-2">
             <Label htmlFor="product">Produto</Label>
-            <Select value={selectedProductId} onValueChange={handleProductChange} disabled={products.length === 0}>
+            <Select value={selectedProductId} onValueChange={handleProductChange} disabled={activeProducts.length === 0}>
               <SelectTrigger id="product">
                 <SelectValue placeholder="Selecione um produto" />
               </SelectTrigger>
               <SelectContent>
-                {products.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
+                {activeProducts.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

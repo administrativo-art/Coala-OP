@@ -76,6 +76,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
   });
   
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
   const selectedKioskId = form.watch('kioskId');
   
   const availableLocations = useMemo(() => {
@@ -169,10 +170,10 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     if (!term.trim()) return;
     const normalizedTerm = term.trim().toLowerCase();
     
-    let product = products.find(p => p.barcode?.toLowerCase() === normalizedTerm);
+    let product = activeProducts.find(p => p.barcode?.toLowerCase() === normalizedTerm);
     
     if (!product) {
-      product = products.find(p => p.baseName.toLowerCase().includes(normalizedTerm));
+      product = activeProducts.find(p => p.baseName.toLowerCase().includes(normalizedTerm));
     }
 
     if (product) {
@@ -180,7 +181,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         form.setValue('imageUrl', product.imageUrl || '');
         toast({ title: "Insumo encontrado!", description: `Insumo "${getProductFullName(product)}" selecionado. Preencha os dados do lote.` });
     } else {
-        toast({ variant: "destructive", title: "Insumo não encontrado", description: "Nenhum insumo cadastrado com este nome ou código de barras." });
+        toast({ variant: "destructive", title: "Insumo não encontrado", description: "Nenhum insumo ativo cadastrado com este nome ou código de barras." });
         setSelectedProduct(null);
     }
   };
@@ -370,7 +371,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertTitle>Insumo não encontrado!</AlertTitle>
                                 <AlertDescription>
-                                    O insumo original deste lote foi removido. Por favor, pesquise e selecione um novo insumo para vincular a este lote.
+                                    O insumo original deste lote foi removido ou arquivado. Por favor, pesquise e selecione um novo insumo ativo para vincular a este lote.
                                 </AlertDescription>
                             </Alert>
                         ) : (

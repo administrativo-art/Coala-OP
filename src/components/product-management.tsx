@@ -20,11 +20,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, PlusCircle, Camera } from 'lucide-react';
+import { Edit, Trash2, PlusCircle, Camera, Archive } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { ArchivedProductsModal } from './archived-products-modal';
 
 
 const BarcodeScannerModal = dynamic(
@@ -67,6 +68,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     const [isDeleting, setIsDeleting] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
     const form = useForm<ProductFormValues>({
@@ -97,6 +99,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
             setProductsToDelete([]);
             setSelectedProducts(new Set());
             setIsDeleting(false);
+            setIsArchiveModalOpen(false);
         }
         onOpenChange(isOpen);
     };
@@ -137,6 +140,11 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         }
         setProductToDelete(product);
     };
+
+    const handleArchiveClick = (product: Product) => {
+        updateProduct({ ...product, isArchived: true });
+        toast({ title: "Insumo arquivado", description: `"${getProductFullName(product)}" foi arquivado e movido para a lista de arquivados.`});
+    };
     
     const handleDeleteConfirm = async () => {
         if (productToDelete) {
@@ -160,7 +168,8 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     };
 
     const handleSelectAllChange = (isSelected: boolean) => {
-        setSelectedProducts(isSelected ? new Set(products.map(p => p.id)) : new Set());
+        const activeProducts = products.filter(p => !p.isArchived);
+        setSelectedProducts(isSelected ? new Set(activeProducts.map(p => p.id)) : new Set());
     };
 
     const handleDeleteSelectedClick = () => {
@@ -202,6 +211,9 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     };
     
     if (!open) return null;
+
+    const activeProducts = products.filter(p => !p.isArchived);
+    const allProductsSelected = activeProducts.length > 0 && selectedProducts.size === activeProducts.length;
 
     return (
         <>
@@ -297,8 +309,8 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                         </Form>
                     ) : (
                        <div className="flex flex-col h-[60vh]">
-                            <div className="p-1">
-                                <Button type="button" className="w-full" onClick={() => {
+                            <div className="p-1 flex gap-2">
+                                <Button type="button" className="flex-grow" onClick={() => {
                                     setEditingProduct(null);
                                     form.reset({
                                         baseName: '',
@@ -310,21 +322,23 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     });
                                     setShowForm(true);
                                 }}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Adicionar Novo Insumo
+                                    <PlusCircle className="mr-2" /> Adicionar
+                                </Button>
+                                <Button type="button" variant="outline" className="flex-grow" onClick={() => setIsArchiveModalOpen(true)}>
+                                    <Archive className="mr-2" /> Ver Arquivados
                                 </Button>
                             </div>
                             <Separator className="my-4" />
 
-                             {products.length > 0 && (
+                             {activeProducts.length > 0 && (
                                 <div className="flex items-center gap-3 px-1 py-2 mb-2 border-y bg-muted/50">
                                     <Checkbox
-                                        id="select-all-products"
-                                        checked={selectedProducts.size === products.length && products.length > 0}
+                                        id="select-all-active-products"
+                                        checked={allProductsSelected}
                                         onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
-                                        aria-label="Selecionar todos os insumos"
+                                        aria-label="Selecionar todos os insumos ativos"
                                     />
-                                    <label htmlFor="select-all-products" className="text-sm font-medium leading-none cursor-pointer">
+                                    <label htmlFor="select-all-active-products" className="text-sm font-medium leading-none cursor-pointer">
                                         Selecionar todos
                                     </label>
                                 </div>
@@ -332,18 +346,19 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
 
                             <ScrollArea className="flex-grow">
                                 <div className="space-y-2 pr-4">
-                                    {products.length > 0 ? products.map(product => (
+                                    {activeProducts.length > 0 ? activeProducts.map(product => (
                                         <div key={product.id} className="flex items-center justify-between rounded-md border p-2">
                                             <div className="flex items-center gap-3">
                                                  <Checkbox
-                                                    id={`product-${product.id}`}
+                                                    id={`active-product-${product.id}`}
                                                     checked={selectedProducts.has(product.id)}
                                                     onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
                                                 />
-                                                <label htmlFor={`product-${product.id}`} className="font-medium cursor-pointer">{getProductFullName(product)}</label>
+                                                <label htmlFor={`active-product-${product.id}`} className="font-medium cursor-pointer">{getProductFullName(product)}</label>
                                             </div>
                                             <div className="flex gap-1">
                                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /></Button>
                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                         </div>
@@ -371,6 +386,8 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                     )}
                 </DialogContent>
             </Dialog>
+
+            <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
 
             {isScannerOpen && (
                 <BarcodeScannerModal
