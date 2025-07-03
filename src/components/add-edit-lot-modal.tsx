@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -258,6 +259,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                 onSelect={field.onChange}
                                                 disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                                                 initialFocus
+                                                locale={ptBR}
                                                 />
                                             </PopoverContent>
                                             </Popover>
@@ -272,7 +274,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                         render={({ field }) => (
                                             <FormItem>
                                             <FormLabel>Quantidade</FormLabel>
-                                            <FormControl><Input type="number" {...field} /></FormControl>
+                                            <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>
                                             <FormMessage />
                                             </FormItem>
                                         )}
