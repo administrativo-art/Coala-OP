@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -35,7 +36,7 @@ const BarcodeScannerModal = dynamic(
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
   const { toast } = useToast();
@@ -52,6 +53,7 @@ export function ExpiryControl() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [lotForHistory, setLotForHistory] = useState<GroupedLot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -177,21 +179,20 @@ export function ExpiryControl() {
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
 
-    const groupToDelete = groupedLots.find(group => group.kiosks.some(k => k.id === deleteTargetId));
-
-    if (!groupToDelete) {
-        toast({
-            variant: "destructive",
-            title: "Erro ao excluir",
-            description: "Não foi possível encontrar o grupo do lote. Tente atualizar a página.",
-        });
-        setDeleteTargetId(null);
-        return;
-    }
-
     setIsDeleting(true);
-    const idsToDelete = groupToDelete.kiosks.map(k => k.id);
-    const success = await deleteLotsByIds(idsToDelete);
+    let success = false;
+
+    if (forceDelete) {
+        success = await forceDeleteLotById(deleteTargetId);
+    } else {
+        const groupToDelete = groupedLots.find(group => group.kiosks.some(k => k.id === deleteTargetId));
+        if (groupToDelete) {
+            const idsToDelete = groupToDelete.kiosks.map(k => k.id);
+            success = await deleteLotsByIds(idsToDelete);
+        } else {
+            success = await forceDeleteLotById(deleteTargetId);
+        }
+    }
     
     if (success) {
       toast({
@@ -203,11 +204,12 @@ export function ExpiryControl() {
       toast({
         variant: "destructive",
         title: "Erro ao excluir o lote",
-        description: `Não foi possível remover o lote. Verifique o console para mais detalhes ou tente novamente.`,
+        description: `Não foi possível remover o lote. Tente usar a opção "Forçar exclusão" se o problema persistir.`,
         duration: 9000,
       });
     }
     setIsDeleting(false);
+    setForceDelete(false);
   };
 
   const handleSearchScanSuccess = (decodedText: string) => {
@@ -442,6 +444,8 @@ export function ExpiryControl() {
             onOpenChange={(open) => !open && setDeleteTargetId(null)}
             onConfirm={handleDeleteConfirm}
             itemName={`o lote selecionado`}
+            showForceDeleteOption={true}
+            onForceDeleteChange={setForceDelete}
         />
       )}
 

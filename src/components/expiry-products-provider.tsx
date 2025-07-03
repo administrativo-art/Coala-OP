@@ -25,6 +25,7 @@ export interface ExpiryProductsContextType {
   addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
   updateLot: (lot: LotEntry) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
+  forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveLot: (params: MoveLotParams) => Promise<void>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
 }
@@ -102,20 +103,29 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const deleteLotsByIds = useCallback(async (lotIds: string[]): Promise<boolean> => {
     if (!lotIds || lotIds.length === 0) {
-      console.error("deleteLotsByIds called with an empty array.");
       return false;
     }
-    
-    // Using Promise.all with individual deleteDoc calls instead of a batch write.
-    // This is a more direct approach that might either succeed where the batch failed,
-    // or provide a more explicit error if one of the deletions fails.
     try {
       const deletePromises = lotIds.map(id => deleteDoc(doc(db, "lots", id)));
       await Promise.all(deletePromises);
       return true;
     } catch (error) {
-      console.error("Error deleting lots by IDs with Promise.all:", error);
+      console.error("Error deleting lots by IDs:", error);
       return false;
+    }
+  }, []);
+  
+  const forceDeleteLotById = useCallback(async (lotId: string): Promise<boolean> => {
+    if (!lotId) {
+        console.error("forceDeleteLotById called with no ID.");
+        return false;
+    }
+    try {
+        await deleteDoc(doc(db, "lots", lotId));
+        return true;
+    } catch (error) {
+        console.error(`Force delete failed for lot ID ${lotId}:`, error);
+        return false;
     }
   }, []);
 
@@ -211,6 +221,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       addLot,
       updateLot,
       deleteLotsByIds,
+      forceDeleteLotById,
       moveLot,
       moveMultipleLots
   };
