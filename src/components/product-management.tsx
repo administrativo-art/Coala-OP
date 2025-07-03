@@ -218,28 +218,9 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
                                 <h3 className="text-lg font-medium">{editingProduct ? `Editando ${getProductFullName(editingProduct)}` : 'Adicionar novo insumo'}</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="baseName" render={({ field }) => (
-                                        <FormItem><FormLabel>Nome base</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                    <FormField control={form.control} name="barcode" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Código de Barras (Opcional)</FormLabel>
-                                            <div className="flex gap-2">
-                                                <FormControl>
-                                                    <Input placeholder="Escanear ou digitar" {...field} />
-                                                </FormControl>
-                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
-                                                    <Camera className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </div>
                                 
                                 <div className="space-y-2">
-                                    <FormLabel>Foto do Insumo (Opcional)</FormLabel>
+                                    <FormLabel>Foto do Insumo</FormLabel>
                                     <div className="flex items-center gap-4">
                                         <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
                                             {form.watch('imageUrl') ? (
@@ -266,7 +247,26 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                         </FormItem>
                                     )}/>
                                 </div>
-
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={form.control} name="barcode" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Código de Barras</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormControl>
+                                                    <Input placeholder="Escanear ou digitar" {...field} />
+                                                </FormControl>
+                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                                                    <Camera className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                     <FormField control={form.control} name="baseName" render={({ field }) => (
+                                        <FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                </div>
 
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (
