@@ -1,18 +1,15 @@
-
 "use client"
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
 import { StockAnalysisConfigurator } from './stock-analysis-configurator';
 import { AnalysisItemFormModal } from './product-management-modal';
-import { type Product, type LotEntry, type PredefinedList } from '@/types';
+import { type Product } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Trash2 } from 'lucide-react';
@@ -26,16 +23,15 @@ interface ItemManagementProps {
 export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
     const { permissions, loading: authLoading } = useAuth();
     const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useStockAnalysisProducts();
-    const { lots, loading: lotsLoading } = useExpiryProducts();
-    const { lists, loading: listsLoading } = usePredefinedLists();
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
     const [productToDelete, setProductToDelete] = useState<Product | null>(null);
     const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     const { toast } = useToast();
     
-    const loading = authLoading || productsLoading || lotsLoading || listsLoading;
+    const loading = authLoading || productsLoading;
 
     const handleOpenChangeAndReset = (isOpen: boolean) => {
         if (!isOpen) {
@@ -64,7 +60,9 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
 
     const handleDeleteConfirm = async () => {
         if (productToDelete) {
+            setIsDeleting(true);
             await deleteProduct(productToDelete.id);
+            setIsDeleting(false);
             setProductToDelete(null);
         }
     };
@@ -96,10 +94,12 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
 
     const handleDeleteMultipleConfirm = async () => {
         if (productsToDelete.length > 0) {
+            setIsDeleting(true);
             const idsToDelete = productsToDelete.map(p => p.id);
             await deleteMultipleProducts(idsToDelete);
             setSelectedProducts(new Set());
             setProductsToDelete([]);
+            setIsDeleting(false);
         }
     };
 
@@ -163,6 +163,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             {productToDelete && (
                 <DeleteConfirmationDialog
                 open={!!productToDelete}
+                isDeleting={isDeleting}
                 onOpenChange={() => setProductToDelete(null)}
                 onConfirm={handleDeleteConfirm}
                 itemName={`o item de análise "${getProductFullName(productToDelete)}"`}
@@ -172,6 +173,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
             {productsToDelete.length > 0 && (
                 <DeleteConfirmationDialog
                     open={productsToDelete.length > 0}
+                    isDeleting={isDeleting}
                     onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
                     onConfirm={handleDeleteMultipleConfirm}
                     itemName={`os ${productsToDelete.length} item(s) selecionado(s)`}
