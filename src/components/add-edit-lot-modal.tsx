@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -179,9 +178,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     if (product) {
         setSelectedProduct(product);
         form.setValue('imageUrl', product.imageUrl || '');
-        toast({ title: "Insumo encontrado!", description: `Insumo "${getProductFullName(product)}" selecionado. Preencha os dados do lote.` });
     } else {
-        toast({ variant: "destructive", title: "Insumo não encontrado", description: "Nenhum insumo ativo cadastrado com este nome ou código de barras." });
         setSelectedProduct(null);
     }
   };
@@ -406,5 +403,3 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
-
-    
