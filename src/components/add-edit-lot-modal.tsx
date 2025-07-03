@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -108,51 +109,56 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   }, [lotToEdit, open, form, products]);
   
   const onSubmit = async (values: LotFormValues) => {
-    if (!selectedProduct && !lotToEdit) {
-        toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
-        return;
-    }
-    
-    const targetProduct = selectedProduct || products.find(p => p.id === lotToEdit?.productId);
-    if (!targetProduct) {
-       toast({ variant: "destructive", title: "Erro de Produto", description: "Não foi possível encontrar o insumo associado a este lote." });
-       return;
-    }
-    
-    if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
-        await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
-    }
-
     const location = locations.find(l => l.id === values.locationId);
 
     if (lotToEdit) {
-        const lotData = {
-            productId: lotToEdit.productId,
-            productName: getProductFullName(targetProduct),
-            lotNumber: values.lotNumber,
-            expiryDate: values.expiryDate.toISOString(),
-            kioskId: values.kioskId,
-            quantity: values.quantity,
-            imageUrl: values.imageUrl || targetProduct.imageUrl,
-            locationId: values.locationId || null,
-            locationName: location?.name || null,
-            locationCode: location?.code || null,
-        };
-        await updateLot({ ...lotToEdit, ...lotData });
+      // EDITING
+      const targetProduct = products.find(p => p.id === lotToEdit.productId);
+
+      if (targetProduct && values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
+        await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
+      }
+
+      const lotData = {
+        productId: lotToEdit.productId,
+        productName: targetProduct ? getProductFullName(targetProduct) : lotToEdit.productName,
+        lotNumber: values.lotNumber,
+        expiryDate: values.expiryDate.toISOString(),
+        kioskId: values.kioskId,
+        quantity: values.quantity,
+        imageUrl: values.imageUrl || lotToEdit.imageUrl || targetProduct?.imageUrl,
+        locationId: values.locationId || null,
+        locationName: location?.name || null,
+        locationCode: location?.code || null,
+      };
+      await updateLot({ ...lotToEdit, ...lotData });
+
     } else {
-        const lotData: Omit<LotEntry, 'id'> = {
-          productId: targetProduct.id,
-          productName: getProductFullName(targetProduct),
-          lotNumber: values.lotNumber,
-          expiryDate: values.expiryDate.toISOString(),
-          kioskId: values.kioskId,
-          quantity: values.quantity,
-          imageUrl: values.imageUrl || targetProduct.imageUrl,
-          locationId: values.locationId || null,
-          locationName: location?.name || null,
-          locationCode: location?.code || null,
-        };
-        await addLot(lotData);
+      // ADDING
+      if (!selectedProduct) {
+        toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder registrar um lote." });
+        return;
+      }
+      
+      const targetProduct = selectedProduct;
+      
+      if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
+        await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
+      }
+
+      const lotData: Omit<LotEntry, 'id'> = {
+        productId: targetProduct.id,
+        productName: getProductFullName(targetProduct),
+        lotNumber: values.lotNumber,
+        expiryDate: values.expiryDate.toISOString(),
+        kioskId: values.kioskId,
+        quantity: values.quantity,
+        imageUrl: values.imageUrl || targetProduct.imageUrl,
+        locationId: values.locationId || null,
+        locationName: location?.name || null,
+        locationCode: location?.code || null,
+      };
+      await addLot(lotData);
     }
 
     onOpenChange(false);
@@ -176,6 +182,8 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     handleBarcodeSearch(decodedText);
     setIsScannerOpen(false);
   };
+
+  const currentImageUrl = form.watch('imageUrl');
 
   return (
     <>
@@ -225,17 +233,22 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 <div className="p-4 border rounded-lg space-y-4 bg-muted/40">
                                     <h4 className="text-sm font-medium text-muted-foreground">Detalhes do Insumo</h4>
                                      <div className="flex items-start gap-4">
-                                          {(selectedProduct?.imageUrl || lotToEdit?.imageUrl) && (
-                                            <Image src={selectedProduct?.imageUrl || lotToEdit?.imageUrl || ''} alt="Foto do insumo" width={64} height={64} className="rounded-md object-cover aspect-square" />
+                                          {(currentImageUrl || lotToEdit?.imageUrl) && (
+                                            <Image src={currentImageUrl || lotToEdit?.imageUrl || ''} alt="Foto do insumo" width={64} height={64} className="rounded-md object-cover aspect-square" />
                                           )}
                                           <div className="flex-grow">
-                                            <p className="font-semibold text-lg">{getProductFullName(selectedProduct || products.find(p => p.id === lotToEdit?.productId) as Product)}</p>
-                                            <p className="text-sm text-muted-foreground">Código: {selectedProduct?.barcode || products.find(p => p.id === lotToEdit?.productId)?.barcode || 'N/A'}</p>
+                                            <p className="font-semibold text-lg">
+                                                {isEditing ? (selectedProduct ? getProductFullName(selectedProduct) : lotToEdit.productName) : (selectedProduct ? getProductFullName(selectedProduct) : 'N/A')}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">Código: {selectedProduct?.barcode || 'N/A'}</p>
+                                            {isEditing && !selectedProduct && (
+                                                <p className="text-sm text-destructive mt-1">Atenção: O insumo deste lote foi removido.</p>
+                                            )}
                                           </div>
                                       </div>
                                 </div>
                                 <div className="p-4 border rounded-lg space-y-4">
-                                    <h4 className="text-sm font-medium text-muted-foreground">2. Detalhes do Lote</h4>
+                                    <h4 className="text-sm font-medium text-muted-foreground">{isEditing ? 'Editar detalhes do Lote' : '2. Detalhes do Lote'}</h4>
                                     <FormField
                                         control={form.control}
                                         name="lotNumber"
@@ -375,3 +388,5 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
+
+    
