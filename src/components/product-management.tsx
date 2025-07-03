@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,10 +32,15 @@ const BarcodeScannerModal = dynamic(
   { ssr: false }
 );
 
+const PhotoCaptureModal = dynamic(
+  () => import('./photo-capture-modal').then(mod => mod.PhotoCaptureModal),
+  { ssr: false }
+);
+
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   barcode: z.string().optional(),
-  imageUrl: z.string().url({ message: "Por favor, insira uma URL de imagem válida." }).optional().or(z.literal('')),
+  imageUrl: z.string().optional(),
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
@@ -61,6 +67,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     const [isDeleting, setIsDeleting] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -180,6 +187,10 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         setIsScannerOpen(false);
     };
 
+    const handlePhotoCaptured = (dataUrl: string) => {
+        form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
+    };
+
     const onSubmit = (values: ProductFormValues) => {
         if (editingProduct) {
             updateProduct({ ...editingProduct, ...values });
@@ -227,9 +238,35 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     )}/>
                                 </div>
                                 
-                                <FormField control={form.control} name="imageUrl" render={({ field }) => (
-                                    <FormItem><FormLabel>URL da Imagem (Opcional)</FormLabel><FormControl><Input placeholder="https://exemplo.com/imagem.png" {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
+                                <div className="space-y-2">
+                                    <FormLabel>Foto do Insumo (Opcional)</FormLabel>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                            {form.watch('imageUrl') ? (
+                                                <Image src={form.watch('imageUrl')!} alt="Pré-visualização do insumo" width={96} height={96} className="object-cover" />
+                                            ) : (
+                                                <Camera className="h-10 w-10 text-muted-foreground" />
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}>
+                                                <Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra foto' : 'Tirar foto'}
+                                            </Button>
+                                            {form.watch('imageUrl') && (
+                                                <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldValidate: true })}>
+                                                    <Trash2 className="mr-2" /> Remover foto
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <FormField control={form.control} name="imageUrl" render={({ field }) => (
+                                        <FormItem className="hidden">
+                                            <FormControl><Input {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                </div>
+
 
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (
@@ -329,6 +366,14 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                     open={isScannerOpen}
                     onOpenChange={setIsScannerOpen}
                     onScanSuccess={handleScanSuccess}
+                />
+            )}
+
+             {isPhotoModalOpen && (
+                <PhotoCaptureModal
+                    open={isPhotoModalOpen}
+                    onOpenChange={setIsPhotoModalOpen}
+                    onPhotoCaptured={handlePhotoCaptured}
                 />
             )}
 
