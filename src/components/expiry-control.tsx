@@ -182,23 +182,22 @@ export function ExpiryControl() {
     }
 
     setIsDeleting(true);
-    try {
-      await deleteLot(deleteTargetId);
+    const success = await deleteLot(deleteTargetId);
+    setIsDeleting(false);
+
+    if (success) {
       toast({
         title: "Lote excluído",
         description: `O lote selecionado foi removido com sucesso.`,
       });
       setDeleteTargetId(null);
-    } catch (error: any) {
-      console.error("Deletion failed:", error);
+    } else {
       toast({
         variant: "destructive",
         title: "Erro ao excluir o lote",
-        description: `Não foi possível remover o lote. Erro: ${error.message || 'Erro desconhecido.'}`,
+        description: `Não foi possível remover o lote. Verifique o console para mais detalhes ou tente novamente.`,
         duration: 9000,
       });
-    } finally {
-      setIsDeleting(false);
     }
   };
 

@@ -24,7 +24,7 @@ export interface ExpiryProductsContextType {
   loading: boolean;
   addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
   updateLot: (lot: LotEntry) => Promise<void>;
-  deleteLot: (lotId: string) => Promise<void>;
+  deleteLot: (lotId: string) => Promise<boolean>;
   moveLot: (params: MoveLotParams) => Promise<void>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
 }
@@ -95,24 +95,21 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     const lotRef = doc(db, "lots", updatedLot.id);
     const { id, ...dataToUpdate } = updatedLot;
     try {
-      // Using setDoc with merge: true acts as an "upsert".
-      // It will update the document if it exists, or create it if it doesn't.
-      // This prevents the "No document to update" error if the lot was deleted
-      // by another process or client.
       await setDoc(lotRef, dataToUpdate, { merge: true });
     } catch (error) {
       console.error(`Error updating lot with ID ${id}:`, error);
-      throw error; // Re-throw to allow the UI to handle it if needed
+      throw error; 
     }
   }, []);
 
-  const deleteLot = useCallback(async (lotId: string) => {
+  const deleteLot = useCallback(async (lotId: string): Promise<boolean> => {
     const lotRef = doc(db, "lots", lotId);
     try {
       await deleteDoc(lotRef);
+      return true;
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
-      throw error;
+      return false;
     }
   }, []);
 
