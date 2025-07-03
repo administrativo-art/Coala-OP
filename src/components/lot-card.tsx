@@ -1,4 +1,3 @@
-
 "use client"
 
 import Image from 'next/image';
@@ -18,7 +17,7 @@ export type GroupedLot = {
   productId: string;
   productName: string;
   lotNumber: string;
-  barcode: string;
+  barcode?: string;
   expiryDate: string;
   totalQuantity: number;
   imageUrl?: string;

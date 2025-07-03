@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -67,7 +66,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const lotRef = doc(db, "lots", existingDoc.id);
             await updateDoc(lotRef, {
                 quantity: existingLot.quantity + lot.quantity,
-                barcode: lot.barcode, 
                 imageUrl: lot.imageUrl || existingLot.imageUrl, 
             });
         } else {
@@ -95,12 +93,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
     const lotRef = doc(db, "lots", lotId);
     try {
-      // Direct deletion attempt. deleteDoc() does not throw an error if the doc doesn't exist.
-      // This is more robust than checking for existence first, which can cause race conditions.
       await deleteDoc(lotRef);
     } catch (error) {
       console.error(`Falha ao excluir lote com ID ${lotId}:`, error);
-      throw error; // Re-throw to be caught by the UI component for user feedback.
+      throw error;
     }
   }, []);
 
@@ -142,7 +138,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
           const newLotData: Omit<LotEntry, 'id'> = {
               productId: sourceLot.productId,
               productName: sourceLot.productName,
-              barcode: sourceLot.barcode,
               lotNumber: sourceLot.lotNumber,
               expiryDate: sourceLot.expiryDate,
               kioskId: toKioskId,

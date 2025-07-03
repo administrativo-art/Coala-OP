@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -27,6 +26,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
+  barcode: z.string().optional(),
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
@@ -57,6 +57,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         resolver: zodResolver(productFormSchema),
         defaultValues: {
             baseName: '',
+            barcode: '',
             category: 'Massa',
             packageSize: undefined,
             unit: 'g',
@@ -87,6 +88,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         setEditingProduct(null);
         form.reset({
             baseName: '',
+            barcode: '',
             category: 'Massa',
             packageSize: undefined,
             unit: 'g',
@@ -98,6 +100,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         setEditingProduct(product);
         form.reset({
             baseName: product.baseName,
+            barcode: product.barcode || '',
             category: product.category,
             packageSize: product.packageSize,
             unit: product.unit
@@ -132,9 +135,12 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const handleDeleteConfirm = async () => {
         if (productToDelete) {
             setIsDeleting(true);
-            await deleteProduct(productToDelete.id);
-            setProductToDelete(null);
-            setIsDeleting(false);
+            try {
+                await deleteProduct(productToDelete.id);
+            } finally {
+                setIsDeleting(false);
+                setProductToDelete(null);
+            }
         }
     };
     
@@ -159,11 +165,14 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const handleDeleteMultipleConfirm = async () => {
         if (productsToDelete.length > 0) {
             setIsDeleting(true);
-            const idsToDelete = productsToDelete.map(p => p.id);
-            await deleteMultipleProducts(idsToDelete);
-            setSelectedProducts(new Set());
-            setProductsToDelete([]);
-            setIsDeleting(false);
+            try {
+                const idsToDelete = productsToDelete.map(p => p.id);
+                await deleteMultipleProducts(idsToDelete);
+                setSelectedProducts(new Set());
+                setProductsToDelete([]);
+            } finally {
+                setIsDeleting(false);
+            }
         }
     };
 
@@ -194,9 +203,14 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
                                 <h3 className="text-lg font-medium">{editingProduct ? `Editando ${getProductFullName(editingProduct)}` : 'Adicionar novo insumo'}</h3>
-                                <FormField control={form.control} name="baseName" render={({ field }) => (
-                                    <FormItem><FormLabel>Nome base</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={form.control} name="baseName" render={({ field }) => (
+                                        <FormItem><FormLabel>Nome base</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                     <FormField control={form.control} name="barcode" render={({ field }) => (
+                                        <FormItem><FormLabel>Código de Barras</FormLabel><FormControl><Input placeholder="Escanear ou digitar" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                </div>
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (
                                         <FormItem><FormLabel>Categoria</FormLabel>

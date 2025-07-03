@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -7,6 +6,7 @@ export type UnitCategory = (typeof unitCategories)[number];
 export type Product = {
   id: string;
   baseName: string;
+  barcode?: string;
   category: UnitCategory;
   packageSize: number;
   unit: string;
@@ -39,7 +39,6 @@ export type LotEntry = {
   id:string;
   productId: string;
   productName: string;
-  barcode: string;
   lotNumber: string;
   expiryDate: string; // ISO String
   kioskId: string;

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -93,13 +92,14 @@ export function ExpiryControl() {
 
     const filteredLots = preFilteredLots.filter(lot => {
       const search = searchTerm.toLowerCase();
+      const product = products.find(p => p.id === lot.productId);
       const expiryDateFormatted = format(parseISO(lot.expiryDate), 'dd/MM/yyyy');
       const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
 
       return (
         lot.productName.toLowerCase().includes(search) ||
         lot.lotNumber.toLowerCase().includes(search) ||
-        (lot.barcode && lot.barcode.toLowerCase().includes(search)) ||
+        (product?.barcode && product.barcode.toLowerCase().includes(search)) ||
         expiryDateFormatted.includes(search) ||
         kioskName.includes(search)
       );
@@ -108,15 +108,16 @@ export function ExpiryControl() {
     const groups: { [key: string]: GroupedLot } = {};
     filteredLots.forEach(lot => {
       const key = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate}`;
+      const product = products.find(p => p.id === lot.productId);
+
       if (!groups[key]) {
-        const product = products.find(p => p.id === lot.productId);
         groups[key] = {
           productId: lot.productId,
           productName: lot.productName,
           lotNumber: lot.lotNumber,
-          barcode: lot.barcode,
+          barcode: product?.barcode,
           expiryDate: lot.expiryDate,
-          imageUrl: lot.imageUrl,
+          imageUrl: lot.imageUrl || product?.imageUrl,
           totalQuantity: 0,
           kiosks: [],
           alertThreshold: product?.alertThreshold,
@@ -168,7 +169,6 @@ export function ExpiryControl() {
 
   const handleDeleteConfirm = async () => {
     if (!lotToDelete) return;
-
     setIsDeleting(true);
     try {
       await deleteLot(lotToDelete.id);
