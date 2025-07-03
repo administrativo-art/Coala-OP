@@ -1,3 +1,4 @@
+
 "use client"
 
 import Image from 'next/image';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, MapPin, Camera, History } from 'lucide-react';
+import { Pencil, Trash2, Truck, MapPin, Camera, History, Eraser } from 'lucide-react';
 import { type Kiosk } from '@/types';
 import { useLocations } from '@/hooks/use-locations';
 
@@ -40,13 +41,14 @@ type LotCardProps = {
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
   onViewHistory: (lot: GroupedLot) => void;
+  onZeroOut: (groupedLot: GroupedLot) => void;
   canEdit: boolean;
   canMove: boolean;
   canDelete: boolean;
   canViewHistory: boolean;
 };
 
-export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHistory, canEdit, canMove, canDelete, canViewHistory }: LotCardProps) {
+export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHistory, onZeroOut, canEdit, canMove, canDelete, canViewHistory }: LotCardProps) {
   const { locations } = useLocations();
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -62,9 +64,9 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHi
   } else if (daysUntilExpiry === 0) {
     status = { color: 'bg-red-600 hover:bg-red-700', text: 'Vence hoje' };
   } else if (daysUntilExpiry <= urgentThreshold) {
-    status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
-  } else if (daysUntilExpiry <= alertThreshold) {
     status = { color: 'bg-orange-500 hover:bg-orange-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
+  } else if (daysUntilExpiry <= alertThreshold) {
+    status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
   } else {
     status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
   }
@@ -104,6 +106,20 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHi
                         </TooltipTrigger>
                         <TooltipContent>
                             <p>Ver Histórico de Movimentação</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            )}
+             {canEdit && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onZeroOut(groupedLot)}>
+                                <Eraser className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Zerar estoque do lote</p>
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>

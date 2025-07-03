@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants, type ButtonProps } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -23,9 +23,13 @@ type DeleteConfirmationDialogProps = {
   isDeleting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
-  itemName: string;
+  itemName?: string;
   showForceDeleteOption?: boolean;
   onForceDeleteChange?: (isForced: boolean) => void;
+  title?: string;
+  description?: React.ReactNode;
+  confirmButtonText?: string;
+  confirmButtonVariant?: ButtonProps['variant'];
 }
 
 export function DeleteConfirmationDialog({ 
@@ -35,7 +39,11 @@ export function DeleteConfirmationDialog({
   onConfirm, 
   itemName,
   showForceDeleteOption = false,
-  onForceDeleteChange 
+  onForceDeleteChange,
+  title = "Você tem certeza absoluta?",
+  description,
+  confirmButtonText = "Excluir",
+  confirmButtonVariant = "destructive",
 }: DeleteConfirmationDialogProps) {
   
   const handleCheckedChange = (checked: boolean | 'indeterminate') => {
@@ -46,9 +54,9 @@ export function DeleteConfirmationDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>
-            Essa ação não pode ser desfeita. Isso excluirá permanentemente {itemName}.
+            {description || `Essa ação não pode ser desfeita. Isso excluirá permanentemente ${itemName}.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -71,10 +79,10 @@ export function DeleteConfirmationDialog({
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isDeleting}
-            className={buttonVariants({ variant: "destructive" })}
+            className={buttonVariants({ variant: confirmButtonVariant })}
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isDeleting ? "Excluindo..." : "Excluir"}
+            {isDeleting ? "Processando..." : confirmButtonText}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

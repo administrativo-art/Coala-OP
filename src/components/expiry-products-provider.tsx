@@ -28,6 +28,7 @@ export interface ExpiryProductsContextType {
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveLot: (params: MoveLotParams) => Promise<void>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
+  zeroOutLotsByIds: (lotIds: string[]) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
@@ -105,15 +106,16 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     if (!lotIds || lotIds.length === 0) {
       return false;
     }
+    const batch = writeBatch(db);
+    lotIds.forEach(id => {
+      batch.delete(doc(db, "lots", id));
+    });
+
     try {
-      const batch = writeBatch(db);
-      lotIds.forEach(id => {
-        batch.delete(doc(db, "lots", id));
-      });
       await batch.commit();
       return true;
     } catch (error) {
-      console.error("Error deleting lots by IDs:", error);
+      console.error("Error batch deleting lots:", error);
       return false;
     }
   }, []);
@@ -129,6 +131,21 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     } catch (error) {
         console.error(`Force delete failed for lot ID ${lotId}:`, error);
         return false;
+    }
+  }, []);
+
+  const zeroOutLotsByIds = useCallback(async (lotIds: string[]) => {
+    if (!lotIds || lotIds.length === 0) return;
+    const batch = writeBatch(db);
+    lotIds.forEach(id => {
+      const lotRef = doc(db, "lots", id);
+      batch.update(lotRef, { quantity: 0 });
+    });
+    try {
+      await batch.commit();
+    } catch (error) {
+      console.error("Error zeroing out lots:", error);
+      throw error;
     }
   }, []);
 
@@ -226,7 +243,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       deleteLotsByIds,
       forceDeleteLotById,
       moveLot,
-      moveMultipleLots
+      moveMultipleLots,
+      zeroOutLotsByIds,
   };
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;

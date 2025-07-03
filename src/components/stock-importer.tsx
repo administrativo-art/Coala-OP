@@ -14,6 +14,7 @@ import { useStockAnalysis } from '@/hooks/use-stock-analysis';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useToast } from '@/hooks/use-toast';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ export function StockAnalyzer() {
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
     const { lots: allLots, loading: lotsLoading, moveMultipleLots, getProductFullName } = useExpiryProducts();
+    const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
@@ -163,12 +165,15 @@ export function StockAnalyzer() {
         const kioskId = form.getValues('kioskId');
 
         if (!file || !kioskId) {
-            console.error("Erro: Selecione um quiosque e um arquivo.");
+            toast({
+                variant: "destructive",
+                title: "Erro",
+                description: "Por favor, selecione um quiosque e um arquivo.",
+            });
             return;
         }
 
         setIsAnalyzing(true);
-        console.log("Processando planilha...");
 
         Papa.parse(file, {
             header: true,
@@ -269,21 +274,40 @@ export function StockAnalyzer() {
 
                     await addStockReport(newReport);
 
+                    toast({
+                        title: "Análise Concluída",
+                        description: newReport.summary,
+                    });
 
                     if (unmatchedItems.length > 0) {
-                        console.warn(`Insumos não encontrados: ${unmatchedItems.join(', ')}`);
+                        toast({
+                            variant: "destructive",
+                            title: "Alguns insumos não foram encontrados",
+                            description: `Os seguintes insumos da sua planilha não foram encontrados na configuração: ${unmatchedItems.join(', ')}.`,
+                            duration: 10000,
+                        });
                     }
-                    
-                    console.log("Análise concluída!", newReport.summary);
 
                 } catch (error: any) {
-                    console.error("Stock analysis failed:", error);
-                    console.error("Falha na análise", error.message || "Não foi possível processar o relatório de estoque.");
+                    toast({
+                        variant: "destructive",
+                        title: "Falha na análise",
+                        description: error.message || "Não foi possível processar o relatório de estoque.",
+                    });
                 } finally {
                     setIsAnalyzing(false);
                     if(fileInputRef.current) fileInputRef.current.value = "";
                 }
-            }
+            },
+            error: (err: any) => {
+                toast({
+                    variant: "destructive",
+                    title: "Erro ao ler arquivo",
+                    description: "Não foi possível ler o arquivo CSV. Verifique o formato e tente novamente.",
+                });
+                setIsAnalyzing(false);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+            },
         });
     };
 
@@ -407,6 +431,10 @@ export function StockAnalyzer() {
         });
 
         doc.save(filename);
+        toast({
+            title: "Exportação Concluída",
+            description: `O relatório "${reportTitle}" foi gerado.`,
+        });
     };
 
     const canManageAnalysisProducts = permissions.stockAnalysis.configure;

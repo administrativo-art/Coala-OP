@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -35,7 +35,7 @@ const BarcodeScannerModal = dynamic(
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
 
@@ -50,7 +50,9 @@ export function ExpiryControl() {
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [lotForHistory, setLotForHistory] = useState<GroupedLot | null>(null);
+  const [lotToZeroOut, setLotToZeroOut] = useState<GroupedLot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
@@ -174,22 +176,43 @@ export function ExpiryControl() {
     setLotForHistory(lot);
   };
 
+  const handleZeroOutClick = (lot: GroupedLot) => {
+    setLotToZeroOut(lot);
+  };
+
+  const handleZeroOutConfirm = async () => {
+    if (!lotToZeroOut) return;
+    setIsProcessing(true);
+    const idsToZero = lotToZeroOut.kiosks.map(k => k.id);
+    await zeroOutLotsByIds(idsToZero);
+    setLotToZeroOut(null);
+    setIsProcessing(false);
+  };
+
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
 
     setIsDeleting(true);
-    let success = false;
+    const lotToDelete = lots.find(l => l.id === deleteTargetId);
+    if (!lotToDelete) {
+        console.error(`Lot with ID ${deleteTargetId} not found.`);
+        setIsDeleting(false);
+        setDeleteTargetId(null);
+        return;
+    }
+    
+    // Find all lot entries that belong to the same visual group
+    const groupToDelete = groupedLots.find(group => 
+        group.kiosks.some(kioskLot => kioskLot.id === deleteTargetId)
+    );
 
-    if (forceDelete) {
-        success = await forceDeleteLotById(deleteTargetId);
+    let success = false;
+    if (groupToDelete) {
+        const idsToDelete = groupToDelete.kiosks.map(k => k.id);
+        success = await deleteLotsByIds(idsToDelete);
     } else {
-        const groupToDelete = groupedLots.find(group => group.kiosks.some(k => k.id === deleteTargetId));
-        if (groupToDelete) {
-            const idsToDelete = groupToDelete.kiosks.map(k => k.id);
-            success = await deleteLotsByIds(idsToDelete);
-        } else {
-            success = await forceDeleteLotById(deleteTargetId);
-        }
+        // Fallback for lots that might not be in the grouped view (e.g., corrupted data)
+        success = await forceDeleteLotById(deleteTargetId);
     }
     
     if (!success) {
@@ -274,6 +297,7 @@ export function ExpiryControl() {
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
             onViewHistory={handleViewHistoryClick}
+            onZeroOut={handleZeroOutClick}
             canEdit={permissions.lots.edit}
             canMove={permissions.lots.move}
             canDelete={permissions.lots.delete}
@@ -448,6 +472,19 @@ export function ExpiryControl() {
           open={isSearchScannerOpen}
           onOpenChange={setIsSearchScannerOpen}
           onScanSuccess={handleSearchScanSuccess}
+        />
+      )}
+      
+      {lotToZeroOut && (
+        <DeleteConfirmationDialog
+            open={!!lotToZeroOut}
+            isDeleting={isProcessing}
+            onOpenChange={() => setLotToZeroOut(null)}
+            onConfirm={handleZeroOutConfirm}
+            title="Zerar estoque do lote?"
+            description={`Isso definirá a quantidade do lote ${lotToZeroOut.lotNumber} como 0 em todos os quiosques. O lote será movido para a auditoria de lotes arquivados. Esta ação não pode ser desfeita.`}
+            confirmButtonText="Zerar Estoque"
+            confirmButtonVariant="destructive"
         />
       )}
       
