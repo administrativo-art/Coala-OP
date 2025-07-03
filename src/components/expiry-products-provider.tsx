@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
@@ -101,21 +102,20 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const deleteLotsByIds = useCallback(async (lotIds: string[]): Promise<boolean> => {
     if (!lotIds || lotIds.length === 0) {
-        console.error("deleteLotsByIds called with an empty array.");
-        return false;
+      console.error("deleteLotsByIds called with an empty array.");
+      return false;
     }
     
-    const batch = writeBatch(db);
-    lotIds.forEach(id => {
-        batch.delete(doc(db, "lots", id));
-    });
-
+    // Using Promise.all with individual deleteDoc calls instead of a batch write.
+    // This is a more direct approach that might either succeed where the batch failed,
+    // or provide a more explicit error if one of the deletions fails.
     try {
-        await batch.commit();
-        return true;
+      const deletePromises = lotIds.map(id => deleteDoc(doc(db, "lots", id)));
+      await Promise.all(deletePromises);
+      return true;
     } catch (error) {
-        console.error("Error deleting lots by IDs:", error);
-        return false;
+      console.error("Error deleting lots by IDs with Promise.all:", error);
+      return false;
     }
   }, []);
 
