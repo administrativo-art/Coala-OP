@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
-import { useProducts } from "@/hooks/use-products"
+import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function ConsumptionAnalysisDashboard() {
   const { user } = useAuth()
-  const { products, loading: productsLoading } = useProducts()
+  const { products, loading: productsLoading } = useStockAnalysisProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
 
