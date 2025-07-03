@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2 } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { useToast } from '@/hooks/use-toast';
@@ -82,18 +82,6 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
             setIsDeleting(false);
         }
         onOpenChange(isOpen);
-    };
-
-    const handleAddNew = () => {
-        setEditingProduct(null);
-        form.reset({
-            baseName: '',
-            barcode: '',
-            category: 'Massa',
-            packageSize: undefined,
-            unit: 'g',
-        });
-        setShowForm(true);
     };
 
     const handleEdit = (product: Product) => {
@@ -240,8 +228,6 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                         </Form>
                     ) : (
                        <div className="flex flex-col h-[60vh]">
-                            <Button onClick={handleAddNew} className="w-full mt-4"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo insumo</Button>
-                            
                              {products.length > 0 && (
                                 <div className="flex items-center gap-3 px-1 py-2 my-4 border-y bg-muted/50">
                                     <Checkbox
