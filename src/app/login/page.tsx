@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { useToast } from "@/hooks/use-toast";
 
 const loginSchema = z.object({
   username: z.string().min(1, 'O nome de usuário é obrigatório.'),
@@ -23,7 +22,6 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
-  const { toast } = useToast();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -44,11 +42,6 @@ export default function LoginPage() {
     if (success) {
       router.push('/dashboard');
     } else {
-      toast({
-        variant: "destructive",
-        title: "Falha no login",
-        description: "Nome de usuário ou senha inválidos. Tente novamente.",
-      });
       form.setValue('password', '');
     }
   };

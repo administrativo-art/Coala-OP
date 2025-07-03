@@ -23,7 +23,6 @@ import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProductManagement } from './product-management';
-import { useToast } from "@/hooks/use-toast";
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 
@@ -39,7 +38,6 @@ export function ExpiryControl() {
   const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById } = useExpiryProducts();
   const { products, loading: productsLoading } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
-  const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -194,18 +192,8 @@ export function ExpiryControl() {
         }
     }
     
-    if (success) {
-      toast({
-        title: "Lote excluído",
-        description: `O lote foi removido com sucesso.`,
-      });
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Erro ao excluir o lote",
-        description: `Não foi possível remover o lote. Tente usar a opção "Forçar exclusão" se o problema persistir.`,
-        duration: 9000,
-      });
+    if (!success) {
+      console.error(`Failed to delete lot with target ID: ${deleteTargetId}.`);
     }
     
     setDeleteTargetId(null);

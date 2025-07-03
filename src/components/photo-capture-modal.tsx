@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Camera, CameraOff, Loader2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 type PhotoCaptureModalProps = {
     open: boolean;
@@ -19,7 +18,6 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const [permissionState, setPermissionState] = useState<'loading' | 'granted' | 'denied'>('loading');
-    const { toast } = useToast();
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -52,14 +50,9 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
             } catch (fallbackError) {
                 console.error('Error accessing fallback camera:', fallbackError);
                 setPermissionState('denied');
-                toast({
-                    variant: 'destructive',
-                    title: 'Acesso à câmera negado',
-                    description: 'Por favor, permita o acesso à câmera nas configurações do seu navegador.',
-                });
             }
         }
-    }, [stopCamera, toast]);
+    }, [stopCamera]);
 
     useEffect(() => {
         if (open) {
@@ -136,4 +129,3 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
         </Dialog>
     );
 }
-

@@ -16,7 +16,6 @@ import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDes
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
 import { type Product, unitCategories } from '@/types';
 import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown } from 'lucide-react';
 import { units } from '@/lib/conversion';
@@ -42,7 +41,6 @@ interface StockAnalysisConfiguratorProps {
 export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange, onSelectAllChange }: StockAnalysisConfiguratorProps) {
   const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useStockAnalysisProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { toast } = useToast();
   const [isImporting, setIsImporting] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
 
@@ -84,16 +82,9 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     });
 
     updateMultipleProducts(productsToUpdate).then(() => {
-        toast({
-            title: "Parâmetros salvos!",
-            description: "As configurações de análise de estoque foram atualizadas.",
-        });
-    }).catch(() => {
-         toast({
-            variant: "destructive",
-            title: "Erro ao salvar",
-            description: "Não foi possível salvar os parâmetros. Tente novamente.",
-        });
+        console.log("Parâmetros salvos!");
+    }).catch((err) => {
+         console.error("Erro ao salvar os parâmetros.", err);
     });
   };
 
@@ -101,11 +92,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     const data = form.getValues('products');
     
     if (!data.length || !kiosks.length) {
-      toast({
-        variant: 'destructive',
-        title: 'Sem dados para exportar',
-        description: 'Não há insumos configurados para análise.',
-      });
+      console.error('Sem dados para exportar. Não há insumos configurados para análise.');
       return;
     }
 
@@ -163,11 +150,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
   
   const handleDownloadTemplate = () => {
     if (kiosksLoading || kiosks.length === 0) {
-        toast({
-            variant: 'destructive',
-            title: 'Quiosques não carregados',
-            description: 'Aguarde os quiosques carregarem para gerar o modelo.',
-        });
+        console.error('Quiosques não carregados. Aguarde para gerar o modelo.');
         return;
     }
 
@@ -210,10 +193,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     if (!file) return;
 
     setIsImporting(true);
-    const { id: toastId } = toast({
-      title: "Importando planilha...",
-      description: "Aguarde enquanto processamos o arquivo.",
-    });
+    console.log("Importando planilha...");
 
     Papa.parse(file, {
       header: true,
@@ -280,31 +260,17 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
             await Promise.all(productsToAdd.map(p => addProduct(p)));
           }
 
-          toast({
-            id: toastId,
-            title: "Importação concluída!",
-            description: `${productsToAdd.length} insumos adicionados e ${productsToUpdate.length} insumos atualizados.`,
-          });
+          console.log(`Importação concluída! ${productsToAdd.length} insumos adicionados e ${productsToUpdate.length} insumos atualizados.`);
 
         } catch (error: any) {
-          toast({
-            id: toastId,
-            variant: "destructive",
-            title: "Erro na importação",
-            description: error.message || "Verifique o formato da planilha e tente novamente.",
-          });
+          console.error("Erro na importação: ", error.message || "Verifique o formato da planilha e tente novamente.");
         } finally {
           setIsImporting(false);
           if (event.target) event.target.value = "";
         }
       },
       error: (error: any) => {
-        toast({
-          id: toastId,
-          variant: "destructive",
-          title: "Erro ao ler o arquivo",
-          description: error.message,
-        });
+        console.error("Erro ao ler o arquivo: ", error.message);
         setIsImporting(false);
         if (event.target) event.target.value = "";
       }

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -20,7 +21,6 @@ import { type LotEntry, type Kiosk, type Product } from '@/types';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StorageLocationManagementModal } from './storage-location-management-modal';
@@ -58,7 +58,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const { products, getProductFullName, updateProduct } = useProducts();
   const { locations } = useLocations();
-  const { toast } = useToast();
   const isEditing = !!lotToEdit;
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -112,7 +111,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   
   const onSubmit = async (values: LotFormValues) => {
     if (!selectedProduct) {
-        toast({ variant: "destructive", title: "Nenhum insumo selecionado", description: "Selecione um insumo para poder salvar." });
         return;
     }
 
@@ -136,7 +134,6 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 imageUrl: values.imageUrl || selectedProduct.imageUrl || '',
             };
             await updateLot(updatedLotData);
-            toast({ title: "Lote atualizado", description: "As informações do lote foram salvas." });
         } else {
             const newLotData: Omit<LotEntry, 'id'> = {
                 productId: selectedProduct.id,
@@ -151,17 +148,11 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 locationCode: location?.code || null,
             };
             await addLot(newLotData);
-            toast({ title: "Lote adicionado", description: "O novo lote foi adicionado ao estoque." });
         }
     
         onOpenChange(false);
     } catch (error) {
         console.error("Failed to save lot:", error);
-        toast({
-            variant: "destructive",
-            title: "Erro ao salvar",
-            description: "Não foi possível salvar as informações do lote. Tente novamente."
-        });
     }
   };
   

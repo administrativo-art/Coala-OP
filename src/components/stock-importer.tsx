@@ -25,7 +25,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings, Download } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
@@ -47,7 +46,6 @@ export function StockAnalyzer() {
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
     const { lots: allLots, loading: lotsLoading, moveMultipleLots, getProductFullName } = useExpiryProducts();
-    const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
@@ -165,15 +163,12 @@ export function StockAnalyzer() {
         const kioskId = form.getValues('kioskId');
 
         if (!file || !kioskId) {
-            toast({ variant: "destructive", title: "Erro", description: "Selecione um quiosque e um arquivo." });
+            console.error("Erro: Selecione um quiosque e um arquivo.");
             return;
         }
 
         setIsAnalyzing(true);
-        const { id: toastId } = toast({
-            title: "Processando planilha...",
-            description: "Aguarde enquanto analisamos seu relatório de estoque.",
-        });
+        console.log("Processando planilha...");
 
         Papa.parse(file, {
             header: true,
@@ -276,19 +271,14 @@ export function StockAnalyzer() {
 
 
                     if (unmatchedItems.length > 0) {
-                        toast({
-                            variant: "destructive",
-                            title: "Insumos não encontrados",
-                            description: `Os seguintes insumos da planilha não foram encontrados no sistema e foram ignorados: ${unmatchedItems.join(', ')}`,
-                            duration: 8000
-                        });
+                        console.warn(`Insumos não encontrados: ${unmatchedItems.join(', ')}`);
                     }
                     
-                    toast({ id: toastId, title: "Análise concluída!", description: newReport.summary });
+                    console.log("Análise concluída!", newReport.summary);
 
                 } catch (error: any) {
                     console.error("Stock analysis failed:", error);
-                    toast({ id: toastId, variant: "destructive", title: "Falha na análise", description: error.message || "Não foi possível processar o relatório de estoque." });
+                    console.error("Falha na análise", error.message || "Não foi possível processar o relatório de estoque.");
                 } finally {
                     setIsAnalyzing(false);
                     if(fileInputRef.current) fileInputRef.current.value = "";
@@ -335,10 +325,9 @@ export function StockAnalyzer() {
                 await updateStockReport({ ...reportToUpdate, results: updatedResults });
             }
 
-            toast({ title: "Sucesso!", description: `Movimentação de ${resultItem.productName} para ${resultItem.kioskName} executada.` });
+            console.log(`Movimentação de ${resultItem.productName} para ${resultItem.kioskName} executada.`);
         } catch (error) {
             console.error("Failed to execute distribution:", error);
-            toast({ variant: "destructive", title: "Erro na Movimentação", description: "Não foi possível executar a transferência de estoque." });
         }
     };
     

@@ -23,7 +23,6 @@ import { Separator } from '@/components/ui/separator';
 import { Edit, Trash2, PlusCircle, Camera, Archive } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
-import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ArchivedProductsModal } from './archived-products-modal';
 
@@ -59,7 +58,6 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
-    const { toast } = useToast();
 
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [showForm, setShowForm] = useState(false);
@@ -130,12 +128,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         }
 
         if (messages.length > 0) {
-            toast({
-                variant: "destructive",
-                title: "Não é possível excluir o insumo",
-                description: `Este insumo não pode ser excluído pois ${messages.join(' e ')}.`,
-                duration: 8000,
-            });
+            alert(`Não é possível excluir o insumo: Este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
             return;
         }
         setProductToDelete(product);
@@ -143,7 +136,6 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
 
     const handleArchiveClick = (product: Product) => {
         updateProduct({ ...product, isArchived: true });
-        toast({ title: "Insumo arquivado", description: `"${getProductFullName(product)}" foi arquivado e movido para a lista de arquivados.`});
     };
     
     const handleDeleteConfirm = async () => {
