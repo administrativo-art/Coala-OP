@@ -157,8 +157,11 @@ export function ExpiryControl() {
     }
   }
 
-  const handleDeleteClick = (lot: LotEntry) => {
-    setLotToDelete(lot);
+  const handleDeleteClick = (lotId: string) => {
+    const lot = lots.find(l => l.id === lotId);
+    if (lot) {
+        setLotToDelete(lot);
+    }
   };
 
   const handleDeleteConfirm = async () => {
