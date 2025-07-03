@@ -22,6 +22,7 @@ import { useProducts } from '@/hooks/use-products';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
