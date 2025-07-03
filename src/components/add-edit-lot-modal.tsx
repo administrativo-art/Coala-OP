@@ -112,26 +112,31 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     const location = locations.find(l => l.id === values.locationId);
 
     if (lotToEdit) {
-      // EDITING
-      const targetProduct = products.find(p => p.id === lotToEdit.productId);
+        // EDITING
+        const targetProduct = products.find(p => p.id === lotToEdit.productId);
+        
+        const updatedLotData: LotEntry = {
+            ...lotToEdit, // Start with existing data
+            ...values,    // Overwrite with form values
+            expiryDate: values.expiryDate.toISOString(), // Convert date to string
+            locationId: values.locationId || null,
+            locationName: location?.name || null,
+            locationCode: location?.code || null,
+        };
 
-      if (targetProduct && values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
-        await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
-      }
+        if (targetProduct) {
+            // If product exists, ensure name is synced and update product image if needed
+            updatedLotData.productName = getProductFullName(targetProduct);
+            updatedLotData.imageUrl = values.imageUrl || targetProduct.imageUrl;
 
-      const lotData = {
-        productId: lotToEdit.productId,
-        productName: targetProduct ? getProductFullName(targetProduct) : lotToEdit.productName,
-        lotNumber: values.lotNumber,
-        expiryDate: values.expiryDate.toISOString(),
-        kioskId: values.kioskId,
-        quantity: values.quantity,
-        imageUrl: values.imageUrl || lotToEdit.imageUrl || targetProduct?.imageUrl,
-        locationId: values.locationId || null,
-        locationName: location?.name || null,
-        locationCode: location?.code || null,
-      };
-      await updateLot({ ...lotToEdit, ...lotData });
+            if (values.imageUrl && values.imageUrl !== targetProduct.imageUrl) {
+                await updateProduct({ ...targetProduct, imageUrl: values.imageUrl });
+            }
+        }
+        // If product doesn't exist, the original productName from lotToEdit is preserved,
+        // and the submitted quantity (e.g., 0) is correctly applied.
+
+        await updateLot(updatedLotData);
 
     } else {
       // ADDING
@@ -388,5 +393,3 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     </>
   );
 }
-
-    
