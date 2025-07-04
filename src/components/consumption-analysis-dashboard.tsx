@@ -357,56 +357,64 @@ export function ConsumptionAnalysisDashboard() {
 
   return (
     <div className="space-y-6">
-        <Card>
-            <CardHeader>
-            <CardTitle>Importar Relatório de Consumo</CardTitle>
-            <CardDescription>Faça o upload de um relatório de vendas/consumo em formato CSV para análise.</CardDescription>
-            </CardHeader>
-            <CardContent>
-            <Form {...uploadForm}>
-                <form onSubmit={uploadForm.handleSubmit(onUploadSubmit)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <FormField control={uploadForm.control} name="kioskId" render={({ field }) => (
-                        <FormItem className="col-span-2"><FormLabel>Quiosque</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                            <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                        </Select><FormMessage />
-                        </FormItem>
-                    )}/>
-                    <FormField control={uploadForm.control} name="month" render={({ field }) => (
-                        <FormItem><FormLabel>Mês</FormLabel><FormControl><Input type="number" min="1" max="12" {...field} /></FormControl><FormMessage /></FormItem>
-                    )}/>
-                    <FormField control={uploadForm.control} name="year" render={({ field }) => (
-                        <FormItem><FormLabel>Ano</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )}/>
-                </div>
-                <FormField
-                    control={uploadForm.control}
-                    name="file"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Arquivo (CSV)</FormLabel>
-                        <FormControl>
-                        <Input
-                            type="file"
-                            accept=".csv"
-                            ref={fileInputRef}
-                            onChange={(e) => field.onChange(e.target.files)}
-                        />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <Button type="submit" disabled={isAnalyzing}>
-                    {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />}
-                    {isAnalyzing ? 'Analisando...' : 'Analisar Relatório'}
-                </Button>
-                </form>
-            </Form>
-            </CardContent>
-        </Card>
+        <Accordion type="single" collapsible className="w-full" defaultValue="importer">
+          <AccordionItem value="importer" className="border-0">
+            <Card>
+                <AccordionTrigger className="w-full p-0 text-left hover:no-underline [&[data-state=open]>div>button>svg]:rotate-180">
+                    <CardHeader className="flex-grow">
+                    <CardTitle>Importar Relatório de Consumo</CardTitle>
+                    <CardDescription>Faça o upload de um relatório de vendas/consumo em formato CSV para análise.</CardDescription>
+                    </CardHeader>
+                </AccordionTrigger>
+              <AccordionContent>
+                <CardContent>
+                  <Form {...uploadForm}>
+                      <form onSubmit={uploadForm.handleSubmit(onUploadSubmit)} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <FormField control={uploadForm.control} name="kioskId" render={({ field }) => (
+                              <FormItem className="col-span-2"><FormLabel>Quiosque</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                  <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                              </Select><FormMessage />
+                              </FormItem>
+                          )}/>
+                          <FormField control={uploadForm.control} name="month" render={({ field }) => (
+                              <FormItem><FormLabel>Mês</FormLabel><FormControl><Input type="number" min="1" max="12" {...field} /></FormControl><FormMessage /></FormItem>
+                          )}/>
+                          <FormField control={uploadForm.control} name="year" render={({ field }) => (
+                              <FormItem><FormLabel>Ano</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                          )}/>
+                      </div>
+                      <FormField
+                          control={uploadForm.control}
+                          name="file"
+                          render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Arquivo (CSV)</FormLabel>
+                              <FormControl>
+                              <Input
+                                  type="file"
+                                  accept=".csv"
+                                  ref={fileInputRef}
+                                  onChange={(e) => field.onChange(e.target.files)}
+                              />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                          )}
+                      />
+                      <Button type="submit" disabled={isAnalyzing}>
+                          {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />}
+                          {isAnalyzing ? 'Analisando...' : 'Analisar Relatório'}
+                      </Button>
+                      </form>
+                  </Form>
+                </CardContent>
+              </AccordionContent>
+            </Card>
+          </AccordionItem>
+        </Accordion>
 
         <Separator />
 
