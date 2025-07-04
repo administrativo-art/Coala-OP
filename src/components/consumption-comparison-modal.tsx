@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { type ConsumptionReport, type Product, type Kiosk } from "@/types";
-import { compareConsumption, type ComparisonInput, type ComparisonOutput } from '@/ai/flows/compare-consumption-flow';
+import { compareConsumption, type ComparisonInput } from '@/ai/flows/compare-consumption-flow';
 import { Scale, Wand2, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -38,14 +38,15 @@ const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
 const months = Array.from({ length: 12 }, (_, i) => ({ value: (i + 1).toString(), label: new Date(0, i).toLocaleString('pt-BR', { month: 'long' }) }));
 
+const AI_ERROR_MESSAGE = "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
+
 export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProps> = ({ open, onOpenChange, history, products, kiosks }) => {
     const { user } = useAuth();
     const [kioskId, setKioskId] = useState<string>('');
     const [periodA, setPeriodA] = useState({ month: '', year: '' });
     const [periodB, setPeriodB] = useState({ month: '', year: '' });
     const [comparisonResults, setComparisonResults] = useState<ComparisonResult[] | null>(null);
-    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-    const [aiAnalysisResult, setAiAnalysisResult] = useState<ComparisonOutput | null>(null);
+    const [aiAnalysisResult, setAiAnalysisResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
     const [isAiLoading, setIsAiLoading] = useState(false);
 
     useEffect(() => {
@@ -99,6 +100,7 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
     const handleGetAIAnalysis = async () => {
         if (!comparisonResults) return;
         setIsAiLoading(true);
+        setAiAnalysisResult(null);
 
         const aiInput: ComparisonInput = {
             periodA: `${months.find(m => m.value === periodA.month)?.label}/${periodA.year}`,
@@ -113,10 +115,14 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
 
         try {
             const analysis = await compareConsumption(aiInput);
-            setAiAnalysisResult(analysis);
+            if (analysis === AI_ERROR_MESSAGE) {
+                setAiAnalysisResult({ type: 'error', message: analysis });
+            } else {
+                setAiAnalysisResult({ type: 'success', message: analysis });
+            }
         } catch (error) {
             console.error("AI analysis failed:", error);
-            setAiAnalysisResult("Ocorreu um erro ao gerar a análise. Tente novamente.");
+            setAiAnalysisResult({ type: 'error', message: "Ocorreu um erro ao gerar a análise. Tente novamente." });
         } finally {
             setIsAiLoading(false);
         }
@@ -167,7 +173,7 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
 
         let finalY = (doc as any).lastAutoTable.finalY;
 
-        if (aiAnalysisResult) {
+        if (aiAnalysisResult?.type === 'success') {
             const margin = 15;
             if (finalY + 20 > doc.internal.pageSize.height - margin) {
                 doc.addPage();
@@ -183,7 +189,7 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
-            const textLines = doc.splitTextToSize(aiAnalysisResult, 180);
+            const textLines = doc.splitTextToSize(aiAnalysisResult.message, 180);
             doc.text(textLines, 14, finalY);
         }
         
@@ -328,16 +334,26 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
 
                             {isAiLoading && <Skeleton className="h-24 w-full" />}
                             {aiAnalysisResult && (
-                                <Card className="bg-primary/5">
-                                    <CardHeader>
-                                        <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                                            <Wand2/> Análise da IA
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <p className="whitespace-pre-wrap">{aiAnalysisResult}</p>
-                                    </CardContent>
-                                </Card>
+                                aiAnalysisResult.type === 'success' ? (
+                                    <Card className="bg-primary/5">
+                                        <CardHeader>
+                                            <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                                                <Wand2/> Análise da IA
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="whitespace-pre-wrap">{aiAnalysisResult.message}</p>
+                                        </CardContent>
+                                    </Card>
+                                ) : (
+                                    <Alert variant="destructive">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <AlertTitle>Falha na Análise da IA</AlertTitle>
+                                        <AlertDescription>
+                                            {aiAnalysisResult.message}
+                                        </AlertDescription>
+                                    </Alert>
+                                )
                             )}
                         </div>
                     )}
@@ -351,3 +367,5 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
     );
 
 }
+
+    
