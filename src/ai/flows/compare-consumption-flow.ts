@@ -17,14 +17,14 @@ const ComparisonItemSchema = z.object({
   unit: z.string().describe('The base unit of the product.'),
 });
 
-export const ComparisonInputSchema = z.object({
+const ComparisonInputSchema = z.object({
   periodA: z.string().describe("Label for the first period, e.g., 'Janeiro/2024'."),
   periodB: z.string().describe("Label for the second period, e.g., 'Fevereiro/2024'."),
   items: z.array(ComparisonItemSchema),
 });
 export type ComparisonInput = z.infer<typeof ComparisonInputSchema>;
 
-export const ComparisonOutputSchema = z.string().describe("A concise analysis of the consumption changes between the two periods.");
+const ComparisonOutputSchema = z.string().describe("A concise analysis of the consumption changes between the two periods.");
 export type ComparisonOutput = z.infer<typeof ComparisonOutputSchema>;
 
 
