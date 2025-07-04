@@ -48,28 +48,15 @@ const prompt = ai.definePrompt({
   input: {schema: SimplifiedPromptInputSchema},
   output: {schema: ComparisonOutputSchema.nullable()},
   prompt: `
-        Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos e escrever uma análise concisa em português.
+      Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos abaixo e escrever um parágrafo curto em português, resumindo as principais variações. Destaque os aumentos e as reduções mais notáveis.
 
-        **Exemplo de Análise:**
+      Período de Referência (A): {{{periodA}}}
+      Período de Comparação (B): {{{periodB}}}
 
-        *Dados Fornecidos:*
-        - Insumo Exemplo 1: 50 kg (Período A) vs 75 kg (Período B)
-        - Insumo Exemplo 2: 100 L (Período A) vs 90 L (Período B)
+      Dados de Consumo:
+      {{{dataAsString}}}
 
-        *Análise Gerada:*
-        Houve um aumento notável no consumo do Insumo Exemplo 1, que cresceu 50% entre os períodos. Por outro lado, o Insumo Exemplo 2 teve uma queda de 10% no consumo.
-
-        **Agora, analise os dados reais abaixo:**
-
-        Dados de Consumo:
-        Período de Referência (A): {{{periodA}}}
-        Período de Comparação (B): {{{periodB}}}
-
-        Variação de consumo por insumo:
-        {{{dataAsString}}}
-
-        Análise:
-        Escreva um parágrafo curto resumindo as principais variações de consumo entre os períodos A e B. Destaque os aumentos e as reduções mais notáveis.
+      Análise Concisa:
     `,
     config: {
         safetySettings: [
