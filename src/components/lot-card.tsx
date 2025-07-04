@@ -1,4 +1,3 @@
-
 "use client"
 
 import Image from 'next/image';
@@ -9,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, MapPin, Camera, History, Eraser } from 'lucide-react';
+import { Pencil, Trash2, Truck, MapPin, Camera, History, Eraser, Info } from 'lucide-react';
 import { type Kiosk } from '@/types';
 import { useLocations } from '@/hooks/use-locations';
 
@@ -26,6 +25,7 @@ export type GroupedLot = {
   imageUrl?: string;
   alertThreshold?: number;
   urgentThreshold?: number;
+  notes?: string;
   kiosks: {
     id: string; // This is the unique LotEntry ID
     kioskId: string;
@@ -106,6 +106,20 @@ export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHi
                         </TooltipTrigger>
                         <TooltipContent>
                             <p>Ver Histórico de Movimentação</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            )}
+            {groupedLot.notes && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button variant="ghost" size="icon" className="h-7 w-7 cursor-help text-muted-foreground">
+                                <Info className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs" side="top">
+                            <p className="whitespace-pre-wrap text-sm">{groupedLot.notes}</p>
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>

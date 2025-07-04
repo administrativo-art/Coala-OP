@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -133,6 +132,7 @@ export function ExpiryControl() {
           kiosks: [],
           alertThreshold: product?.alertThreshold,
           urgentThreshold: product?.urgentThreshold,
+          notes: product?.notes,
         };
       }
       groups[key].totalQuantity += lot.quantity;
