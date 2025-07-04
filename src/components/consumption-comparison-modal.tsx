@@ -12,8 +12,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { type ConsumptionReport, type Product, type Kiosk } from "@/types";
-import { compareConsumption, type ComparisonInput } from '@/ai/flows/compare-consumption-flow';
-import { Scale, Wand2, TrendingUp, TrendingDown, Minus, AlertCircle, Info } from 'lucide-react';
+import { compareConsumption, type ComparisonInput, type ComparisonOutput } from '@/ai/flows/compare-consumption-flow';
+import { Scale, Wand2, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ConsumptionComparisonModalProps {
     open: boolean;
@@ -43,7 +45,7 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
     const [periodB, setPeriodB] = useState({ month: '', year: '' });
     const [comparisonResults, setComparisonResults] = useState<ComparisonResult[] | null>(null);
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-    const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
+    const [aiAnalysisResult, setAiAnalysisResult] = useState<ComparisonOutput | null>(null);
     const [isAiLoading, setIsAiLoading] = useState(false);
 
     useEffect(() => {
@@ -118,6 +120,74 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
         } finally {
             setIsAiLoading(false);
         }
+    };
+    
+    const handleExportPdf = () => {
+        if (!comparisonResults) return;
+
+        const doc = new jsPDF();
+        const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'N/A';
+        const periodALabel = `${months.find(m => m.value === periodA.month)?.label}/${periodA.year}`;
+        const periodBLabel = `${months.find(m => m.value === periodB.month)?.label}/${periodB.year}`;
+
+        doc.setFontSize(18);
+        doc.text(`Comparativo de Consumo - ${kioskName}`, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Período A: ${periodALabel}`, 14, 30);
+        doc.text(`Período B: ${periodBLabel}`, 14, 36);
+
+        const tableHead = [['Insumo', `Consumo A`, `Consumo B`, 'Variação Absoluta', 'Variação %']];
+        const tableBody = comparisonResults.map(item => {
+            let percentageText: string;
+            if (item.percentageChange === null) {
+                percentageText = '0.0%';
+            } else if (item.percentageChange === Infinity) {
+                percentageText = 'Novo';
+            } else {
+                percentageText = `${item.percentageChange.toFixed(1)}%`;
+            }
+
+            return [
+                `${item.productName} (${item.unit})`,
+                item.consumptionA.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                item.consumptionB.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                item.variation.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                percentageText
+            ];
+        });
+
+        autoTable(doc, {
+            startY: 45,
+            head: tableHead,
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: '#3F51B5' },
+        });
+
+        let finalY = (doc as any).lastAutoTable.finalY;
+
+        if (aiAnalysisResult) {
+            const margin = 15;
+            if (finalY + 20 > doc.internal.pageSize.height - margin) {
+                doc.addPage();
+                finalY = margin;
+            } else {
+                finalY += 15;
+            }
+            
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text("Análise da IA", 14, finalY);
+            finalY += 7;
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            const textLines = doc.splitTextToSize(aiAnalysisResult, 180);
+            doc.text(textLines, 14, finalY);
+        }
+        
+        doc.save(`comparativo_consumo_${kioskName.replace(/\s/g, '_')}_${periodA.month}-${periodA.year}_vs_${periodB.month}-${periodB.year}.pdf`);
     };
 
     const getVariationCell = (variation: number, percentage: number | null) => {
@@ -216,8 +286,12 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
                     {comparisonResults && comparisonResults.length > 0 && (
                         <div className="space-y-4">
                             <Card>
-                                <CardHeader>
+                                <CardHeader className="flex flex-row items-center justify-between">
                                     <CardTitle>Resultados da Comparação</CardTitle>
+                                    <Button variant="outline" size="sm" onClick={handleExportPdf}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Exportar PDF
+                                    </Button>
                                 </CardHeader>
                                 <CardContent>
                                     <ScrollArea className="h-[40vh]">
@@ -276,4 +350,4 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
         </Dialog>
     );
 
-    
+}
