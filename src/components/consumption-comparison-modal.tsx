@@ -6,14 +6,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import { type ConsumptionReport, type Product, type Kiosk } from "@/types";
-import { compareConsumption, type ComparisonInput } from '@/ai/flows/compare-consumption-flow';
-import { Scale, Wand2, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download } from 'lucide-react';
+import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Copy } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -34,16 +34,27 @@ interface ComparisonResult {
     percentageChange: number | null;
 }
 
-const AI_ERROR_MESSAGE = "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
+const SUGGESTED_PROMPT = `Você é um Analista de Dados Sênior com foco em varejo e gestão de estoque. Sua tarefa é realizar uma análise técnica e aprofundada dos dados de consumo de insumos para o quiosque, comparando os dois períodos.
+
+Sua análise deve conter:
+
+Diagnóstico Geral: Um parágrafo inicial que sintetiza a principal mudança no padrão de consumo.
+
+Análise de Variações Críticas: Identifique os itens com as maiores variações, tanto percentuais quanto absolutas. Separe claramente os aumentos e as reduções.
+
+Identificação de Correlações: Aponte correlações entre o consumo de diferentes insumos (ex: o aumento nas vendas de milkshake e o consumo de copos, tampas e canudos correspondentes; ou a queda de um produto e seus descartáveis associados).
+
+Hipóteses e Implicações de Negócio: Com base nos dados, formule hipóteses para as mudanças observadas (ex: mudança de preferência do cliente, impacto de uma promoção, possível falta de estoque de um item). Descreva as implicações para a gestão de estoque e estratégia de vendas.
+
+Recomendação Principal: Forneça uma recomendação clara e assertiva para a gerência do quiosque.`;
 
 export function ConsumptionComparisonModal({ open, onOpenChange, history, products, kiosks }: ConsumptionComparisonModalProps) {
     const { user } = useAuth();
+    const { toast } = useToast();
     const [kioskId, setKioskId] = useState<string>('');
     const [periodA, setPeriodA] = useState({ month: '', year: '' });
     const [periodB, setPeriodB] = useState({ month: '', year: '' });
     const [comparisonResults, setComparisonResults] = useState<ComparisonResult[] | null>(null);
-    const [aiAnalysisResult, setAiAnalysisResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
-    const [isAiLoading, setIsAiLoading] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -57,14 +68,12 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         setPeriodA({ month: '', year: '' });
         setPeriodB({ month: '', year: '' });
         setComparisonResults(null);
-        setAiAnalysisResult(null);
     }, [user, open]);
 
     useEffect(() => {
         setPeriodA({ month: '', year: '' });
         setPeriodB({ month: '', year: '' });
         setComparisonResults(null);
-        setAiAnalysisResult(null);
     }, [kioskId]);
 
     useEffect(() => setPeriodA(p => ({ ...p, month: '' })), [periodA.year]);
@@ -145,43 +154,14 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             });
         });
         setComparisonResults(results.sort((a,b) => a.productName.localeCompare(b.productName)));
-        setAiAnalysisResult(null);
-    };
-
-    const handleGetAIAnalysis = async () => {
-        if (!comparisonResults || comparisonResults.length === 0) {
-            setAiAnalysisResult({ type: 'error', message: "Não há dados na tabela para analisar." });
-            return;
-        }
-        setIsAiLoading(true);
-        setAiAnalysisResult(null);
-
-        const aiInput: ComparisonInput = {
-            periodA: `${getMonthLabel(periodA.month)}/${periodA.year}`,
-            periodB: `${getMonthLabel(periodB.month)}/${periodB.year}`,
-            items: comparisonResults.map(r => ({
-                productName: r.productName,
-                consumptionA: r.consumptionA,
-                consumptionB: r.consumptionB,
-                unit: r.unit,
-            }))
-        };
-
-        try {
-            const analysis = await compareConsumption(aiInput);
-            if (analysis === AI_ERROR_MESSAGE) {
-                setAiAnalysisResult({ type: 'error', message: analysis });
-            } else {
-                setAiAnalysisResult({ type: 'success', message: analysis });
-            }
-        } catch (error) {
-            console.error("AI analysis failed:", error);
-            setAiAnalysisResult({ type: 'error', message: "Ocorreu um erro ao gerar a análise. Tente novamente." });
-        } finally {
-            setIsAiLoading(false);
-        }
     };
     
+    const handleCopyPrompt = () => {
+        navigator.clipboard.writeText(SUGGESTED_PROMPT).then(() => {
+            toast({ title: "Prompt copiado!", description: "Cole na sua ferramenta de IA favorita." });
+        });
+    };
+
     const handleExportPdf = () => {
         if (!comparisonResults) return;
 
@@ -224,28 +204,6 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             theme: 'grid',
             headStyles: { fillColor: '#3F51B5' },
         });
-
-        let finalY = (doc as any).lastAutoTable.finalY;
-
-        if (aiAnalysisResult?.type === 'success') {
-            const margin = 15;
-            if (finalY + 20 > doc.internal.pageSize.height - margin) {
-                doc.addPage();
-                finalY = margin;
-            } else {
-                finalY += 15;
-            }
-            
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text("Análise da IA", 14, finalY);
-            finalY += 7;
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            const textLines = doc.splitTextToSize(aiAnalysisResult.message, 180);
-            doc.text(textLines, 14, finalY);
-        }
         
         doc.save(`comparativo_consumo_${kioskName.replace(/\s/g, '_')}_${periodA.month}-${periodA.year}_vs_${periodB.month}-${periodB.year}.pdf`);
     };
@@ -360,7 +318,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                     </Button>
                                 </CardHeader>
                                 <CardContent>
-                                    <ScrollArea className="h-[40vh]">
+                                    <ScrollArea className="h-[25vh]">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
@@ -385,36 +343,25 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                 </CardContent>
                             </Card>
 
-                            <div className="text-center">
-                                 <Button onClick={handleGetAIAnalysis} disabled={isAiLoading || !comparisonResults || comparisonResults.length === 0 || !periodA.month || !periodB.month}>
-                                    <Wand2 className="mr-2" />
-                                    {isAiLoading ? "Analisando..." : "Obter Análise da IA"}
-                                 </Button>
-                            </div>
-
-                            {isAiLoading && <Skeleton className="h-24 w-full" />}
-                            {aiAnalysisResult && (
-                                aiAnalysisResult.type === 'success' ? (
-                                    <Card className="bg-primary/5">
-                                        <CardHeader>
-                                            <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                                                <Wand2/> Análise da IA
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p className="whitespace-pre-wrap">{aiAnalysisResult.message}</p>
-                                        </CardContent>
-                                    </Card>
-                                ) : (
-                                    <Alert variant="destructive">
-                                        <AlertCircle className="h-4 w-4" />
-                                        <AlertTitle>Falha na Análise da IA</AlertTitle>
-                                        <AlertDescription>
-                                            {aiAnalysisResult.message}
-                                        </AlertDescription>
-                                    </Alert>
-                                )
-                            )}
+                             <Card>
+                                <CardHeader>
+                                    <CardTitle>Sugestão de Prompt para Análise Externa</CardTitle>
+                                    <CardDescription>
+                                        Copie o prompt abaixo e cole-o em sua ferramenta de IA de preferência, junto com os dados exportados da tabela, para obter uma análise detalhada.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                    <Textarea
+                                        readOnly
+                                        value={SUGGESTED_PROMPT}
+                                        className="h-48 font-mono text-xs"
+                                    />
+                                    <Button onClick={handleCopyPrompt} className="w-full">
+                                        <Copy className="mr-2 h-4 w-4" />
+                                        Copiar Prompt
+                                    </Button>
+                                </CardContent>
+                            </Card>
                         </div>
                     )}
                 </div>
