@@ -59,7 +59,6 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     const q = query(
         collection(db, "stockAnalysisProducts"),
         where("baseName", "==", productDef.baseName),
-        where("packageSize", "==", productDef.packageSize),
         where("unit", "==", productDef.unit)
     );
 
@@ -138,9 +137,6 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
   
   const getProductFullName = useCallback((product: Product) => {
     if (!product) return '';
-    if (product.packageSize && product.packageSize !== 1) {
-        return `${product.baseName} (${product.packageSize}${product.unit})`;
-    }
     return `${product.baseName} (${product.unit})`;
   }, []);
 

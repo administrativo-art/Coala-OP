@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent that analyzes product consumption from PDF reports.
@@ -14,12 +15,8 @@ const ProductSchema = z.object({
   id: z.string(),
   baseName: z.string(),
   category: z.enum(['Volume', 'Massa', 'Comprimento', 'Unidade']),
-  packageSize: z.number(),
   unit: z.string(),
   pdfUnit: z.string().optional(),
-  hasPurchaseUnit: z.boolean().optional(),
-  purchaseUnitName: z.string().optional(),
-  itemsPerPurchaseUnit: z.number().optional(),
   stockLevels: z.record(z.string(), z.object({ min: z.number(), max: z.number() })).optional(),
 });
 
@@ -30,7 +27,7 @@ const AnalyzeConsumptionInputSchema = z.object({
   year: z.number(),
   kioskId: z.string(),
   kioskName: z.string(),
-  products: z.array(ProductSchema).describe("The list of products to be considered in the analysis, including their packaging configuration."),
+  products: z.array(ProductSchema).describe("The list of products to be considered in the analysis, including their base unit configuration."),
 });
 type AnalyzeConsumptionInput = z.infer<typeof AnalyzeConsumptionInputSchema>;
 
@@ -39,7 +36,6 @@ const ConsumptionAnalysisItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   consumedQuantity: z.number().describe("The total quantity consumed in the product's base unit (e.g., L, kg, un)."),
-  consumedPackages: z.number().describe("The number of individual packages consumed."),
 });
 
 const AnalyzeConsumptionOutputSchema = z.object({
@@ -68,13 +64,12 @@ const analyzeConsumptionPrompt = ai.definePrompt({
 
     Here are the business rules:
     1.  **Match Products:** For each product mentioned in the PDF report, find its corresponding entry in the provided \`products\` configuration list. The primary matching key is the product name (\`baseName\`).
-    2.  **Extract Consumption:** Extract the total quantity consumed for each matched product from the PDF. The quantity in the PDF might be in a different unit (e.g., 'ml') than the product's main packaging unit (e.g., 'L'). Use the \`pdfUnit\` and \`unit\` fields from the product configuration to perform any necessary conversions.
+    2.  **Extract Consumption:** Extract the total quantity consumed for each matched product from the PDF. The quantity in the PDF might be in a different unit (e.g., 'ml') than the product's main base unit (e.g., 'L'). Use the \`pdfUnit\` and \`unit\` fields from the product configuration to perform any necessary conversions.
     3.  **Calculate Total Consumed Quantity:** The final \`consumedQuantity\` for each product must be in its base unit as defined in its configuration (e.g., L, kg, un).
-    4.  **Calculate Consumed Packages:** Based on the total \`consumedQuantity\`, calculate the \`consumedPackages\`. This is the number of individual packages sold or used. To calculate this, divide the total \`consumedQuantity\` by the product's \`packageSize\`. Round the result to the nearest whole number.
-    5.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema. Include the original report name, month, year, kioskId, and kioskName from the input in your response. The \`results\` array should contain an entry for every product found in the report.
+    4.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema. Include the original report name, month, year, kioskId, and kioskName from the input in your response. The \`results\` array should contain an entry for every product found in the report.
 
     **CONFIGURATION DATA:**
-    - All Products to look for, with their packaging configurations: {{{json products}}}
+    - All Products to look for, with their base unit configurations: {{{json products}}}
 
     **REPORT TO ANALYZE:**
     - Report Name: {{{reportName}}}

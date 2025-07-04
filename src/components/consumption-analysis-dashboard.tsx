@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useRef, useEffect } from "react"
@@ -143,7 +144,7 @@ export function ConsumptionAnalysisDashboard() {
         if (!kioskConsumption[report.kioskId][item.productId]) {
           kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0 };
         }
-        kioskConsumption[report.kioskId][item.productId].total += item.consumedPackages;
+        kioskConsumption[report.kioskId][item.productId].total += item.consumedQuantity;
         kioskConsumption[report.kioskId][item.productId].count += 1;
       });
     });
@@ -176,17 +177,11 @@ export function ConsumptionAnalysisDashboard() {
     const dataForChart = activeProducts
       .filter(p => selectedProducts.includes(p.id))
       .map(product => {
-        const avgPackages = relevantConsumptionData[product.id] || 0;
-        let consumption = Math.ceil(avgPackages);
-        let unitLabel = 'Pacotes';
-        if (product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
-            consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
-            unitLabel = product.purchaseUnitName || 'Un. Compra';
-        }
+        const avgQuantity = relevantConsumptionData[product.id] || 0;
         return {
           productId: product.id,
-          name: `${product.baseName} (${unitLabel})`,
-          "Consumo": consumption,
+          name: `${product.baseName} (${product.unit})`,
+          "Consumo": parseFloat(avgQuantity.toFixed(2)),
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -245,15 +240,14 @@ export function ConsumptionAnalysisDashboard() {
                             {report.results && report.results.length > 0 ? (
                                <div className="rounded-md border">
                                     <Table>
-                                        <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. Pacotes</TableHead><TableHead className="text-right">Qtd. Total (Unidade Base)</TableHead></TableRow></TableHeader>
+                                        <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. Consumida (Unidade Base)</TableHead></TableRow></TableHeader>
                                         <TableBody>
                                             {report.results.map((item, index) => {
                                                 const productConfig = activeProducts.find(p => p.id === item.productId);
                                                 return (
                                                     <TableRow key={index}>
                                                         <TableCell>{item.productName}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{item.consumedPackages}</TableCell>
-                                                        <TableCell className="text-right">{item.consumedQuantity.toLocaleString()} {productConfig?.unit || ''}</TableCell>
+                                                        <TableCell className="text-right font-semibold">{item.consumedQuantity.toLocaleString()} {productConfig?.unit || ''}</TableCell>
                                                     </TableRow>
                                                 )
                                             })}
@@ -436,5 +430,3 @@ export function ConsumptionAnalysisDashboard() {
     </div>
   )
 }
-
-    

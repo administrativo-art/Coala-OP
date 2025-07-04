@@ -17,22 +17,17 @@ export type Product = {
   barcode?: string;
   imageUrl?: string;
   category: UnitCategory;
-  packageSize: number;
   unit: string;
   pdfUnit?: string;
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
-  hasPurchaseUnit?: boolean;
-  purchaseUnitName?: string;
-  itemsPerPurchaseUnit?: number;
   isArchived?: boolean;
 };
 
 export type ProductDefinition = {
     baseName: string;
     category: UnitCategory;
-    packageSize: number;
     unit: string;
 }
 
@@ -113,7 +108,6 @@ export type ConsumptionAnalysisItem = {
   productId: string;
   productName: string;
   consumedQuantity: number;
-  consumedPackages: number;
 };
 
 export type ConsumptionReport = {

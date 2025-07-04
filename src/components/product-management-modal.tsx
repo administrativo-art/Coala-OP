@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -21,7 +22,6 @@ import { getUnitsForCategory } from '@/lib/conversion';
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do insumo é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
 });
 
@@ -48,7 +48,6 @@ export function AnalysisItemFormModal({
     defaultValues: {
       baseName: '',
       category: 'Volume',
-      packageSize: undefined,
       unit: 'L',
     },
   });
@@ -61,11 +60,10 @@ export function AnalysisItemFormModal({
         form.reset({
           baseName: productToEdit.baseName,
           category: productToEdit.category,
-          packageSize: productToEdit.packageSize,
           unit: productToEdit.unit,
         });
       } else {
-        form.reset({ baseName: '', category: 'Volume', packageSize: undefined, unit: 'L' });
+        form.reset({ baseName: '', category: 'Volume', unit: 'L' });
       }
     }
   }, [open, productToEdit, form]);
@@ -79,10 +77,11 @@ export function AnalysisItemFormModal({
 
 
   const onSubmit = (values: ProductFormValues) => {
+    const productData = { ...values, packageSize: 1 }; // packageSize is no longer used for analysis but is kept for compatibility
     if (productToEdit) {
-      updateProduct({ ...productToEdit, ...values });
+      updateProduct({ ...productToEdit, ...productData });
     } else {
-      addProduct(values);
+      addProduct(productData);
     }
     onOpenChange(false);
   };
@@ -107,7 +106,7 @@ export function AnalysisItemFormModal({
                     </FormItem>
                   )}
                 />
-                 <div className="grid grid-cols-3 gap-4">
+                 <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="category"
@@ -126,29 +125,10 @@ export function AnalysisItemFormModal({
                     />
                     <FormField
                       control={form.control}
-                      name="packageSize"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tamanho</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step="any"
-                              placeholder="ex: 250"
-                              {...field}
-                              value={field.value ?? ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
                       name="unit"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unidade</FormLabel>
+                          <FormLabel>Unidade Base</FormLabel>
                            <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
                             <SelectContent>
@@ -161,7 +141,7 @@ export function AnalysisItemFormModal({
                     />
                 </div>
                 <FormDescription>
-                    O tamanho e a unidade definem a embalagem base para os cálculos de estoque mínimo e máximo.
+                    A unidade base é a unidade padrão para os cálculos de estoque mínimo e máximo.
                 </FormDescription>
 
                 <DialogFooter className="pt-4">
