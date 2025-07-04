@@ -47,17 +47,23 @@ const prompt = ai.definePrompt({
   name: 'compareConsumptionPrompt',
   input: {schema: SimplifiedPromptInputSchema},
   output: {schema: ComparisonOutputSchema.nullable()},
-  prompt: `
-      Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos abaixo e escrever um parágrafo curto em português, resumindo as principais variações. Destaque os aumentos e as reduções mais notáveis.
+  prompt: `Você é um Analista de Dados Sênior com foco em varejo e gestão de estoque. Sua tarefa é realizar uma análise técnica e aprofundada dos dados de consumo de insumos para o quiosque, comparando os dois períodos.
 
-      Período de Referência (A): {{{periodA}}}
-      Período de Comparação (B): {{{periodB}}}
+Sua análise deve conter:
 
-      Dados de Consumo:
-      {{{dataAsString}}}
+Diagnóstico Geral: Um parágrafo inicial que sintetiza a principal mudança no padrão de consumo.
 
-      Análise Concisa:
-    `,
+Análise de Variações Críticas: Identifique os itens com as maiores variações, tanto percentuais quanto absolutas. Separe claramente os aumentos e as reduções.
+
+Identificação de Correlações: Aponte correlações entre o consumo de diferentes insumos (ex: o aumento nas vendas de milkshake e o consumo de copos, tampas e canudos correspondentes; ou a queda de um produto e seus descartáveis associados).
+
+Hipóteses e Implicações de Negócio: Com base nos dados, formule hipóteses para as mudanças observadas (ex: mudança de preferência do cliente, impacto de uma promoção, possível falta de estoque de um item). Descreva as implicações para a gestão de estoque e estratégia de vendas.
+
+Período de Referência (A): {{{periodA}}}
+Período de Comparação (B): {{{periodB}}}
+Dados de Consumo: {{{dataAsString}}}
+
+Recomendação Principal: Forneça uma recomendação clara e assertiva para a gerência do quiosque.`,
     config: {
         safetySettings: [
           {
