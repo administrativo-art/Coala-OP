@@ -297,7 +297,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">
                                     <CardTitle>Resultados da Comparação</CardTitle>
-                                    <Button variant="outline" size="sm" onClick={handleExportPdf}>
+                                    <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={!comparisonResults || comparisonResults.length === 0}>
                                         <Download className="mr-2 h-4 w-4" />
                                         Exportar PDF
                                     </Button>
@@ -329,7 +329,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                             </Card>
 
                             <div className="text-center">
-                                 <Button onClick={handleGetAIAnalysis} disabled={isAiLoading}>
+                                 <Button onClick={handleGetAIAnalysis} disabled={isAiLoading || !comparisonResults || comparisonResults.length === 0}>
                                     <Wand2 className="mr-2" />
                                     {isAiLoading ? "Analisando..." : "Obter Análise da IA"}
                                  </Button>
@@ -368,5 +368,4 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             </DialogContent>
         </Dialog>
     );
-
 }
