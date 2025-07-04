@@ -33,10 +33,17 @@ export async function compareConsumption(input: ComparisonInput): Promise<Compar
   return compareConsumptionFlow(input);
 }
 
+// A new, simpler schema for the prompt itself.
+const SimplifiedPromptInputSchema = z.object({
+  periodA: z.string(),
+  periodB: z.string(),
+  dataAsString: z.string(),
+});
+
 
 const prompt = ai.definePrompt({
   name: 'compareConsumptionPrompt',
-  input: {schema: ComparisonInputSchema},
+  input: {schema: SimplifiedPromptInputSchema},
   output: {schema: ComparisonOutputSchema.nullable()},
   prompt: `
         Você é um analista de negócios para uma rede de quiosques de shakes. Sua tarefa é analisar a variação no consumo de insumos entre dois períodos.
@@ -46,11 +53,7 @@ const prompt = ai.definePrompt({
 
         A seguir, uma lista de produtos e seus consumos em cada período.
 
-        {{#each items}}
-        - Insumo: {{{this.productName}}}
-          - Consumo em {{{../periodA}}}: {{{this.consumptionA}}} {{{this.unit}}}
-          - Consumo em {{{../periodB}}}: {{{this.consumptionB}}} {{{this.unit}}}
-        {{/each}}
+{{{dataAsString}}}
 
         Com base nesses dados, escreva uma análise curta e objetiva em um único parágrafo (no máximo 3 ou 4 frases) destacando as mudanças mais significativas. Foque nos maiores aumentos e quedas, tanto em termos absolutos quanto percentuais. Se possível, sugira uma possível causa para as variações mais importantes (ex: sazonalidade, popularidade de um novo produto, etc.). Seja direto e evite jargões.
     `,
@@ -72,7 +75,19 @@ const compareConsumptionFlow = ai.defineFlow(
     outputSchema: ComparisonOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
+    // Manually format the items array into a single string.
+    const dataAsString = input.items.map(item => 
+        `- Insumo: ${item.productName}\n  - Consumo em ${input.periodA}: ${item.consumptionA} ${item.unit}\n  - Consumo em ${input.periodB}: ${item.consumptionB} ${item.unit}`
+    ).join('\n\n');
+    
+    // Create the simplified input object for the prompt.
+    const simplifiedInput = {
+        periodA: input.periodA,
+        periodB: input.periodB,
+        dataAsString: dataAsString,
+    };
+
+    const {output} = await prompt(simplifiedInput);
     if (output === null) {
       return "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
     }
