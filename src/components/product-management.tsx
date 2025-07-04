@@ -25,6 +25,7 @@ import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ArchivedProductsModal } from './archived-products-modal';
+import { Textarea } from '@/components/ui/textarea';
 
 
 const BarcodeScannerModal = dynamic(
@@ -44,6 +45,7 @@ const productFormSchema = z.object({
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
+  notes: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -78,6 +80,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
             category: 'Massa',
             packageSize: undefined,
             unit: 'g',
+            notes: '',
         }
     });
     
@@ -110,7 +113,8 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
             imageUrl: product.imageUrl || '',
             category: product.category,
             packageSize: product.packageSize,
-            unit: product.unit
+            unit: product.unit,
+            notes: product.notes || ''
         });
         setShowForm(true);
     };
@@ -293,6 +297,25 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                         </FormItem>
                                     )}/>
                                 </div>
+                                
+                                <FormField
+                                  control={form.control}
+                                  name="notes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Observações</FormLabel>
+                                      <FormControl>
+                                        <Textarea
+                                          placeholder="Insira observações sobre o insumo (opcional)"
+                                          {...field}
+                                          value={field.value ?? ''}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
                                 <DialogFooter className="pt-4 border-t">
                                     <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                                     <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
@@ -310,7 +333,8 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                         imageUrl: '',
                                         category: 'Massa',
                                         packageSize: undefined,
-                                        unit: 'g'
+                                        unit: 'g',
+                                        notes: ''
                                     });
                                     setShowForm(true);
                                 }}>

@@ -17,7 +17,9 @@ export type Product = {
   barcode?: string;
   imageUrl?: string;
   category: UnitCategory;
+  packageSize: number;
   unit: string;
+  notes?: string;
   pdfUnit?: string;
   stockLevels?: { [kioskId: string]: { min: number; max: number } };
   alertThreshold?: number; // e.g., 30 days
