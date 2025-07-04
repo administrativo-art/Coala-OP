@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrendingUp, ListFilter, UploadCloud, Loader2, FileClock, Trash2 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -201,6 +201,14 @@ export function ConsumptionAnalysisDashboard() {
   });
   
   const loadingData = consumptionLoading || productsLoading || kiosksLoading;
+  const CHART_COLORS = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+  ];
+  const chartHeight = Math.max(350, chartData.length * 40);
 
   const handleDeleteReportClick = (report: ConsumptionReport) => setReportToDelete(report);
   const handleDeleteReportConfirm = async () => {
@@ -378,26 +386,44 @@ export function ConsumptionAnalysisDashboard() {
                 )}
             </div>
         </CardHeader>
-        <CardContent className="pl-2">
+        <CardContent className="pr-2 pl-0">
             { loadingData ? (
                 <Skeleton className="h-[350px] w-full" />
                 ) : chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 120 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
-                    <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false}/>
-                    <Tooltip 
-                        cursor={{fill: 'hsl(var(--muted))'}}
-                        contentStyle={{ 
-                            backgroundColor: "hsl(var(--background))", 
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "var(--radius)"
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                    <BarChart
+                        layout="vertical"
+                        data={chartData}
+                        margin={{
+                            top: 5,
+                            right: 50,
+                            left: 20,
+                            bottom: 5,
                         }}
-                    />
-                    <Bar dataKey="Consumo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                        <LabelList dataKey="Consumo" position="top" style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
-                    </Bar>
+                    >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" allowDecimals={false} />
+                        <YAxis
+                            type="category"
+                            dataKey="name"
+                            width={150}
+                            tick={{ fontSize: 12 }}
+                            interval={0}
+                        />
+                        <Tooltip 
+                            cursor={{fill: 'hsl(var(--muted))'}}
+                            contentStyle={{ 
+                                backgroundColor: "hsl(var(--background))", 
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "var(--radius)"
+                            }}
+                        />
+                        <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                           {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                            <LabelList dataKey="Consumo" position="right" offset={10} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                        </Bar>
                     </BarChart>
                 </ResponsiveContainer>
                 ) : (
@@ -430,3 +456,5 @@ export function ConsumptionAnalysisDashboard() {
     </div>
   )
 }
+
+    

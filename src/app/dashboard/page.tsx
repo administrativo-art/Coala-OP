@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
-import { useProducts } from "@/hooks/use-products"
+import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Box, Package, AlertTriangle, TrendingUp, ListFilter } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 export default function DashboardPage() {
   const { user } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
-  const { products, loading: productsLoading } = useProducts()
+  const { products, loading: productsLoading } = useStockAnalysisProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
 
@@ -30,6 +30,14 @@ export default function DashboardPage() {
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
 
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+  
+  const CHART_COLORS = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+  ];
 
   useEffect(() => {
     // Set initial selection only once when active products are loaded.
@@ -63,7 +71,6 @@ export default function DashboardPage() {
       return [];
     }
 
-    // Step 1: Aggregate consumption data (total packages and number of reports)
     const kioskConsumption: { [kioskId: string]: { [productId: string]: { total: number; count: number } } } = {};
 
     consumptionHistory.forEach(report => {
@@ -74,20 +81,18 @@ export default function DashboardPage() {
         if (!kioskConsumption[report.kioskId][item.productId]) {
           kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0 };
         }
-        kioskConsumption[report.kioskId][item.productId].total += item.consumedPackages;
+        kioskConsumption[report.kioskId][item.productId].total += item.consumedQuantity;
         kioskConsumption[report.kioskId][item.productId].count += 1;
       });
     });
 
-    // Step 2: Determine which consumption data to use based on selectors
     const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
-    let relevantConsumptionData: { [productId: string]: number } = {}; // Stores average packages per product
+    let relevantConsumptionData: { [productId: string]: number } = {};
 
     if (kioskIdForChart === 'matriz' && user.username === 'master') {
         const masterAverages: { [productId: string]: { totalAvg: number } } = {};
         
         Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
-            // Aggregate all kiosks except the distribution center itself
             if (kioskId === 'matriz') return;
 
             Object.entries(productMap).forEach(([productId, data]) => {
@@ -112,23 +117,14 @@ export default function DashboardPage() {
         }
     }
 
-    // Step 3: Generate chart data for ALL selected active products, maintaining a consistent alphabetical order.
     const dataForChart = activeProducts
       .filter(p => selectedProducts.includes(p.id))
       .map(product => {
-        const avgPackages = relevantConsumptionData[product.id] || 0;
-        let consumption = Math.ceil(avgPackages);
-        let unitLabel = 'Pacotes';
-
-        if (product.hasPurchaseUnit && product.itemsPerPurchaseUnit && product.itemsPerPurchaseUnit > 0) {
-            consumption = Math.ceil(avgPackages / product.itemsPerPurchaseUnit);
-            unitLabel = product.purchaseUnitName || 'Un. Compra';
-        }
-
+        const avgQuantity = relevantConsumptionData[product.id] || 0;
         return {
           productId: product.id,
-          name: `${product.baseName} (${unitLabel})`,
-          "Consumo": consumption,
+          name: `${product.baseName} (${product.unit})`,
+          "Consumo": parseFloat(avgQuantity.toFixed(2)),
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -139,6 +135,7 @@ export default function DashboardPage() {
 
 
   const initialLoading = productsLoading || lotsLoading || kiosksLoading;
+  const chartHeight = Math.max(350, chartData.length * 40);
 
   if (initialLoading) {
     return (
@@ -251,26 +248,44 @@ export default function DashboardPage() {
                     )}
                 </div>
             </CardHeader>
-            <CardContent className="pl-2">
+            <CardContent className="pr-2 pl-0">
                  { (consumptionLoading || productsLoading || kiosksLoading) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={350}>
-                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 120 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
-                        <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false}/>
-                        <Tooltip 
-                            cursor={{fill: 'hsl(var(--muted))'}}
-                            contentStyle={{ 
-                                backgroundColor: "hsl(var(--background))", 
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "var(--radius)"
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <BarChart
+                            layout="vertical"
+                            data={chartData}
+                            margin={{
+                                top: 5,
+                                right: 50,
+                                left: 20,
+                                bottom: 5,
                             }}
-                        />
-                        <Bar dataKey="Consumo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="Consumo" position="top" style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
-                        </Bar>
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" allowDecimals={false} />
+                            <YAxis
+                                type="category"
+                                dataKey="name"
+                                width={150}
+                                tick={{ fontSize: 12 }}
+                                interval={0}
+                            />
+                            <Tooltip 
+                                cursor={{fill: 'hsl(var(--muted))'}}
+                                contentStyle={{ 
+                                    backgroundColor: "hsl(var(--background))", 
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "var(--radius)"
+                                }}
+                            />
+                            <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                                {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                                <LabelList dataKey="Consumo" position="right" offset={10} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                            </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                     ) : (
@@ -295,3 +310,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
