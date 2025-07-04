@@ -40,7 +40,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({ value: (i + 1).toString()
 
 const AI_ERROR_MESSAGE = "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
 
-export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProps> = ({ open, onOpenChange, history, products, kiosks }) => {
+export function ConsumptionComparisonModal({ open, onOpenChange, history, products, kiosks }: ConsumptionComparisonModalProps) {
     const { user } = useAuth();
     const [kioskId, setKioskId] = useState<string>('');
     const [periodA, setPeriodA] = useState({ month: '', year: '' });
@@ -98,7 +98,10 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
     };
 
     const handleGetAIAnalysis = async () => {
-        if (!comparisonResults) return;
+        if (!comparisonResults || comparisonResults.length === 0) {
+            setAiAnalysisResult({ type: 'error', message: "Não há dados na tabela para analisar." });
+            return;
+        }
         setIsAiLoading(true);
         setAiAnalysisResult(null);
 
@@ -367,5 +370,3 @@ export const ConsumptionComparisonModal: React.FC<ConsumptionComparisonModalProp
     );
 
 }
-
-    

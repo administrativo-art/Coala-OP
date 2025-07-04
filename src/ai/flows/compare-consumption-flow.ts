@@ -54,6 +54,14 @@ const prompt = ai.definePrompt({
 
         Com base nesses dados, escreva uma análise curta e objetiva em um único parágrafo (no máximo 3 ou 4 frases) destacando as mudanças mais significativas. Foque nos maiores aumentos e quedas, tanto em termos absolutos quanto percentuais. Se possível, sugira uma possível causa para as variações mais importantes (ex: sazonalidade, popularidade de um novo produto, etc.). Seja direto e evite jargões.
     `,
+    config: {
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_ONLY_HIGH',
+          },
+        ],
+    },
 });
 
 
