@@ -37,7 +37,7 @@ export async function compareConsumption(input: ComparisonInput): Promise<Compar
 const prompt = ai.definePrompt({
   name: 'compareConsumptionPrompt',
   input: {schema: ComparisonInputSchema},
-  output: {schema: ComparisonOutputSchema},
+  output: {schema: ComparisonOutputSchema.nullable()},
   prompt: `
         Você é um analista de negócios para uma rede de quiosques de shakes. Sua tarefa é analisar a variação no consumo de insumos entre dois períodos.
 
