@@ -94,18 +94,23 @@ const normalizeString = (str: string) => {
         .trim();
 };
 
-const parseQuantityString = (quantityStr: string): { value: number; unit: string } | null => {
-    if (!quantityStr) return null;
+const parseQuantityString = (quantityStr: string, productConfig: Product): { value: number; unit: string } | null => {
+    if (!quantityStr && quantityStr !== "0") return null;
 
-    // Regex to capture number (integer or decimal) and unit
-    const match = quantityStr.match(/(\d*[\.,]?\d+)\s*(\w+)/);
+    // Regex to capture number (integer or decimal) and an OPTIONAL unit
+    const match = quantityStr.match(/^(-?\d*[\.,]?\d+)\s*(\w*)/);
     if (!match) return null;
 
     const valueStr = match[1].replace(',', '.');
     const value = parseFloat(valueStr);
-    const unit = match[2];
+    let unit = match[2];
 
     if (isNaN(value)) return null;
+
+    // If unit was not found in the string, use the product's configured pdfUnit or base unit
+    if (!unit) {
+        unit = productConfig.pdfUnit || productConfig.unit;
+    }
 
     return { value, unit };
 }
@@ -130,15 +135,19 @@ const analyzeConsumptionFlow = ai.defineFlow(
 
     // Step 2: Process extracted items in TypeScript
     for (const extractedItem of extractionResult.items) {
-      const normalizedName = normalizeString(extractedItem.name);
+      // Clean the name to remove units like (un) or (g) that the AI might still include
+      const cleanedName = extractedItem.name.replace(/\s*\([\w\s-]+\)\s*$/, '').trim();
+      const normalizedName = normalizeString(cleanedName);
+      
       const productConfig = productMap.get(normalizedName);
 
       if (!productConfig) {
-        console.warn(`Unmatched product from report: "${extractedItem.name}"`);
+        console.warn(`Unmatched product from report: "${extractedItem.name}" (normalized to "${normalizedName}")`);
         continue; // Skip items from the PDF that are not in our product list
       }
 
-      const parsedQuantity = parseQuantityString(extractedItem.quantity);
+      const parsedQuantity = parseQuantityString(extractedItem.quantity, productConfig);
+      
       if (!parsedQuantity) {
         console.warn(`Could not parse quantity for "${extractedItem.name}": "${extractedItem.quantity}"`);
         continue;
