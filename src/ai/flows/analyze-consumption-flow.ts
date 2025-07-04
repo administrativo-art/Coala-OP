@@ -9,6 +9,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { type Product } from '@/types';
+import { convertValue } from '@/lib/conversion';
 
 // Zod schema that mirrors the Product type from src/types/index.ts for validation
 const ProductSchema = z.object({
@@ -54,31 +55,56 @@ export async function analyzeConsumption(input: AnalyzeConsumptionInput): Promis
 }
 
 
-const analyzeConsumptionPrompt = ai.definePrompt({
-  name: 'analyzeConsumptionPrompt',
-  input: { schema: AnalyzeConsumptionInputSchema },
-  output: { schema: AnalyzeConsumptionOutputSchema },
+// NEW: Define the schema for the data extraction prompt.
+const ExtractedItemSchema = z.object({
+  name: z.string().describe("The name of the item as it appears in the report."),
+  quantity: z.string().describe("The consumed quantity as a string, including the unit (e.g., '1.5 kg', '750g')."),
+});
+
+const DataExtractionOutputSchema = z.object({
+  items: z.array(ExtractedItemSchema),
+});
+
+// NEW: Define the data extraction prompt.
+const extractConsumptionDataPrompt = ai.definePrompt({
+  name: 'extractConsumptionDataPrompt',
+  input: { schema: z.object({ pdfDataUri: z.string() }) },
+  output: { schema: DataExtractionOutputSchema },
   prompt: `
-    You are an expert inventory analyst for a franchise of smoothie kiosks called "Coala Shakes".
-    Your task is to analyze a consumption or sales report for a specific month, year, and kiosk, and determine how much of each product was used.
+    You are an expert data extraction bot.
+    Your task is to analyze the provided PDF consumption report.
+    Carefully read the document and extract a list of all consumed items and their corresponding quantities.
+    The quantity MUST be returned as a string that includes both the number and the unit (e.g., "1.5 kg", "750g", "12 un").
+    Return the data as a single JSON object that strictly follows the provided output schema.
 
-    Here are the business rules:
-    1.  **Match Products:** For each product mentioned in the PDF report, find its corresponding entry in the provided \`products\` configuration list. The primary matching key is the product name (\`baseName\`).
-    2.  **Extract Consumption:** Extract the total quantity consumed for each matched product from the PDF. The quantity in the PDF might be in a different unit (e.g., 'ml') than the product's main base unit (e.g., 'L'). Use the \`pdfUnit\` and \`unit\` fields from the product configuration to perform any necessary conversions.
-    3.  **Calculate Total Consumed Quantity:** The final \`consumedQuantity\` for each product must be in its base unit as defined in its configuration (e.g., L, kg, un).
-    4.  **Output Format:** Your final output MUST be a JSON object that strictly follows the provided output schema. Include the original report name, month, year, kioskId, and kioskName from the input in your response. The \`results\` array should contain an entry for every product found in the report.
-
-    **CONFIGURATION DATA:**
-    - All Products to look for, with their base unit configurations: {{{json products}}}
-
-    **REPORT TO ANALYZE:**
-    - Report Name: {{{reportName}}}
-    - Kiosk: {{{kioskName}}} (ID: {{{kioskId}}})
-    - Month: {{{month}}}
-    - Year: {{{year}}}
-    - PDF Content: {{media url=pdfDataUri}}
+    PDF Content to Analyze: {{media url=pdfDataUri}}
   `,
 });
+
+const normalizeString = (str: string) => {
+    if (!str) return '';
+    return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+};
+
+const parseQuantityString = (quantityStr: string): { value: number; unit: string } | null => {
+    if (!quantityStr) return null;
+
+    // Regex to capture number (integer or decimal) and unit
+    const match = quantityStr.match(/(\d*[\.,]?\d+)\s*(\w+)/);
+    if (!match) return null;
+
+    const valueStr = match[1].replace(',', '.');
+    const value = parseFloat(valueStr);
+    const unit = match[2];
+
+    if (isNaN(value)) return null;
+
+    return { value, unit };
+}
 
 
 const analyzeConsumptionFlow = ai.defineFlow(
@@ -88,7 +114,60 @@ const analyzeConsumptionFlow = ai.defineFlow(
     outputSchema: AnalyzeConsumptionOutputSchema,
   },
   async (input) => {
-    const { output } = await analyzeConsumptionPrompt(input);
-    return output!;
+    // Step 1: Extract raw data from PDF using the new prompt
+    const { output: extractionResult } = await extractConsumptionDataPrompt({ pdfDataUri: input.pdfDataUri });
+
+    if (!extractionResult || !extractionResult.items) {
+      throw new Error("AI failed to extract any items from the PDF.");
+    }
+    
+    const analysisResults: z.infer<typeof ConsumptionAnalysisItemSchema>[] = [];
+    const productMap = new Map(input.products.map(p => [normalizeString(p.baseName), p]));
+
+    // Step 2: Process extracted items in TypeScript
+    for (const extractedItem of extractionResult.items) {
+      const normalizedName = normalizeString(extractedItem.name);
+      const productConfig = productMap.get(normalizedName);
+
+      if (!productConfig) {
+        console.warn(`Unmatched product from report: "${extractedItem.name}"`);
+        continue; // Skip items from the PDF that are not in our product list
+      }
+
+      const parsedQuantity = parseQuantityString(extractedItem.quantity);
+      if (!parsedQuantity) {
+        console.warn(`Could not parse quantity for "${extractedItem.name}": "${extractedItem.quantity}"`);
+        continue;
+      }
+      
+      const { value: quantityFromPdf, unit: unitFromPdf } = parsedQuantity;
+      const baseUnit = productConfig.unit;
+
+      try {
+        const consumedQuantityInBaseUnit = convertValue(quantityFromPdf, unitFromPdf, baseUnit, productConfig.category);
+        
+        analysisResults.push({
+          productId: productConfig.id,
+          productName: productConfig.baseName,
+          consumedQuantity: consumedQuantityInBaseUnit,
+        });
+
+      } catch (error) {
+         console.error(`Error converting units for ${productConfig.baseName}:`, error);
+         continue;
+      }
+    }
+    
+    // Step 3: Construct the final output object
+    const finalOutput: AnalyzeConsumptionOutput = {
+      reportName: input.reportName,
+      month: input.month,
+      year: input.year,
+      kioskId: input.kioskId,
+      kioskName: input.kioskName,
+      results: analysisResults,
+    };
+    
+    return finalOutput;
   }
 );
