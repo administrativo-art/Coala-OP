@@ -11,6 +11,8 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'zod';
 
+const AI_ERROR_MESSAGE = "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
+
 const ComparisonItemSchema = z.object({
   productName: z.string().describe('The name of the product.'),
   consumptionA: z.number().describe('The consumption value for the first period.'),
@@ -46,7 +48,18 @@ const prompt = ai.definePrompt({
   input: {schema: SimplifiedPromptInputSchema},
   output: {schema: ComparisonOutputSchema.nullable()},
   prompt: `
-        Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos fornecidos e escrever uma análise concisa em português.
+        Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos e escrever uma análise concisa em português.
+
+        **Exemplo de Análise:**
+
+        *Dados Fornecidos:*
+        - Insumo Exemplo 1: 50 kg (Período A) vs 75 kg (Período B)
+        - Insumo Exemplo 2: 100 L (Período A) vs 90 L (Período B)
+
+        *Análise Gerada:*
+        Houve um aumento notável no consumo do Insumo Exemplo 1, que cresceu 50% entre os períodos. Por outro lado, o Insumo Exemplo 2 teve uma queda de 10% no consumo.
+
+        **Agora, analise os dados reais abaixo:**
 
         Dados de Consumo:
         Período de Referência (A): {{{periodA}}}
@@ -90,7 +103,7 @@ const compareConsumptionFlow = ai.defineFlow(
 
     const {output} = await prompt(simplifiedInput);
     if (output === null) {
-      return "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
+      return AI_ERROR_MESSAGE;
     }
     return output;
   }
