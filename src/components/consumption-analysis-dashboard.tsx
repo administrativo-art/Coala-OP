@@ -9,13 +9,14 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, UploadCloud, History } from 'lucide-react'
+import { TrendingUp, ListFilter, UploadCloud, History, Scale } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConsumptionHistoryModal } from "./consumption-history-modal";
 import { ConsumptionImportModal } from "./consumption-import-modal";
+import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 
 
 export function ConsumptionAnalysisDashboard() {
@@ -29,6 +30,7 @@ export function ConsumptionAnalysisDashboard() {
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
 
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
 
@@ -145,6 +147,9 @@ export function ConsumptionAnalysisDashboard() {
                     <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsHistoryModalOpen(true)}>
                         <History className="mr-2 h-4 w-4" /> Histórico
                     </Button>
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsComparisonModalOpen(true)}>
+                        <Scale className="mr-2 h-4 w-4" /> Analisar Variação
+                    </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
@@ -259,6 +264,14 @@ export function ConsumptionAnalysisDashboard() {
             kiosks={kiosks}
             products={products}
             addReport={addReport}
+        />
+
+        <ConsumptionComparisonModal
+            open={isComparisonModalOpen}
+            onOpenChange={setIsComparisonModalOpen}
+            history={consumptionHistory}
+            products={activeProducts}
+            kiosks={kiosks}
         />
     </>
   )
