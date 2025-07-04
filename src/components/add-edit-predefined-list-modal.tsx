@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,6 +15,9 @@ import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import { type Product, type PredefinedList } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 
 const predefinedItemSchema = z.object({
   id: z.string(),
@@ -41,6 +44,9 @@ type AddEditPredefinedListModalProps = {
 };
 
 export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, products, addList, updateList, getProductFullName }: AddEditPredefinedListModalProps) {
+  const [isAddProductPopoverOpen, setIsAddProductPopoverOpen] = useState(false);
+  const [productsToAdd, setProductsToAdd] = useState<Set<string>>(new Set());
+  
   const form = useForm<ListFormValues>({
     resolver: zodResolver(predefinedListSchema),
     defaultValues: { name: '', items: [] }
@@ -76,8 +82,37 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
     onOpenChange(false);
   };
   
-  const handleAddItem = () => {
-    append({ id: new Date().toISOString(), productId: '', fromUnit: '', toUnit: '' });
+  const handleToggleProductToAdd = (productId: string) => {
+    setProductsToAdd(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(productId)) {
+            newSet.delete(productId);
+        } else {
+            newSet.add(productId);
+        }
+        return newSet;
+    });
+  };
+
+  const handleAddSelectedProducts = () => {
+    const sortedProductsToAdd = [...productsToAdd].sort((aId, bId) => {
+        const productA = activeProducts.find(p => p.id === aId);
+        const productB = activeProducts.find(p => p.id === bId);
+        if (!productA || !productB) return 0;
+        return getProductFullName(productA).localeCompare(getProductFullName(productB));
+    });
+
+    sortedProductsToAdd.forEach(productId => {
+        append({
+            id: 'item-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2),
+            productId: productId,
+            fromUnit: '',
+            toUnit: '',
+        });
+    });
+
+    setProductsToAdd(new Set());
+    setIsAddProductPopoverOpen(false);
   };
   
   return (
@@ -167,9 +202,44 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                  )}
               </div>
             </ScrollArea>
-             <Button type="button" variant="outline" className="w-full" onClick={handleAddItem}>
-                <PlusCircle className="mr-2" /> Adicionar item à lista
-            </Button>
+             <Popover open={isAddProductPopoverOpen} onOpenChange={setIsAddProductPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full">
+                        <PlusCircle className="mr-2" /> Adicionar item(s) à lista
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                    <div className="grid gap-4">
+                        <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Selecionar Produtos</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Marque os produtos que deseja adicionar.
+                            </p>
+                        </div>
+                        <ScrollArea className="h-48">
+                            <div className="space-y-2 p-1">
+                                {activeProducts
+                                    .sort((a,b) => getProductFullName(a).localeCompare(getProductFullName(b)))
+                                    .map(product => (
+                                    <div key={product.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`add-${product.id}`}
+                                            checked={productsToAdd.has(product.id)}
+                                            onCheckedChange={() => handleToggleProductToAdd(product.id)}
+                                        />
+                                        <Label htmlFor={`add-${product.id}`} className="font-normal w-full cursor-pointer">
+                                            {getProductFullName(product)}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <Button onClick={handleAddSelectedProducts} disabled={productsToAdd.size === 0}>
+                            Adicionar ({productsToAdd.size})
+                        </Button>
+                    </div>
+                </PopoverContent>
+            </Popover>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit">{listToEdit ? 'Salvar alterações' : 'Criar lista'}</Button>
