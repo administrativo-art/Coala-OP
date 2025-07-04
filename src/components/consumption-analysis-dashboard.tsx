@@ -5,11 +5,14 @@ import { useMemo, useState, useRef, useEffect } from "react"
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useToast } from "@/hooks/use-toast"
+import { type Product } from '@/types';
+import { convertValue } from '@/lib/conversion';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,9 +29,8 @@ import { Separator } from "./ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 
-import { analyzeConsumption } from "@/ai/flows/analyze-consumption-flow";
 import { type ConsumptionReport } from "@/types";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 const consumptionUploadSchema = z.object({
@@ -39,6 +41,35 @@ const consumptionUploadSchema = z.object({
 });
 
 type ConsumptionUploadFormValues = z.infer<typeof consumptionUploadSchema>;
+
+const normalizeString = (str: string) => {
+    if (!str) return '';
+    return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+};
+
+const parseQuantityString = (quantityStr: string, productConfig: Product): { value: number; unit: string } | null => {
+    if (!quantityStr && quantityStr !== "0") return null;
+
+    const match = String(quantityStr).match(/^(-?\d*[\.,]?\d+)\s*(\w*)/);
+    if (!match) return null;
+
+    const valueStr = match[1].replace(',', '.');
+    const value = parseFloat(valueStr);
+    let unit = match[2];
+
+    if (isNaN(value)) return null;
+
+    if (!unit) {
+        unit = productConfig.pdfUnit || productConfig.unit;
+    }
+
+    return { value, unit };
+}
+
 
 export function ConsumptionAnalysisDashboard() {
   const { user } = useAuth()
@@ -65,6 +96,12 @@ export function ConsumptionAnalysisDashboard() {
       file: undefined,
     }
   });
+  
+  const findAnalysisProductByName = (baseName: string): Product | undefined => {
+    const normalizedName = normalizeString(baseName);
+    if (!normalizedName) return undefined;
+    return activeProducts.find(p => normalizeString(p.baseName) === normalizedName);
+  }
 
   const onUploadSubmit = async (values: ConsumptionUploadFormValues) => {
     const file = values.file[0];
@@ -75,51 +112,89 @@ export function ConsumptionAnalysisDashboard() {
 
     setIsAnalyzing(true);
     
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const pdfDataUri = reader.result as string;
-        const selectedKiosk = kiosks.find(k => k.id === values.kioskId);
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+            try {
+                const rows = results.data as any[];
+                if (rows.length === 0) throw new Error("A planilha CSV está vazia ou em formato inválido.");
+                
+                const kiosk = kiosks.find(k => k.id === values.kioskId);
+                if (!kiosk) throw new Error("Quiosque selecionado inválido.");
 
-        if (!selectedKiosk) throw new Error("Quiosque não encontrado.");
+                const analysisResults: { [productId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
+                const unmatchedItems = new Set<string>();
 
-        const analysisResult = await analyzeConsumption({
-            reportName: file.name,
-            pdfDataUri,
-            month: values.month,
-            year: values.year,
-            kioskId: values.kioskId,
-            kioskName: selectedKiosk.name,
-            products: activeProducts,
-        });
+                for (const row of rows) {
+                    const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
+                    const quantityStr = (row['Qtde.'] || row['Quantidade'] || row['Qtd'])?.trim();
+                    
+                    if (!itemName || !quantityStr) continue;
 
-        if (analysisResult) {
-            await addReport({
-                ...analysisResult,
-                createdAt: new Date().toISOString(),
-                status: 'completed',
-            });
-            toast({ title: 'Sucesso', description: `Relatório "${file.name}" analisado e salvo.` });
-        } else {
-             throw new Error('A análise de IA não retornou resultados.');
+                    const productConfig = findAnalysisProductByName(itemName);
+                    if (!productConfig) {
+                        unmatchedItems.add(itemName);
+                        continue;
+                    }
+
+                    const parsedQuantity = parseQuantityString(quantityStr, productConfig);
+                    if (!parsedQuantity) {
+                         console.warn(`Could not parse quantity for "${itemName}": "${quantityStr}"`);
+                         continue;
+                    }
+
+                    const { value: quantityFromCsv, unit: unitFromCsv } = parsedQuantity;
+                    const consumedQuantityInBaseUnit = convertValue(quantityFromCsv, unitFromCsv, productConfig.unit, productConfig.category);
+                    
+                    if (!analysisResults[productConfig.id]) {
+                        analysisResults[productConfig.id] = { 
+                            productName: productConfig.baseName,
+                            consumedQuantity: 0,
+                            count: 0
+                        };
+                    }
+                    analysisResults[productConfig.id].consumedQuantity += consumedQuantityInBaseUnit;
+                    analysisResults[productConfig.id].count += 1;
+                }
+
+                if (unmatchedItems.size > 0) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Alguns itens não foram encontrados',
+                        description: `Os seguintes itens do CSV não foram localizados: ${Array.from(unmatchedItems).join(', ')}`,
+                        duration: 10000,
+                    });
+                }
+                
+                const finalResults = Object.entries(analysisResults).map(([productId, data]) => ({
+                    productId,
+                    productName: data.productName,
+                    consumedQuantity: data.consumedQuantity
+                }));
+
+                await addReport({
+                    reportName: file.name,
+                    month: values.month,
+                    year: values.year,
+                    kioskId: values.kioskId,
+                    kioskName: kiosk.name,
+                    createdAt: new Date().toISOString(),
+                    status: 'completed',
+                    results: finalResults,
+                });
+                
+                toast({ title: 'Sucesso', description: `Relatório "${file.name}" analisado e salvo.` });
+
+            } catch (error: any) {
+                 toast({ variant: 'destructive', title: 'Erro na Análise', description: error.message || 'Não foi possível analisar o relatório.' });
+            } finally {
+                setIsAnalyzing(false);
+                uploadForm.reset({ ...uploadForm.getValues(), file: undefined });
+                if (fileInputRef.current) fileInputRef.current.value = "";
+            }
         }
-      };
-
-      reader.onerror = () => {
-        throw new Error('Falha ao ler o arquivo.');
-      };
-
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Erro na Análise', description: error.message || 'Não foi possível analisar o relatório.' });
-    } finally {
-        setIsAnalyzing(false);
-        uploadForm.reset({
-            ...uploadForm.getValues(),
-            file: undefined,
-        });
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    });
   };
 
 
@@ -276,7 +351,7 @@ export function ConsumptionAnalysisDashboard() {
         <Card>
             <CardHeader>
             <CardTitle>Importar Relatório de Consumo</CardTitle>
-            <CardDescription>Faça o upload de um relatório de vendas/consumo em PDF para que a IA analise.</CardDescription>
+            <CardDescription>Faça o upload de um relatório de vendas/consumo em formato CSV para análise.</CardDescription>
             </CardHeader>
             <CardContent>
             <Form {...uploadForm}>
@@ -302,11 +377,11 @@ export function ConsumptionAnalysisDashboard() {
                     name="file"
                     render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Arquivo (PDF)</FormLabel>
+                        <FormLabel>Arquivo (CSV)</FormLabel>
                         <FormControl>
                         <Input
                             type="file"
-                            accept="application/pdf"
+                            accept=".csv"
                             ref={fileInputRef}
                             onChange={(e) => field.onChange(e.target.files)}
                         />
@@ -456,5 +531,3 @@ export function ConsumptionAnalysisDashboard() {
     </div>
   )
 }
-
-    
