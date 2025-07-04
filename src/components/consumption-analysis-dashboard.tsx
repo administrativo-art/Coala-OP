@@ -322,7 +322,6 @@ export function ConsumptionAnalysisDashboard() {
                                 <div className="grid gap-1 flex-grow text-left">
                                     <p className="font-semibold">{report.kioskName} - {report.month}/{report.year}</p>
                                     <p className="text-sm text-muted-foreground">Analisado em: {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-                                    <p className="text-sm">Relatório: {report.reportName}</p>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
                                     <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteReportClick(report); }}><span><Trash2 className="h-4 w-4" /></span></Button>
