@@ -28,13 +28,27 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
   if (!value || !fromUnit || !toUnit || !category) return 0;
 
   const categoryUnits = units[category];
-  if (!categoryUnits[fromUnit] || !categoryUnits[toUnit]) {
+  if (!categoryUnits) {
+    console.error(`Invalid category provided: ${category}`);
+    return 0;
+  }
+
+  const findUnitKey = (unit: string) => {
+    if (!unit) return undefined;
+    const lowerCaseUnit = unit.toLowerCase();
+    return Object.keys(categoryUnits).find(key => key.toLowerCase() === lowerCaseUnit);
+  }
+
+  const fromUnitKey = findUnitKey(fromUnit);
+  const toUnitKey = findUnitKey(toUnit);
+
+  if (!fromUnitKey || !toUnitKey) {
     console.error(`Invalid unit provided for category ${category}. From: ${fromUnit}, To: ${toUnit}`);
     return 0;
   }
   
-  const valueInBaseUnit = value * categoryUnits[fromUnit];
-  const convertedValue = valueInBaseUnit / categoryUnits[toUnit];
+  const valueInBaseUnit = value * categoryUnits[fromUnitKey];
+  const convertedValue = valueInBaseUnit / categoryUnits[toUnitKey];
   
   return convertedValue;
 }
