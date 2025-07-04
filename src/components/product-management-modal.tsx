@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -16,12 +15,13 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { type Product, unitCategories, UnitCategory } from '@/types';
-import { units } from '@/lib/conversion';
+import { type Product, unitCategories, type UnitCategory } from '@/types';
+import { getUnitsForCategory } from '@/lib/conversion';
 
 const productSchema = z.object({
   baseName: z.string().min(1, 'O nome do insumo é obrigatório.'),
   category: z.enum(unitCategories),
+  packageSize: z.coerce.number().min(0.001, 'O tamanho deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
 });
 
@@ -48,6 +48,7 @@ export function AnalysisItemFormModal({
     defaultValues: {
       baseName: '',
       category: 'Volume',
+      packageSize: undefined,
       unit: 'L',
     },
   });
@@ -60,10 +61,11 @@ export function AnalysisItemFormModal({
         form.reset({
           baseName: productToEdit.baseName,
           category: productToEdit.category,
+          packageSize: productToEdit.packageSize,
           unit: productToEdit.unit,
         });
       } else {
-        form.reset({ baseName: '', category: 'Volume', unit: 'L' });
+        form.reset({ baseName: '', category: 'Volume', packageSize: undefined, unit: 'L' });
       }
     }
   }, [open, productToEdit, form]);
@@ -71,17 +73,16 @@ export function AnalysisItemFormModal({
   useEffect(() => {
       const isDirty = form.formState.isDirty;
       if (category && (isDirty || !productToEdit)) {
-          form.setValue('unit', Object.keys(units[category])[0]);
+          form.setValue('unit', getUnitsForCategory(category)[0]);
       }
   }, [category, form, productToEdit]);
 
 
   const onSubmit = (values: ProductFormValues) => {
-    const dataToSave = { ...values, packageSize: 1 };
     if (productToEdit) {
-      updateProduct({ ...productToEdit, ...dataToSave });
+      updateProduct({ ...productToEdit, ...values });
     } else {
-      addProduct(dataToSave);
+      addProduct(values);
     }
     onOpenChange(false);
   };
@@ -106,39 +107,63 @@ export function AnalysisItemFormModal({
                     </FormItem>
                   )}
                 />
-                 <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Categoria</FormLabel>
-                        <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                            {unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="unit"
-                    render={({ field }) => (
+                 <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unidade de Medida</FormLabel>
-                         <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
+                          <FormLabel>Categoria</FormLabel>
+                          <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                           <SelectContent>
-                             {Object.keys(units[category]).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                              {unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                           </SelectContent>
-                        </Select>
-                        <FormDescription>Esta é a unidade base que será usada para os cálculos de estoque mínimo e máximo.</FormDescription>
-                        <FormMessage />
+                          </Select>
+                          <FormMessage />
                       </FormItem>
-                    )}
-                  />
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="packageSize"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tamanho</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="any"
+                              placeholder="ex: 250"
+                              {...field}
+                              value={field.value ?? ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="unit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade</FormLabel>
+                           <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                               {getUnitsForCategory(category).map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                </div>
+                <FormDescription>
+                    O tamanho e a unidade definem a embalagem base para os cálculos de estoque mínimo e máximo.
+                </FormDescription>
+
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                   <Button type="submit">{productToEdit ? 'Salvar alterações' : 'Adicionar item'}</Button>
