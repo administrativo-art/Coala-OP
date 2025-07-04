@@ -214,7 +214,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     return (
         <>
             <Dialog open={open} onOpenChange={handleOpenChangeAndReset}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Gerenciar Insumos</DialogTitle>
                         <DialogDescription>
@@ -224,99 +224,102 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
 
                     {showForm ? (
                         <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-                                <h3 className="text-lg font-medium">{editingProduct ? `Editando ${getProductFullName(editingProduct)}` : 'Adicionar novo insumo'}</h3>
-                                
-                                <div className="space-y-2">
-                                    <FormLabel>Foto do Insumo</FormLabel>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                            {form.watch('imageUrl') ? (
-                                                <Image src={form.watch('imageUrl')!} alt="Pré-visualização do insumo" width={96} height={96} className="object-cover" />
-                                            ) : (
-                                                <Camera className="h-10 w-10 text-muted-foreground" />
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}>
-                                                <Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra foto' : 'Tirar foto'}
-                                            </Button>
-                                            {form.watch('imageUrl') && (
-                                                <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldValidate: true })}>
-                                                    <Trash2 className="mr-2" /> Remover foto
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <FormField control={form.control} name="imageUrl" render={({ field }) => (
-                                        <FormItem className="hidden">
-                                            <FormControl><Input {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="barcode" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Código de Barras</FormLabel>
-                                            <div className="flex gap-2">
-                                                <FormControl>
-                                                    <Input placeholder="Escanear ou digitar" {...field} />
-                                                </FormControl>
-                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
-                                                    <Camera className="h-4 w-4" />
-                                                </Button>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+                               <ScrollArea className="flex-1 pr-6">
+                                <div className="space-y-4 pt-4">
+                                    <h3 className="text-lg font-medium">{editingProduct ? `Editando ${getProductFullName(editingProduct)}` : 'Adicionar novo insumo'}</h3>
+                                    
+                                    <div className="space-y-2">
+                                        <FormLabel>Foto do Insumo</FormLabel>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                                {form.watch('imageUrl') ? (
+                                                    <Image src={form.watch('imageUrl')!} alt="Pré-visualização do insumo" width={96} height={96} className="object-cover" />
+                                                ) : (
+                                                    <Camera className="h-10 w-10 text-muted-foreground" />
+                                                )}
                                             </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                     <FormField control={form.control} name="baseName" render={({ field }) => (
-                                        <FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                </div>
+                                            <div className="flex flex-col gap-2">
+                                                <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}>
+                                                    <Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra foto' : 'Tirar foto'}
+                                                </Button>
+                                                {form.watch('imageUrl') && (
+                                                    <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldValidate: true })}>
+                                                        <Trash2 className="mr-2" /> Remover foto
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <FormField control={form.control} name="imageUrl" render={({ field }) => (
+                                            <FormItem className="hidden">
+                                                <FormControl><Input {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}/>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <FormField control={form.control} name="barcode" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Código de Barras</FormLabel>
+                                                <div className="flex gap-2">
+                                                    <FormControl>
+                                                        <Input placeholder="Escanear ou digitar" {...field} />
+                                                    </FormControl>
+                                                    <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                                                        <Camera className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}/>
+                                        <FormField control={form.control} name="baseName" render={({ field }) => (
+                                            <FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                    </div>
 
-                                <div className="grid grid-cols-3 gap-4">
-                                    <FormField control={form.control} name="category" render={({ field }) => (
-                                        <FormItem><FormLabel>Categoria</FormLabel>
-                                            <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
-                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                            </Select><FormMessage />
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <FormField control={form.control} name="category" render={({ field }) => (
+                                            <FormItem><FormLabel>Categoria</FormLabel>
+                                                <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
+                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                    <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+                                                </Select><FormMessage />
+                                            </FormItem>
+                                        )}/>
+                                        <FormField control={form.control} name="packageSize" render={({ field }) => (
+                                            <FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormField control={form.control} name="unit" render={({ field }) => (
+                                            <FormItem><FormLabel>Unidade</FormLabel>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                    <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                                </Select><FormMessage />
+                                            </FormItem>
+                                        )}/>
+                                    </div>
+                                    
+                                    <FormField
+                                    control={form.control}
+                                    name="notes"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel>Observações</FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                            placeholder="Insira observações sobre o insumo (opcional)"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
                                         </FormItem>
-                                    )}/>
-                                    <FormField control={form.control} name="packageSize" render={({ field }) => (
-                                        <FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                    <FormField control={form.control} name="unit" render={({ field }) => (
-                                        <FormItem><FormLabel>Unidade</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                                            </Select><FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </div>
-                                
-                                <FormField
-                                  control={form.control}
-                                  name="notes"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Observações</FormLabel>
-                                      <FormControl>
-                                        <Textarea
-                                          placeholder="Insira observações sobre o insumo (opcional)"
-                                          {...field}
-                                          value={field.value ?? ''}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <DialogFooter className="pt-4 border-t">
+                                    )}
+                                    />
+                                    </div>
+                                </ScrollArea>
+                                <DialogFooter className="pt-4 border-t mt-auto shrink-0">
                                     <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                                     <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
                                 </DialogFooter>
