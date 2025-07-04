@@ -51,24 +51,37 @@ const normalizeString = (str: string) => {
         .trim();
 };
 
-const parseQuantityString = (quantityStr: string, productConfig: Product): { value: number; unit: string } | null => {
-    if (!quantityStr && quantityStr !== "0") return null;
-
-    const match = String(quantityStr).match(/^(-?\d*[\.,]?\d+)\s*(\w*)/);
-    if (!match) return null;
-
-    const valueStr = match[1].replace(',', '.');
-    const value = parseFloat(valueStr);
-    let unit = match[2];
-
-    if (isNaN(value)) return null;
-
-    if (!unit) {
-        unit = productConfig.pdfUnit || productConfig.unit;
+const parseQuantity = (qtyString: string | number): number => {
+    if (typeof qtyString === 'number') {
+        return isNaN(qtyString) ? 0 : qtyString;
     }
 
-    return { value, unit };
-}
+    if (typeof qtyString !== 'string' || !qtyString.trim()) {
+        return 0;
+    }
+
+    let numStr = qtyString.trim();
+
+    if (numStr.startsWith('(') && numStr.endsWith(')')) {
+        numStr = '-' + numStr.substring(1, numStr.length - 1);
+    }
+
+    const lastComma = numStr.lastIndexOf(',');
+    const lastDot = numStr.lastIndexOf('.');
+
+    if (lastComma > lastDot) {
+        numStr = numStr.replace(/\./g, '').replace(',', '.');
+    } else if (lastDot > lastComma) {
+        numStr = numStr.replace(/,/g, '');
+    } else if (lastComma !== -1) {
+        numStr = numStr.replace(',', '.');
+    }
+
+    numStr = numStr.replace(/[^0-9.-]/g, '');
+
+    const parsed = parseFloat(numStr);
+    return isNaN(parsed) ? 0 : parsed;
+};
 
 
 export function ConsumptionAnalysisDashboard() {
@@ -128,7 +141,8 @@ export function ConsumptionAnalysisDashboard() {
 
                 for (const row of rows) {
                     const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
-                    const quantityStr = (row['Qtde.'] || row['Quantidade'] || row['Qtd'])?.trim();
+                    const unitFromCsv = (row['Unidade'] || row['unidade'])?.trim();
+                    const quantityStr = (row['Qted.'] || row['Qtde.'] || row['Quantidade'] || row['Qtd'])?.trim();
                     
                     if (!itemName || !quantityStr) continue;
 
@@ -138,14 +152,10 @@ export function ConsumptionAnalysisDashboard() {
                         continue;
                     }
 
-                    const parsedQuantity = parseQuantityString(quantityStr, productConfig);
-                    if (!parsedQuantity) {
-                         console.warn(`Could not parse quantity for "${itemName}": "${quantityStr}"`);
-                         continue;
-                    }
-
-                    const { value: quantityFromCsv, unit: unitFromCsv } = parsedQuantity;
-                    const consumedQuantityInBaseUnit = convertValue(quantityFromCsv, unitFromCsv, productConfig.unit, productConfig.category);
+                    const quantityValue = parseQuantity(quantityStr);
+                    const unitToUse = unitFromCsv || productConfig.pdfUnit || productConfig.unit;
+                    
+                    const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, productConfig.unit, productConfig.category);
                     
                     if (!analysisResults[productConfig.id]) {
                         analysisResults[productConfig.id] = { 
