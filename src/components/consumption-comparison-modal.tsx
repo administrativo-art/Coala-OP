@@ -34,10 +34,6 @@ interface ComparisonResult {
     percentageChange: number | null;
 }
 
-const currentYear = new Date().getFullYear();
-const years = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
-const months = Array.from({ length: 12 }, (_, i) => ({ value: (i + 1).toString(), label: new Date(0, i).toLocaleString('pt-BR', { month: 'long' }) }));
-
 const AI_ERROR_MESSAGE = "A análise da IA não pôde ser gerada. Isso pode ocorrer devido a filtros de segurança ou um erro inesperado. Por favor, tente novamente.";
 
 export function ConsumptionComparisonModal({ open, onOpenChange, history, products, kiosks }: ConsumptionComparisonModalProps) {
@@ -50,10 +46,65 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
     const [isAiLoading, setIsAiLoading] = useState(false);
 
     useEffect(() => {
-        if(user?.username !== 'master' && user?.kioskId) {
+        if (!open) return;
+        
+        if(user?.username === 'master') {
+            setKioskId('');
+        } else if (user?.kioskId) {
             setKioskId(user.kioskId);
         }
-    }, [user]);
+
+        setPeriodA({ month: '', year: '' });
+        setPeriodB({ month: '', year: '' });
+        setComparisonResults(null);
+        setAiAnalysisResult(null);
+    }, [user, open]);
+
+    useEffect(() => {
+        setPeriodA({ month: '', year: '' });
+        setPeriodB({ month: '', year: '' });
+        setComparisonResults(null);
+        setAiAnalysisResult(null);
+    }, [kioskId]);
+
+    useEffect(() => setPeriodA(p => ({ ...p, month: '' })), [periodA.year]);
+    useEffect(() => setPeriodB(p => ({ ...p, month: '' })), [periodB.year]);
+
+    const getMonthLabel = (monthNumber: number | string) => {
+        if (!monthNumber) return '';
+        const monthIndex = Number(monthNumber) - 1;
+        if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return '';
+        return new Date(0, monthIndex).toLocaleString('pt-BR', { month: 'long' });
+    };
+
+    const availableYears = useMemo(() => {
+        if (!kioskId) return [];
+        const yearsForKiosk = history
+            .filter(h => h.kioskId === kioskId)
+            .map(h => h.year.toString());
+        return [...new Set(yearsForKiosk)].sort((a, b) => b.localeCompare(a));
+    }, [kioskId, history]);
+
+    const availableMonthsA = useMemo(() => {
+        if (!kioskId || !periodA.year) return [];
+        const monthsForYear = history
+            .filter(h => h.kioskId === kioskId && h.year.toString() === periodA.year)
+            .map(h => h.month.toString());
+        return [...new Set(monthsForYear)]
+            .sort((a, b) => Number(a) - Number(b))
+            .map(m => ({ value: m, label: getMonthLabel(m) }));
+    }, [kioskId, periodA.year, history]);
+
+    const availableMonthsB = useMemo(() => {
+        if (!kioskId || !periodB.year) return [];
+        const monthsForYear = history
+            .filter(h => h.kioskId === kioskId && h.year.toString() === periodB.year)
+            .map(h => h.month.toString());
+        return [...new Set(monthsForYear)]
+            .sort((a, b) => Number(a) - Number(b))
+            .map(m => ({ value: m, label: getMonthLabel(m) }));
+    }, [kioskId, periodB.year, history]);
+
 
     const handleCompare = () => {
         if (!kioskId || !periodA.month || !periodA.year || !periodB.month || !periodB.year) return;
@@ -81,7 +132,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             if (consumptionA > 0) {
                 percentageChange = (variation / consumptionA) * 100;
             } else if (consumptionB > 0) {
-                percentageChange = Infinity; // Represents new consumption
+                percentageChange = Infinity;
             }
             
             results.push({
@@ -94,7 +145,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             });
         });
         setComparisonResults(results.sort((a,b) => a.productName.localeCompare(b.productName)));
-        setAiAnalysisResult(null); // Reset AI analysis on new comparison
+        setAiAnalysisResult(null);
     };
 
     const handleGetAIAnalysis = async () => {
@@ -106,8 +157,8 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         setAiAnalysisResult(null);
 
         const aiInput: ComparisonInput = {
-            periodA: `${months.find(m => m.value === periodA.month)?.label}/${periodA.year}`,
-            periodB: `${months.find(m => m.value === periodB.month)?.label}/${periodB.year}`,
+            periodA: `${getMonthLabel(periodA.month)}/${periodA.year}`,
+            periodB: `${getMonthLabel(periodB.month)}/${periodB.year}`,
             items: comparisonResults.map(r => ({
                 productName: r.productName,
                 consumptionA: r.consumptionA,
@@ -136,8 +187,8 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
 
         const doc = new jsPDF();
         const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'N/A';
-        const periodALabel = `${months.find(m => m.value === periodA.month)?.label}/${periodA.year}`;
-        const periodBLabel = `${months.find(m => m.value === periodB.month)?.label}/${periodB.year}`;
+        const periodALabel = `${getMonthLabel(periodA.month)}/${periodA.year}`;
+        const periodBLabel = `${getMonthLabel(periodB.month)}/${periodB.year}`;
 
         doc.setFontSize(18);
         doc.text(`Comparativo de Consumo - ${kioskName}`, 14, 22);
@@ -231,7 +282,9 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             return a.name.localeCompare(b.name);
         });
     }, [kiosks]);
-
+    
+    const isCompareDisabled = !kioskId || !periodA.month || !periodA.year || !periodB.month || !periodB.year;
+    
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
@@ -253,26 +306,30 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium">Período A</label>
                         <div className="flex gap-2">
-                             <Select value={periodA.month} onValueChange={(m) => setPeriodA(p => ({...p, month: m}))}><SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
-                                <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                             <Select value={periodA.year} onValueChange={(y) => setPeriodA(p => ({...p, year: y}))} disabled={!kioskId}>
+                                <SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
+                                <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                             </Select>
-                            <Select value={periodA.year} onValueChange={(y) => setPeriodA(p => ({...p, year: y}))}><SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
-                                <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                             <Select value={periodA.month} onValueChange={(m) => setPeriodA(p => ({...p, month: m}))} disabled={!periodA.year}>
+                                <SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
+                                <SelectContent>{availableMonthsA.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </div>
                      <div className="space-y-1.5">
                         <label className="text-sm font-medium">Período B</label>
                          <div className="flex gap-2">
-                            <Select value={periodB.month} onValueChange={(m) => setPeriodB(p => ({...p, month: m}))}><SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
-                                <SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                            <Select value={periodB.year} onValueChange={(y) => setPeriodB(p => ({...p, year: y}))} disabled={!kioskId}>
+                                <SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
+                                <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                             </Select>
-                            <Select value={periodB.year} onValueChange={(y) => setPeriodB(p => ({...p, year: y}))}><SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
-                                <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                            <Select value={periodB.month} onValueChange={(m) => setPeriodB(p => ({...p, month: m}))} disabled={!periodB.year}>
+                                <SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
+                                <SelectContent>{availableMonthsB.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </div>
-                    <Button onClick={handleCompare} disabled={!kioskId || !periodA.month || !periodA.year || !periodB.month || !periodB.year}>Comparar</Button>
+                    <Button onClick={handleCompare} disabled={isCompareDisabled}>Comparar</Button>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto pr-4">
@@ -329,7 +386,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                             </Card>
 
                             <div className="text-center">
-                                 <Button onClick={handleGetAIAnalysis} disabled={isAiLoading || !comparisonResults || comparisonResults.length === 0}>
+                                 <Button onClick={handleGetAIAnalysis} disabled={isAiLoading || !comparisonResults || comparisonResults.length === 0 || !periodA.month || !periodB.month}>
                                     <Wand2 className="mr-2" />
                                     {isAiLoading ? "Analisando..." : "Obter Análise da IA"}
                                  </Button>
