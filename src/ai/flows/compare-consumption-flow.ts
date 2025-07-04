@@ -46,16 +46,17 @@ const prompt = ai.definePrompt({
   input: {schema: SimplifiedPromptInputSchema},
   output: {schema: ComparisonOutputSchema.nullable()},
   prompt: `
-        Você é um analista de negócios para uma rede de quiosques de shakes. Sua tarefa é analisar a variação no consumo de insumos entre dois períodos.
+        Você é um analista de dados. Sua tarefa é analisar os dados de consumo de insumos fornecidos e escrever uma análise concisa em português.
 
-        Período A: {{{periodA}}}
-        Período B: {{{periodB}}}
+        Dados de Consumo:
+        Período de Referência (A): {{{periodA}}}
+        Período de Comparação (B): {{{periodB}}}
 
-        A seguir, uma lista de produtos e seus consumos em cada período.
+        Variação de consumo por insumo:
+        {{{dataAsString}}}
 
-{{{dataAsString}}}
-
-        Com base nesses dados, escreva uma análise curta e objetiva em um único parágrafo (no máximo 3 ou 4 frases) destacando as mudanças mais significativas. Foque nos maiores aumentos e quedas, tanto em termos absolutos quanto percentuais. Se possível, sugira uma possível causa para as variações mais importantes (ex: sazonalidade, popularidade de um novo produto, etc.). Seja direto e evite jargões.
+        Análise:
+        Escreva um parágrafo curto resumindo as principais variações de consumo entre os períodos A e B. Destaque os aumentos e as reduções mais notáveis.
     `,
     config: {
         safetySettings: [
@@ -77,8 +78,8 @@ const compareConsumptionFlow = ai.defineFlow(
   async (input) => {
     // Manually format the items array into a single string.
     const dataAsString = input.items.map(item => 
-        `- Insumo: ${item.productName}\n  - Consumo em ${input.periodA}: ${item.consumptionA} ${item.unit}\n  - Consumo em ${input.periodB}: ${item.consumptionB} ${item.unit}`
-    ).join('\n\n');
+        `- ${item.productName}: ${item.consumptionA} ${item.unit} (Período A) vs ${item.consumptionB} ${item.unit} (Período B)`
+    ).join('\n');
     
     // Create the simplified input object for the prompt.
     const simplifiedInput = {
