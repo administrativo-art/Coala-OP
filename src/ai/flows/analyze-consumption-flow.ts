@@ -73,8 +73,12 @@ const extractConsumptionDataPrompt = ai.definePrompt({
   prompt: `
     You are an expert data extraction bot.
     Your task is to analyze the provided PDF consumption report.
-    Carefully read the document and extract a list of all consumed items and their corresponding quantities.
-    The quantity MUST be returned as a string that includes both the number and the unit (e.g., "1.5 kg", "750g", "12 un").
+    The report might list items in a format like "PRODUCT NAME (unit) quantity", sometimes with the name split across multiple lines.
+    You must extract a list of all consumed items and their corresponding quantities.
+
+    - The 'name' you return should be the product name ONLY (e.g., "FARINHA LÁCTEA", "CHOCOLATE GRANULADO"). Do NOT include the unit in parentheses like "(g)" or "(un)" in the name field.
+    - The 'quantity' you return MUST be a string that includes both the number and the corresponding unit (e.g., "0 g", "1.5 kg", "12 un").
+
     Return the data as a single JSON object that strictly follows the provided output schema.
 
     PDF Content to Analyze: {{media url=pdfDataUri}}
