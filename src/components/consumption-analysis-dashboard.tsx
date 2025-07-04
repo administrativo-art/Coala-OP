@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useRef, useEffect } from "react"
@@ -17,7 +16,7 @@ import { convertValue } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, UploadCloud, Loader2, FileClock, Trash2 } from 'lucide-react'
+import { TrendingUp, ListFilter, UploadCloud, Loader2, History } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -25,13 +24,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Separator } from "./ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+import { ConsumptionHistoryModal } from "./consumption-history-modal";
 
-import { type ConsumptionReport } from "@/types";
-import { format } from "date-fns";
-import { ptBR } from 'date-fns/locale';
 
 const consumptionUploadSchema = z.object({
   kioskId: z.string().min(1, "Selecione um quiosque."),
@@ -94,7 +88,7 @@ export function ConsumptionAnalysisDashboard() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [reportToDelete, setReportToDelete] = useState<ConsumptionReport | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -194,7 +188,7 @@ export function ConsumptionAnalysisDashboard() {
                     results: finalResults,
                 });
                 
-                toast({ title: 'Sucesso', description: `Relatório "${file.name}" analisado e salvo.` });
+                toast({ title: 'Sucesso', description: `Relatório analisado e salvo.` });
 
             } catch (error: any) {
                  toast({ variant: 'destructive', title: 'Erro na Análise', description: error.message || 'Não foi possível analisar o relatório.' });
@@ -295,256 +289,189 @@ export function ConsumptionAnalysisDashboard() {
   ];
   const chartHeight = Math.max(350, chartData.length * 40);
 
-  const handleDeleteReportClick = (report: ConsumptionReport) => setReportToDelete(report);
-  const handleDeleteReportConfirm = async () => {
-    if (reportToDelete) {
-        await deleteReport(reportToDelete.id);
-        setReportToDelete(null);
-    }
-  };
-
-  const renderHistory = () => {
-    if (consumptionLoading) return <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
-    if (consumptionHistory.length === 0) return (
-        <div className="text-center py-8 text-muted-foreground">
-            <FileClock className="mx-auto h-12 w-12" />
-            <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise no histórico</h3>
-            <p className="mt-1 text-sm">Faça o upload de um relatório para começar.</p>
-        </div>
-    )
-    return (
-        <Accordion type="multiple" className="w-full space-y-3">
-            {consumptionHistory.map(report => (
-                <AccordionItem value={report.id} key={report.id} className="border-none">
-                    <Card>
-                        <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full">
-                            <div className="flex items-center justify-between gap-4 w-full">
-                                <div className="grid gap-1 flex-grow text-left">
-                                    <p className="font-semibold">{report.kioskName} - {report.month}/{report.year}</p>
-                                    <p className="text-sm text-muted-foreground">Analisado em: {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                    <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteReportClick(report); }}><span><Trash2 className="h-4 w-4" /></span></Button>
-                                </div>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="p-4 pt-0">
-                            {report.results && report.results.length > 0 ? (
-                               <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. Consumida (Unidade Base)</TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {report.results.map((item, index) => {
-                                                const productConfig = activeProducts.find(p => p.id === item.productId);
-                                                return (
-                                                    <TableRow key={index}>
-                                                        <TableCell>{item.productName}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{item.consumedQuantity.toLocaleString()} {productConfig?.unit || ''}</TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            ) : (<p className="text-center text-muted-foreground text-sm pt-4">Nenhum resultado para este relatório.</p>)}
-                        </AccordionContent>
-                    </Card>
-                </AccordionItem>
-            ))}
-        </Accordion>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-        <Accordion type="single" collapsible className="w-full" defaultValue="importer">
-          <AccordionItem value="importer" className="border-0">
+    <>
+        <div className="space-y-6">
+            <Accordion type="single" collapsible className="w-full" defaultValue="importer">
+            <AccordionItem value="importer" className="border-0">
+                <Card>
+                    <AccordionTrigger className="w-full p-4 text-left hover:no-underline [&[data-state=open]>div>button>svg]:rotate-180">
+                        <CardHeader className="p-0">
+                        <CardTitle>Importar Relatório de Consumo</CardTitle>
+                        <CardDescription>Faça o upload de um relatório de vendas/consumo em formato CSV para análise.</CardDescription>
+                        </CardHeader>
+                    </AccordionTrigger>
+                <AccordionContent className="p-4 pt-0">
+                    <Form {...uploadForm}>
+                        <form onSubmit={uploadForm.handleSubmit(onUploadSubmit)} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <FormField control={uploadForm.control} name="kioskId" render={({ field }) => (
+                                <FormItem className="col-span-2"><FormLabel>Quiosque</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                    <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                                </Select><FormMessage />
+                                </FormItem>
+                            )}/>
+                            <FormField control={uploadForm.control} name="month" render={({ field }) => (
+                                <FormItem><FormLabel>Mês</FormLabel><FormControl><Input type="number" min="1" max="12" {...field} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                            <FormField control={uploadForm.control} name="year" render={({ field }) => (
+                                <FormItem><FormLabel>Ano</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                        </div>
+                        <FormField
+                            control={uploadForm.control}
+                            name="file"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Arquivo (CSV)</FormLabel>
+                                <FormControl>
+                                <Input
+                                    type="file"
+                                    accept=".csv"
+                                    ref={fileInputRef}
+                                    onChange={(e) => field.onChange(e.target.files)}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <Button type="submit" disabled={isAnalyzing}>
+                            {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />}
+                            {isAnalyzing ? 'Analisando...' : 'Analisar Relatório'}
+                        </Button>
+                        </form>
+                    </Form>
+                </AccordionContent>
+                </Card>
+            </AccordionItem>
+            </Accordion>
+
             <Card>
-                <AccordionTrigger className="w-full p-0 text-left hover:no-underline [&[data-state=open]>div>button>svg]:rotate-180">
-                    <CardHeader className="flex-grow">
-                    <CardTitle>Importar Relatório de Consumo</CardTitle>
-                    <CardDescription>Faça o upload de um relatório de vendas/consumo em formato CSV para análise.</CardDescription>
-                    </CardHeader>
-                </AccordionTrigger>
-              <AccordionContent>
-                <CardContent>
-                  <Form {...uploadForm}>
-                      <form onSubmit={uploadForm.handleSubmit(onUploadSubmit)} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <FormField control={uploadForm.control} name="kioskId" render={({ field }) => (
-                              <FormItem className="col-span-2"><FormLabel>Quiosque</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                  <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                              </Select><FormMessage />
-                              </FormItem>
-                          )}/>
-                          <FormField control={uploadForm.control} name="month" render={({ field }) => (
-                              <FormItem><FormLabel>Mês</FormLabel><FormControl><Input type="number" min="1" max="12" {...field} /></FormControl><FormMessage /></FormItem>
-                          )}/>
-                          <FormField control={uploadForm.control} name="year" render={({ field }) => (
-                              <FormItem><FormLabel>Ano</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                          )}/>
-                      </div>
-                      <FormField
-                          control={uploadForm.control}
-                          name="file"
-                          render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Arquivo (CSV)</FormLabel>
-                              <FormControl>
-                              <Input
-                                  type="file"
-                                  accept=".csv"
-                                  ref={fileInputRef}
-                                  onChange={(e) => field.onChange(e.target.files)}
-                              />
-                              </FormControl>
-                              <FormMessage />
-                          </FormItem>
-                          )}
-                      />
-                      <Button type="submit" disabled={isAnalyzing}>
-                          {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />}
-                          {isAnalyzing ? 'Analisando...' : 'Analisar Relatório'}
-                      </Button>
-                      </form>
-                  </Form>
-                </CardContent>
-              </AccordionContent>
+            <CardHeader className="flex flex-col gap-4">
+                <div>
+                    <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
+                    </CardTitle>
+                    <CardDescription>
+                        {user?.username === 'master' 
+                            ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
+                            : `Produtos consumidos no seu quiosque.`}
+                    </CardDescription>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsHistoryModalOpen(true)}>
+                        <History className="mr-2 h-4 w-4" /> Histórico
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-auto">
+                                <ListFilter className="mr-2 h-4 w-4" />
+                                Filtrar Produtos ({selectedProducts.length})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64">
+                            <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-60">
+                            {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                                <DropdownMenuCheckboxItem
+                                    key={product.id}
+                                    checked={selectedProducts.includes(product.id)}
+                                    onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {product.baseName}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {user?.username === 'master' && (
+                        <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
+                            <SelectTrigger className="w-full sm:w-[240px]">
+                                <SelectValue placeholder="Selecionar Quiosque" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent className="pr-2 pl-0">
+                { loadingData ? (
+                    <Skeleton className="h-[350px] w-full" />
+                    ) : chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <BarChart
+                            layout="vertical"
+                            data={chartData}
+                            margin={{
+                                top: 5,
+                                right: 50,
+                                left: 20,
+                                bottom: 5,
+                            }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" allowDecimals={false} />
+                            <YAxis
+                                type="category"
+                                dataKey="name"
+                                width={150}
+                                tick={{ fontSize: 12 }}
+                                interval={0}
+                            />
+                            <Tooltip 
+                                cursor={{fill: 'hsl(var(--muted))'}}
+                                contentStyle={{ 
+                                    backgroundColor: "hsl(var(--background))", 
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "var(--radius)"
+                                }}
+                            />
+                            <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                            {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                                <LabelList dataKey="Consumo" position="right" offset={10} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                    ) : (
+                    <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
+                            <TrendingUp className="h-12 w-12 mb-4" />
+                            <p className="font-semibold">
+                                {selectedProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
+                            </p>
+                            <p className="text-sm">
+                                {selectedProducts.length === 0
+                                ? "Selecione produtos no filtro para exibi-los no gráfico."
+                                : user?.username === 'master' && selectedKiosk !== 'matriz' 
+                                    ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
+                                    : "Faça o upload de relatórios de consumo para gerar o gráfico."
+                                }
+                            </p>
+                    </div>
+                    )}
+            </CardContent>
             </Card>
-          </AccordionItem>
-        </Accordion>
-
-        <Separator />
-
-        <div>
-            <h3 className="text-lg font-semibold mb-2">Histórico de Análises de Consumo</h3>
-            {renderHistory()}
         </div>
 
-        <Separator />
-
-        <Card>
-        <CardHeader className="flex flex-col gap-4">
-            <div>
-                <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
-                </CardTitle>
-                <CardDescription>
-                    {user?.username === 'master' 
-                        ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
-                        : `Produtos consumidos no seu quiosque.`}
-                </CardDescription>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto">
-                            <ListFilter className="mr-2 h-4 w-4" />
-                            Filtrar Produtos ({selectedProducts.length})
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64">
-                        <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ScrollArea className="h-60">
-                        {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
-                            <DropdownMenuCheckboxItem
-                                key={product.id}
-                                checked={selectedProducts.includes(product.id)}
-                                onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
-                                onSelect={(e) => e.preventDefault()}
-                            >
-                                {product.baseName}
-                            </DropdownMenuCheckboxItem>
-                        ))}
-                        </ScrollArea>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                {user?.username === 'master' && (
-                    <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
-                        <SelectTrigger className="w-full sm:w-[240px]">
-                            <SelectValue placeholder="Selecionar Quiosque" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                )}
-            </div>
-        </CardHeader>
-        <CardContent className="pr-2 pl-0">
-            { loadingData ? (
-                <Skeleton className="h-[350px] w-full" />
-                ) : chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                    <BarChart
-                        layout="vertical"
-                        data={chartData}
-                        margin={{
-                            top: 5,
-                            right: 50,
-                            left: 20,
-                            bottom: 5,
-                        }}
-                    >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" allowDecimals={false} />
-                        <YAxis
-                            type="category"
-                            dataKey="name"
-                            width={150}
-                            tick={{ fontSize: 12 }}
-                            interval={0}
-                        />
-                        <Tooltip 
-                            cursor={{fill: 'hsl(var(--muted))'}}
-                            contentStyle={{ 
-                                backgroundColor: "hsl(var(--background))", 
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "var(--radius)"
-                            }}
-                        />
-                        <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
-                           {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                            <LabelList dataKey="Consumo" position="right" offset={10} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-                ) : (
-                <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
-                        <TrendingUp className="h-12 w-12 mb-4" />
-                        <p className="font-semibold">
-                            {selectedProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
-                        </p>
-                        <p className="text-sm">
-                            {selectedProducts.length === 0
-                            ? "Selecione produtos no filtro para exibi-los no gráfico."
-                            : user?.username === 'master' && selectedKiosk !== 'matriz' 
-                                ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
-                                : "Faça o upload de relatórios de consumo para gerar o gráfico."
-                            }
-                        </p>
-                </div>
-                )}
-        </CardContent>
-        </Card>
-
-         {reportToDelete && (
-            <DeleteConfirmationDialog
-                open={!!reportToDelete}
-                onOpenChange={() => setReportToDelete(null)}
-                onConfirm={handleDeleteReportConfirm}
-                itemName={`o relatório de consumo de ${reportToDelete.kioskName} (${reportToDelete.month}/${reportToDelete.year})`}
-            />
-        )}
-    </div>
+        <ConsumptionHistoryModal
+            open={isHistoryModalOpen}
+            onOpenChange={setIsHistoryModalOpen}
+            history={consumptionHistory}
+            loading={consumptionLoading}
+            deleteReport={deleteReport}
+        />
+    </>
   )
 }
