@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react";
@@ -252,5 +253,5 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-    )
+    );
 }
