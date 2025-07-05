@@ -51,7 +51,8 @@ export default function LoginPage() {
   }
   
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 dark">
+    <div style={{ backgroundImage: "url('/login-background.svg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+         className="flex min-h-screen flex-col items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
           <div className="inline-block font-logo mb-4 select-none">
@@ -94,3 +95,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
