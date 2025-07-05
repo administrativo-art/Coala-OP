@@ -97,8 +97,12 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
         statusNovo: newStatus,
         changedBy: { userId: user.id, username: user.username },
         changedAt: now,
-        detalhes: payload?.detalhesResultado,
     };
+    
+    // Conditionally add 'detalhes' to history to avoid 'undefined'
+    if (payload?.detalhesResultado) {
+        historyItem.detalhes = payload.detalhesResultado;
+    }
 
     const updateData: Partial<ReturnRequest> = {
         ...payload,
