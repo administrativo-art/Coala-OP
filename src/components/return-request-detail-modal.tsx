@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -89,6 +90,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
   const handleStatusChange = (newStatus: ReturnRequest['status']) => {
     let updatePayload: Partial<ReturnRequest> = {
+        status: newStatus,
         checklist: {
             ...request.checklist,
             [request.status]: checklist,
@@ -101,7 +103,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
     if ((newStatus === 'finalizado_sucesso' || newStatus === 'finalizado_erro') && resultDetails) {
         updatePayload.detalhesResultado = resultDetails;
     }
-    updateReturnRequest(request.id, newStatus, updatePayload);
+    updateReturnRequest(request.id, updatePayload);
   };
 
   return (
@@ -121,7 +123,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
         <ScrollArea className="flex-1 pr-6">
             <div className="space-y-6 py-4">
-                {/* Ações e Checklist */}
                 <div className="p-4 border rounded-lg bg-muted/30">
                     <h3 className="font-semibold text-lg mb-4">Ações e Checklist</h3>
                     
@@ -161,9 +162,8 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
                     </div>
                 </div>
 
-                {/* Histórico */}
                 <div className="p-4 border rounded-lg">
-                    <h3 className="font-semibold text-lg mb-2">Histórico de Status</h3>
+                    <h3 className="font-semibold text-lg mb-2">Histórico de Situação</h3>
                     <div className="space-y-4">
                         {request.historico.map((item, index) => (
                             <div key={index} className="flex items-start gap-4">
@@ -172,13 +172,19 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
                                     {index < request.historico.length - 1 && <div className="w-px h-8 bg-border"></div>}
                                 </div>
                                 <div>
-                                    <p className="font-medium">
-                                        Status alterado de <span className="font-bold">{returnRequestStatuses[item.statusAnterior].label}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo].label}</span>
-                                    </p>
+                                    {item.detalhes === "Chamado criado." ? (
+                                        <p className="font-medium">
+                                            Chamado criado na situação <span className="font-bold">{returnRequestStatuses[item.statusNovo].label}</span>
+                                        </p>
+                                    ) : (
+                                        <p className="font-medium">
+                                            Situação alterada de <span className="font-bold">{returnRequestStatuses[item.statusAnterior].label}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo].label}</span>
+                                        </p>
+                                    )}
                                     <p className="text-sm text-muted-foreground">
                                         por {item.changedBy.username} em {format(parseISO(item.changedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                                     </p>
-                                    {item.detalhes && <p className="text-sm mt-1 p-2 bg-muted rounded-md">{item.detalhes}</p>}
+                                    {item.detalhes && item.detalhes !== "Chamado criado." && <p className="text-sm mt-1 p-2 bg-muted rounded-md">{item.detalhes}</p>}
                                 </div>
                             </div>
                         ))}

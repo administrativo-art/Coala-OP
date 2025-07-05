@@ -259,6 +259,14 @@ export type ReturnRequest = {
     };
 };
 
+export interface ReturnRequestContextType {
+  requests: ReturnRequest[];
+  loading: boolean;
+  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number }) => Promise<void>;
+  updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
+  deleteReturnRequest: (requestId: string) => Promise<void>;
+}
+
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },

@@ -13,7 +13,7 @@ export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
   addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number }) => Promise<void>;
-  updateReturnRequest: (requestId: string, newStatus: ReturnRequest['status'], payload?: Partial<ReturnRequest>) => Promise<void>;
+  updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }
 
@@ -66,7 +66,7 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
             insumoNome: getProductFullName(product),
             status: 'aberta',
             historico: [{
-                statusAnterior: 'aberta', // Not ideal, but required by type
+                statusAnterior: 'aberta',
                 statusNovo: 'aberta',
                 changedBy: { userId: user.id, username: user.username },
                 changedAt: now,
@@ -85,38 +85,46 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, products, getProductFullName]);
   
-  const updateReturnRequest = useCallback(async (requestId: string, newStatus: ReturnRequest['status'], payload?: Partial<ReturnRequest>) => {
+  const updateReturnRequest = useCallback(async (requestId: string, payload: Partial<ReturnRequest>) => {
     if (!user) throw new Error("Usuário não autenticado.");
     const requestRef = doc(db, "returnRequests", requestId);
-    const currentRequest = requests.find(r => r.id === requestId);
-    if (!currentRequest) throw new Error("Chamado não encontrado.");
-
-    const now = new Date().toISOString();
-    const historyItem: ReturnRequestHistoricoItem = {
-        statusAnterior: currentRequest.status,
-        statusNovo: newStatus,
-        changedBy: { userId: user.id, username: user.username },
-        changedAt: now,
-    };
     
-    // Conditionally add 'detalhes' to history to avoid 'undefined'
-    if (payload?.detalhesResultado) {
-        historyItem.detalhes = payload.detalhesResultado;
-    }
-
-    const updateData: Partial<ReturnRequest> = {
-        ...payload,
-        status: newStatus,
-        updatedAt: now,
-        historico: [...currentRequest.historico, historyItem],
-    };
-
     try {
-        await updateDoc(requestRef, updateData);
+        await runTransaction(db, async (transaction) => {
+            const requestDoc = await transaction.get(requestRef);
+            if (!requestDoc.exists()) {
+                throw "Document does not exist!";
+            }
+            
+            const currentRequest = requestDoc.data() as ReturnRequest;
+            const now = new Date().toISOString();
+            
+            const updateData: Partial<ReturnRequest> = {
+                ...payload,
+                updatedAt: now,
+            };
+
+            if (payload.status && payload.status !== currentRequest.status) {
+                const historyItem: ReturnRequestHistoricoItem = {
+                    statusAnterior: currentRequest.status,
+                    statusNovo: payload.status,
+                    changedBy: { userId: user.id, username: user.username },
+                    changedAt: now,
+                };
+                if (payload.detalhesResultado) {
+                    historyItem.detalhes = payload.detalhesResultado;
+                }
+                updateData.historico = [...currentRequest.historico, historyItem];
+            } else {
+                updateData.historico = currentRequest.historico;
+            }
+
+            transaction.update(requestRef, updateData);
+        });
     } catch(error) {
         console.error("Error updating return request:", error);
     }
-  }, [user, requests]);
+  }, [user]);
 
   const deleteReturnRequest = useCallback(async (requestId: string) => {
     try {
