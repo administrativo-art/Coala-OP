@@ -14,6 +14,7 @@ export type Location = {
 export type Product = {
   id: string;
   baseName: string;
+  brand?: string;
   barcode?: string;
   imageUrl?: string;
   category: UnitCategory;
@@ -29,6 +30,7 @@ export type Product = {
 
 export type ProductDefinition = {
     baseName: string;
+    brand?: string;
     category: UnitCategory;
     unit: string;
 }

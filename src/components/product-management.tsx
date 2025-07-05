@@ -40,6 +40,7 @@ const PhotoCaptureModal = dynamic(
 
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
+  brand: z.string().optional(),
   barcode: z.string().optional(),
   imageUrl: z.string().optional(),
   category: z.enum(unitCategories),
@@ -75,6 +76,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         resolver: zodResolver(productFormSchema),
         defaultValues: {
             baseName: '',
+            brand: '',
             barcode: '',
             imageUrl: '',
             category: 'Massa',
@@ -109,6 +111,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         setEditingProduct(product);
         form.reset({
             baseName: product.baseName,
+            brand: product.brand || '',
             barcode: product.barcode || '',
             imageUrl: product.imageUrl || '',
             category: product.category,
@@ -259,24 +262,32 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     </div>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <FormField control={form.control} name="barcode" render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Código de Barras</FormLabel>
-                                                <div className="flex gap-2">
-                                                    <FormControl>
-                                                        <Input placeholder="Escanear ou digitar" {...field} />
-                                                    </FormControl>
-                                                    <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
-                                                        <Camera className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}/>
                                         <FormField control={form.control} name="baseName" render={({ field }) => (
                                             <FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>
                                         )}/>
+                                        <FormField control={form.control} name="brand" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Marca (Opcional)</FormLabel>
+                                                <FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}/>
                                     </div>
+                                    
+                                    <FormField control={form.control} name="barcode" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Código de Barras</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormControl>
+                                                    <Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} />
+                                                </FormControl>
+                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                                                    <Camera className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
 
                                     <div className="grid grid-cols-3 gap-4">
                                         <FormField control={form.control} name="category" render={({ field }) => (
@@ -332,6 +343,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                     setEditingProduct(null);
                                     form.reset({
                                         baseName: '',
+                                        brand: '',
                                         barcode: '',
                                         imageUrl: '',
                                         category: 'Massa',
