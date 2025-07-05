@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react";
@@ -10,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, PackageUp, Inbox, Trash2 } from "lucide-react";
+import { PlusCircle, Truck, Inbox, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useReturnRequests } from "@/hooks/use-return-requests";
 import { type ReturnRequest, returnRequestStatuses } from "@/types";
@@ -114,7 +113,7 @@ export function ReturnRequestManagement() {
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <div>
-                            <CardTitle className="flex items-center gap-2"><PackageUp />Controle de Devoluções e Bonificações</CardTitle>
+                            <CardTitle className="flex items-center gap-2"><Truck />Controle de Devoluções e Bonificações</CardTitle>
                             <CardDescription>Gerencie o ciclo de vida dos chamados com fornecedores.</CardDescription>
                         </div>
                         {permissions.returns.add && (

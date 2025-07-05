@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -21,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, PackageUp } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -183,7 +182,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         </AccordionContent>
                     </AccordionItem>
                      <AccordionItem value="returns">
-                        <AccordionTrigger className="text-lg font-semibold"><PackageUp className="mr-2 h-5 w-5" /> Devoluções e Bonificações</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Devoluções e Bonificações</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.returns.add", "Abrir chamados", "Permite abrir novos chamados de devolução ou bonificação.")}
                             {renderPermissionSwitch("permissions.returns.updateStatus", "Atualizar status", "Permite alterar o status de um chamado (ex: de aberta para em andamento).")}

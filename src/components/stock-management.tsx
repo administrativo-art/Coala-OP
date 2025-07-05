@@ -1,10 +1,9 @@
-
 "use client";
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, PackageUp } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, Truck } from 'lucide-react';
 
 export function StockManagement() {
     return (
@@ -49,7 +48,7 @@ export function StockManagement() {
                 <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
-                            <PackageUp className="h-10 w-10 text-primary" />
+                            <Truck className="h-10 w-10 text-primary" />
                         </div>
                         <CardTitle className="text-2xl mb-2">Devoluções e Bonificações</CardTitle>
                         <CardDescription>Gerencie o processo de devolução e bonificação de insumos com fornecedores.</CardDescription>
