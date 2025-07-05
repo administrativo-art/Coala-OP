@@ -134,6 +134,7 @@ export type PermissionSet = {
     forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean };
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
+    returns: { add: boolean; updateStatus: boolean; delete: boolean; };
 };
 
 export type Profile = {
@@ -210,6 +211,54 @@ export type FormSubmission = {
     answers: FormAnswer[];
 };
 
+export type ReturnRequestStatus = 'aberta' | 'aguardando_comunicacao' | 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
+
+export const returnRequestStatuses: { [key in ReturnRequestStatus]: { label: string; color: string } } = {
+    aberta: { label: 'Aberta', color: 'bg-blue-500' },
+    aguardando_comunicacao: { label: 'Aguardando Comunicação', color: 'bg-yellow-500' },
+    em_andamento: { label: 'Em Andamento', color: 'bg-orange-500' },
+    finalizado_sucesso: { label: 'Finalizado (Sucesso)', color: 'bg-green-600' },
+    finalizado_erro: { label: 'Finalizado (Erro)', color: 'bg-red-600' },
+};
+
+export type ReturnRequestHistoricoItem = {
+    statusAnterior: ReturnRequestStatus;
+    statusNovo: ReturnRequestStatus;
+    changedBy: {
+        userId: string;
+        username: string;
+    };
+    changedAt: string; // Data em formato ISO
+    detalhes?: string;
+};
+
+export type ReturnRequestChecklistItem = {
+    texto: string;
+    feito: boolean;
+};
+
+export type ReturnRequest = {
+    id: string; // ID do documento no Firestore
+    numero: string; // Ex: "DEV-20250704-0001"
+    insumoId: string; // Referência ao ID do insumo na coleção `products`
+    insumoNome: string; // Para exibição rápida, ex: "Ovomaltine (400g)"
+    lote: string;
+    quantidade: number;
+    tipo: 'devolucao' | 'bonificacao';
+    status: ReturnRequestStatus;
+    dataPrevisaoRetorno?: string; // Data em formato ISO
+    detalhesResultado?: string;
+    anexos?: { url: string; nome: string }[];
+    historico: ReturnRequestHistoricoItem[];
+    checklist: { [key: string]: ReturnRequestChecklistItem[] };
+    createdAt: string; // Data em formato ISO
+    updatedAt: string; // Data em formato ISO
+    createdBy: {
+        userId: string;
+        username: string;
+    };
+};
+
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
@@ -219,6 +268,7 @@ export const defaultGuestPermissions: PermissionSet = {
     forms: { manage: false, fill: false, viewHistory: false, deleteHistory: false },
     stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
+    returns: { add: false, updateStatus: false, delete: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -230,6 +280,7 @@ export const defaultUserPermissions: PermissionSet = {
     forms: { manage: false, fill: true, viewHistory: true, deleteHistory: false },
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
+    returns: { add: true, updateStatus: true, delete: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -241,4 +292,5 @@ export const defaultAdminPermissions: PermissionSet = {
     forms: { manage: true, fill: true, viewHistory: true, deleteHistory: true },
     stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
+    returns: { add: true, updateStatus: true, delete: true },
 };

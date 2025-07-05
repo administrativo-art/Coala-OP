@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
@@ -57,8 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (currentUser) {
-      // FAILSAFE: If the user is 'master', always grant full admin permissions,
-      // bypassing the profile system for this specific user to ensure functionality.
       if (currentUser.username === 'master') {
         setPermissions(defaultAdminPermissions);
         return;
@@ -69,7 +68,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const profilePermissions = userProfile ? userProfile.permissions : defaultGuestPermissions;
         
-        // Deep merge to ensure all permission keys exist, preventing crashes.
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
@@ -77,7 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
             kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
             predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
-            checklists: { ...defaultGuestPermissions.checklists, ...profilePermissions?.checklists },
+            forms: { ...defaultGuestPermissions.forms, ...profilePermissions?.forms },
+            stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profilePermissions?.stockAnalysis },
+            consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
+            returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
@@ -115,14 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setUsers(usersData);
         
-        // Final validation of current user
         if (currentUser) {
             const foundUser = usersData.find(u => u.id === currentUser.id);
             if (!foundUser) {
-                // The stored user no longer exists in the DB
                 logout();
             } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
-                // User data has changed (e.g., profile), update local state
                 setCurrentUser(foundUser);
                 window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
             }
@@ -178,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await deleteDoc(doc(db, "users", userId));
     } catch (error) {
         console.error("Error deleting user:", error);
+        throw error;
     }
   };
   
