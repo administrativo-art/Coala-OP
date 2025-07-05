@@ -1,11 +1,10 @@
-
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { type ReturnRequest, returnRequestStatuses } from '@/types';
+import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistItem } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
@@ -60,13 +59,42 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   const { updateReturnRequest } = useReturnRequests();
   const [resultDetails, setResultDetails] = useState('');
   const [returnDate, setReturnDate] = useState<Date | undefined>();
+  const [checklist, setChecklist] = useState<ReturnRequestChecklistItem[]>([]);
+
+  useEffect(() => {
+    if (request) {
+        const savedChecklist = request.checklist?.[request.status];
+        if (savedChecklist && savedChecklist.length > 0) {
+            setChecklist(savedChecklist);
+        } else {
+            const items = (CHECKLIST_CONFIG[request.status] || []).map(item => ({ ...item, feito: false }));
+            setChecklist(items);
+        }
+        setResultDetails(request.detalhesResultado || '');
+        setReturnDate(request.dataPrevisaoRetorno ? parseISO(request.dataPrevisaoRetorno) : undefined);
+    }
+  }, [request]);
 
   if (!request) return null;
 
   const currentStatusInfo = returnRequestStatuses[request.status];
 
+  const handleChecklistChange = (index: number, checked: boolean) => {
+    setChecklist(current => {
+        const newChecklist = [...current];
+        newChecklist[index].feito = checked;
+        return newChecklist;
+    });
+  };
+
   const handleStatusChange = (newStatus: ReturnRequest['status']) => {
-    let updatePayload: Partial<ReturnRequest> = {};
+    let updatePayload: Partial<ReturnRequest> = {
+        checklist: {
+            ...request.checklist,
+            [request.status]: checklist,
+        }
+    };
+
     if (newStatus === 'aguardando_comunicacao' && returnDate) {
         updatePayload.dataPrevisaoRetorno = returnDate.toISOString();
     }
@@ -75,8 +103,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
     }
     updateReturnRequest(request.id, newStatus, updatePayload);
   };
-  
-  const checklistItems = CHECKLIST_CONFIG[request.status] || [];
 
   return (
     <Dialog open={!!request} onOpenChange={onOpenChange}>
@@ -99,9 +125,13 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
                 <div className="p-4 border rounded-lg bg-muted/30">
                     <h3 className="font-semibold text-lg mb-4">Ações e Checklist</h3>
                     
-                    {checklistItems.map((item, index) => (
+                    {checklist.map((item, index) => (
                         <div key={index} className="flex items-center space-x-2 mb-2">
-                           <Checkbox id={`chk-${index}`} disabled />
+                           <Checkbox 
+                                id={`chk-${index}`} 
+                                checked={item.feito}
+                                onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
+                           />
                            <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug">{item.texto}</Label>
                         </div>
                     ))}
