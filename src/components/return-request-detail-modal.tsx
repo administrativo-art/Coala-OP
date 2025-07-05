@@ -223,28 +223,32 @@ CT Sorvetes LTDA`;
                            const isReturnDateItem = item.texto === "Inserir previsão de retorno (data)";
 
                            return (
-                                <div key={index} className="flex items-center justify-between space-x-2">
-                                    <div className="flex items-center gap-2">
-                                        <Checkbox 
-                                            id={`chk-${index}`} 
-                                            checked={item.feito}
-                                            onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
-                                        />
-                                        <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug flex items-center gap-2">
-                                            {item.texto}
-                                        </Label>
+                                <div key={index}>
+                                    <div className="flex items-center justify-between space-x-2">
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox 
+                                                id={`chk-${index}`} 
+                                                checked={item.feito}
+                                                onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
+                                            />
+                                            <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug flex items-center gap-2">
+                                                {item.texto}
+                                            </Label>
+                                        </div>
+                                        <div className="flex items-center">
+                                            {isCommunicationItem && (
+                                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
+                                            )}
+                                            {isFilmingItem && (
+                                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center">
-                                        {isCommunicationItem && (
-                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
-                                        )}
-                                        {isFilmingItem && (
-                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
-                                        )}
-                                        {isContactDateItem && (
+                                    {isContactDateItem && (
+                                        <div className="pl-8 pt-2">
                                             <Popover>
                                                 <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("w-[220px] justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
+                                                <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
                                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                                     {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
                                                 </Button>
@@ -254,19 +258,21 @@ CT Sorvetes LTDA`;
                                                     <div className="p-2 border-t"><Input type="time" value={contactDate ? format(contactDate, 'HH:mm') : ''} onChange={handleContactTimeChange} /></div>
                                                 </PopoverContent>
                                             </Popover>
-                                        )}
-                                        {isReturnDateItem && (
+                                        </div>
+                                    )}
+                                    {isReturnDateItem && (
+                                        <div className="pl-8 pt-2">
                                             <Popover>
                                                 <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("w-[220px] justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
+                                                <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
                                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                                     {returnDate ? format(returnDate, "dd/MM/yyyy") : <span>Selecionar data de retorno</span>}
                                                 </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus /></PopoverContent>
                                             </Popover>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                            )
                         })}
