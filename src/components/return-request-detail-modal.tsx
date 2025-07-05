@@ -83,14 +83,23 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   };
   
   const getUpdatePayload = (): Partial<ReturnRequest> => {
-      return {
+      const payload: Partial<ReturnRequest> = {
         checklist: {
             ...request.checklist,
             [effectiveStatus]: checklist,
         },
         detalhesResultado: resultDetails,
         dataContatoRepresentante: contactDate?.toISOString(),
-      }
+      };
+      
+      Object.keys(payload).forEach(key => {
+        const typedKey = key as keyof typeof payload;
+        if (payload[typedKey] === undefined) {
+          delete payload[typedKey];
+        }
+      });
+      
+      return payload;
   };
   
   const handleSaveChanges = () => {
@@ -108,9 +117,20 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
     if (newStatus === 'finalizado_sucesso' || newStatus === 'finalizado_erro') {
         updatePayload.dataConclusao = new Date().toISOString();
     }
+    
+    const updatedRequest = { ...request, ...updatePayload };
+    setChecklist((CHECKLIST_CONFIG[newStatus] || []).map(item => ({...item, feito: false})));
+    setRequestToView(updatedRequest as ReturnRequest);
 
     updateReturnRequest(request.id, updatePayload);
   };
+
+  const setRequestToView = (updatedRequest: ReturnRequest) => {
+    // This is a placeholder function that should be handled by the parent component
+    // In this case, we need to update local state to reflect changes immediately
+    const event = new CustomEvent('requestUpdate', { detail: updatedRequest });
+    window.dispatchEvent(event);
+  }
   
   const handleArchive = () => {
     if (!request) return;
@@ -239,7 +259,7 @@ CT Sorvetes LTDA`;
                                         <div className="pl-8 pt-2">
                                             <Popover>
                                                 <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
+                                                <Button variant={"outline"} size="sm" className={cn("justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
                                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                                     {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
                                                 </Button>
