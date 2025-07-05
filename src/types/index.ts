@@ -248,6 +248,7 @@ export type ReturnRequest = {
     motivo: string;
     status: ReturnRequestStatus;
     dataPrevisaoRetorno?: string; // Data em formato ISO
+    dataConclusao?: string; // Data em formato ISO
     detalhesResultado?: string;
     anexos?: { url: string; nome: string }[];
     historico: ReturnRequestHistoricoItem[];

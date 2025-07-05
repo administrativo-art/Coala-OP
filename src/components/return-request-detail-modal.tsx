@@ -9,7 +9,7 @@ import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistI
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { Calendar as CalendarIcon, Check, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, User, CalendarCheck, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive } from 'lucide-react';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -92,6 +92,10 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         dataPrevisaoRetorno: returnDate ? returnDate.toISOString() : undefined,
         detalhesResultado: resultDetails,
     };
+    
+    if (newStatus === 'finalizado_sucesso' || newStatus === 'finalizado_erro') {
+        updatePayload.dataConclusao = new Date().toISOString();
+    }
 
     updateReturnRequest(request.id, updatePayload);
   };
@@ -142,6 +146,20 @@ CT Sorvetes LTDA`;
                 </DialogDescription>
               </div>
               <Badge className={cn("text-white", currentStatusInfo.color)}>{currentStatusInfo.label}</Badge>
+            </div>
+             <div className="text-xs text-muted-foreground pt-2 space-y-1">
+                {request.createdBy && (
+                    <div className="flex items-center gap-2">
+                        <User className="h-3 w-3" />
+                        <span>Aberto por: <strong>{request.createdBy.username}</strong> em {format(parseISO(request.createdAt), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    </div>
+                )}
+                {isFinalized && request.dataConclusao && (
+                    <div className="flex items-center gap-2">
+                        <CalendarCheck className="h-3 w-3" />
+                        <span>Concluído em: <strong>{format(parseISO(request.dataConclusao), "dd/MM/yyyy", { locale: ptBR })}</strong></span>
+                    </div>
+                )}
             </div>
           </DialogHeader>
 
