@@ -219,25 +219,21 @@ CT Sorvetes LTDA`;
 
                            return (
                                 <div key={index}>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox 
-                                                id={`chk-${index}`} 
-                                                checked={item.feito}
-                                                onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
-                                            />
-                                            <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug flex items-center gap-2">
-                                                {item.texto}
-                                            </Label>
-                                        </div>
-                                        <div className="flex items-center">
-                                            {isCommunicationItem && (
-                                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
-                                            )}
-                                            {isFilmingItem && (
-                                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
-                                            )}
-                                        </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id={`chk-${index}`} 
+                                            checked={item.feito}
+                                            onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
+                                        />
+                                        <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug">
+                                            {item.texto}
+                                        </Label>
+                                        {isCommunicationItem && (
+                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
+                                        )}
+                                        {isFilmingItem && (
+                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
+                                        )}
                                     </div>
                                     {isContactDateItem && (
                                         <div className="pl-8 pt-2">
