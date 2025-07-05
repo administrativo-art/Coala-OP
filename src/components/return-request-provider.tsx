@@ -7,12 +7,12 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 
 export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; dataPrevisaoRetorno: Date; }) => Promise<void>;
+  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
   updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }
@@ -39,7 +39,7 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addReturnRequest = useCallback(async (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; dataPrevisaoRetorno: Date; }) => {
+  const addReturnRequest = useCallback(async (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => {
     if (!user) throw new Error("Usuário não autenticado.");
     const product = products.find(p => p.id === data.insumoId);
     if (!product) throw new Error("Produto não encontrado.");
@@ -59,23 +59,25 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
             return `${prefix}-${dateStr}-${sequence}`;
         });
 
-        const now = new Date().toISOString();
+        const now = new Date();
+        const dataPrevisaoRetorno = addDays(now, 45);
+
         const newRequest: Omit<ReturnRequest, 'id'> = {
             ...data,
             numero: newNumero,
             insumoNome: getProductFullName(product),
             status: 'em_andamento',
-            dataPrevisaoRetorno: data.dataPrevisaoRetorno.toISOString(),
+            dataPrevisaoRetorno: dataPrevisaoRetorno.toISOString(),
             historico: [{
                 statusAnterior: 'em_andamento',
                 statusNovo: 'em_andamento',
                 changedBy: { userId: user.id, username: user.username },
-                changedAt: now,
+                changedAt: now.toISOString(),
                 detalhes: "Chamado criado."
             }],
             checklist: {},
-            createdAt: now,
-            updatedAt: now,
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
             createdBy: { userId: user.id, username: user.username },
         };
         

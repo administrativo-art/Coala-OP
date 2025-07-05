@@ -5,8 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistItem } from '@/types';
-import { format, parseISO } from 'date-fns';
+import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistItem, type ReturnRequestStatus } from '@/types';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
 import { Calendar as CalendarIcon, Check, User, CalendarCheck, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive, Save } from 'lucide-react';
@@ -90,6 +90,11 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
   const effectiveStatus = returnRequestStatuses[request.status] ? request.status : 'em_andamento';
   const currentStatusInfo = returnRequestStatuses[effectiveStatus] || { label: 'Desconhecido', color: 'bg-gray-400'};
+  let isOverdue = false;
+  if (request.status === 'em_andamento' && request.dataPrevisaoRetorno) {
+      isOverdue = differenceInDays(new Date(), parseISO(request.dataPrevisaoRetorno)) > 0;
+  }
+
 
   const handleChecklistChange = (index: number, checked: boolean) => {
     setChecklist(current => {
@@ -210,7 +215,9 @@ CT Sorvetes LTDA`;
                   <span className="capitalize">{request.tipo}</span> de {request.insumoNome} (Lote: {request.lote})
                 </DialogDescription>
               </div>
-              <Badge className={cn("text-white", currentStatusInfo.color)}>{currentStatusInfo.label}</Badge>
+               <Badge className={cn("text-white", isOverdue ? 'bg-red-700' : currentStatusInfo.color)}>
+                  {isOverdue ? `${currentStatusInfo.label} | Atrasado` : currentStatusInfo.label}
+              </Badge>
             </div>
              <div className="text-xs text-muted-foreground pt-2 space-y-1">
                 {request.createdBy && (

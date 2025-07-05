@@ -29,7 +29,6 @@ const returnRequestSchema = z.object({
   lote: z.string().min(1, 'O lote é obrigatório.'),
   quantidade: z.coerce.number().min(0.01, 'A quantidade deve ser maior que zero.'),
   motivo: z.string().min(10, 'O motivo deve ter pelo menos 10 caracteres.'),
-  dataPrevisaoRetorno: z.date({ required_error: 'A data de previsão é obrigatória.' }),
 });
 
 type ReturnRequestFormValues = z.infer<typeof returnRequestSchema>;
@@ -53,7 +52,6 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
       lote: '',
       quantidade: undefined,
       motivo: '',
-      dataPrevisaoRetorno: undefined,
     }
   });
 
@@ -208,46 +206,6 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
                   )}
                 />
              </div>
-             <FormField
-                control={form.control}
-                name="dataPrevisaoRetorno"
-                render={({ field }) => (
-                <FormItem className="flex flex-col">
-                    <FormLabel>Data de Conclusão Prevista</FormLabel>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <FormControl>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                                )}
-                            >
-                                {field.value ? (
-                                format(field.value, "PPP", { locale: ptBR })
-                                ) : (
-                                <span>Escolha uma data</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                            </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                            initialFocus
-                            locale={ptBR}
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                </FormItem>
-                )}
-            />
              <FormField
               control={form.control}
               name="motivo"

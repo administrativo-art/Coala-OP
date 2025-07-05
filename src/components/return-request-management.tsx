@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,33 +91,37 @@ export function ReturnRequestManagement() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Número</TableHead>
+                            <TableHead>Responsável</TableHead>
                             <TableHead>Insumo</TableHead>
-                            <TableHead>Lote</TableHead>
-                            <TableHead>Qtd.</TableHead>
                             <TableHead>Situação</TableHead>
-                            <TableHead>Data Abertura</TableHead>
+                            <TableHead>Abertura</TableHead>
+                            <TableHead>Previsão</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {activeRequests.map((req) => {
                             const statusInfo = returnRequestStatuses[req.status];
+                            let isOverdue = false;
+                            if (req.status === 'em_andamento' && req.dataPrevisaoRetorno) {
+                                isOverdue = differenceInDays(new Date(), parseISO(req.dataPrevisaoRetorno)) > 0;
+                            }
                             return (
                                 <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
                                     <TableCell className="font-semibold">{req.numero}</TableCell>
+                                    <TableCell>{req.createdBy?.username || 'N/A'}</TableCell>
                                     <TableCell>{req.insumoNome}</TableCell>
-                                    <TableCell>{req.lote}</TableCell>
-                                    <TableCell>{req.quantidade}</TableCell>
                                     <TableCell>
                                         {statusInfo ? (
-                                            <Badge className={cn("text-white", statusInfo.color)}>
-                                                {statusInfo.label}
+                                            <Badge className={cn("text-white", isOverdue ? 'bg-red-700' : statusInfo.color)}>
+                                                {isOverdue ? `${statusInfo.label} | Atrasado` : statusInfo.label}
                                             </Badge>
                                         ) : (
                                             <Badge variant="secondary">Desconhecido</Badge>
                                         )}
                                     </TableCell>
                                     <TableCell>{format(parseISO(req.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                    <TableCell>{req.dataPrevisaoRetorno ? format(parseISO(req.dataPrevisaoRetorno), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}</TableCell>
                                     <TableCell className="text-right">
                                         {permissions.returns.delete && (
                                             <Button

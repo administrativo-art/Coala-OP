@@ -2,28 +2,36 @@
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
+import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useKiosks } from "@/hooks/use-kiosks"
+import { useReturnRequests } from "@/hooks/use-return-requests"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
+import { format } from "date-fns"
+import { ptBR } from 'date-fns/locale'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
+import { type ReturnRequest, returnRequestStatuses } from "@/types"
+import { cn } from "@/lib/utils"
 
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { products, loading: productsLoading } = useStockAnalysisProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
+  const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -64,6 +72,18 @@ export default function DashboardPage() {
      if (lotsLoading) return 0;
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0).length;
   }, [lotsInKiosk, lotsLoading]);
+  
+  const myActiveReturnRequests = useMemo(() => {
+    if (returnRequestsLoading || !user) return [];
+    
+    const activeRequests = returnRequests.filter(r => !r.isArchived);
+
+    if (user.username === 'master' || permissions.returns.updateStatus) { 
+        return activeRequests;
+    }
+
+    return activeRequests.filter(r => r.createdBy.userId === user.id);
+  }, [returnRequests, returnRequestsLoading, user, permissions]);
 
   const chartData = useMemo(() => {
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -134,7 +154,7 @@ export default function DashboardPage() {
   }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
 
 
-  const initialLoading = productsLoading || lotsLoading || kiosksLoading;
+  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading;
   const chartHeight = Math.max(350, chartData.length * 40);
 
   if (initialLoading) {
@@ -195,6 +215,46 @@ export default function DashboardPage() {
       </div>
 
        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-1">
+            {myActiveReturnRequests.length > 0 && (
+                <Card className="md:col-span-2">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Truck className="h-6 w-6" /> Chamados de Devolução/Bonificação Abertos
+                        </CardTitle>
+                        <CardDescription>
+                            Estes são os seus chamados que precisam de atenção. Clique em um chamado para ver os detalhes.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-2">
+                            {myActiveReturnRequests.map(req => {
+                                const statusInfo = returnRequestStatuses[req.status];
+                                let isOverdue = false;
+                                if (req.status === 'em_andamento' && req.dataPrevisaoRetorno) {
+                                    isOverdue = differenceInDays(new Date(), parseISO(req.dataPrevisaoRetorno)) > 0;
+                                }
+                                return (
+                                    <Link href="/dashboard/stock/returns" key={req.id}>
+                                        <div className="flex items-center justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors">
+                                            <div>
+                                                <p className="font-semibold">{req.numero}: <span className="font-normal">{req.insumoNome}</span></p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Previsão de Conclusão: {format(parseISO(req.dataPrevisaoRetorno), "dd/MM/yyyy", { locale: ptBR })}
+                                                </p>
+                                            </div>
+                                            {statusInfo && (
+                                                <Badge className={cn("text-white shrink-0", isOverdue ? 'bg-red-700' : statusInfo.color)}>
+                                                    {isOverdue ? `${statusInfo.label} | Atrasado` : statusInfo.label}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </Link>
+                                )
+                            })}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
           <Card>
             <CardHeader className="flex flex-col gap-4">
                 <div>
@@ -310,5 +370,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-    
