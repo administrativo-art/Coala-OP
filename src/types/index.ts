@@ -222,7 +222,7 @@ export const returnRequestStatuses: { [key in ReturnRequestStatus]: { label: str
 };
 
 export type ReturnRequestHistoricoItem = {
-    statusAnterior: ReturnRequestStatus | 'aberta' | 'aguardando_comunicacao';
+    statusAnterior: ReturnRequestStatus;
     statusNovo: ReturnRequestStatus;
     changedBy: {
         userId: string;
@@ -265,7 +265,7 @@ export type ReturnRequest = {
 export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
+  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; dataPrevisaoRetorno: Date; }) => Promise<void>;
   updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }

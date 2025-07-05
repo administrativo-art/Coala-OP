@@ -12,12 +12,10 @@ import { Badge } from './ui/badge';
 import { Calendar as CalendarIcon, Check, User, CalendarCheck, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive } from 'lucide-react';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { Textarea } from './ui/textarea';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Calendar } from './ui/calendar';
-import { cn } from '@/lib/utils';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface ReturnRequestDetailModalProps {
   request: ReturnRequest | null;
@@ -49,7 +47,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   const { updateReturnRequest } = useReturnRequests();
   const { toast } = useToast();
   const [resultDetails, setResultDetails] = useState('');
-  const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [checklist, setChecklist] = useState<ReturnRequestChecklistItem[]>([]);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
@@ -65,7 +62,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
             setChecklist(items);
         }
         setResultDetails(request.detalhesResultado || '');
-        setReturnDate(request.dataPrevisaoRetorno ? parseISO(request.dataPrevisaoRetorno) : undefined);
     }
   }, [request]);
 
@@ -89,7 +85,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
             ...request.checklist,
             [effectiveStatus]: checklist,
         },
-        dataPrevisaoRetorno: returnDate ? returnDate.toISOString() : undefined,
         detalhesResultado: resultDetails,
     };
     
@@ -154,6 +149,12 @@ CT Sorvetes LTDA`;
                         <span>Aberto por: <strong>{request.createdBy.username}</strong> em {format(parseISO(request.createdAt), "dd/MM/yyyy", { locale: ptBR })}</span>
                     </div>
                 )}
+                {request.dataPrevisaoRetorno && (
+                    <div className="flex items-center gap-2">
+                        <CalendarIcon className="h-3 w-3" />
+                        <span>Previsão de Conclusão: <strong>{format(parseISO(request.dataPrevisaoRetorno), "dd/MM/yyyy", { locale: ptBR })}</strong></span>
+                    </div>
+                )}
                 {isFinalized && request.dataConclusao && (
                     <div className="flex items-center gap-2">
                         <CalendarCheck className="h-3 w-3" />
@@ -216,15 +217,6 @@ CT Sorvetes LTDA`;
 
                         {effectiveStatus === 'em_andamento' && (
                             <div className="mt-4 pt-4 border-t space-y-4">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {returnDate ? format(returnDate, "PPP", { locale: ptBR }) : <span>Previsão de retorno</span>}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus locale={ptBR} /></PopoverContent>
-                                </Popover>
                                 <Textarea placeholder="Detalhes do resultado (obrigatório para finalizar)" value={resultDetails} onChange={(e) => setResultDetails(e.target.value)} />
                                 <div className="flex gap-2 flex-wrap">
                                     <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>
