@@ -64,10 +64,10 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
             ...data,
             numero: newNumero,
             insumoNome: getProductFullName(product),
-            status: 'aberta',
+            status: 'em_andamento',
             historico: [{
-                statusAnterior: 'aberta',
-                statusNovo: 'aberta',
+                statusAnterior: 'em_andamento',
+                statusNovo: 'em_andamento',
                 changedBy: { userId: user.id, username: user.username },
                 changedAt: now,
                 detalhes: "Chamado criado."

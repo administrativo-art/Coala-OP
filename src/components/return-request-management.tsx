@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react";
@@ -69,38 +70,45 @@ export function ReturnRequestManagement() {
                             <TableHead>Insumo</TableHead>
                             <TableHead>Lote</TableHead>
                             <TableHead>Qtd.</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead>Situação</TableHead>
                             <TableHead>Data Abertura</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {requests.map((req) => (
-                            <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
-                                <TableCell className="font-semibold">{req.numero}</TableCell>
-                                <TableCell>{req.insumoNome}</TableCell>
-                                <TableCell>{req.lote}</TableCell>
-                                <TableCell>{req.quantidade}</TableCell>
-                                <TableCell>
-                                    <Badge className={cn("text-white", returnRequestStatuses[req.status].color)}>
-                                        {returnRequestStatuses[req.status].label}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>{format(parseISO(req.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
-                                <TableCell className="text-right">
-                                    {permissions.returns.delete && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-destructive hover:text-destructive"
-                                            onClick={(e) => { e.stopPropagation(); setRequestToDelete(req); }}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                        {requests.map((req) => {
+                            const statusInfo = returnRequestStatuses[req.status];
+                            return (
+                                <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
+                                    <TableCell className="font-semibold">{req.numero}</TableCell>
+                                    <TableCell>{req.insumoNome}</TableCell>
+                                    <TableCell>{req.lote}</TableCell>
+                                    <TableCell>{req.quantidade}</TableCell>
+                                    <TableCell>
+                                        {statusInfo ? (
+                                            <Badge className={cn("text-white", statusInfo.color)}>
+                                                {statusInfo.label}
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="secondary">Desconhecido</Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{format(parseISO(req.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                    <TableCell className="text-right">
+                                        {permissions.returns.delete && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-destructive hover:text-destructive"
+                                                onClick={(e) => { e.stopPropagation(); setRequestToDelete(req); }}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </div>

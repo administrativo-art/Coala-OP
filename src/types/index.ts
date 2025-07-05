@@ -211,18 +211,16 @@ export type FormSubmission = {
     answers: FormAnswer[];
 };
 
-export type ReturnRequestStatus = 'aberta' | 'aguardando_comunicacao' | 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
+export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
 
 export const returnRequestStatuses: { [key in ReturnRequestStatus]: { label: string; color: string } } = {
-    aberta: { label: 'Aberta', color: 'bg-blue-500' },
-    aguardando_comunicacao: { label: 'Aguardando Comunicação', color: 'bg-yellow-500' },
     em_andamento: { label: 'Em Andamento', color: 'bg-orange-500' },
     finalizado_sucesso: { label: 'Finalizado (Sucesso)', color: 'bg-green-600' },
     finalizado_erro: { label: 'Finalizado (Erro)', color: 'bg-red-600' },
 };
 
 export type ReturnRequestHistoricoItem = {
-    statusAnterior: ReturnRequestStatus;
+    statusAnterior: ReturnRequestStatus | 'aberta' | 'aguardando_comunicacao';
     statusNovo: ReturnRequestStatus;
     changedBy: {
         userId: string;

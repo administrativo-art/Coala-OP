@@ -25,31 +25,22 @@ interface ReturnRequestDetailModalProps {
 }
 
 const CHECKLIST_CONFIG: { [key: string]: { texto: string }[] } = {
-    aberta: [
+    em_andamento: [
         { texto: "Filmar o produto para enviar" },
         { texto: "Comunicação ao representante" },
-    ],
-    aguardando_comunicacao: [
-        { texto: "Enviar notificação ao representante (e-mail/WhatsApp)" },
         { texto: "Registrar data e hora do contato" },
-        { texto: "Anexar protocolo de atendimento" },
-        { texto: "Inserir previsão de retorno (data) e marcar como confirmado" },
-    ],
-    em_andamento: [
-        { texto: "Receber resposta do representante" },
-        { texto: "Registrar data prevista de coleta" },
+        { texto: "Inserir previsão de retorno (data)" },
     ],
     finalizado_sucesso: [
-        { texto: "Preencher detalhes do resultado" },
-        { texto: "Atualizar estoque (repor/bonificar)" },
-        { texto: "Gerar nota de crédito/débito, se aplicável" },
-        { texto: "Notificar solicitante sobre conclusão" },
-        { texto: "Arquivar comprovantes eletrônicos" },
+        { texto: "Preencher “Detalhes do resultado”" },
+        { texto: "Atualizar estoque (repor / bonificar), se houver" },
+        { texto: "Gerar nota de crédito/débito, se houver" },
+        { texto: "Arquivar protocolo no sistema" },
     ],
     finalizado_erro: [
-        { texto: "Preencher detalhes do resultado e motivo do insucesso" },
+        { texto: "Preencher “Detalhes do resultado” e motivo do insucesso" },
         { texto: "Sugerir ação corretiva ou reabertura de chamado" },
-        { texto: "Encerrar protocolo no sistema" },
+        { texto: "Arquivar protocolo no sistema" },
     ],
 };
 
@@ -65,11 +56,12 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
   useEffect(() => {
     if (request) {
-        const savedChecklist = request.checklist?.[request.status];
+        const effectiveStatus = returnRequestStatuses[request.status] ? request.status : 'em_andamento';
+        const savedChecklist = request.checklist?.[effectiveStatus];
         if (savedChecklist && savedChecklist.length > 0) {
             setChecklist(savedChecklist);
         } else {
-            const items = (CHECKLIST_CONFIG[request.status] || []).map(item => ({ ...item, feito: false }));
+            const items = (CHECKLIST_CONFIG[effectiveStatus] || []).map(item => ({ ...item, feito: false }));
             setChecklist(items);
         }
         setResultDetails(request.detalhesResultado || '');
@@ -79,7 +71,8 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
   if (!request) return null;
 
-  const currentStatusInfo = returnRequestStatuses[request.status];
+  const effectiveStatus = returnRequestStatuses[request.status] ? request.status : 'em_andamento';
+  const currentStatusInfo = returnRequestStatuses[effectiveStatus];
 
   const handleChecklistChange = (index: number, checked: boolean) => {
     setChecklist(current => {
@@ -94,16 +87,12 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         status: newStatus,
         checklist: {
             ...request.checklist,
-            [request.status]: checklist,
-        }
+            [effectiveStatus]: checklist,
+        },
+        dataPrevisaoRetorno: returnDate ? returnDate.toISOString() : request.dataPrevisaoRetorno,
+        detalhesResultado: resultDetails,
     };
 
-    if (newStatus === 'aguardando_comunicacao' && returnDate) {
-        updatePayload.dataPrevisaoRetorno = returnDate.toISOString();
-    }
-    if ((newStatus === 'finalizado_sucesso' || newStatus === 'finalizado_erro') && resultDetails) {
-        updatePayload.detalhesResultado = resultDetails;
-    }
     updateReturnRequest(request.id, updatePayload);
   };
   
@@ -199,29 +188,24 @@ CT Sorvetes LTDA`;
                            )
                         })}
 
-                      <div className="mt-4 pt-4 border-t space-y-4">
-                          {request.status === 'aguardando_comunicacao' && (
-                              <Popover>
-                                  <PopoverTrigger asChild>
-                                      <Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
-                                          <CalendarIcon className="mr-2 h-4 w-4" />
-                                          {returnDate ? format(returnDate, "PPP", { locale: ptBR }) : <span>Previsão de retorno</span>}
-                                      </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus locale={ptBR} /></PopoverContent>
-                              </Popover>
-                          )}
-                          {(request.status === 'em_andamento' || request.status === 'aguardando_comunicacao') && (
-                              <Textarea placeholder="Detalhes do resultado (obrigatório para finalizar)" value={resultDetails} onChange={(e) => setResultDetails(e.target.value)} />
-                          )}
-
-                          <div className="flex gap-2 flex-wrap">
-                              {request.status === 'aberta' && <Button onClick={() => handleStatusChange('aguardando_comunicacao')}><Send className="mr-2"/>Próximo</Button>}
-                              {request.status === 'aguardando_comunicacao' && <Button onClick={() => handleStatusChange('em_andamento')}><ChevronsRight className="mr-2"/>Iniciar Processo</Button>}
-                              {request.status === 'em_andamento' && <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>}
-                              {(request.status === 'em_andamento' || request.status === 'aguardando_comunicacao') && <Button variant="destructive" onClick={() => handleStatusChange('finalizado_erro')} disabled={!resultDetails}><XCircle className="mr-2"/>Finalizar sem Sucesso</Button>}
-                          </div>
-                      </div>
+                        {effectiveStatus === 'em_andamento' && (
+                            <div className="mt-4 pt-4 border-t space-y-4">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {returnDate ? format(returnDate, "PPP", { locale: ptBR }) : <span>Previsão de retorno</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus locale={ptBR} /></PopoverContent>
+                                </Popover>
+                                <Textarea placeholder="Detalhes do resultado (obrigatório para finalizar)" value={resultDetails} onChange={(e) => setResultDetails(e.target.value)} />
+                                <div className="flex gap-2 flex-wrap">
+                                    <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>
+                                    <Button variant="destructive" onClick={() => handleStatusChange('finalizado_erro')} disabled={!resultDetails}><XCircle className="mr-2"/>Finalizar sem Sucesso</Button>
+                                </div>
+                            </div>
+                        )}
                   </div>
 
                   <div className="p-4 border rounded-lg">
@@ -236,11 +220,11 @@ CT Sorvetes LTDA`;
                                   <div>
                                       {item.detalhes === "Chamado criado." ? (
                                           <p className="font-medium">
-                                              Chamado criado na situação <span className="font-bold">{returnRequestStatuses[item.statusNovo].label}</span>
+                                              Chamado criado na situação <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
                                           </p>
                                       ) : (
                                           <p className="font-medium">
-                                              Situação alterada de <span className="font-bold">{returnRequestStatuses[item.statusAnterior].label}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo].label}</span>
+                                              Situação alterada de <span className="font-bold">{returnRequestStatuses[item.statusAnterior as ReturnRequestStatus]?.label || 'Desconhecido'}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
                                           </p>
                                       )}
                                       <p className="text-sm text-muted-foreground">
