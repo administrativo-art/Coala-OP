@@ -12,7 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useProducts } from '@/hooks/use-products';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 const returnRequestSchema = z.object({
   tipo: z.enum(['devolucao', 'bonificacao'], { required_error: 'Selecione o tipo.' }),
@@ -31,6 +33,8 @@ interface AddReturnRequestModalProps {
 export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestModalProps) {
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { addReturnRequest, loading: addingRequest } = useReturnRequests();
+  const { user } = useAuth();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
   
   const form = useForm<ReturnRequestFormValues>({
     resolver: zodResolver(returnRequestSchema),
@@ -42,6 +46,40 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
     }
   });
 
+  const selectedInsumoId = form.watch('insumoId');
+
+  const availableLots = useMemo(() => {
+    if (!selectedInsumoId || lotsLoading || !user) return [];
+
+    const userVisibleLots = user.username === 'master' 
+        ? lots 
+        : lots.filter(lot => lot.kioskId === user.kioskId);
+
+    const productLots = userVisibleLots.filter(lot => lot.productId === selectedInsumoId && lot.quantity > 0);
+    
+    const uniqueLotsMap = new Map<string, { lotNumber: string, quantity: number }>();
+
+    productLots.forEach(lot => {
+        const existing = uniqueLotsMap.get(lot.lotNumber);
+        if (existing) {
+            existing.quantity += lot.quantity;
+        } else {
+            uniqueLotsMap.set(lot.lotNumber, { 
+                lotNumber: lot.lotNumber, 
+                quantity: lot.quantity,
+            });
+        }
+    });
+
+    return Array.from(uniqueLotsMap.values());
+  }, [selectedInsumoId, lots, user, lotsLoading]);
+
+  useEffect(() => {
+    if(selectedInsumoId) {
+      form.resetField('lote');
+    }
+  }, [selectedInsumoId, form]);
+
   const onSubmit = async (values: ReturnRequestFormValues) => {
     await addReturnRequest(values);
     onOpenChange(false);
@@ -49,9 +87,16 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
   };
   
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+  
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      form.reset();
+    }
+    onOpenChange(isOpen);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Abrir Chamado de Devolução/Bonificação</DialogTitle>
@@ -110,7 +155,32 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Lote</FormLabel>
-                      <FormControl><Input placeholder="Lote do produto" {...field} /></FormControl>
+                       <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!selectedInsumoId || availableLots.length === 0 || lotsLoading}
+                        >
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={
+                                        !selectedInsumoId 
+                                        ? "Selecione um insumo" 
+                                        : lotsLoading
+                                        ? "Carregando lotes..."
+                                        : availableLots.length === 0 
+                                        ? "Nenhum lote disponível" 
+                                        : "Selecione o lote"
+                                    } />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {availableLots.map(({ lotNumber, quantity }) => (
+                                    <SelectItem key={lotNumber} value={lotNumber}>
+                                        {lotNumber} (Qtd: {quantity})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -128,7 +198,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
                 />
              </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={addingRequest}>
                 {addingRequest ? 'Salvando...' : 'Abrir Chamado'}
               </Button>
