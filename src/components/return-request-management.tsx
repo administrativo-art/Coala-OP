@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo } from "react";
@@ -107,11 +106,11 @@ export function ReturnRequestManagement() {
                                 isOverdue = differenceInDays(new Date(), parseISO(req.dataPrevisaoRetorno)) > 0;
                             }
                             return (
-                                <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
-                                    <TableCell className="font-semibold">{req.numero}</TableCell>
-                                    <TableCell>{req.createdBy?.username || 'N/A'}</TableCell>
-                                    <TableCell>{req.insumoNome}</TableCell>
-                                    <TableCell>
+                                <TableRow key={req.id}>
+                                    <TableCell className="font-semibold cursor-pointer" onClick={() => setRequestToView(req)}>{req.numero}</TableCell>
+                                    <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{req.createdBy?.username || 'N/A'}</TableCell>
+                                    <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{req.insumoNome}</TableCell>
+                                    <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>
                                         {statusInfo ? (
                                             <Badge className={cn("text-white", isOverdue ? 'bg-red-700' : statusInfo.color)}>
                                                 {isOverdue ? `${statusInfo.label} | Atrasado` : statusInfo.label}
@@ -120,15 +119,15 @@ export function ReturnRequestManagement() {
                                             <Badge variant="secondary">Desconhecido</Badge>
                                         )}
                                     </TableCell>
-                                    <TableCell>{format(parseISO(req.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
-                                    <TableCell>{req.dataPrevisaoRetorno ? format(parseISO(req.dataPrevisaoRetorno), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}</TableCell>
+                                    <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{format(parseISO(req.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                    <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{req.dataPrevisaoRetorno ? format(parseISO(req.dataPrevisaoRetorno), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}</TableCell>
                                     <TableCell className="text-right">
                                         {permissions.returns.delete && (
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 className="text-destructive hover:text-destructive"
-                                                onClick={(e) => { e.stopPropagation(); setRequestToDelete(req); }}
+                                                onClick={() => setRequestToDelete(req)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -152,16 +151,17 @@ export function ReturnRequestManagement() {
                         <TableHead>Insumo</TableHead>
                         <TableHead>Situação Final</TableHead>
                         <TableHead>Data de Arquivamento</TableHead>
+                        {permissions.returns.delete && <TableHead className="text-right">Ações</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {archivedRequests.map((req) => {
                         const statusInfo = returnRequestStatuses[req.status];
                         return (
-                            <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
-                                <TableCell className="font-semibold">{req.numero}</TableCell>
-                                <TableCell>{req.insumoNome}</TableCell>
-                                <TableCell>
+                            <TableRow key={req.id}>
+                                <TableCell className="font-semibold cursor-pointer" onClick={() => setRequestToView(req)}>{req.numero}</TableCell>
+                                <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{req.insumoNome}</TableCell>
+                                <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>
                                     {statusInfo ? (
                                         <Badge className={cn("text-white", statusInfo.color)}>
                                             {statusInfo.label}
@@ -170,7 +170,19 @@ export function ReturnRequestManagement() {
                                         <Badge variant="secondary">Desconhecido</Badge>
                                     )}
                                 </TableCell>
-                                <TableCell>{format(parseISO(req.updatedAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{format(parseISO(req.updatedAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                {permissions.returns.delete && (
+                                    <TableCell className="text-right">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => setRequestToDelete(req)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
+                                )}
                             </TableRow>
                         );
                     })}
