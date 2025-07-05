@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -25,9 +24,6 @@ interface ReturnRequestDetailModalProps {
 
 const CHECKLIST_CONFIG: { [key: string]: { texto: string }[] } = {
     aberta: [
-        { texto: "Conferir dados do insumo (nome, código)" },
-        { texto: "Validar lote e quantidade" },
-        { texto: "Definir tipo: devolução ou bonificação" },
         { texto: "Filmar o produto para enviar" },
         { texto: "Comunicação ao representante" },
     ],
