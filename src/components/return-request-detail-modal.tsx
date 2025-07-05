@@ -9,13 +9,16 @@ import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistI
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { Calendar as CalendarIcon, Check, User, CalendarCheck, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, User, CalendarCheck, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive, Save } from 'lucide-react';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { Textarea } from './ui/textarea';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { Input } from './ui/input';
 
 interface ReturnRequestDetailModalProps {
   request: ReturnRequest | null;
@@ -48,6 +51,8 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   const { toast } = useToast();
   const [resultDetails, setResultDetails] = useState('');
   const [checklist, setChecklist] = useState<ReturnRequestChecklistItem[]>([]);
+  const [contactDate, setContactDate] = useState<Date | undefined>();
+  const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
 
@@ -62,6 +67,8 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
             setChecklist(items);
         }
         setResultDetails(request.detalhesResultado || '');
+        setContactDate(request.dataContatoRepresentante ? parseISO(request.dataContatoRepresentante) : undefined);
+        setReturnDate(request.dataPrevisaoRetornoFornecedor ? parseISO(request.dataPrevisaoRetornoFornecedor) : undefined);
     }
   }, [request]);
 
@@ -77,15 +84,29 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         return newChecklist;
     });
   };
-
-  const handleStatusChange = (newStatus: ReturnRequest['status']) => {
-    let updatePayload: Partial<ReturnRequest> = {
-        status: newStatus,
+  
+  const getUpdatePayload = (): Partial<ReturnRequest> => {
+      return {
         checklist: {
             ...request.checklist,
             [effectiveStatus]: checklist,
         },
         detalhesResultado: resultDetails,
+        dataContatoRepresentante: contactDate?.toISOString(),
+        dataPrevisaoRetornoFornecedor: returnDate?.toISOString(),
+      }
+  };
+  
+  const handleSaveChanges = () => {
+      if (!request) return;
+      updateReturnRequest(request.id, getUpdatePayload());
+      toast({ title: "Alterações salvas com sucesso!" });
+  }
+
+  const handleStatusChange = (newStatus: ReturnRequest['status']) => {
+    let updatePayload: Partial<ReturnRequest> = {
+        ...getUpdatePayload(),
+        status: newStatus,
     };
     
     if (newStatus === 'finalizado_sucesso' || newStatus === 'finalizado_erro') {
@@ -97,7 +118,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   
   const handleArchive = () => {
     if (!request) return;
-    updateReturnRequest(request.id, { isArchived: true });
+    updateReturnRequest(request.id, { ...getUpdatePayload(), isArchived: true });
     onOpenChange(false);
   };
 
@@ -125,6 +146,25 @@ CT Sorvetes LTDA`;
     navigator.clipboard.writeText(communicationTemplate).then(() => {
       toast({ title: 'Modelo copiado!', description: 'O texto está na sua área de transferência.' });
       setIsTemplateModalOpen(false);
+    });
+  };
+
+  const handleContactTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = e.target.value;
+    const [hours, minutes] = time.split(':').map(Number);
+    
+    setContactDate(prevDate => {
+        if (!prevDate) {
+            const newDateWithTime = new Date();
+            newDateWithTime.setHours(hours, minutes, 0, 0);
+            return newDateWithTime;
+        }
+        
+        if (isNaN(hours) || isNaN(minutes)) return prevDate;
+
+        const newDate = new Date(prevDate);
+        newDate.setHours(hours, minutes);
+        return newDate;
     });
   };
 
@@ -175,45 +215,62 @@ CT Sorvetes LTDA`;
                   <div className="p-4 border rounded-lg bg-muted/30">
                       <h3 className="font-semibold text-lg mb-4">Checklist</h3>
                       
-                      {checklist.map((item, index) => {
+                      <div className="space-y-3">
+                        {checklist.map((item, index) => {
                            const isCommunicationItem = item.texto === "Comunicação ao representante";
                            const isFilmingItem = item.texto === "Filmar o produto para enviar";
+                           const isContactDateItem = item.texto === "Registrar data e hora do contato";
+                           const isReturnDateItem = item.texto === "Inserir previsão de retorno (data)";
 
                            return (
-                                <div key={index} className="flex items-center space-x-2 mb-2">
-                                    <Checkbox 
-                                        id={`chk-${index}`} 
-                                        checked={item.feito}
-                                        onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
-                                    />
-                                    <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug flex items-center gap-2">
-                                        {item.texto}
+                                <div key={index} className="flex items-center justify-between space-x-2">
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox 
+                                            id={`chk-${index}`} 
+                                            checked={item.feito}
+                                            onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
+                                        />
+                                        <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug flex items-center gap-2">
+                                            {item.texto}
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center">
                                         {isCommunicationItem && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-5 w-5 text-muted-foreground hover:text-primary"
-                                                onClick={() => setIsTemplateModalOpen(true)}
-                                            >
-                                                <MessageSquareText className="h-4 w-4" />
-                                            </Button>
+                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
                                         )}
                                         {isFilmingItem && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-5 w-5 text-muted-foreground hover:text-primary"
-                                                onClick={() => setIsVideosModalOpen(true)}
-                                            >
-                                                <Video className="h-4 w-4" />
-                                            </Button>
+                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
                                         )}
-                                    </Label>
+                                        {isContactDateItem && (
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                <Button variant={"outline"} size="sm" className={cn("w-[220px] justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
+                                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                                    {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
+                                                </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0">
+                                                    <Calendar mode="single" selected={contactDate} onSelect={setContactDate} initialFocus />
+                                                    <div className="p-2 border-t"><Input type="time" value={contactDate ? format(contactDate, 'HH:mm') : ''} onChange={handleContactTimeChange} /></div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        )}
+                                        {isReturnDateItem && (
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                <Button variant={"outline"} size="sm" className={cn("w-[220px] justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
+                                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                                    {returnDate ? format(returnDate, "dd/MM/yyyy") : <span>Selecionar data de retorno</span>}
+                                                </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus /></PopoverContent>
+                                            </Popover>
+                                        )}
+                                    </div>
                                 </div>
                            )
                         })}
+                      </div>
 
                         {effectiveStatus === 'em_andamento' && (
                             <div className="mt-4 pt-4 border-t space-y-4">
@@ -257,12 +314,17 @@ CT Sorvetes LTDA`;
               </div>
           </ScrollArea>
 
-          <DialogFooter className="pt-4 border-t">
-            {isFinalized && (
-              <Button variant="outline" onClick={handleArchive}>
-                <Archive className="mr-2 h-4 w-4" />
-                Arquivar
-              </Button>
+          <DialogFooter className="pt-4 border-t flex-wrap justify-end gap-2">
+            {isFinalized ? (
+                 <Button variant="outline" onClick={handleArchive}>
+                    <Archive className="mr-2 h-4 w-4" />
+                    Arquivar
+                </Button>
+            ) : (
+                <Button variant="secondary" onClick={handleSaveChanges}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Salvar Alterações
+                </Button>
             )}
             <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
           </DialogFooter>
