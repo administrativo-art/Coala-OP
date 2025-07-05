@@ -9,7 +9,7 @@ import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistI
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { Calendar as CalendarIcon, Check, ChevronsRight, Send, XCircle, MessageSquareText, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video } from 'lucide-react';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -61,6 +61,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [checklist, setChecklist] = useState<ReturnRequestChecklistItem[]>([]);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
 
   useEffect(() => {
     if (request) {
@@ -160,6 +161,8 @@ CT Sorvetes LTDA`;
                       
                       {checklist.map((item, index) => {
                            const isCommunicationItem = item.texto === "Comunicação ao representante";
+                           const isFilmingItem = item.texto === "Filmar o produto para enviar";
+
                            return (
                                 <div key={index} className="flex items-center space-x-2 mb-2">
                                     <Checkbox 
@@ -178,6 +181,17 @@ CT Sorvetes LTDA`;
                                                 onClick={() => setIsTemplateModalOpen(true)}
                                             >
                                                 <MessageSquareText className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                        {isFilmingItem && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-5 w-5 text-muted-foreground hover:text-primary"
+                                                onClick={() => setIsVideosModalOpen(true)}
+                                            >
+                                                <Video className="h-4 w-4" />
                                             </Button>
                                         )}
                                     </Label>
@@ -267,6 +281,23 @@ CT Sorvetes LTDA`;
                 <Button type="button" onClick={handleCopyTemplate}>
                     <Copy className="mr-2 h-4 w-4" /> Copiar Texto
                 </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isVideosModalOpen} onOpenChange={setIsVideosModalOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Vídeos de Instrução</DialogTitle>
+                <DialogDescription>
+                    Consulte os vídeos abaixo para entender como filmar corretamente o produto.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <p className="text-muted-foreground">Os links para os vídeos de instrução serão adicionados aqui em breve.</p>
+            </div>
+            <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsVideosModalOpen(false)}>Fechar</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
