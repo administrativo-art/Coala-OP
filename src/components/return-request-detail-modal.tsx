@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -390,7 +389,7 @@ CT Sorvetes LTDA`;
             </DialogHeader>
             <div className="py-4 space-y-2">
                 <a 
-                    href="https://drive.google.com/file/d/1PwluJfNuMFGqByHWduGqPI3tS6dxT6Zw/view?usp=sharing"
+                    href="https://drive.google.com/file/d/1uzOEGlPrgCmENQXtLY8IYz2qKR-56NLp/view?usp=share_link"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline font-medium"
