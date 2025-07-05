@@ -111,13 +111,23 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
                     changedBy: { userId: user.id, username: user.username },
                     changedAt: now,
                 };
+                
                 if (payload.detalhesResultado) {
                     historyItem.detalhes = payload.detalhesResultado;
                 }
+
                 updateData.historico = [...currentRequest.historico, historyItem];
             } else if (currentRequest.historico) {
                 updateData.historico = currentRequest.historico;
             }
+
+            // Firestore does not allow `undefined` values. We need to clean them up.
+            Object.keys(updateData).forEach(keyStr => {
+              const key = keyStr as keyof typeof updateData;
+              if (updateData[key] === undefined) {
+                delete updateData[key];
+              }
+            });
 
             transaction.update(requestRef, updateData);
         });
