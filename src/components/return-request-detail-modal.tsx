@@ -69,6 +69,23 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
     }
   }, [request]);
 
+  useEffect(() => {
+      const handleRequestUpdate = (event: Event) => {
+          const customEvent = event as CustomEvent;
+          if (request && customEvent.detail.id === request.id) {
+              const updatedRequest = customEvent.detail;
+              const newStatus = updatedRequest.status;
+              const newChecklist = (CHECKLIST_CONFIG[newStatus] || []).map(item => ({...item, feito: false}));
+              setChecklist(newChecklist);
+          }
+      };
+
+      window.addEventListener('requestUpdate', handleRequestUpdate);
+      return () => {
+          window.removeEventListener('requestUpdate', handleRequestUpdate);
+      };
+  }, [request]);
+
   if (!request) return null;
 
   const effectiveStatus = returnRequestStatuses[request.status] ? request.status : 'em_andamento';
@@ -92,10 +109,10 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         dataContatoRepresentante: contactDate?.toISOString(),
       };
       
-      Object.keys(payload).forEach(key => {
-        const typedKey = key as keyof typeof payload;
-        if (payload[typedKey] === undefined) {
-          delete payload[typedKey];
+      Object.keys(payload).forEach(keyStr => {
+        const key = keyStr as keyof typeof payload;
+        if ((payload as any)[key] === undefined) {
+          delete (payload as any)[key];
         }
       });
       
@@ -109,6 +126,8 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   }
 
   const handleStatusChange = (newStatus: ReturnRequest['status']) => {
+    if(!request) return;
+    
     let updatePayload: Partial<ReturnRequest> = {
         ...getUpdatePayload(),
         status: newStatus,
@@ -119,18 +138,13 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
     }
     
     const updatedRequest = { ...request, ...updatePayload };
-    setChecklist((CHECKLIST_CONFIG[newStatus] || []).map(item => ({...item, feito: false})));
-    setRequestToView(updatedRequest as ReturnRequest);
+    
+    // Dispatch event to update parent state implicitly
+    const event = new CustomEvent('requestUpdate', { detail: updatedRequest });
+    window.dispatchEvent(event);
 
     updateReturnRequest(request.id, updatePayload);
   };
-
-  const setRequestToView = (updatedRequest: ReturnRequest) => {
-    // This is a placeholder function that should be handled by the parent component
-    // In this case, we need to update local state to reflect changes immediately
-    const event = new CustomEvent('requestUpdate', { detail: updatedRequest });
-    window.dispatchEvent(event);
-  }
   
   const handleArchive = () => {
     if (!request) return;
@@ -256,10 +270,10 @@ CT Sorvetes LTDA`;
                                         )}
                                     </div>
                                     {isContactDateItem && (
-                                        <div className="pl-8 pt-2">
+                                        <div className="pl-6 pt-2">
                                             <Popover>
                                                 <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
+                                                <Button variant={"outline"} size="sm" className={cn("w-[240px] justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
                                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                                     {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
                                                 </Button>
@@ -367,8 +381,15 @@ CT Sorvetes LTDA`;
                     Consulte os vídeos abaixo para entender como filmar corretamente o produto.
                 </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-                <p className="text-muted-foreground">Os links para os vídeos de instrução serão adicionados aqui em breve.</p>
+            <div className="py-4 space-y-2">
+                <a 
+                    href="https://drive.google.com/file/d/1PwluJfNuMFGqByHWduGqPI3tS6dxT6Zw/view?usp=sharing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium"
+                >
+                    Cascão e casquinha
+                </a>
             </div>
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsVideosModalOpen(false)}>Fechar</Button>
