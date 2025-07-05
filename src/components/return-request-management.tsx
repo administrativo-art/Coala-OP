@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +27,18 @@ export function ReturnRequestManagement() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [requestToView, setRequestToView] = useState<ReturnRequest | null>(null);
     const [requestToDelete, setRequestToDelete] = useState<ReturnRequest | null>(null);
+
+    useEffect(() => {
+        if (requestToView) {
+            const updatedRequest = requests.find(r => r.id === requestToView.id);
+            if (updatedRequest && JSON.stringify(updatedRequest) !== JSON.stringify(requestToView)) {
+                setRequestToView(updatedRequest);
+            } else if (!updatedRequest) {
+                // The request was likely deleted, so close the modal
+                setRequestToView(null);
+            }
+        }
+    }, [requests, requestToView]);
 
     const handleDelete = async () => {
         if (requestToDelete) {
