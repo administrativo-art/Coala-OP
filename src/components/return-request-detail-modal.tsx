@@ -157,7 +157,7 @@ CT Sorvetes LTDA`;
                       </div>
                   )}
                   <div className="p-4 border rounded-lg bg-muted/30">
-                      <h3 className="font-semibold text-lg mb-4">Ações e Checklist</h3>
+                      <h3 className="font-semibold text-lg mb-4">Checklist</h3>
                       
                       {checklist.map((item, index) => {
                            const isCommunicationItem = item.texto === "Comunicação ao representante";
