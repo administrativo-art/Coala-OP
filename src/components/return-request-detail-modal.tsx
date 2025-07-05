@@ -28,8 +28,8 @@ const CHECKLIST_CONFIG: { [key: string]: { texto: string }[] } = {
         { texto: "Conferir dados do insumo (nome, código)" },
         { texto: "Validar lote e quantidade" },
         { texto: "Definir tipo: devolução ou bonificação" },
-        { texto: "Anexar evidência (foto/vídeo) opcional" },
-        { texto: "Checar geração automática do número de controle" },
+        { texto: "Filmar o produto para enviar" },
+        { texto: "Comunicação ao representante" },
     ],
     aguardando_comunicacao: [
         { texto: "Enviar notificação ao representante (e-mail/WhatsApp)" },
@@ -154,7 +154,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
                         )}
 
                         <div className="flex gap-2 flex-wrap">
-                            {request.status === 'aberta' && <Button onClick={() => handleStatusChange('aguardando_comunicacao')}><Send className="mr-2"/>Comunicar Representante</Button>}
+                            {request.status === 'aberta' && <Button onClick={() => handleStatusChange('aguardando_comunicacao')}><Send className="mr-2"/>Próximo</Button>}
                             {request.status === 'aguardando_comunicacao' && <Button onClick={() => handleStatusChange('em_andamento')}><ChevronsRight className="mr-2"/>Iniciar Processo</Button>}
                             {request.status === 'em_andamento' && <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>}
                             {(request.status === 'em_andamento' || request.status === 'aguardando_comunicacao') && <Button variant="destructive" onClick={() => handleStatusChange('finalizado_erro')} disabled={!resultDetails}><XCircle className="mr-2"/>Finalizar sem Sucesso</Button>}
