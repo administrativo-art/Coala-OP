@@ -14,6 +14,7 @@ import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
 import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
+import { ReturnsProvider } from '@/components/return-request-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -45,8 +46,10 @@ export default function RootLayout({
                           <StockAnalysisProvider>
                               <ConsumptionAnalysisProvider>
                                 <MovementHistoryProvider>
-                                  {children}
-                                  <Toaster />
+                                  <ReturnsProvider>
+                                    {children}
+                                    <Toaster />
+                                  </ReturnsProvider>
                                 </MovementHistoryProvider>
                               </ConsumptionAnalysisProvider>
                           </StockAnalysisProvider>
