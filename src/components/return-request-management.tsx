@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react";
@@ -7,14 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Truck, Inbox, Trash2, Archive as ArchiveIcon } from "lucide-react";
+import { Truck, Inbox, Trash2, Archive as ArchiveIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useReturnRequests } from "@/hooks/use-return-requests";
 import { type ReturnRequest, returnRequestStatuses } from "@/types";
 import { cn } from "@/lib/utils";
-import { AddReturnRequestModal } from "./add-return-request-modal";
 import { ReturnRequestDetailModal } from "./return-request-detail-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
@@ -24,7 +23,6 @@ export function ReturnRequestManagement() {
     const { permissions } = useAuth();
     const { requests, loading, deleteReturnRequest } = useReturnRequests();
 
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [requestToView, setRequestToView] = useState<ReturnRequest | null>(null);
     const [requestToDelete, setRequestToDelete] = useState<ReturnRequest | null>(null);
 
@@ -36,7 +34,7 @@ export function ReturnRequestManagement() {
         });
         return { 
             activeRequests: active, 
-            archivedRequests: archived.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            archivedRequests: archived.sort((a,b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
         };
     }, [requests]);
 
@@ -165,7 +163,7 @@ export function ReturnRequestManagement() {
                                         <Badge variant="secondary">Desconhecido</Badge>
                                     )}
                                 </TableCell>
-                                <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{format(parseISO(req.updatedAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                                <TableCell className="cursor-pointer" onClick={() => setRequestToView(req)}>{req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}</TableCell>
                                 {permissions.returns.delete && (
                                     <TableCell className="text-right">
                                         <Button
@@ -190,16 +188,9 @@ export function ReturnRequestManagement() {
         <>
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <CardTitle className="flex items-center gap-2"><Truck />Controle de Devoluções e Bonificações</CardTitle>
-                            <CardDescription>Gerencie o ciclo de vida dos chamados com fornecedores.</CardDescription>
-                        </div>
-                        {permissions.returns.add && (
-                            <Button onClick={() => setIsAddModalOpen(true)}>
-                                <PlusCircle className="mr-2" /> Abrir Chamado
-                            </Button>
-                        )}
+                    <div>
+                        <CardTitle className="flex items-center gap-2"><Truck />Controle de Devoluções e Bonificações</CardTitle>
+                        <CardDescription>Gerencie o ciclo de vida dos chamados com fornecedores.</CardDescription>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -225,7 +216,6 @@ export function ReturnRequestManagement() {
                 </Accordion>
             )}
 
-            <AddReturnRequestModal open={isAddModalOpen} onOpenChange={setIsAddModalOpen} />
             <ReturnRequestDetailModal request={requestToView} onOpenChange={() => setRequestToView(null)} />
             
             {requestToDelete && (
