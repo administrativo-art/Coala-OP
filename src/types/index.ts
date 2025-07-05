@@ -245,6 +245,7 @@ export type ReturnRequest = {
     lote: string;
     quantidade: number;
     tipo: 'devolucao' | 'bonificacao';
+    motivo: string;
     status: ReturnRequestStatus;
     dataPrevisaoRetorno?: string; // Data em formato ISO
     detalhesResultado?: string;
@@ -262,7 +263,7 @@ export type ReturnRequest = {
 export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number }) => Promise<void>;
+  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
   updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }

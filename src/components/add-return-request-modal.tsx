@@ -15,12 +15,14 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { Textarea } from './ui/textarea';
 
 const returnRequestSchema = z.object({
   tipo: z.enum(['devolucao', 'bonificacao'], { required_error: 'Selecione o tipo.' }),
   insumoId: z.string().min(1, 'Selecione um insumo.'),
   lote: z.string().min(1, 'O lote é obrigatório.'),
   quantidade: z.coerce.number().min(0.01, 'A quantidade deve ser maior que zero.'),
+  motivo: z.string().min(10, 'O motivo deve ter pelo menos 10 caracteres.'),
 });
 
 type ReturnRequestFormValues = z.infer<typeof returnRequestSchema>;
@@ -43,6 +45,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
       insumoId: '',
       lote: '',
       quantidade: undefined,
+      motivo: '',
     }
   });
 
@@ -197,6 +200,22 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
                   )}
                 />
              </div>
+             <FormField
+              control={form.control}
+              name="motivo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Motivo</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Descreva o motivo da devolução ou bonificação (ex: produto vencido, avariado, etc.)"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={addingRequest}>

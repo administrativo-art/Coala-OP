@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -119,6 +120,12 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
 
         <ScrollArea className="flex-1 pr-6">
             <div className="space-y-6 py-4">
+                 {request.motivo && (
+                    <div className="p-4 border rounded-lg">
+                        <h3 className="font-semibold text-lg mb-2">Motivo do Chamado</h3>
+                        <p className="text-sm whitespace-pre-wrap">{request.motivo}</p>
+                    </div>
+                )}
                 <div className="p-4 border rounded-lg bg-muted/30">
                     <h3 className="font-semibold text-lg mb-4">Ações e Checklist</h3>
                     

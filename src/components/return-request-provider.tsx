@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number }) => Promise<void>;
+  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
   updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }
@@ -39,7 +39,7 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addReturnRequest = useCallback(async (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number }) => {
+  const addReturnRequest = useCallback(async (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => {
     if (!user) throw new Error("Usuário não autenticado.");
     const product = products.find(p => p.id === data.insumoId);
     if (!product) throw new Error("Produto não encontrado.");
@@ -115,7 +115,7 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
                     historyItem.detalhes = payload.detalhesResultado;
                 }
                 updateData.historico = [...currentRequest.historico, historyItem];
-            } else {
+            } else if (currentRequest.historico) {
                 updateData.historico = currentRequest.historico;
             }
 
