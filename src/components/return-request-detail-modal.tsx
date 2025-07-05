@@ -30,7 +30,6 @@ const CHECKLIST_CONFIG: { [key: string]: { texto: string }[] } = {
         { texto: "Filmar o produto para enviar" },
         { texto: "Comunicação ao representante" },
         { texto: "Registrar data e hora do contato" },
-        { texto: "Inserir previsão de retorno (data)" },
     ],
     finalizado_sucesso: [
         { texto: "Preencher “Detalhes do resultado”" },
@@ -52,7 +51,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   const [resultDetails, setResultDetails] = useState('');
   const [checklist, setChecklist] = useState<ReturnRequestChecklistItem[]>([]);
   const [contactDate, setContactDate] = useState<Date | undefined>();
-  const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
 
@@ -68,7 +66,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         }
         setResultDetails(request.detalhesResultado || '');
         setContactDate(request.dataContatoRepresentante ? parseISO(request.dataContatoRepresentante) : undefined);
-        setReturnDate(request.dataPrevisaoRetornoFornecedor ? parseISO(request.dataPrevisaoRetornoFornecedor) : undefined);
     }
   }, [request]);
 
@@ -93,7 +90,6 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
         },
         detalhesResultado: resultDetails,
         dataContatoRepresentante: contactDate?.toISOString(),
-        dataPrevisaoRetornoFornecedor: returnDate?.toISOString(),
       }
   };
   
@@ -220,7 +216,6 @@ CT Sorvetes LTDA`;
                            const isCommunicationItem = item.texto === "Comunicação ao representante";
                            const isFilmingItem = item.texto === "Filmar o produto para enviar";
                            const isContactDateItem = item.texto === "Registrar data e hora do contato";
-                           const isReturnDateItem = item.texto === "Inserir previsão de retorno (data)";
 
                            return (
                                 <div key={index}>
@@ -257,19 +252,6 @@ CT Sorvetes LTDA`;
                                                     <Calendar mode="single" selected={contactDate} onSelect={setContactDate} initialFocus />
                                                     <div className="p-2 border-t"><Input type="time" value={contactDate ? format(contactDate, 'HH:mm') : ''} onChange={handleContactTimeChange} /></div>
                                                 </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                    )}
-                                    {isReturnDateItem && (
-                                        <div className="pl-8 pt-2">
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !returnDate && "text-muted-foreground")}>
-                                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                                    {returnDate ? format(returnDate, "dd/MM/yyyy") : <span>Selecionar data de retorno</span>}
-                                                </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={returnDate} onSelect={setReturnDate} initialFocus /></PopoverContent>
                                             </Popover>
                                         </div>
                                     )}
