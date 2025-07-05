@@ -73,13 +73,8 @@ export function ReturnRequestManagement() {
                     <Inbox className="h-16 w-16 text-muted-foreground/50 mb-4" />
                     <h3 className="text-xl font-semibold">Nenhum chamado ativo</h3>
                     <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                        Inicie um novo chamado de devolução ou bonificação para começar a gerenciar.
+                        Use o botão "Abrir Chamado" acima para iniciar um novo.
                     </p>
-                    {permissions.returns.add && (
-                        <Button size="lg" onClick={() => setIsAddModalOpen(true)}>
-                            <PlusCircle className="mr-2 h-5 w-5" /> Abrir Chamado
-                        </Button>
-                    )}
                 </div>
             );
         }
