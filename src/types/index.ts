@@ -252,6 +252,7 @@ export type ReturnRequest = {
     checklist: { [key: string]: ReturnRequestChecklistItem[] };
     createdAt: string; // Data em formato ISO
     updatedAt: string; // Data em formato ISO
+    isArchived?: boolean;
     createdBy: {
         userId: string;
         username: string;

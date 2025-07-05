@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Truck, Inbox, Trash2 } from "lucide-react";
+import { PlusCircle, Truck, Inbox, Trash2, Archive as ArchiveIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useReturnRequests } from "@/hooks/use-return-requests";
 import { type ReturnRequest, returnRequestStatuses } from "@/types";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { AddReturnRequestModal } from "./add-return-request-modal";
 import { ReturnRequestDetailModal } from "./return-request-detail-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 
 
 export function ReturnRequestManagement() {
@@ -28,13 +29,24 @@ export function ReturnRequestManagement() {
     const [requestToView, setRequestToView] = useState<ReturnRequest | null>(null);
     const [requestToDelete, setRequestToDelete] = useState<ReturnRequest | null>(null);
 
+    const { activeRequests, archivedRequests } = useMemo(() => {
+        const active: ReturnRequest[] = [];
+        const archived: ReturnRequest[] = [];
+        requests.forEach(req => {
+            (req.isArchived ? archived : active).push(req);
+        });
+        return { 
+            activeRequests: active, 
+            archivedRequests: archived.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        };
+    }, [requests]);
+
     useEffect(() => {
         if (requestToView) {
             const updatedRequest = requests.find(r => r.id === requestToView.id);
             if (updatedRequest && JSON.stringify(updatedRequest) !== JSON.stringify(requestToView)) {
                 setRequestToView(updatedRequest);
             } else if (!updatedRequest) {
-                // The request was likely deleted, so close the modal
                 setRequestToView(null);
             }
         }
@@ -56,11 +68,11 @@ export function ReturnRequestManagement() {
             );
         }
 
-        if (requests.length === 0) {
+        if (activeRequests.length === 0) {
             return (
                 <div className="text-center py-16 flex flex-col items-center">
                     <Inbox className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                    <h3 className="text-xl font-semibold">Nenhum chamado aberto</h3>
+                    <h3 className="text-xl font-semibold">Nenhum chamado ativo</h3>
                     <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                         Inicie um novo chamado de devolução ou bonificação para começar a gerenciar.
                     </p>
@@ -88,7 +100,7 @@ export function ReturnRequestManagement() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {requests.map((req) => {
+                        {activeRequests.map((req) => {
                             const statusInfo = returnRequestStatuses[req.status];
                             return (
                                 <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
@@ -126,6 +138,42 @@ export function ReturnRequestManagement() {
             </div>
         );
     };
+    
+    const renderArchivedTable = () => (
+        <div className="border rounded-lg">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Insumo</TableHead>
+                        <TableHead>Situação Final</TableHead>
+                        <TableHead>Data de Arquivamento</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {archivedRequests.map((req) => {
+                        const statusInfo = returnRequestStatuses[req.status];
+                        return (
+                            <TableRow key={req.id} className="cursor-pointer" onClick={() => setRequestToView(req)}>
+                                <TableCell className="font-semibold">{req.numero}</TableCell>
+                                <TableCell>{req.insumoNome}</TableCell>
+                                <TableCell>
+                                    {statusInfo ? (
+                                        <Badge className={cn("text-white", statusInfo.color)}>
+                                            {statusInfo.label}
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="secondary">Desconhecido</Badge>
+                                    )}
+                                </TableCell>
+                                <TableCell>{format(parseISO(req.updatedAt), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                            </TableRow>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+        </div>
+    );
 
     return (
         <>
@@ -147,6 +195,24 @@ export function ReturnRequestManagement() {
                     {renderContent()}
                 </CardContent>
             </Card>
+
+            {archivedRequests.length > 0 && (
+                <Accordion type="single" collapsible className="w-full mt-6">
+                    <AccordionItem value="archived-requests">
+                        <Card>
+                            <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline [&[data-state=open]>svg]:ml-auto">
+                                <div className="flex items-center gap-2">
+                                    <ArchiveIcon className="h-5 w-5 text-primary" />
+                                    Chamados Arquivados ({archivedRequests.length})
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 pt-0">
+                                {renderArchivedTable()}
+                            </AccordionContent>
+                        </Card>
+                    </AccordionItem>
+                </Accordion>
+            )}
 
             <AddReturnRequestModal open={isAddModalOpen} onOpenChange={setIsAddModalOpen} />
             <ReturnRequestDetailModal request={requestToView} onOpenChange={() => setRequestToView(null)} />

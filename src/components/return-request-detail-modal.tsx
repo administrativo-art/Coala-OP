@@ -9,7 +9,7 @@ import { type ReturnRequest, returnRequestStatuses, type ReturnRequestChecklistI
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { Calendar as CalendarIcon, Check, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, ChevronsRight, Send, XCircle, MessageSquareText, Copy, Video, Archive } from 'lucide-react';
 import { useReturnRequests } from '@/hooks/use-return-requests';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -72,7 +72,7 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
   if (!request) return null;
 
   const effectiveStatus = returnRequestStatuses[request.status] ? request.status : 'em_andamento';
-  const currentStatusInfo = returnRequestStatuses[effectiveStatus];
+  const currentStatusInfo = returnRequestStatuses[effectiveStatus] || { label: 'Desconhecido', color: 'bg-gray-400'};
 
   const handleChecklistChange = (index: number, checked: boolean) => {
     setChecklist(current => {
@@ -89,13 +89,21 @@ export function ReturnRequestDetailModal({ request, onOpenChange }: ReturnReques
             ...request.checklist,
             [effectiveStatus]: checklist,
         },
-        dataPrevisaoRetorno: returnDate ? returnDate.toISOString() : request.dataPrevisaoRetorno,
+        dataPrevisaoRetorno: returnDate ? returnDate.toISOString() : undefined,
         detalhesResultado: resultDetails,
     };
 
     updateReturnRequest(request.id, updatePayload);
   };
   
+  const handleArchive = () => {
+    if (!request) return;
+    updateReturnRequest(request.id, { isArchived: true });
+    onOpenChange(false);
+  };
+
+  const isFinalized = request.status === 'finalizado_sucesso' || request.status === 'finalizado_erro';
+
   const communicationTemplate = `Prezado(a) [Nome do representante],
 Tudo bem?
 
@@ -240,6 +248,12 @@ CT Sorvetes LTDA`;
           </ScrollArea>
 
           <DialogFooter className="pt-4 border-t">
+            {isFinalized && (
+              <Button variant="outline" onClick={handleArchive}>
+                <Archive className="mr-2 h-4 w-4" />
+                Arquivar
+              </Button>
+            )}
             <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
