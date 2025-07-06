@@ -60,10 +60,10 @@ export function ConsumptionAnalysisDashboard() {
       });
     });
 
-    const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
+    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.kioskId;
     let relevantConsumptionData: { [productId: string]: number } = {};
 
-    if (kioskIdForChart === 'matriz' && user.username === 'master') {
+    if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
         const masterAverages: { [productId: string]: { totalAvg: number } } = {};
         Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
             if (kioskId === 'matriz') return;
@@ -138,7 +138,7 @@ export function ConsumptionAnalysisDashboard() {
                         <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
                     </CardTitle>
                     <CardDescription>
-                        {user?.username === 'master' 
+                        {user?.username === 'Tiago Brasil' 
                             ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
                             : `Produtos consumidos no seu quiosque.`}
                     </CardDescription>
@@ -178,7 +178,7 @@ export function ConsumptionAnalysisDashboard() {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {user?.username === 'master' && (
+                    {user?.username === 'Tiago Brasil' && (
                         <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
                             <SelectTrigger className="w-full sm:w-[240px]">
                                 <SelectValue placeholder="Selecionar Quiosque" />
@@ -239,7 +239,7 @@ export function ConsumptionAnalysisDashboard() {
                             <p className="text-sm">
                                 {selectedProducts.length === 0
                                 ? "Selecione produtos no filtro para exibi-los no gráfico."
-                                : user?.username === 'master' && selectedKiosk !== 'matriz' 
+                                : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
                                     ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
                                 }

@@ -60,7 +60,7 @@ export function ExpiryControl() {
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
-    if (user.username === 'master' || (permissions.lots.edit && permissions.lots.delete)) return lots;
+    if (user.username === 'Tiago Brasil' || (permissions.lots.edit && permissions.lots.delete)) return lots;
     return lots.filter(lot => lot.kioskId === user.kioskId);
   }, [lots, user, loading, permissions]);
 
@@ -81,7 +81,7 @@ export function ExpiryControl() {
 
 
   const groupedLots = useMemo(() => {
-    const kioskFilteredLots = (user?.username === 'master')
+    const kioskFilteredLots = (user?.username === 'Tiago Brasil')
       ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
       : visibleLots;
 
@@ -386,7 +386,7 @@ export function ExpiryControl() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                {user?.username === 'master' && (
+                {user?.username === 'Tiago Brasil' && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline">

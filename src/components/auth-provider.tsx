@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useContext } fr
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, runTransaction } from "firebase/firestore";
 import { ProfilesContext } from '@/components/profiles-provider';
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (currentUser) {
-      if (currentUser.username === 'master') {
+      if (currentUser.username === 'Tiago Brasil') {
         setPermissions(defaultAdminPermissions);
         return;
       }
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (querySnapshot.empty && !localStorage.getItem('users_seeded') && profilesContext.adminProfileId) {
             console.log("No users found. Seeding master user...");
             const masterUser: Omit<User, 'id'> = {
-              username: 'master',
+              username: 'Tiago Brasil',
               password: 'master',
               profileId: profilesContext.adminProfileId,
               kioskId: 'matriz',

@@ -74,7 +74,7 @@ export function UserManagement() {
   };
   
   const handleDeleteClick = (user: User) => {
-    if (user.id === currentUser?.id || user.username === 'master') return;
+    if (user.id === currentUser?.id || user.username === 'Tiago Brasil') return;
     setUserToDelete(user);
   };
 
@@ -145,7 +145,7 @@ export function UserManagement() {
                   <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome de usuário</FormLabel>
-                        <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'master'} /></FormControl>
+                        <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'Tiago Brasil'} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -161,7 +161,7 @@ export function UserManagement() {
                     <FormField control={form.control} name="profileId" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Perfil de permissão</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'master' || profilesLoading}>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'Tiago Brasil' || profilesLoading}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
                             <SelectContent>
                                 {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -222,7 +222,7 @@ export function UserManagement() {
                         </div>
                       <div className="flex gap-2">
                         {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                        {permissions.users.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'master' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
+                        {permissions.users.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'Tiago Brasil' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     </div>
                   ))}

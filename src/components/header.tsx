@@ -23,7 +23,7 @@ export function Header() {
     const canManageLots = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory);
     const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
     const canManageStock = canManageLots || canAnalyzeStock;
-    const isMasterUser = user?.username === 'master';
+    const isMasterUser = user?.username === 'Tiago Brasil';
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },

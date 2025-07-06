@@ -59,7 +59,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
     useEffect(() => {
         if (!open) return;
         
-        if(user?.username === 'master') {
+        if(user?.username === 'Tiago Brasil') {
             setKioskId('');
         } else if (user?.kioskId) {
             setKioskId(user.kioskId);
@@ -253,7 +253,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-4 items-end border p-4 rounded-lg">
-                    {user?.username === 'master' && (
+                    {user?.username === 'Tiago Brasil' && (
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium">Quiosque</label>
                             <Select value={kioskId} onValueChange={setKioskId}><SelectTrigger><SelectValue placeholder="Selecione..."/></SelectTrigger>

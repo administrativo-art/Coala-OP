@@ -57,7 +57,7 @@ export default function DashboardPage() {
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
-    return user.username === 'master' ? lots : lots.filter(lot => lot.kioskId === user.kioskId);
+    return user.username === 'Tiago Brasil' ? lots : lots.filter(lot => lot.kioskId === user.kioskId);
   }, [lots, user, lotsLoading]);
 
   const expiringSoonCount = useMemo(() => {
@@ -78,7 +78,7 @@ export default function DashboardPage() {
     
     const activeRequests = returnRequests.filter(r => !r.isArchived);
 
-    if (user.username === 'master' || permissions.returns.updateStatus) { 
+    if (user.username === 'Tiago Brasil' || permissions.returns.updateStatus) { 
         return activeRequests;
     }
 
@@ -106,10 +106,10 @@ export default function DashboardPage() {
       });
     });
 
-    const kioskIdForChart = user.username === 'master' ? selectedKiosk : user.kioskId;
+    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.kioskId;
     let relevantConsumptionData: { [productId: string]: number } = {};
 
-    if (kioskIdForChart === 'matriz' && user.username === 'master') {
+    if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
         const masterAverages: { [productId: string]: { totalAvg: number } } = {};
         
         Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
@@ -262,7 +262,7 @@ export default function DashboardPage() {
                         <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
                     </CardTitle>
                     <CardDescription>
-                        {user?.username === 'master' 
+                        {user?.username === 'Tiago Brasil' 
                             ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
                             : `Produtos consumidos no seu quiosque.`}
                     </CardDescription>
@@ -296,7 +296,7 @@ export default function DashboardPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {user?.username === 'master' && (
+                    {user?.username === 'Tiago Brasil' && (
                         <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
                             <SelectTrigger className="w-full sm:w-[240px]">
                                 <SelectValue placeholder="Selecionar Quiosque" />
@@ -357,7 +357,7 @@ export default function DashboardPage() {
                             <p className="text-sm">
                                 {selectedProducts.length === 0
                                 ? "Selecione produtos no filtro para exibi-los no gráfico."
-                                : user?.username === 'master' && selectedKiosk !== 'matriz' 
+                                : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
                                     ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
                                 }
