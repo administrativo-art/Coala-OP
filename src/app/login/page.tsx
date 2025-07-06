@@ -61,7 +61,7 @@ export default function LoginPage() {
             <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
 
-        <h2 className="text-center text-2xl font-bold text-white/90 mb-6">BEM VINDO</h2>
+        <h2 className="text-center text-2xl font-bold text-white mb-6">BEM VINDO</h2>
         
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
@@ -75,7 +75,7 @@ export default function LoginPage() {
                         <Input
                             id="username-input"
                             placeholder="Usuário"
-                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/90 focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
+                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
                             {...field}
                         />
                     </FormControl>
@@ -94,7 +94,7 @@ export default function LoginPage() {
                             id="password-input"
                             type="password"
                             placeholder="Senha"
-                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/90 focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
+                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
                             {...field}
                         />
                     </FormControl>
@@ -115,12 +115,12 @@ export default function LoginPage() {
           </Form>
 
           <div className="text-center mt-4">
-            <a href="#" className="text-sm text-white/80 hover:text-white hover:underline">
+            <a href="#" className="text-sm text-white hover:underline">
               Trocar minha senha
             </a>
           </div>
 
-          <p className="text-xs text-white/30 mt-6">
+          <p className="text-xs text-white/50 mt-6">
             é tão bom quanto um abraço
           </p>
       </div>
