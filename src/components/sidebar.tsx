@@ -1,19 +1,14 @@
+
 "use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { Button } from "@/components/ui/button"
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-interface SidebarProps {
-  isCollapsed: boolean
-  setIsCollapsed: (isCollapsed: boolean) => void
-}
-
-export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname()
   const { permissions, loading, user } = useAuth()
 
@@ -35,18 +30,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   ];
 
   return (
-    <div className="hidden border-r bg-background text-foreground md:block dark transition-all duration-300">
+    <div className="group hidden border-r bg-background text-foreground md:block dark transition-all duration-300 ease-in-out w-[72px] hover:w-[280px]">
       <div className="flex h-full max-h-screen flex-col">
-        <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
+        <div className="flex h-14 shrink-0 items-center justify-center border-b px-4 lg:h-[60px]">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            {isCollapsed ? (
-                <Shell className="h-6 w-6" />
-            ) : (
-              <div className="font-logo select-none">
-                <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
-                <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
-              </div>
-            )}
+            <Shell className="h-6 w-6 group-hover:hidden" />
+            <div className="font-logo select-none hidden group-hover:block">
+              <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
+              <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
+            </div>
              <span className="sr-only">Coala Shakes</span>
           </Link>
         </div>
@@ -60,33 +52,21 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground",
-                        pathname === item.href && "bg-secondary text-secondary-foreground",
-                        isCollapsed && "h-9 w-9 justify-center"
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9 justify-center group-hover:justify-start",
+                        pathname === item.href && "bg-secondary text-secondary-foreground"
                       )}
                     >
                       <item.icon className="h-4 w-4" />
-                      <span className={cn(isCollapsed && "sr-only")}>{item.label}</span>
+                      <span className="hidden group-hover:inline whitespace-nowrap">{item.label}</span>
                     </Link>
                   </TooltipTrigger>
-                  {isCollapsed && (
+                  <div className="group-hover:hidden">
                     <TooltipContent side="right" sideOffset={5}>{item.label}</TooltipContent>
-                  )}
+                  </div>
                 </Tooltip>
               ))}
             </nav>
           </TooltipProvider>
-        </div>
-        
-        <div className="mt-auto border-t p-4 flex justify-center">
-          <Button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            size="icon"
-            variant="outline"
-          >
-            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            <span className="sr-only">Toggle sidebar</span>
-          </Button>
         </div>
       </div>
     </div>
