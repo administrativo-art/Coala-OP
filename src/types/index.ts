@@ -152,6 +152,7 @@ export type User = {
     password?: string; // Should be hashed in a real app
     profileId: string;
     kioskId: string;
+    avatarUrl?: string;
 };
 
 export type PredefinedConversionItem = {
