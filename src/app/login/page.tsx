@@ -57,13 +57,13 @@ export default function LoginPage() {
          className="flex min-h-screen flex-col items-center justify-center p-4">
       
       <div className="w-full max-w-sm rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
-        <div className="text-center font-logo select-none mb-12">
-            <div className="text-7xl font-bold text-primary">coala</div>
-            <div className="text-6xl font-bold text-accent -mt-5 pl-8">shakes</div>
+        <div className="text-center font-logo select-none mb-8">
+            <div className="text-6xl font-bold text-primary">coala</div>
+            <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
         
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 w-full">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
               <FormField
                 control={form.control}
                 name="username"
@@ -105,7 +105,7 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <div className="pt-2">
+              <div className="pt-6">
                 <Button
                     type="submit"
                     className="h-12 w-full rounded-full bg-gradient-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-px"
@@ -118,8 +118,8 @@ export default function LoginPage() {
             </form>
           </Form>
 
-          <div className="text-center mt-6">
-            <a href="#" className="text-sm text-black/50 hover:text-black/70 transition-colors duration-200">
+          <div className="text-center mt-4">
+            <a href="#" className="text-sm text-black/60 hover:text-black/80 transition-colors duration-200">
               Trocar minha senha
             </a>
           </div>
