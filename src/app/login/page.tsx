@@ -119,10 +119,6 @@ export default function LoginPage() {
               Trocar minha senha
             </a>
           </div>
-
-          <p className="text-xs text-white/50 mt-6">
-            é tão bom quanto um abraço
-          </p>
       </div>
     </div>
   );
