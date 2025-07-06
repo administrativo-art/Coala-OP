@@ -1,24 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="640" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid slice" fill="none">
   <defs>
-    <!-- Gradiente suave entre rosa e azul-claro -->
-    <linearGradient id="gradient-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#F883B6" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#4CC6D3" stop-opacity="0.4"/>
-    </linearGradient>
+    <!-- Blur para os blobs -->
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="40" />
+    </filter>
   </defs>
 
-  <!-- Fundo com gradiente -->
-  <rect width="360" height="640" fill="url(#gradient-bg)" />
+  <!-- Fundo claro -->
+  <rect width="360" height="640" fill="#FCF5F9"/>
 
-  <!-- Formas abstratas para dar profundidade -->
-  <ellipse cx="180" cy="150" rx="160" ry="100" fill="#FFC7DA" opacity="0.6"/>
-  <ellipse cx="100" cy="450" rx="140" ry="90"  fill="#4CC6D3" opacity="0.5"/>
-  <ellipse cx="260" cy="520" rx="180" ry="110" fill="#F883B6" opacity="0.4"/>
-  <ellipse cx="280" cy="300" rx="120" ry="70"  fill="#4CC6D3" opacity="0.3"/>
+  <!-- Blobs orgânicos com blur -->
+  <circle cx="90"  cy="180" r="100" fill="#4CC6D3" filter="url(#blur)" opacity="0.6"/>
+  <circle cx="270" cy="220" r="80"  fill="#F883B6" filter="url(#blur)" opacity="0.5"/>
+  <circle cx="180" cy="450" r="120" fill="#FFC7DA" filter="url(#blur)" opacity="0.4"/>
+  <ellipse cx="300" cy="520" rx="90" ry="60" fill="#FBD243" opacity="0.3"/>
+  <ellipse cx="60"  cy="520" rx="70" ry="45" fill="#4CC6D3" opacity="0.3"/>
 
-  <!-- Pequenas bolhas para suavizar a composição -->
-  <circle cx="50"  cy="100" r="12" fill="#FFF" opacity="0.2"/>
-  <circle cx="310" cy="180" r="8"  fill="#FFF" opacity="0.15"/>
-  <circle cx="200" cy="600" r="16" fill="#FFF" opacity="0.2"/>
-  <circle cx="30"  cy="580" r="10" fill="#FFF" opacity="0.15"/>
+  <!-- Pequenos pontos para textura sutil -->
+  <g opacity="0.15">
+    <circle cx="50"  cy="100" r="4" fill="#fff"/>
+    <circle cx="320" cy="150" r="3" fill="#fff"/>
+    <circle cx="200" cy="600" r="5" fill="#fff"/>
+    <circle cx="30"  cy="580" r="3" fill="#fff"/>
+    <circle cx="340" cy="50"  r="4" fill="#fff"/>
+  </g>
 </svg>
