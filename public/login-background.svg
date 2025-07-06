@@ -1,52 +1,24 @@
-<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="1920" height="1080" fill="#4AC9E3"/>
-<path d="M129.5 73.1992C129.5 70.339 131.79 68.0493 134.65 68.0493C137.51 68.0493 139.8 70.339 139.8 73.1992V106.679C139.8 113.629 135.087 119.532 128.85 120.599C127.859 120.769 126.852 120.859 125.83 120.859C119.74 120.859 114.7 115.819 114.7 109.729C114.7 108.709 114.79 107.709 114.96 106.719L115.01 106.429C115.7 102.329 118.8 98.9893 122.86 98.2193C126.38 97.5393 129.5 94.6293 129.5 91.0193V73.1992Z" fill="#36B9D3" fill-opacity="0.6"/>
-<path d="M149.38 68.32C149.38 62.77 153.92 58.23 159.47 58.23C165.02 58.23 169.56 62.77 169.56 68.32V98.91C169.56 109.84 162.73 119.01 152.8 121.72C151.03 122.24 149.19 122.5 147.31 122.5C138.32 122.5 131.06 115.24 131.06 106.25C131.06 104.37 131.32 102.53 131.84 100.76L132.06 99.99C133.8 93.99 138.83 89.44 144.91 88.08C147.78 87.45 149.38 84.88 149.38 82.02V68.32Z" fill="#36B9D3" fill-opacity="0.6"/>
-<ellipse cx="270" cy="99" rx="103" ry="83" fill="#FF4B9E"/>
-<ellipse cx="616" cy="117.5" rx="91" ry="80.5" fill="#FF9BCE"/>
-<ellipse cx="91" cy="46" rx="27" ry="24" fill="#FFC700"/>
-<ellipse cx="44.5" cy="151" rx="44.5" ry="43" fill="#FFC700"/>
-<ellipse cx="118.5" cy="275.5" rx="80.5" ry="68.5" fill="#4AD3E3"/>
-<ellipse cx="64" cy="428" rx="64" ry="60" fill="#FF4B9E"/>
-<ellipse cx="233" cy="421" rx="142" ry="94" fill="#FF9BCE"/>
-<ellipse cx="505" cy="554" rx="113" ry="79" fill="#FF4B9E"/>
-<ellipse cx="282" cy="622" rx="46" ry="38" fill="#FFC700"/>
-<ellipse cx="143" cy="608" rx="83" ry="70" fill="#4AD3E3"/>
-<ellipse cx="73" cy="747" rx="73" ry="67" fill="#FF9BCE"/>
-<ellipse cx="271" cy="780" rx="157" ry="99" fill="#FF4B9E"/>
-<ellipse cx="560" cy="745" rx="78" ry="65" fill="#FFC700"/>
-<ellipse cx="463" cy="898" rx="156" ry="94" fill="#4AD3E3"/>
-<ellipse cx="199" cy="961" rx="111" ry="85" fill="#FF9BCE"/>
-<ellipse cx="778" cy="99" rx="66" ry="57" fill="#FFC700"/>
-<ellipse cx="658" cy="301" rx="121" ry="91" fill="#FFC700"/>
-<ellipse cx="469" cy="289" rx="38" ry="33" fill="#4AD3E3"/>
-<ellipse cx="896" cy="254" rx="121" ry="97" fill="#FF4B9E"/>
-<ellipse cx="828" cy="481" rx="65" ry="56" fill="#FF9BCE"/>
-<ellipse cx="1092" cy="76" rx="91" ry="76" fill="#FF9BCE"/>
-<ellipse cx="1024" cy="229" rx="37" ry="32" fill="#FFC700"/>
-<ellipse cx="1136" cy="268" rx="77" ry="67" fill="#FF4B9E"/>
-<ellipse cx="1278" cy="180" rx="49" ry="42" fill="#4AD3E3"/>
-<ellipse cx="1342" cy="80" rx="100" ry="80" fill="#FFC700"/>
-<ellipse cx="1584" cy="64" rx="70" ry="64" fill="#FF9BCE"/>
-<ellipse cx="1789" cy="117" rx="101" ry="81" fill="#FF4B9E"/>
-<ellipse cx="1695" cy="242" rx="51" ry="44" fill="#FFC700"/>
-<ellipse cx="1503" cy="296" rx="92" ry="75" fill="#4AD3E3"/>
-<ellipse cx="1342" cy="421" rx="65" ry="56" fill="#FFC700"/>
-<ellipse cx="1211" cy="466" rx="90" ry="74" fill="#FF9BCE"/>
-<ellipse cx="988" cy="622" rx="160" ry="101" fill="#FFC700"/>
-<ellipse cx="806" cy="658" rx="46" ry="40" fill="#FF4B9E"/>
-<ellipse cx="789" cy="820" rx="121" ry="87" fill="#FF9BCE"/>
-<ellipse cx="669" cy="952" rx="81" ry="70" fill="#FFC700"/>
-<ellipse cx="945" cy="937" rx="156" ry="99" fill="#FF4B9E"/>
-<ellipse cx="1225" cy="863" rx="44" ry="38" fill="#FFC700"/>
-<ellipse cx="1190" cy="710" rx="65" ry="57" fill="#4AD3E3"/>
-<ellipse cx="1361" cy="635" rx="102" ry="82" fill="#FF4B9E"/>
-<ellipse cx="1593" cy="540" rx="109" ry="83" fill="#FFC700"/>
-<ellipse cx="1824" cy="453" rx="96" ry="78" fill="#4AD3E3"/>
-<ellipse cx="1760" cy="682" rx="86" ry="71" fill="#FF9BCE"/>
-<ellipse cx="1548" cy="775" rx="55" ry="48" fill="#FF4B9E"/>
-<ellipse cx="1407" cy="874" rx="73" ry="63" fill="#4AD3E3"/>
-<ellipse cx="1373" cy="1014" rx="97" ry="79" fill="#FFC700"/>
-<ellipse cx="1635" cy="958" rx="146" ry="94" fill="#FF9BCE"/>
-<ellipse cx="1860" cy="902" rx="60" ry="51" fill="#FF4B9E"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid slice" fill="none">
+  <defs>
+    <!-- Gradiente suave entre rosa e azul-claro -->
+    <linearGradient id="gradient-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F883B6" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#4CC6D3" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fundo com gradiente -->
+  <rect width="360" height="640" fill="url(#gradient-bg)" />
+
+  <!-- Formas abstratas para dar profundidade -->
+  <ellipse cx="180" cy="150" rx="160" ry="100" fill="#FFC7DA" opacity="0.6"/>
+  <ellipse cx="100" cy="450" rx="140" ry="90"  fill="#4CC6D3" opacity="0.5"/>
+  <ellipse cx="260" cy="520" rx="180" ry="110" fill="#F883B6" opacity="0.4"/>
+  <ellipse cx="280" cy="300" rx="120" ry="70"  fill="#4CC6D3" opacity="0.3"/>
+
+  <!-- Pequenas bolhas para suavizar a composição -->
+  <circle cx="50"  cy="100" r="12" fill="#FFF" opacity="0.2"/>
+  <circle cx="310" cy="180" r="8"  fill="#FFF" opacity="0.15"/>
+  <circle cx="200" cy="600" r="16" fill="#FFF" opacity="0.2"/>
+  <circle cx="30"  cy="580" r="10" fill="#FFF" opacity="0.15"/>
 </svg>
