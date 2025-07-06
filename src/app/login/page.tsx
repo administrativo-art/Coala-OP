@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from 'react';
@@ -61,7 +62,7 @@ export default function LoginPage() {
             <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
 
-        <h2 className="text-center text-2xl font-bold text-white tracking-wider mb-6">BEM VINDO</h2>
+        <h2 className="text-center text-2xl font-bold text-white tracking-wider mb-6 [text-shadow:0_2px_4px_rgba(0,0,0,0.2)]">BEM VINDO</h2>
         
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 w-full">
@@ -76,7 +77,7 @@ export default function LoginPage() {
                             <Input
                                 id="username-input"
                                 placeholder="Usuário"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
+                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
                                 {...field}
                             />
                         </FormControl>
@@ -97,7 +98,7 @@ export default function LoginPage() {
                                 id="password-input"
                                 type="password"
                                 placeholder="Senha"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
+                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
                                 {...field}
                             />
                         </FormControl>
@@ -120,7 +121,7 @@ export default function LoginPage() {
           </Form>
 
           <div className="text-center mt-6">
-            <a href="#" className="text-sm text-white/80 hover:text-white hover:underline">
+            <a href="#" className="text-sm text-white hover:underline [text-shadow:0_1px_3px_rgba(0,0,0,0.25)]">
               Trocar minha senha
             </a>
           </div>
