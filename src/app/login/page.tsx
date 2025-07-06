@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'O nome de usuário é obrigatório.'),
@@ -61,7 +62,7 @@ export default function LoginPage() {
             <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
 
-        <h2 className="text-center text-2xl font-bold text-white mb-6">BEM VINDO</h2>
+        <h2 className="text-center text-2xl font-bold text-white tracking-wider mb-6">BEM VINDO</h2>
         
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
@@ -75,7 +76,7 @@ export default function LoginPage() {
                         <Input
                             id="username-input"
                             placeholder="Usuário"
-                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
+                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
                             {...field}
                         />
                     </FormControl>
@@ -94,7 +95,7 @@ export default function LoginPage() {
                             id="password-input"
                             type="password"
                             placeholder="Senha"
-                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
+                            className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center"
                             {...field}
                         />
                     </FormControl>
@@ -108,14 +109,15 @@ export default function LoginPage() {
                     className="h-12 w-full rounded-full bg-gradient-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5"
                     disabled={form.formState.isSubmitting}
                   >
+                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                     Entrar
                 </Button>
               </div>
             </form>
           </Form>
 
-          <div className="text-center mt-4">
-            <a href="#" className="text-sm text-white hover:underline">
+          <div className="text-center mt-6">
+            <a href="#" className="text-sm text-white/80 hover:text-white hover:underline">
               Trocar minha senha
             </a>
           </div>
