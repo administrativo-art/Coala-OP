@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -56,14 +57,14 @@ export default function LoginPage() {
     <div style={{ backgroundImage: "url('/login-background.svg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
          className="flex min-h-screen flex-col items-center justify-center p-4">
       
-      <div className="w-full max-w-sm rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-full max-w-[350px] rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
         <div className="text-center font-logo select-none mb-8">
-            <div className="text-6xl font-bold text-primary">coala</div>
-            <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
+            <div className="text-5xl font-bold text-primary">coala</div>
+            <div className="text-4xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
         
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-[75%]">
               <FormField
                 control={form.control}
                 name="username"
@@ -119,9 +120,9 @@ export default function LoginPage() {
           </Form>
 
           <div className="text-center mt-4">
-            <a href="#" className="text-sm text-black/60 hover:text-black/80 transition-colors duration-200">
+            <Link href="/forgot-password" className="text-sm text-black/60 hover:text-black/80 transition-colors duration-200">
               Trocar minha senha
-            </a>
+            </Link>
           </div>
       </div>
     </div>

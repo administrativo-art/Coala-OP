@@ -21,6 +21,7 @@ export interface AuthContextType {
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
+  changePassword: (username: string, oldPassword: string, newPassword: string) => Promise<boolean>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             forms: { ...defaultGuestPermissions.forms, ...profilePermissions?.forms },
             stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profilePermissions?.stockAnalysis },
             consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
+            returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
@@ -178,6 +180,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
     }
   };
+
+  const changePassword = async (username: string, oldPassword: string, newPassword: string): Promise<boolean> => {
+    const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", oldPassword));
+    try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const userDoc = querySnapshot.docs[0];
+            const userRef = doc(db, "users", userDoc.id);
+            await updateDoc(userRef, { password: newPassword });
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error("Change password error:", error);
+        return false;
+    }
+  };
   
   const value: AuthContextType = {
     user: currentUser,
@@ -190,6 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     addUser,
     updateUser,
     deleteUser,
+    changePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
