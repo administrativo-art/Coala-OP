@@ -57,12 +57,10 @@ export default function LoginPage() {
          className="flex min-h-screen flex-col items-center justify-center p-4">
       
       <div className="w-full max-w-sm rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
-        <div className="text-center font-logo select-none mb-8">
+        <div className="text-center font-logo select-none mb-12">
             <div className="text-6xl font-bold text-primary">coala</div>
             <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
-
-        <h2 className="text-center text-2xl font-bold text-black/60 tracking-wider mb-6 [text-shadow:0_1px_3px_rgba(255,255,255,0.4)]">BEM VINDO</h2>
         
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 w-full">
@@ -77,7 +75,7 @@ export default function LoginPage() {
                             <Input
                                 id="username-input"
                                 placeholder="Usuário"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
+                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
                                 {...field}
                             />
                         </FormControl>
@@ -98,7 +96,7 @@ export default function LoginPage() {
                                 id="password-input"
                                 type="password"
                                 placeholder="Senha"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
+                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center pl-12"
                                 {...field}
                             />
                         </FormControl>
