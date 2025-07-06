@@ -62,7 +62,7 @@ export default function LoginPage() {
             <div className="text-5xl font-bold text-accent -mt-4 pl-6">shakes</div>
         </div>
 
-        <h2 className="text-center text-2xl font-bold text-white tracking-wider mb-6 [text-shadow:0_2px_4px_rgba(0,0,0,0.2)]">BEM VINDO</h2>
+        <h2 className="text-center text-2xl font-bold text-black/60 tracking-wider mb-6 [text-shadow:0_1px_3px_rgba(255,255,255,0.4)]">BEM VINDO</h2>
         
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 w-full">
@@ -121,7 +121,7 @@ export default function LoginPage() {
           </Form>
 
           <div className="text-center mt-6">
-            <a href="#" className="text-sm text-white hover:underline [text-shadow:0_1px_3px_rgba(0,0,0,0.25)]">
+            <a href="#" className="text-sm text-black/50 hover:text-black/70 transition-colors duration-200">
               Trocar minha senha
             </a>
           </div>
