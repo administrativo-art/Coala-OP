@@ -9,7 +9,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Loader2, User, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -71,7 +70,6 @@ export default function LoginPage() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <Label htmlFor="username-input" className="sr-only">Usuário</Label>
                      <div className="relative">
                         <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" />
                         <FormControl>
@@ -92,7 +90,6 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <Label htmlFor="password-input" className="sr-only">Senha</Label>
                      <div className={cn("relative", form.formState.errors.password && "animate-shake")}>
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" />
                         <FormControl>
