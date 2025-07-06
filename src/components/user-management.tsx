@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse } from 'lucide-react';
 import { type User } from '@/types';
@@ -88,7 +87,7 @@ export function UserManagement() {
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
       const updatedData: Partial<User> = {
-          username: values.username, // Username should be editable now
+          username: values.username,
           profileId: values.profileId,
           kioskId: values.kioskId,
       };
@@ -123,9 +122,8 @@ export function UserManagement() {
     );
   }
   
-  const getProfileName = (profileId: string) => {
-    return profiles.find(p => p.id === profileId)?.name || 'N/A';
-  }
+  const getProfileName = (profileId: string) => profiles.find(p => p.id === profileId)?.name || 'N/A';
+  const getKioskName = (kioskId: string) => kiosks.find(k => k.id === kioskId)?.name || 'N/A';
 
   return (
     <>
@@ -212,22 +210,36 @@ export function UserManagement() {
                 </Button>
               </div>
               <Separator className="my-4" />
-              <ScrollArea className="h-72">
-                <div className="space-y-2 pr-4">
-                  {users.map(user => (
-                    <div key={user.id} className="flex items-center justify-between rounded-md border p-3">
-                        <div>
-                            <span className="font-medium">{user.username}</span>
-                            <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>{getProfileName(user.profileId)}</span>
-                        </div>
-                      <div className="flex gap-2">
+              <div className="space-y-2">
+                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-4">
+                  <div>Usuário</div>
+                  <div>Perfil</div>
+                  <div>Quiosque</div>
+                  <div className="text-right">Ações</div>
+                </div>
+                {users.map(user => (
+                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
+                    <div className="font-medium">
+                      <span className="md:hidden text-muted-foreground">Usuário: </span>
+                      {user.username}
+                    </div>
+                    <div>
+                      <span className="md:hidden text-muted-foreground">Perfil: </span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
+                        {getProfileName(user.profileId)}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      <span className="md:hidden font-medium text-card-foreground">Quiosque: </span>
+                      {getKioskName(user.kioskId)}
+                    </div>
+                    <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
                         {permissions.users.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'Tiago Brasil' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
-                      </div>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </CardContent>
