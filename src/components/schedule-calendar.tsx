@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight, Users, Star, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule } from '@/types';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule) => void;
@@ -61,34 +60,37 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
   const turns = ['T1', 'T2'];
 
-  const handleEditClick = (e: React.MouseEvent, dayData: DailySchedule) => {
-      e.stopPropagation();
-      onEditDay(dayData);
-  }
-
   const renderDayCell = (day: Date) => {
     const dayISO = format(day, 'yyyy-MM-dd');
     const dayData = scheduleMap.get(dayISO);
     const dayNumber = format(day, 'd');
     const dayOfWeek = getDay(day); // 0 = Sunday
 
+    const handleEdit = () => {
+        if (!canManageSchedule) return;
+
+        const dataToEdit = dayData || {
+            id: dayISO,
+            diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
+        };
+        onEditDay(dataToEdit);
+    };
+
     return (
-      <div key={dayISO} className="border-t border-l p-1 min-h-[120px] flex flex-col relative bg-card hover:bg-muted/50 transition-colors group">
+      <div 
+        key={dayISO} 
+        className={cn(
+            "border-t border-l p-1 min-h-[120px] flex flex-col relative bg-card transition-colors group",
+            canManageSchedule && "cursor-pointer hover:bg-muted/50"
+        )}
+        onClick={handleEdit}
+      >
         <div className="flex justify-between items-start">
             <div className={cn("text-sm font-semibold mb-1", dayOfWeek === 0 && 'text-red-600')}>{dayNumber}</div>
-            {canManageSchedule && dayData && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleEditClick(e, dayData)}>
-                                <Edit className="h-3 w-3" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Editar escala do dia</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+            {canManageSchedule && (
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity pr-1 pt-1">
+                    <Edit className="h-3 w-3 text-muted-foreground" />
+                </div>
             )}
         </div>
         {dayData ? (
@@ -148,10 +150,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
               {days.map(renderDayCell)}
               {Array.from({ length: (7 - (days.length + startingDayIndex) % 7) % 7 }).map((_, i) => <div key={`empty-end-${i}`} className="border-t border-l h-24"></div>)}
             </div>
-             {schedule.length === 0 && (
+             {schedule.length === 0 && !loading && (
                  <div className="text-center py-16 text-muted-foreground border">
                     <p className="font-semibold">Nenhuma escala encontrada para {format(currentDate, 'MMMM yyyy', { locale: ptBR })}.</p>
-                    <p className="text-sm mt-1">A escala é gerada automaticamente todo dia 25 do mês anterior.</p>
+                    <p className="text-sm mt-1">Clique em um dia para criar a escala manualmente.</p>
                 </div>
             )}
             <div className="flex justify-end gap-4 mt-4 text-xs text-muted-foreground">
