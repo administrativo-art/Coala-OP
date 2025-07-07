@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from 'react';
@@ -11,8 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { type DailySchedule } from '@/types';
@@ -20,7 +19,6 @@ import { type DailySchedule } from '@/types';
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
   onOpenChange: (open: boolean) => void;
-  onSaveSuccess: (updatedDay: DailySchedule) => void;
 };
 
 const scheduleSchema = z.object({
@@ -32,8 +30,7 @@ const scheduleSchema = z.object({
 
 type FormValues = z.infer<typeof scheduleSchema>;
 
-export function EditScheduleModal({ dayData, onOpenChange, onSaveSuccess }: EditScheduleModalProps) {
-  const { users } = useAuth();
+export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
   const { updateDailySchedule, loading } = useMonthlySchedule();
   
@@ -71,7 +68,6 @@ export function EditScheduleModal({ dayData, onOpenChange, onSaveSuccess }: Edit
     });
 
     await updateDailySchedule(dayData.id, updates);
-    onSaveSuccess(dayData);
     onOpenChange(false);
   };
 
