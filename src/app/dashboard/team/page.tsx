@@ -1,12 +1,13 @@
-
 "use client"
 
 import { useState } from 'react';
+import { useAuth } from '@/hooks/use-auth';
 import { ScheduleCalendar } from '@/components/schedule-calendar';
 import { EditScheduleModal } from '@/components/edit-schedule-modal';
 import { type DailySchedule } from '@/types';
 
 export default function TeamManagement() {
+    const { users } = useAuth();
     const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
     const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
 
@@ -29,6 +30,7 @@ export default function TeamManagement() {
                 dayData={dayToEdit}
                 kioskId={kioskToEdit}
                 onOpenChange={handleCloseModal}
+                users={users}
             />
         </>
     );

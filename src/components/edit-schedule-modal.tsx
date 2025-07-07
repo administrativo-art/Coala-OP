@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -11,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
-import { type DailySchedule } from '@/types';
+import { type DailySchedule, type User } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
@@ -22,6 +22,7 @@ type EditScheduleModalProps = {
   dayData: DailySchedule | null;
   kioskId: string | null;
   onOpenChange: (open: boolean) => void;
+  users: User[];
 };
 
 const scheduleSchema = z.object({
@@ -34,7 +35,7 @@ const scheduleSchema = z.object({
 
 type FormValues = z.infer<typeof scheduleSchema>;
 
-export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditScheduleModalProps) {
+export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
   const { updateDailySchedule, loading } = useMonthlySchedule();
   const [showThirdShift, setShowThirdShift] = useState(false);
@@ -56,6 +57,11 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
     if (!kioskId) return null;
     return kiosks.find(k => k.id === kioskId);
   }, [kioskId, kiosks]);
+
+  const availableEmployees = useMemo(() => {
+    if (!users || !kioskId) return [];
+    return users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
+  }, [users, kioskId]);
 
   useEffect(() => {
     if (dayData && editingKiosk) {
@@ -101,6 +107,24 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
 
   const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
+  const renderSelect = (field: any) => (
+    <Select onValueChange={field.onChange} value={field.value || ''}>
+        <FormControl>
+            <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+        </FormControl>
+        <SelectContent>
+            <SelectItem value="">Ninguém</SelectItem>
+            <SelectItem value="FOLGA">FOLGA</SelectItem>
+            <Separator className="my-1"/>
+            {availableEmployees.map(emp => (
+                <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+  );
+
   return (
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -120,9 +144,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Turno Único</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Nome do colaborador" {...field} />
-                        </FormControl>
+                        {renderSelect(field)}
                         <FormMessage />
                         </FormItem>
                     )}
@@ -145,9 +167,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
                                 : field.key.endsWith('T2') ? 'Turno 2' 
                                 : 'Turno 3'
                             }</FormLabel>
-                            <FormControl>
-                                <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
-                            </FormControl>
+                            {renderSelect(controllerField)}
                             <FormMessage />
                             </FormItem>
                         )}
