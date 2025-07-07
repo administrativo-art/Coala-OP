@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useState } from "react"
 
 export function Sidebar() {
   const pathname = usePathname()
   const { permissions, loading, user } = useAuth()
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
@@ -31,12 +33,19 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="group hidden border-r bg-background text-foreground md:block dark transition-all duration-300 ease-in-out w-[72px] hover:w-[280px]">
+    <div 
+      className={cn(
+        "hidden border-r bg-background text-foreground md:block dark transition-all duration-300 ease-in-out",
+        isExpanded ? "w-[280px]" : "w-[72px]"
+      )}
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
+    >
       <div className="flex h-full max-h-screen flex-col">
         <div className="flex h-14 shrink-0 items-center justify-center border-b px-4 lg:h-[60px]">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            <Shell className="h-6 w-6 group-hover:hidden" />
-            <div className="font-logo select-none hidden group-hover:block">
+            <Shell className={cn("h-6 w-6", isExpanded && "hidden")} />
+            <div className={cn("font-logo select-none", !isExpanded && "hidden")}>
               <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
               <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
             </div>
@@ -53,15 +62,20 @@ export function Sidebar() {
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9 justify-center group-hover:justify-start",
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9",
+                        isExpanded ? "justify-start" : "justify-center",
                         pathname === item.href && "bg-secondary text-secondary-foreground"
                       )}
                     >
                       <item.icon className="h-4 w-4" />
-                      <span className="hidden group-hover:inline whitespace-nowrap">{item.label}</span>
+                      <span className={cn("whitespace-nowrap", !isExpanded && "hidden")}>{item.label}</span>
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={5} className="group-hover:hidden">{item.label}</TooltipContent>
+                  {!isExpanded && (
+                     <TooltipContent side="right" sideOffset={5}>
+                      {item.label}
+                    </TooltipContent>
+                  )}
                 </Tooltip>
               ))}
             </nav>
