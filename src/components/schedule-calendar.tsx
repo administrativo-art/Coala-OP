@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -213,7 +212,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         <div className="overflow-x-auto border rounded-lg">
             <div className="grid" style={{ gridTemplateColumns: `250px repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
                 {/* <!--- Headers ---> */}
-                <div className="sticky left-0 z-10 bg-card border-r border-b font-semibold p-2 flex items-center">Colaborador(a)</div>
+                <div className="sticky left-0 z-20 bg-card border-r border-b font-semibold p-2 flex items-center">Colaborador(a)</div>
                 {daysInMonth.map((day, dayIndex) => (
                     <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b", dayIndex < daysInMonth.length -1 && "border-r")}>
                         <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
