@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -111,7 +110,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
   const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
   const renderSelect = (field: any) => (
-    <Select onValueChange={field.onChange} value={field.value || ''}>
+    <Select onValueChange={field.onChange} value={field.value || '_NONE_'}>
         <FormControl>
             <SelectTrigger>
                 <SelectValue placeholder="Selecione..." />
@@ -120,7 +119,6 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
         <SelectContent>
             <SelectItem value="_NONE_">Ninguém</SelectItem>
             <SelectItem value="FOLGA">FOLGA</SelectItem>
-            <Separator className="my-1"/>
             {availableEmployees.map(emp => (
                 <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
             ))}
