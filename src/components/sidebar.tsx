@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -62,9 +61,7 @@ export function Sidebar() {
                       <span className="hidden group-hover:inline whitespace-nowrap">{item.label}</span>
                     </Link>
                   </TooltipTrigger>
-                  <div className="group-hover:hidden">
-                    <TooltipContent side="right" sideOffset={5}>{item.label}</TooltipContent>
-                  </div>
+                  <TooltipContent side="right" sideOffset={5} className="group-hover:hidden">{item.label}</TooltipContent>
                 </Tooltip>
               ))}
             </nav>
