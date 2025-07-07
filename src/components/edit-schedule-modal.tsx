@@ -20,6 +20,7 @@ import { type DailySchedule } from '@/types';
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
   onOpenChange: (open: boolean) => void;
+  onSaveSuccess: (updatedDay: DailySchedule) => void;
 };
 
 const scheduleSchema = z.object({
@@ -31,7 +32,7 @@ const scheduleSchema = z.object({
 
 type FormValues = z.infer<typeof scheduleSchema>;
 
-export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalProps) {
+export function EditScheduleModal({ dayData, onOpenChange, onSaveSuccess }: EditScheduleModalProps) {
   const { users } = useAuth();
   const { kiosks } = useKiosks();
   const { updateDailySchedule, loading } = useMonthlySchedule();
@@ -70,6 +71,7 @@ export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalPr
     });
 
     await updateDailySchedule(dayData.id, updates);
+    onSaveSuccess(dayData);
     onOpenChange(false);
   };
 
