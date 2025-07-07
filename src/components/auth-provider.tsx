@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
-                operacional: data.operacional ?? true,
+                operacional: data.operacional ?? false,
              } as User
         });
 
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
-                operacional: data.operacional ?? true,
+                operacional: data.operacional ?? false,
              } as User;
             setCurrentUser(userToLogin);
             window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
