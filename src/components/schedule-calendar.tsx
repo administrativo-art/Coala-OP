@@ -110,6 +110,24 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const kioskList = useMemo(() => {
       return kiosks.filter(k => k.id !== 'matriz').sort((a,b) => a.name.localeCompare(b.name));
   }, [kiosks]);
+  
+  const kioskColorMap = useMemo(() => {
+    const colors = [
+      { text: 'text-red-600', bg: 'bg-red-500' },
+      { text: 'text-blue-600', bg: 'bg-blue-500' },
+      { text: 'text-green-600', bg: 'bg-green-500' },
+      { text: 'text-orange-600', bg: 'bg-orange-500' },
+      { text: 'text-indigo-600', bg: 'bg-indigo-500' },
+      { text: 'text-purple-600', bg: 'bg-purple-500' },
+      { text: 'text-pink-600', bg: 'bg-pink-500' },
+      { text: 'text-teal-600', bg: 'bg-teal-500' },
+    ];
+    const map = new Map<string, { text: string; bg: string }>();
+    kioskList.forEach((kiosk, index) => {
+      map.set(kiosk.id, colors[index % colors.length]);
+    });
+    return map;
+  }, [kioskList]);
 
   const turns = ['T1', 'T2'];
 
@@ -163,10 +181,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         
                         const isReinforcement = employeeName.includes('+');
                         const mainEmployee = isReinforcement ? employeeName.split('+')[0].trim() : employeeName;
+
+                        const kioskColors = kioskColorMap.get(kiosk.id);
+                        const kioskColorClass = kioskColors ? kioskColors.text : 'text-primary';
                         
                         return (
                             <div key={`${kiosk.id}-${turn}`} className="flex items-center gap-1.5 p-1 rounded-sm bg-muted">
-                                <span className="font-bold text-primary w-6 shrink-0">{turn}</span>
+                                <span className={cn("font-bold w-6 shrink-0", kioskColorClass)}>{turn}</span>
                                 <span className="truncate flex-grow">{mainEmployee}</span>
                                 {isReinforcement && <Star className="h-3 w-3 text-yellow-500 shrink-0" />}
                             </div>
@@ -226,8 +247,21 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     <p className="text-sm mt-1">{canManageSchedule ? "Clique em 'Gerar Escala com IA' para começar ou edite um dia manualmente." : "Aguardando a criação da escala."}</p>
                 </div>
             )}
-            <div className="flex justify-end gap-4 mt-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1"><Star className="h-3 w-3 text-yellow-500"/> = Reforço Folguista</div>
+            <div className="flex justify-between items-center flex-wrap gap-4 mt-4 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="font-semibold">Legenda:</span>
+                  {kioskList.map(kiosk => {
+                      const kioskColors = kioskColorMap.get(kiosk.id);
+                      if (!kioskColors) return null;
+                      return (
+                          <div key={kiosk.id} className="flex items-center gap-1.5">
+                              <div className={cn("h-3 w-3 rounded-full border", kioskColors.bg)}></div>
+                              <span>{kiosk.name}</span>
+                          </div>
+                      )
+                  })}
+              </div>
+              <div className="flex items-center gap-1"><Star className="h-3 w-3 text-yellow-500"/> = Reforço Folguista</div>
             </div>
           </>
         )}
