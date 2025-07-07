@@ -11,6 +11,7 @@ import { z } from 'genkit';
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 
+// Keep old input/output types for external compatibility
 const UserSchema = z.object({
   id: z.string(),
   username: z.string(),
@@ -32,10 +33,27 @@ const GenerateScheduleInputSchema = z.object({
 export type GenerateScheduleInput = z.infer<typeof GenerateScheduleInputSchema>;
 
 
-const GenerateScheduleOutputSchema = z.record(z.string(), z.record(z.string(), z.string().optional()))
-  .describe('The complete monthly schedule. The top-level key is the date string "YYYY-MM-DD". The nested value is an object where the key is a string like "Kiosk Name T1" or "Kiosk Name T2", and the value is the assigned employee\'s username.');
+// This is the output type that the rest of the app expects.
+const GenerateScheduleOutputSchema = z.record(z.string(), z.record(z.string(), z.string().optional()));
 export type GenerateScheduleOutput = z.infer<typeof GenerateScheduleOutputSchema>;
 
+// -- NEW AI-specific schemas --
+const AiShiftSchema = z.object({
+  kioskName: z.string().describe("The name of the kiosk."),
+  turn: z.enum(['T1', 'T2']).describe("The shift turn, either T1 or T2."),
+  employeeUsername: z.string().describe("The username of the assigned employee."),
+});
+
+const AiDailyScheduleSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("The date for this schedule in YYYY-MM-DD format."),
+  shifts: z.array(AiShiftSchema).describe("A list of all shifts for this date."),
+});
+
+const AiScheduleOutputSchema = z.object({
+  schedule: z.array(AiDailyScheduleSchema).describe("The complete monthly schedule as an array of daily schedules."),
+});
+type AiScheduleOutput = z.infer<typeof AiScheduleOutputSchema>;
+// -- END NEW SCHEMAS --
 
 export async function generateSchedule(input: GenerateScheduleInput): Promise<GenerateScheduleOutput> {
   // Add day of the week to the prompt context
@@ -48,7 +66,24 @@ export async function generateSchedule(input: GenerateScheduleInput): Promise<Ge
 
   const extendedInput = { ...input, days };
 
-  return generateScheduleFlow(extendedInput);
+  const aiOutput = await generateScheduleFlow(extendedInput);
+
+  // Transform the AI's array-based output into the record-based format the app expects
+  const transformedSchedule: GenerateScheduleOutput = {};
+  if (aiOutput && aiOutput.schedule) {
+    aiOutput.schedule.forEach(dailySchedule => {
+      const dateKey = dailySchedule.date;
+      if (!transformedSchedule[dateKey]) {
+        transformedSchedule[dateKey] = {};
+      }
+      dailySchedule.shifts.forEach(shift => {
+        const shiftKey = `${shift.kioskName} ${shift.turn}`;
+        transformedSchedule[dateKey][shiftKey] = shift.employeeUsername;
+      });
+    });
+  }
+
+  return transformedSchedule;
 }
 
 const prompt = ai.definePrompt({
@@ -58,7 +93,7 @@ const prompt = ai.definePrompt({
       days: z.array(z.object({ date: z.string(), dayOfWeek: z.string() })),
     }),
   },
-  output: { schema: GenerateScheduleOutputSchema },
+  output: { schema: AiScheduleOutputSchema }, // Use new schema here
   prompt: `You are an expert shift scheduler for a chain of kiosks. Your task is to generate a fair and balanced monthly work schedule.
 
   **Input Data:**
@@ -83,7 +118,7 @@ const prompt = ai.definePrompt({
   4.  **Folguistas:** Employees marked as 'folguista' (floater) do not have a fixed shift and should be used to cover the days off of other employees. They are essential for filling gaps.
   5.  **No Back-to-Backs:** An employee cannot work T2 on one day and T1 the very next day.
   6.  **Fairness:** Distribute the workload and days off as evenly as possible among all employees. Every employee should have a similar number of work days.
-  7.  **Output Format:** You MUST provide a complete schedule for every day of the month. The output must be a JSON object. The keys of this object are date strings in "YYYY-MM-DD" format. The value for each date is another object where keys are strings in the format "Kiosk Name T1" or "Kiosk Name T2", and the value is the username of the assigned employee.
+  7.  **Output Format:** You MUST provide a complete schedule for every day of the month. The output must be a single JSON object with a key "schedule". The value of "schedule" must be an array of objects, where each object represents a single day. Each day object must have a "date" (string in "YYYY-MM-DD" format) and a "shifts" key. "shifts" must be an array of shift objects. Each shift object must have "kioskName" (string), "turn" (string, "T1" or "T2"), and "employeeUsername" (string, the employee's username).
 
   Generate the complete schedule for the month now.
   `,
@@ -95,10 +130,13 @@ const generateScheduleFlow = ai.defineFlow(
     inputSchema: GenerateScheduleInputSchema.extend({
       days: z.array(z.object({ date: z.string(), dayOfWeek: z.string() })),
     }),
-    outputSchema: GenerateScheduleOutputSchema,
+    outputSchema: AiScheduleOutputSchema, // Use new schema here
   },
-  async (input) => {
+  async (input): Promise<AiScheduleOutput> => {
     const { output } = await prompt(input);
-    return output!;
+    if (!output) {
+      throw new Error("AI did not return a schedule.");
+    }
+    return output;
   }
 );
