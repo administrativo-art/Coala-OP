@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -10,11 +9,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Loader2, Bed } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Loader2, Bed, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule } from '@/types';
 import { generateSchedule } from '@/ai/flows/generate-schedule-flow';
 import { useToast } from '@/hooks/use-toast';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule) => void;
@@ -30,6 +30,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
+
+  const operationalUserMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    users.forEach(u => map.set(u.username, u.operacional));
+    return map;
+  }, [users]);
 
   useEffect(() => {
     fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
@@ -120,6 +126,34 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return kiosks.filter(k => k.id !== 'matriz');
   }, [kiosks]);
 
+  const renderEmployee = (name: string) => {
+    if (!name || name === 'Folga') {
+      return <span className="truncate">{name}</span>;
+    }
+    
+    const isOperational = operationalUserMap.get(name);
+
+    if (isOperational === false) { // Explicitly check for false, undefined means user not found
+      return (
+        <TooltipProvider>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <span className="truncate text-destructive flex items-center gap-1">
+                <UserX className="h-3 w-3 shrink-0" />
+                {name}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{name} não é um colaborador operacional.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return <span className="truncate">{name}</span>;
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -160,10 +194,16 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
                 {/* <!--- Kiosk Rows ---> */}
                 {kiosksToDisplay.map((kiosk, kioskIndex) => {
+                    const kioskColor = kiosk.name.toLowerCase().includes('tirirical')
+                      ? 'bg-blue-100 dark:bg-blue-900/30'
+                      : kiosk.name.toLowerCase().includes('joão paulo')
+                      ? 'bg-green-100 dark:bg-green-900/30'
+                      : 'bg-card';
                     return (
                     <React.Fragment key={kiosk.id}>
                         <div className={cn(
-                            "sticky left-0 z-10 bg-card border-r p-2 flex items-center gap-3 font-medium text-sm",
+                            "sticky left-0 z-10 border-r p-2 flex items-center gap-3 font-medium text-sm",
+                             kioskColor,
                             kioskIndex < kiosksToDisplay.length - 1 && "border-b"
                         )}>
                            {kiosk.name}
@@ -190,11 +230,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                         <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-muted/30">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="font-bold text-sky-600">T1:</span>
-                                                <span className="truncate">{t1Employee}</span>
+                                                {renderEmployee(t1Employee)}
                                             </div>
                                             <div className="flex items-center gap-1.5">
                                                 <span className="font-bold text-amber-600">T2:</span>
-                                                <span className="truncate">{t2Employee}</span>
+                                                {renderEmployee(t2Employee)}
                                             </div>
                                         </div>
                                     ) : (
