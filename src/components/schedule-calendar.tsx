@@ -10,11 +10,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule, kioskId: string) => void;
@@ -72,6 +73,81 @@ const calculateConsecutiveWorkDays = (
     });
     
     return counts;
+};
+
+const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { scheduleMap: Map<string, DailySchedule>, users: User[], kiosksToDisplay: Kiosk[] }) => {
+    const costData = useMemo(() => {
+        const workDays = new Map<string, number>();
+        const operationalUsers = users.filter(u => u.operacional);
+
+        operationalUsers.forEach(u => workDays.set(u.username, 0));
+
+        for (const daySchedule of scheduleMap.values()) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    if (employeeNames && typeof employeeNames === 'string') {
+                        employeeNames.split(' + ').forEach(name => {
+                            const trimmedName = name.trim();
+                            if (trimmedName && workDays.has(trimmedName)) {
+                                workDays.set(trimmedName, (workDays.get(trimmedName) || 0) + 1);
+                            }
+                        });
+                    }
+                });
+            });
+        }
+        
+        return operationalUsers
+            .map(user => {
+                const daysWorked = workDays.get(user.username) || 0;
+                const dailyCost = user.valeTransporte || 0;
+                return {
+                    id: user.id,
+                    username: user.username,
+                    daysWorked,
+                    totalCost: daysWorked * dailyCost,
+                };
+            })
+            .filter(item => item.daysWorked > 0)
+            .sort((a, b) => a.username.localeCompare(b.username));
+
+    }, [scheduleMap, users, kiosksToDisplay]);
+
+    if (costData.length === 0) {
+        return null;
+    }
+
+    return (
+        <Card className="mt-6">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><DollarSign /> Análise de Custo de Vale-Transporte</CardTitle>
+                <CardDescription>Custo total de VT para os colaboradores na escala do mês atual.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Colaborador</TableHead>
+                                <TableHead className="text-center">Dias Trabalhados</TableHead>
+                                <TableHead className="text-right">Valor Total (VT)</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {costData.map(item => (
+                                <TableRow key={item.id}>
+                                    <TableCell className="font-medium">{item.username}</TableCell>
+                                    <TableCell className="text-center">{item.daysWorked}</TableCell>
+                                    <TableCell className="text-right">{item.totalCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
 };
 
 
@@ -257,13 +333,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   return (
     <>
         <Card className="w-full">
-        <CardHeader>
-            <div className="space-y-1">
+        <CardHeader className="space-y-4">
+            <div>
                 <CardTitle className="flex items-center gap-2"><Users /> Escala de Trabalho</CardTitle>
                 <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
              {canManageSchedule && (
-                <div className="flex flex-wrap gap-2 pt-4">
+                <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
                     </Button>
@@ -273,7 +349,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     </Button>
                 </div>
             )}
-            <div className="flex items-center gap-2 pt-4">
+            <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
                 <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
                 <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
@@ -387,6 +463,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             )}
         </CardContent>
         </Card>
+
+        <div className="mt-6">
+            <TransportationCostAnalysis 
+                scheduleMap={scheduleMap}
+                users={users}
+                kiosksToDisplay={kiosksToDisplay}
+            />
+        </div>
 
         {isClearConfirmationOpen && (
             <DeleteConfirmationDialog

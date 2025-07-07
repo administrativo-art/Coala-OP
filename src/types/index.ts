@@ -185,6 +185,7 @@ export type User = {
     folguista: boolean;
     operacional: boolean;
     avatarUrl?: string;
+    valeTransporte?: number;
 };
 
 export type PredefinedConversionItem = {

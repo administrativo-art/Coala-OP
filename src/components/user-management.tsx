@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -32,6 +32,7 @@ const userSchema = z.object({
   turno: z.enum(['T1', 'T2']).nullable(),
   folguista: z.boolean(),
   operacional: z.boolean(),
+  valeTransporte: z.coerce.number().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 4;
 }, {
@@ -62,6 +63,7 @@ export function UserManagement() {
         turno: null,
         folguista: false,
         operacional: true,
+        valeTransporte: 0,
     }
   });
   
@@ -84,6 +86,7 @@ export function UserManagement() {
       turno: null,
       folguista: false,
       operacional: true,
+      valeTransporte: 0,
     });
     setShowForm(true);
   };
@@ -98,6 +101,7 @@ export function UserManagement() {
       turno: user.turno,
       folguista: user.folguista,
       operacional: user.operacional,
+      valeTransporte: user.valeTransporte || 0,
     });
     setShowForm(true);
   };
@@ -283,20 +287,32 @@ export function UserManagement() {
                         </FormItem>
                     )}/>
                     
-                  <FormField control={form.control} name="turno" render={({ field }) => (
-                      <FormItem>
-                          <FormLabel>Turno Padrão</FormLabel>
-                          <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione um turno..." /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                  <SelectItem value="T1">T1</SelectItem>
-                                  <SelectItem value="T2">T2</SelectItem>
-                                  <SelectItem value="null">Nenhum (para folguistas)</SelectItem>
-                              </SelectContent>
-                          </Select>
-                          <FormMessage />
-                      </FormItem>
-                  )}/>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="turno" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Turno Padrão</FormLabel>
+                            <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione um turno..." /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="T1">T1</SelectItem>
+                                    <SelectItem value="T2">T2</SelectItem>
+                                    <SelectItem value="null">Nenhum (para folguistas)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                     <FormField control={form.control} name="valeTransporte" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Valor Diário do VT (R$)</FormLabel>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <FormControl><Input type="number" placeholder="ex: 8.80" className="pl-8" {...field} value={field.value ?? ''} /></FormControl>
+                            </div>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">
@@ -320,14 +336,15 @@ export function UserManagement() {
               </div>
               <Separator className="my-4" />
               <div className="space-y-2">
-                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-4">
+                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-5">
                   <div>Usuário</div>
                   <div>Perfil</div>
                   <div>Quiosque(s)</div>
+                  <div>VT Diário</div>
                   <div className="text-right">Ações</div>
                 </div>
                 {users.map(user => (
-                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
+                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-5">
                     <div className="font-medium">
                       <span className="md:hidden text-muted-foreground">Usuário: </span>
                       {user.username}
@@ -341,6 +358,10 @@ export function UserManagement() {
                     <div className="text-muted-foreground text-sm truncate">
                       <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
                       {getKioskNames(user.assignedKioskIds)}
+                    </div>
+                     <div>
+                      <span className="md:hidden text-muted-foreground">VT Diário: </span>
+                      {(user.valeTransporte || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}

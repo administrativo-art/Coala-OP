@@ -107,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               turno: null,
               folguista: false,
               operacional: true,
+              valeTransporte: 0,
             };
             try {
               await addDoc(collection(db, "users"), masterUser as any);
@@ -126,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
                 operacional: data.operacional ?? false,
+                valeTransporte: data.valeTransporte ?? 0,
              } as User
         });
 
@@ -164,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
                 operacional: data.operacional ?? false,
+                valeTransporte: data.valeTransporte ?? 0,
              } as User;
             setCurrentUser(userToLogin);
             window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
