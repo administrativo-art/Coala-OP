@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -26,6 +26,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { users, permissions } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
+  const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -139,6 +140,52 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     setIsClearConfirmationOpen(false);
   };
 
+  const handleGenerateConfirm = async () => {
+    const operationalStaff = users.filter(u => u.operacional && !u.folguista && u.turno);
+    const kioskStaff: Record<string, { T1: string[], T2: string[] }> = {};
+    kiosksToDisplay.forEach(kiosk => {
+        kioskStaff[kiosk.id] = { T1: [], T2: [] };
+    });
+
+    operationalStaff.forEach(user => {
+        user.assignedKioskIds.forEach(kioskId => {
+            if (kioskStaff[kioskId] && user.turno) {
+                kioskStaff[kioskId][user.turno].push(user.username);
+            }
+        });
+    });
+
+    const newScheduleData: Record<string, Partial<DailySchedule>> = {};
+
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const dayOfWeek = day.getDay(); // 0 = Sunday
+
+        const dailyAssignments: Partial<DailySchedule> = {
+            id: dayISO,
+            diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
+        };
+
+        kiosksToDisplay.forEach(kiosk => {
+            const staff = kioskStaff[kiosk.id];
+            dailyAssignments[`${kiosk.name} T1`] = '';
+            dailyAssignments[`${kiosk.name} T2`] = '';
+            dailyAssignments[`${kiosk.name} T3`] = '';
+            dailyAssignments[`${kiosk.name} Folga`] = '';
+            
+            if (dayOfWeek !== 0 && staff) {
+                dailyAssignments[`${kiosk.name} T1`] = staff.T1.join(' + ');
+                dailyAssignments[`${kiosk.name} T2`] = staff.T2.join(' + ');
+            }
+        });
+
+        newScheduleData[dayISO] = dailyAssignments;
+    });
+
+    await createFullMonthSchedule(newScheduleData);
+    setIsGenerateConfirmationOpen(false);
+  };
+
   const renderEmployee = (name: string, count?: number) => {
     if (!name) return null;
     const displayName = count ? `${name}.${count}` : name;
@@ -185,10 +232,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
                 </div>
                 {canManageSchedule && (
-                    <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Limpar Mês
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
+                            <Wand2 className="mr-2 h-4 w-4" /> Gerar Escala
+                        </Button>
+                        <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Limpar Mês
+                        </Button>
+                    </div>
                 )}
             </div>
         </CardHeader>
@@ -309,6 +361,18 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 title="Limpar a escala do mês?"
                 description={`Esta ação irá apagar todos os agendamentos para ${format(currentDate, 'MMMM yyyy', { locale: ptBR })}. Esta ação não pode ser desfeita.`}
                 confirmButtonText="Sim, limpar mês"
+            />
+        )}
+
+        {isGenerateConfirmationOpen && (
+            <DeleteConfirmationDialog
+                open={isGenerateConfirmationOpen}
+                onOpenChange={setIsGenerateConfirmationOpen}
+                onConfirm={handleGenerateConfirm}
+                title="Gerar escala automática?"
+                description="Esta ação irá preencher a escala do mês com base nos turnos padrão dos colaboradores. Os dados existentes serão sobrescritos. Deseja continuar?"
+                confirmButtonText="Sim, Gerar Escala"
+                confirmButtonVariant="default"
             />
         )}
     </>
