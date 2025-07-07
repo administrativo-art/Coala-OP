@@ -182,6 +182,7 @@ export type User = {
     assignedKioskIds: string[];
     turno: 'T1' | 'T2' | null;
     folguista: boolean;
+    operacional: boolean;
     avatarUrl?: string;
 };
 

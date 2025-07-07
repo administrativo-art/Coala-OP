@@ -10,7 +10,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check } from 'lucide-react';
@@ -31,6 +31,7 @@ const userSchema = z.object({
   assignedKioskIds: z.array(z.string()).min(1, 'Selecione ao menos um quiosque.'),
   turno: z.enum(['T1', 'T2']).nullable(),
   folguista: z.boolean(),
+  operacional: z.boolean(),
 }).refine(data => {
     return !data.password || data.password.length >= 4;
 }, {
@@ -60,6 +61,7 @@ export function UserManagement() {
         assignedKioskIds: [],
         turno: null,
         folguista: false,
+        operacional: true,
     }
   });
   
@@ -80,7 +82,8 @@ export function UserManagement() {
       profileId: '',
       assignedKioskIds: [],
       turno: null,
-      folguista: false
+      folguista: false,
+      operacional: true,
     });
     setShowForm(true);
   };
@@ -93,7 +96,8 @@ export function UserManagement() {
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
       turno: user.turno,
-      folguista: user.folguista
+      folguista: user.folguista,
+      operacional: user.operacional,
     });
     setShowForm(true);
   };
@@ -249,6 +253,27 @@ export function UserManagement() {
 
                   <Separator />
                   <h4 className="font-medium text-muted-foreground">Configuração de Escala</h4>
+
+                  <FormField
+                    control={form.control}
+                    name="operacional"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5">
+                            <FormLabel>Colaborador Operacional</FormLabel>
+                            <FormDescription>
+                                Ative se este colaborador deve ser incluído na geração da escala de trabalho.
+                            </FormDescription>
+                        </div>
+                        <FormControl>
+                            <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            />
+                        </FormControl>
+                        </FormItem>
+                    )}
+                    />
                   
                    <FormField control={form.control} name="folguista" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">

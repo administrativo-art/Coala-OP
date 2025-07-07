@@ -106,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               assignedKioskIds: ['matriz'],
               turno: null,
               folguista: false,
+              operacional: true,
             };
             try {
               await addDoc(collection(db, "users"), masterUser as any);
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
+                operacional: data.operacional ?? true,
              } as User
         });
 
@@ -161,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
                 folguista: data.folguista ?? false,
+                operacional: data.operacional ?? true,
              } as User;
             setCurrentUser(userToLogin);
             window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));

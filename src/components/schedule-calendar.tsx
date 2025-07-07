@@ -52,12 +52,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
     try {
         const kiosksToStaff = kiosks.filter(k => k.id !== 'matriz');
-        const usersToSchedule = users.map(u => ({
-            id: u.id,
-            username: u.username,
-            turno: u.turno,
-            folguista: u.folguista
-        }));
+        const usersToSchedule = users
+            .filter(u => u.operacional)
+            .map(u => ({
+                id: u.id,
+                username: u.username,
+                turno: u.turno,
+                folguista: u.folguista
+            }));
         
         const result = await generateSchedule({
             month: currentMonth,
