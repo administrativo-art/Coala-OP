@@ -77,10 +77,10 @@ const prompt = ai.definePrompt({
   {{/each}}
 
   **Rules:**
-  1.  **Coverage:** Every kiosk must have one employee assigned to Turno 1 (T1) and one to Turno 2 (T2) for every single day of the month.
-  2.  **Standard Shifts:** Employees with a fixed 'turno' (T1 or T2) should primarily work that shift.
-  3.  **Folguistas:** Employees marked as 'folguista' (floater) do not have a fixed shift and should be used to cover the days off of other employees. They are essential for filling gaps.
-  4.  **Work Schedule:** The work schedule is flexible. The ideal is for employees to work about 6 days before a day off, but this is not a strict rule. The most important goal is to ensure full shift coverage. Days off can be granted in shorter intervals if necessary to complete the monthly schedule. **Hard Rule:** No employee can work more than 7 consecutive days without a day off. A day off is represented by the employee's name not being assigned to any shift on that day.
+  1.  **Coverage:** Every kiosk must have one employee assigned to Turno 1 (T1) and one to Turno 2 (T2) for every single day of the month. This is the top priority.
+  2.  **Strict 6-Day Work Limit:** No employee can work more than 6 consecutive days. After working for 6 days in a row, an employee MUST receive at least one day off. This is a non-negotiable rule. A day off is represented by the employee's name not being assigned to any shift on that day.
+  3.  **Standard Shifts:** Employees with a fixed 'turno' (T1 or T2) should primarily work that shift.
+  4.  **Folguistas:** Employees marked as 'folguista' (floater) do not have a fixed shift and should be used to cover the days off of other employees. They are essential for filling gaps.
   5.  **No Back-to-Backs:** An employee cannot work T2 on one day and T1 the very next day.
   6.  **Fairness:** Distribute the workload and days off as evenly as possible among all employees. Every employee should have a similar number of work days.
   7.  **Output Format:** You MUST provide a complete schedule for every day of the month. The output must be a JSON object. The keys of this object are date strings in "YYYY-MM-DD" format. The value for each date is another object where keys are strings in the format "Kiosk Name T1" or "Kiosk Name T2", and the value is the username of the assigned employee.
