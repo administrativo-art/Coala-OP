@@ -225,23 +225,21 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <CardTitle className="flex items-center gap-2"><Users /> Escala de Trabalho</CardTitle>
                 <CardDescription className="mt-1">Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row justify-between items-center pt-4 gap-4">
-                <div className="flex items-center gap-2">
+            {canManageSchedule && (
+                <div className="flex flex-wrap gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
+                        <Wand2 className="mr-2 h-4 w-4" /> Gerar Escala Automática
+                    </Button>
+                    <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Limpar Mês
+                    </Button>
+                </div>
+            )}
+            <div className="flex items-center gap-2 pt-4">
                 <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
                 <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
                 <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
-                </div>
-                {canManageSchedule && (
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
-                            <Wand2 className="mr-2 h-4 w-4" /> Gerar Escala
-                        </Button>
-                        <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Limpar Mês
-                        </Button>
-                    </div>
-                )}
             </div>
         </CardHeader>
         <CardContent>
