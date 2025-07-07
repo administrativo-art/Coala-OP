@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react";
@@ -20,7 +19,6 @@ import { Label } from "@/components/ui/label";
 
 type DeleteConfirmationDialogProps = {
   open: boolean;
-  isDeleting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   itemName?: string;
@@ -30,11 +28,11 @@ type DeleteConfirmationDialogProps = {
   description?: React.ReactNode;
   confirmButtonText?: string;
   confirmButtonVariant?: ButtonProps['variant'];
+  isDeleting?: boolean;
 }
 
 export function DeleteConfirmationDialog({ 
   open, 
-  isDeleting, 
   onOpenChange, 
   onConfirm, 
   itemName,
@@ -44,6 +42,7 @@ export function DeleteConfirmationDialog({
   description,
   confirmButtonText = "Excluir",
   confirmButtonVariant = "destructive",
+  isDeleting = false,
 }: DeleteConfirmationDialogProps) {
   
   const handleCheckedChange = (checked: boolean | 'indeterminate') => {

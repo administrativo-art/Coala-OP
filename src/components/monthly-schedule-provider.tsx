@@ -1,10 +1,9 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { type DailySchedule } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { type MonthlyScheduleContextType } from '@/types';
 
 export const MonthlyScheduleContext = createContext<MonthlyScheduleContextType | undefined>(undefined);
@@ -56,14 +55,32 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only on initial mount
+  }, []);
+
+  const updateDailySchedule = useCallback(async (dayId: string, updates: Partial<DailySchedule>) => {
+    const monthPadded = currentMonth.toString().padStart(2, '0');
+    const scheduleDocPath = `escala/${currentYear}-${monthPadded}/dias/${dayId}`;
+    const docRef = doc(db, scheduleDocPath);
+
+    try {
+        // Using set with merge: true will create the document if it doesn't exist,
+        // which might be desirable if a day was missed in generation.
+        // Or use updateDoc if you only want to update existing docs.
+        await setDoc(docRef, updates, { merge: true });
+    } catch(error) {
+        console.error("Error updating daily schedule:", error);
+        throw error;
+    }
+  }, [currentYear, currentMonth]);
+
 
   const value: MonthlyScheduleContextType = {
     schedule,
     loading,
     fetchSchedule,
     currentYear,
-    currentMonth
+    currentMonth,
+    updateDailySchedule,
   };
 
   return <MonthlyScheduleContext.Provider value={value}>{children}</MonthlyScheduleContext.Provider>;

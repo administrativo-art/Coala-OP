@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -148,6 +147,7 @@ export interface MonthlyScheduleContextType {
   schedule: DailySchedule[];
   loading: boolean;
   fetchSchedule: (year: number, month: number) => void;
+  updateDailySchedule: (dayId: string, updates: Partial<DailySchedule>) => Promise<void>;
   currentYear: number;
   currentMonth: number;
 }

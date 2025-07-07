@@ -1,5 +1,20 @@
-import { TeamManagement } from '@/components/team-management'
+"use client"
 
-export default function TeamPage() {
-    return <TeamManagement />
+import { useState } from 'react';
+import { ScheduleCalendar } from '@/components/schedule-calendar';
+import { EditScheduleModal } from '@/components/edit-schedule-modal';
+import { type DailySchedule } from '@/types';
+
+export default function TeamManagement() {
+    const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
+
+    return (
+        <>
+            <ScheduleCalendar onEditDay={setDayToEdit} />
+            <EditScheduleModal 
+                dayData={dayToEdit}
+                onOpenChange={() => setDayToEdit(null)}
+            />
+        </>
+    );
 }

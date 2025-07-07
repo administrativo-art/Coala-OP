@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -6,19 +5,27 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths,
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, VenetianMask, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, VenetianMask, Star, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule } from '@/types';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
-export function ScheduleCalendar() {
+interface ScheduleCalendarProps {
+    onEditDay: (day: DailySchedule) => void;
+}
+
+export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, loading: scheduleLoading, fetchSchedule } = useMonthlySchedule();
+  const { permissions } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const loading = kiosksLoading || scheduleLoading;
+  const canManageSchedule = permissions.team.manage;
 
   useEffect(() => {
     // Fetch schedule when component mounts or currentDate changes
@@ -54,6 +61,11 @@ export function ScheduleCalendar() {
 
   const turns = ['T1', 'T2'];
 
+  const handleEditClick = (e: React.MouseEvent, dayData: DailySchedule) => {
+      e.stopPropagation();
+      onEditDay(dayData);
+  }
+
   const renderDayCell = (day: Date) => {
     const dayISO = format(day, 'yyyy-MM-dd');
     const dayData = scheduleMap.get(dayISO);
@@ -61,8 +73,24 @@ export function ScheduleCalendar() {
     const dayOfWeek = getDay(day); // 0 = Sunday
 
     return (
-      <div key={dayISO} className="border-t border-l p-1 min-h-[120px] flex flex-col relative bg-card hover:bg-muted/50 transition-colors">
-        <div className={cn("text-sm font-semibold mb-1", dayOfWeek === 0 && 'text-red-600')}>{dayNumber}</div>
+      <div key={dayISO} className="border-t border-l p-1 min-h-[120px] flex flex-col relative bg-card hover:bg-muted/50 transition-colors group">
+        <div className="flex justify-between items-start">
+            <div className={cn("text-sm font-semibold mb-1", dayOfWeek === 0 && 'text-red-600')}>{dayNumber}</div>
+            {canManageSchedule && dayData && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleEditClick(e, dayData)}>
+                                <Edit className="h-3 w-3" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Editar escala do dia</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            )}
+        </div>
         {dayData ? (
           <div className="space-y-1 text-xs flex-grow">
             {kioskList.map(kiosk => (
@@ -86,9 +114,18 @@ export function ScheduleCalendar() {
                 </div>
             ))}
             {dayData.folguistaDSR && (
-                <div className="absolute bottom-1 right-1 p-1 bg-green-100 dark:bg-green-900 rounded-full" title="DSR Folguista">
-                    <VenetianMask className="h-4 w-4 text-green-600 dark:text-green-400" />
-                </div>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="absolute bottom-1 right-1 p-1 bg-green-100 dark:bg-green-900 rounded-full cursor-help">
+                                <VenetianMask className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>DSR Folguista</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             )}
           </div>
         ) : (
