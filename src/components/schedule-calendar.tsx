@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
