@@ -101,36 +101,53 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return counts;
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
 
-  const folgasPorDia = useMemo(() => {
-    const folgasMap = new Map<string, string[]>();
-    const operationalUsersList = users.filter(u => u.operacional);
+  const folgasPorKioskePorDia = useMemo(() => {
+    const folgasMap = new Map<string, Map<string, string[]>>(); // Map<dayISO, Map<kioskId, string[]>>
+    const operationalUsers = users.filter(u => u.operacional);
+    
+    const usersByKiosk = new Map<string, string[]>();
+    kiosksToDisplay.forEach(kiosk => {
+        const assignedUsers = operationalUsers
+            .filter(u => u.assignedKioskIds.includes(kiosk.id))
+            .map(u => u.username);
+        usersByKiosk.set(kiosk.id, assignedUsers);
+    });
 
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
         const daySchedule = scheduleMap.get(dayISO);
-        const todaysWorkers = new Set<string>();
+        const dayFolgasMap = new Map<string, string[]>();
 
-        if (daySchedule) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2'].forEach(turn => {
-                    const employeeName = daySchedule[`${kiosk.name} ${turn}`];
-                    if (employeeName && typeof employeeName === 'string' && employeeName.toLowerCase() !== 'folga') {
-                        todaysWorkers.add(employeeName);
-                    }
-                });
-            });
-        }
+        kiosksToDisplay.forEach(kiosk => {
+            const assignedToThisKiosk = usersByKiosk.get(kiosk.id) || [];
+            
+            const workingThisKiosk = new Set<string>();
+            if (daySchedule) {
+                const t1Employee = daySchedule[`${kiosk.name} T1`];
+                const t2Employee = daySchedule[`${kiosk.name} T2`];
+                if (t1Employee && typeof t1Employee === 'string' && t1Employee.toLowerCase() !== 'folga') {
+                    workingThisKiosk.add(t1Employee);
+                }
+                if (t2Employee && typeof t2Employee === 'string' && t2Employee.toLowerCase() !== 'folga') {
+                    workingThisKiosk.add(t2Employee);
+                }
+            }
 
-        const onLeave = operationalUsersList
-            .filter(user => !todaysWorkers.has(user.username))
-            .map(user => user.username);
-        
-        if (onLeave.length > 0) {
-            folgasMap.set(dayISO, onLeave);
+            const onLeaveFromThisKiosk = assignedToThisKiosk.filter(user => !workingThisKiosk.has(user));
+            
+            if (onLeaveFromThisKiosk.length > 0) {
+                dayFolgasMap.set(kiosk.id, onLeaveFromThisKiosk);
+            }
+        });
+
+        if (dayFolgasMap.size > 0) {
+            folgasMap.set(dayISO, dayFolgasMap);
         }
     });
+
     return folgasMap;
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
+
 
   const handleEditClick = (day: Date) => {
     if (!canManageSchedule) return;
@@ -259,6 +276,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const dayISO = format(day, 'yyyy-MM-dd');
                                 const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
+                                const onLeave = folgasPorKioskePorDia.get(dayISO)?.get(kiosk.id);
 
                                 const t1Employee = dayData?.[`${kiosk.name} T1`];
                                 const t2Employee = dayData?.[`${kiosk.name} T2`];
@@ -288,6 +306,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                     <span className="font-bold text-amber-600">T2:</span>
                                                     {renderEmployee(t2Employee, t2Count)}
                                                 </div>
+                                                {onLeave && onLeave.length > 0 && (
+                                                    <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
+                                                        <span className="font-bold text-muted-foreground">F:</span>
+                                                        <span className="truncate text-muted-foreground">{onLeave.join(', ')}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="text-center text-muted-foreground text-xs space-y-1 p-2 rounded-md bg-muted/30 w-full h-full flex flex-col items-center justify-center">
@@ -301,34 +325,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         </React.Fragment>
                         )
                     })}
-
-                    <React.Fragment>
-                        <div className={cn(
-                            "sticky left-0 z-20 border-r p-2 flex items-center font-medium text-sm bg-muted/50"
-                        )}>
-                            F:
-                        </div>
-                        {daysInMonth.map((day, dayIndex) => {
-                            const dayISO = format(day, 'yyyy-MM-dd');
-                            const onLeave = folgasPorDia.get(dayISO);
-
-                            return (
-                                <div 
-                                    key={`${dayISO}-folga`} 
-                                    className={cn(
-                                        "p-1.5 h-full flex items-center justify-center group z-10 text-xs bg-muted/50",
-                                        dayIndex < daysInMonth.length - 1 && "border-r",
-                                    )}
-                                >
-                                    {onLeave && onLeave.length > 0 && (
-                                        <div className="w-full h-full rounded-md p-2 text-xs flex flex-col justify-center">
-                                            <span className="truncate text-muted-foreground">{onLeave.join(', ')}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </React.Fragment>
                 </div>
             </div>
             )}
