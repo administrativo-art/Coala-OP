@@ -25,15 +25,16 @@ export default function DashboardLayout({
   if (loading || !isAuthenticated) {
     return (
       <div className="flex h-screen w-full">
-         <div className="hidden border-r bg-muted/40 md:block w-[72px]">
-            <div className="flex h-full max-h-screen flex-col gap-2">
-                 <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px] lg:px-6">
-                    <Skeleton className="h-8 w-8 rounded-full" />
+         <div className="hidden border-r bg-muted/40 md:block w-[280px]">
+            <div className="flex h-full max-h-screen flex-col">
+                 <div className="flex h-14 items-center justify-center border-b px-4 lg:h-[60px]">
+                    <Skeleton className="h-8 w-40" />
                  </div>
                  <div className="flex-1 p-4 space-y-4">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
                  </div>
             </div>
          </div>
@@ -53,7 +54,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[auto_1fr]">
+    <div className="grid min-h-screen w-full md:grid-cols-[280px_1fr]">
       <Sidebar />
       <div className="flex flex-col overflow-hidden">
         <Header />
