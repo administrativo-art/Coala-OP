@@ -6,19 +6,25 @@ import { type DailySchedule } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { type MonthlyScheduleContextType } from '@/types';
+import { getYear, getMonth, subMonths } from 'date-fns';
 
 export const MonthlyScheduleContext = createContext<MonthlyScheduleContextType | undefined>(undefined);
 
 export function MonthlyScheduleProvider({ children }: { children: React.ReactNode }) {
   const [schedule, setSchedule] = useState<DailySchedule[]>([]);
+  const [previousMonthSchedule, setPreviousMonthSchedule] = useState<DailySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const prevUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const fetchSchedule = useCallback((year: number, month: number) => {
     if (unsubscribeRef.current) {
       unsubscribeRef.current();
+    }
+     if (prevUnsubscribeRef.current) {
+      prevUnsubscribeRef.current();
     }
     
     setLoading(true);
@@ -42,6 +48,21 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
       setLoading(false);
     });
 
+    const prevMonthDate = subMonths(new Date(year, month - 1, 15), 1);
+    const prevYear = getYear(prevMonthDate);
+    const prevMonth = getMonth(prevMonthDate) + 1;
+    const prevMonthPadded = prevMonth.toString().padStart(2, '0');
+    const prevScheduleCollectionPath = `escala/${prevYear}-${prevMonthPadded}/dias`;
+
+    const prevQ = query(collection(db, prevScheduleCollectionPath));
+    prevUnsubscribeRef.current = onSnapshot(prevQ, (querySnapshot) => {
+      const prevScheduleData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailySchedule));
+      setPreviousMonthSchedule(prevScheduleData);
+    }, (error) => {
+      console.error(`Error fetching schedule for ${prevYear}-${prevMonthPadded}: `, error);
+      setPreviousMonthSchedule([]);
+    });
+
   }, []);
 
   useEffect(() => {
@@ -51,6 +72,9 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
+      }
+      if (prevUnsubscribeRef.current) {
+        prevUnsubscribeRef.current();
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,13 +119,14 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
 
   const value: MonthlyScheduleContextType = useMemo(() => ({
     schedule,
+    previousMonthSchedule,
     loading,
     fetchSchedule,
     currentYear,
     currentMonth,
     updateDailySchedule,
     createFullMonthSchedule,
-  }), [schedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule, createFullMonthSchedule]);
+  }), [schedule, previousMonthSchedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule, createFullMonthSchedule]);
 
   return <MonthlyScheduleContext.Provider value={value}>{children}</MonthlyScheduleContext.Provider>;
 }

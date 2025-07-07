@@ -145,6 +145,7 @@ export type DailySchedule = {
 
 export interface MonthlyScheduleContextType {
   schedule: DailySchedule[];
+  previousMonthSchedule: DailySchedule[];
   loading: boolean;
   fetchSchedule: (year: number, month: number) => void;
   updateDailySchedule: (dayId: string, updates: Partial<DailySchedule>) => Promise<void>;

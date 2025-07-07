@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type DailySchedule } from '@/types';
+import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -20,9 +20,64 @@ interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule, kioskId: string) => void;
 }
 
+const calculateConsecutiveWorkDays = (
+    days: Date[],
+    scheduleMap: Map<string, DailySchedule>,
+    users: User[],
+    kiosksToDisplay: Kiosk[],
+    initialCounts: Map<string, number> = new Map()
+) => {
+    const counts = new Map<string, Map<string, number>>();
+    const operationalUsers = users.filter(u => u.operacional);
+    const employeeTrackers = new Map<string, number>(initialCounts);
+
+    operationalUsers.forEach(u => {
+        if (!employeeTrackers.has(u.username)) {
+            employeeTrackers.set(u.username, 0);
+        }
+    });
+
+    days.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = scheduleMap.get(dayISO);
+        const todaysWorkers = new Set<string>();
+        const dayCounts = new Map<string, number>();
+
+        if (daySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    if (employeeNames && typeof employeeNames === 'string') {
+                        employeeNames.split(' + ').forEach(name => {
+                            if (name.trim() && name.toLowerCase() !== 'folga') {
+                                todaysWorkers.add(name.trim());
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        for (const employee of operationalUsers) {
+            const employeeName = employee.username;
+            if (todaysWorkers.has(employeeName)) {
+                const newCount = (employeeTrackers.get(employeeName) || 0) + 1;
+                employeeTrackers.set(employeeName, newCount);
+            } else {
+                employeeTrackers.set(employeeName, 0);
+            }
+            dayCounts.set(employeeName, employeeTrackers.get(employeeName) || 0);
+        }
+        counts.set(dayISO, dayCounts);
+    });
+    
+    return counts;
+};
+
+
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { schedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
+  const { schedule, previousMonthSchedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
   const { users, permissions } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
@@ -63,44 +118,26 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [kiosks]);
 
   const workDayCounts = useMemo(() => {
-    const counts = new Map<string, Map<string, number>>();
-    const employeeTrackers = new Map<string, number>();
-
     const operationalUsers = users.filter(u => u.operacional);
-    operationalUsers.forEach(u => employeeTrackers.set(u.username, 0));
+    
+    // 1. Calculate final counts from previous month
+    let initialCounts = new Map<string, number>();
+    if (previousMonthSchedule.length > 0) {
+        const sortedPrevMonthDays = previousMonthSchedule.map(s => parseISO(s.id)).sort((a,b) => a.getTime() - b.getTime());
+        const prevMonthScheduleMap = new Map<string, DailySchedule>();
+        previousMonthSchedule.forEach(day => prevMonthScheduleMap.set(day.id, day));
+        
+        const prevMonthCounts = calculateConsecutiveWorkDays(sortedPrevMonthDays, prevMonthScheduleMap, users, kiosksToDisplay);
+        const lastDayISO = format(sortedPrevMonthDays[sortedPrevMonthDays.length - 1], 'yyyy-MM-dd');
+        initialCounts = prevMonthCounts.get(lastDayISO) || new Map();
+    } else {
+        operationalUsers.forEach(u => initialCounts.set(u.username, 0));
+    }
+    
+    // 2. Calculate current month counts using initial counts
+    return calculateConsecutiveWorkDays(daysInMonth, scheduleMap, users, kiosksToDisplay, initialCounts);
 
-    daysInMonth.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = scheduleMap.get(dayISO);
-        const todaysWorkers = new Set<string>();
-        const dayCounts = new Map<string, number>();
-
-        if (daySchedule) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeName = daySchedule[`${kiosk.name} ${turn}`];
-                    if (employeeName && typeof employeeName === 'string' && employeeName.toLowerCase() !== 'folga') {
-                        todaysWorkers.add(employeeName);
-                    }
-                });
-            });
-        }
-
-        for (const employee of operationalUsers) {
-            const employeeName = employee.username;
-            if (todaysWorkers.has(employeeName)) {
-                const newCount = (employeeTrackers.get(employeeName) || 0) + 1;
-                employeeTrackers.set(employeeName, newCount);
-                dayCounts.set(employeeName, newCount);
-            } else {
-                employeeTrackers.set(employeeName, 0);
-            }
-        }
-        counts.set(dayISO, dayCounts);
-    });
-
-    return counts;
-  }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
+  }, [daysInMonth, scheduleMap, users, kiosksToDisplay, previousMonthSchedule]);
 
   const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
@@ -221,11 +258,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     <>
         <Card className="w-full">
         <CardHeader>
-            <div>
+            <div className="space-y-1">
                 <CardTitle className="flex items-center gap-2"><Users /> Escala de Trabalho</CardTitle>
-                <CardDescription className="mt-1">Visualize e edite as escalas de trabalho mensais.</CardDescription>
+                <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
-            {canManageSchedule && (
+             {canManageSchedule && (
                 <div className="flex flex-wrap gap-2 pt-4">
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
