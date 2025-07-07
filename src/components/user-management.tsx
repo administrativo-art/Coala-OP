@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -230,11 +231,18 @@ export function UserManagement() {
                                                 <CommandGroup>
                                                     <ScrollArea className="h-48">
                                                     {kiosks.map((kiosk) => (
-                                                        <CommandItem key={kiosk.id} onSelect={() => {
-                                                            const selected = field.value || [];
-                                                            const isSelected = selected.includes(kiosk.id);
-                                                            field.onChange(isSelected ? selected.filter(id => id !== kiosk.id) : [...selected, kiosk.id]);
-                                                        }}>
+                                                        <CommandItem 
+                                                            key={kiosk.id}
+                                                            onSelect={() => {
+                                                                const selected = field.value || [];
+                                                                const isSelected = selected.includes(kiosk.id);
+                                                                field.onChange(isSelected ? selected.filter(id => id !== kiosk.id) : [...selected, kiosk.id]);
+                                                            }}
+                                                            onMouseDown={(e) => {
+                                                              e.preventDefault();
+                                                              e.stopPropagation();
+                                                            }}
+                                                        >
                                                              <Check className={cn("mr-2 h-4 w-4", (field.value || []).includes(kiosk.id) ? "opacity-100" : "opacity-0")} />
                                                             {kiosk.name}
                                                         </CommandItem>
