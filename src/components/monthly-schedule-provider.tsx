@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type DailySchedule } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { type MonthlyScheduleContextType } from '@/types';
 
 export const MonthlyScheduleContext = createContext<MonthlyScheduleContextType | undefined>(undefined);
@@ -69,6 +69,29 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     }
   }, [currentYear, currentMonth]);
 
+  const createFullMonthSchedule = useCallback(async (scheduleData: Record<string, any>) => {
+    const monthPadded = currentMonth.toString().padStart(2, '0');
+    const collectionPath = `escala/${currentYear}-${monthPadded}/dias`;
+    const batch = writeBatch(db);
+
+    for (const dateId in scheduleData) {
+        if (Object.prototype.hasOwnProperty.call(scheduleData, dateId)) {
+            const daySchedule = scheduleData[dateId];
+            const docRef = doc(db, collectionPath, dateId);
+            batch.set(docRef, daySchedule);
+        }
+    }
+    
+    try {
+      await batch.commit();
+      console.log("Full month schedule successfully created.");
+    } catch (error) {
+      console.error("Error creating full month schedule:", error);
+      throw error;
+    }
+
+  }, [currentYear, currentMonth]);
+
 
   const value: MonthlyScheduleContextType = useMemo(() => ({
     schedule,
@@ -77,7 +100,8 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     currentYear,
     currentMonth,
     updateDailySchedule,
-  }), [schedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule]);
+    createFullMonthSchedule,
+  }), [schedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule, createFullMonthSchedule]);
 
   return <MonthlyScheduleContext.Provider value={value}>{children}</MonthlyScheduleContext.Provider>;
 }
