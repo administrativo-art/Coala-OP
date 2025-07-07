@@ -101,6 +101,37 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return counts;
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
 
+  const folgasPorDia = useMemo(() => {
+    const folgasMap = new Map<string, string[]>();
+    const operationalUsersList = users.filter(u => u.operacional);
+
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = scheduleMap.get(dayISO);
+        const todaysWorkers = new Set<string>();
+
+        if (daySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2'].forEach(turn => {
+                    const employeeName = daySchedule[`${kiosk.name} ${turn}`];
+                    if (employeeName && typeof employeeName === 'string' && employeeName.toLowerCase() !== 'folga') {
+                        todaysWorkers.add(employeeName);
+                    }
+                });
+            });
+        }
+
+        const onLeave = operationalUsersList
+            .filter(user => !todaysWorkers.has(user.username))
+            .map(user => user.username);
+        
+        if (onLeave.length > 0) {
+            folgasMap.set(dayISO, onLeave);
+        }
+    });
+    return folgasMap;
+  }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
+
   const handleEditClick = (day: Date) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -270,6 +301,34 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         </React.Fragment>
                         )
                     })}
+
+                    <React.Fragment>
+                        <div className={cn(
+                            "sticky left-0 z-20 border-r p-2 flex items-center font-medium text-sm bg-muted/50"
+                        )}>
+                            F:
+                        </div>
+                        {daysInMonth.map((day, dayIndex) => {
+                            const dayISO = format(day, 'yyyy-MM-dd');
+                            const onLeave = folgasPorDia.get(dayISO);
+
+                            return (
+                                <div 
+                                    key={`${dayISO}-folga`} 
+                                    className={cn(
+                                        "p-1.5 h-full flex items-center justify-center group z-10 text-xs bg-muted/50",
+                                        dayIndex < daysInMonth.length - 1 && "border-r",
+                                    )}
+                                >
+                                    {onLeave && onLeave.length > 0 && (
+                                        <div className="w-full h-full rounded-md p-2 text-xs flex flex-col justify-center">
+                                            <span className="truncate text-muted-foreground">{onLeave.join(', ')}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </React.Fragment>
                 </div>
             </div>
             )}
