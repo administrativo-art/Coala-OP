@@ -8,13 +8,27 @@ import { type DailySchedule } from '@/types';
 
 export default function TeamManagement() {
     const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
+    const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
+
+    const handleEdit = (day: DailySchedule, kioskId: string) => {
+        setDayToEdit(day);
+        setKioskToEdit(kioskId);
+    };
+
+    const handleCloseModal = (open: boolean) => {
+        if (!open) {
+            setDayToEdit(null);
+            setKioskToEdit(null);
+        }
+    };
 
     return (
         <>
-            <ScheduleCalendar onEditDay={setDayToEdit} />
+            <ScheduleCalendar onEditDay={handleEdit} />
             <EditScheduleModal 
                 dayData={dayToEdit}
-                onOpenChange={(open) => !open && setDayToEdit(null)}
+                kioskId={kioskToEdit}
+                onOpenChange={handleCloseModal}
             />
         </>
     );

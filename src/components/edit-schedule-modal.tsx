@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,13 +11,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { type DailySchedule } from '@/types';
 
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
+  kioskId: string | null;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -30,7 +30,7 @@ const scheduleSchema = z.object({
 
 type FormValues = z.infer<typeof scheduleSchema>;
 
-export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalProps) {
+export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
   const { updateDailySchedule, loading } = useMonthlySchedule();
   
@@ -45,19 +45,22 @@ export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalPr
     control: form.control,
     name: "shifts",
   });
+  
+  const editingKiosk = useMemo(() => {
+    if (!kioskId) return null;
+    return kiosks.find(k => k.id === kioskId);
+  }, [kioskId, kiosks]);
 
   useEffect(() => {
-    if (dayData) {
-      const initialShifts = kiosks
-        .filter(k => k.id !== 'matriz')
-        .flatMap(kiosk => ['T1', 'T2'].map(turn => ({
-          key: `${kiosk.name} ${turn}`,
-          value: dayData[`${kiosk.name} ${turn}`] || '',
-        })));
+    if (dayData && editingKiosk) {
+      const initialShifts = ['T1', 'T2'].map(turn => ({
+          key: `${editingKiosk.name} ${turn}`,
+          value: dayData[`${editingKiosk.name} ${turn}`] || '',
+      }));
       
       replace(initialShifts);
     }
-  }, [dayData, kiosks, replace, form]);
+  }, [dayData, editingKiosk, replace]);
 
   const onSubmit = async (values: FormValues) => {
     if (!dayData) return;
@@ -71,39 +74,37 @@ export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalPr
     onOpenChange(false);
   };
 
-  if (!dayData) return null;
+  if (!dayData || !editingKiosk) return null;
 
   return (
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Editar Escala</DialogTitle>
+          <DialogTitle>Editar Escala - {editingKiosk.name}</DialogTitle>
           <DialogDescription>
             Alterando a escala para {format(new Date(dayData.id), "EEEE, dd 'de' MMMM", { locale: ptBR })}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ScrollArea className="h-96 pr-4">
-              <div className="space-y-4">
-                {fields.map((field, index) => (
-                  <FormField
-                    key={field.id}
-                    control={form.control}
-                    name={`shifts.${index}.value`}
-                    render={({ field: controllerField }) => (
-                      <FormItem>
-                        <FormLabel>{field.key}</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
+            <div className="space-y-4 py-4">
+              {fields.map((field, index) => (
+                <FormField
+                  key={field.id}
+                  control={form.control}
+                  name={`shifts.${index}.value`}
+                  render={({ field: controllerField }) => (
+                    <FormItem>
+                      <FormLabel>{field.key.endsWith('T1') ? 'Turno 1' : 'Turno 2'}</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
             <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={loading}>Salvar Alterações</Button>

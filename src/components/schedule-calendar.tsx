@@ -17,7 +17,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 interface ScheduleCalendarProps {
-    onEditDay: (day: DailySchedule) => void;
+    onEditDay: (day: DailySchedule, kioskId: string) => void;
 }
 
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
@@ -149,7 +149,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
 
 
-  const handleEditClick = (day: Date) => {
+  const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
     const dayData = scheduleMap.get(dayISO);
@@ -164,7 +164,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             return acc;
         }, {} as { [key: string]: any })
     };
-    onEditDay(dataToEdit);
+    onEditDay(dataToEdit, kioskId);
   };
   
   const handleClearMonthConfirm = async () => {
@@ -287,7 +287,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 return (
                                     <div 
                                         key={dayISO} 
-                                        onClick={() => handleEditClick(day)}
+                                        onClick={() => handleEditClick(day, kiosk.id)}
                                         className={cn(
                                             "p-1.5 h-full flex items-center justify-center group z-10",
                                             kioskColor,
