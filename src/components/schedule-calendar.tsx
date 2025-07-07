@@ -101,58 +101,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return counts;
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
 
-  const folgasPorKioskePorDia = useMemo(() => {
-    const folgasMap = new Map<string, Map<string, string[]>>(); // Map<dayISO, Map<kioskId, string[]>>
-    const operationalUsers = users.filter(u => u.operacional);
-    
-    const usersByKiosk = new Map<string, string[]>();
-    kiosksToDisplay.forEach(kiosk => {
-        const assignedUsers = operationalUsers
-            .filter(u => u.assignedKioskIds.includes(kiosk.id))
-            .map(u => u.username);
-        usersByKiosk.set(kiosk.id, assignedUsers);
-    });
-
-    daysInMonth.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = scheduleMap.get(dayISO);
-        const dayFolgasMap = new Map<string, string[]>();
-
-        kiosksToDisplay.forEach(kiosk => {
-            const assignedToThisKiosk = usersByKiosk.get(kiosk.id) || [];
-            
-            const workingThisKiosk = new Set<string>();
-            if (daySchedule) {
-                const t1Employee = daySchedule[`${kiosk.name} T1`];
-                const t2Employee = daySchedule[`${kiosk.name} T2`];
-                const t3Employee = daySchedule[`${kiosk.name} T3`];
-                if (t1Employee && typeof t1Employee === 'string' && t1Employee.toLowerCase() !== 'folga') {
-                    workingThisKiosk.add(t1Employee);
-                }
-                if (t2Employee && typeof t2Employee === 'string' && t2Employee.toLowerCase() !== 'folga') {
-                    workingThisKiosk.add(t2Employee);
-                }
-                if (t3Employee && typeof t3Employee === 'string' && t3Employee.toLowerCase() !== 'folga') {
-                    workingThisKiosk.add(t3Employee);
-                }
-            }
-
-            const onLeaveFromThisKiosk = assignedToThisKiosk.filter(user => !workingThisKiosk.has(user));
-            
-            if (onLeaveFromThisKiosk.length > 0) {
-                dayFolgasMap.set(kiosk.id, onLeaveFromThisKiosk);
-            }
-        });
-
-        if (dayFolgasMap.size > 0) {
-            folgasMap.set(dayISO, dayFolgasMap);
-        }
-    });
-
-    return folgasMap;
-  }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
-
-
   const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -162,7 +110,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
-            ['T1', 'T2', 'T3'].forEach(turn => {
+            ['T1', 'T2', 'T3', 'Folga'].forEach(turn => {
                 acc[`${kiosk.name} ${turn}`] = '';
             });
             return acc;
@@ -173,7 +121,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
-    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`]);
+    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`, `${kiosk.name} Folga`]);
 
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
@@ -280,11 +228,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const dayISO = format(day, 'yyyy-MM-dd');
                                 const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
-                                const onLeave = folgasPorKioskePorDia.get(dayISO)?.get(kiosk.id);
+                                const isSunday = day?.getDay() === 0;
 
                                 const t1Employee = dayData?.[`${kiosk.name} T1`];
                                 const t2Employee = dayData?.[`${kiosk.name} T2`];
                                 const t3Employee = dayData?.[`${kiosk.name} T3`];
+                                const folgaEmployee = dayData?.[`${kiosk.name} Folga`];
                                 
                                 const t1Count = t1Employee ? dayCounts?.get(t1Employee) : undefined;
                                 const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
@@ -304,24 +253,33 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                     >
                                         {dayData ? (
                                             <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-card/50">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-bold text-sky-600">T1:</span>
-                                                    {renderEmployee(t1Employee, t1Count)}
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-bold text-amber-600">T2:</span>
-                                                    {renderEmployee(t2Employee, t2Count)}
-                                                </div>
-                                                {t3Employee && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className="font-bold text-emerald-600">T3:</span>
-                                                        {renderEmployee(t3Employee, t3Count)}
+                                                {isSunday ? (
+                                                     <div className="flex items-center gap-1.5">
+                                                        <span className="font-bold text-purple-600">U:</span>
+                                                        {renderEmployee(t1Employee, t1Count)}
                                                     </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-sky-600">T1:</span>
+                                                            {renderEmployee(t1Employee, t1Count)}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-amber-600">T2:</span>
+                                                            {renderEmployee(t2Employee, t2Count)}
+                                                        </div>
+                                                        {t3Employee && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="font-bold text-emerald-600">T3:</span>
+                                                                {renderEmployee(t3Employee, t3Count)}
+                                                            </div>
+                                                        )}
+                                                    </>
                                                 )}
-                                                {onLeave && onLeave.length > 0 && (
-                                                    <div className={cn("flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed", (t1Employee || t2Employee || t3Employee) ? "" : "hidden")}>
+                                                {folgaEmployee && (
+                                                    <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
                                                         <span className="font-bold text-muted-foreground">F:</span>
-                                                        <span className="truncate text-muted-foreground">{onLeave.join(', ')}</span>
+                                                        <span className="truncate text-muted-foreground">{folgaEmployee}</span>
                                                     </div>
                                                 )}
                                             </div>

@@ -16,6 +16,7 @@ import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { type DailySchedule } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
+import { Separator } from './ui/separator';
 
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
@@ -28,6 +29,7 @@ const scheduleSchema = z.object({
     key: z.string(),
     value: z.string(),
   })),
+  folga: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof scheduleSchema>;
@@ -41,6 +43,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
       shifts: [],
+      folga: '',
     },
   });
 
@@ -65,26 +68,38 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
       }));
       
       replace(initialShifts);
+      form.setValue('folga', dayData[`${editingKiosk.name} Folga`] || '');
     }
-  }, [dayData, editingKiosk, replace]);
+  }, [dayData, editingKiosk, replace, form]);
 
   const onSubmit = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
-    
-    const updates: Partial<DailySchedule> = {};
-    values.shifts.forEach(shift => {
-      updates[shift.key] = shift.value;
-    });
 
-    if (!showThirdShift) {
-        updates[`${editingKiosk.name} T3`] = '';
+    const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
+    const updates: Partial<DailySchedule> = {};
+
+    if (isSunday) {
+        updates[`${editingKiosk.name} T1`] = values.shifts[0].value;
+        updates[`${editingKiosk.name} T2`] = ''; // Clear T2
+        updates[`${editingKiosk.name} T3`] = ''; // Clear T3
+    } else {
+        values.shifts.forEach(shift => {
+            updates[shift.key] = shift.value;
+        });
+        if (!showThirdShift) {
+            updates[`${editingKiosk.name} T3`] = '';
+        }
     }
+    
+    updates[`${editingKiosk.name} Folga`] = values.folga; 
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
   };
 
   if (!dayData || !editingKiosk) return null;
+
+  const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
   return (
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
@@ -98,36 +113,74 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-4 py-4">
-              {fields.map((field, index) => {
-                if (field.key.endsWith(' T3') && !showThirdShift) {
-                    return null;
-                }
-                return (
-                    <FormField
-                    key={field.id}
+              {isSunday ? (
+                <FormField
                     control={form.control}
-                    name={`shifts.${index}.value`}
-                    render={({ field: controllerField }) => (
+                    name={`shifts.0.value`} // Assumes T1 is at index 0
+                    render={({ field }) => (
                         <FormItem>
-                        <FormLabel>{
-                            field.key.endsWith('T1') ? 'Turno 1' 
-                            : field.key.endsWith('T2') ? 'Turno 2' 
-                            : 'Turno 3'
-                        }</FormLabel>
+                        <FormLabel>Turno Único</FormLabel>
                         <FormControl>
-                            <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
+                            <Input placeholder="Nome do colaborador" {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
-                    />
-                )
-              })}
+                />
+              ) : (
+                <>
+                  {fields.map((field, index) => {
+                    if (field.key.endsWith(' T3') && !showThirdShift) {
+                        return null;
+                    }
+                    return (
+                        <FormField
+                        key={field.id}
+                        control={form.control}
+                        name={`shifts.${index}.value`}
+                        render={({ field: controllerField }) => (
+                            <FormItem>
+                            <FormLabel>{
+                                field.key.endsWith('T1') ? 'Turno 1' 
+                                : field.key.endsWith('T2') ? 'Turno 2' 
+                                : 'Turno 3'
+                            }</FormLabel>
+                            <FormControl>
+                                <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    )
+                  })}
+                </>
+              )}
             </div>
-             <div className="flex items-center space-x-2">
-                <Switch id="third-shift-toggle" checked={showThirdShift} onCheckedChange={setShowThirdShift} />
-                <Label htmlFor="third-shift-toggle">Habilitar 3º turno</Label>
-            </div>
+
+            {!isSunday && (
+                <div className="flex items-center space-x-2">
+                    <Switch id="third-shift-toggle" checked={showThirdShift} onCheckedChange={setShowThirdShift} />
+                    <Label htmlFor="third-shift-toggle">Habilitar 3º turno</Label>
+                </div>
+            )}
+            
+            <Separator className="my-2" />
+            
+            <FormField
+                control={form.control}
+                name="folga"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Folga</FormLabel>
+                    <FormControl>
+                        <Input placeholder="Nome(s) do(s) colaborador(es) de folga" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+
             <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={loading}>Salvar Alterações</Button>
