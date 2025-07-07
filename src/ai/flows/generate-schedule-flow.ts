@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI flow for automatically generating a monthly work schedule.
@@ -17,6 +18,7 @@ const UserSchema = z.object({
   username: z.string(),
   turno: z.enum(['T1', 'T2']).nullable(),
   folguista: z.boolean(),
+  assignedKioskNames: z.array(z.string()).describe("A list of kiosk names this employee is assigned to work at.")
 });
 
 const KioskSchema = z.object({
@@ -120,7 +122,7 @@ const prompt = ai.definePrompt({
   - **Month/Year:** {{month}}/{{year}}
   - **Employees:**
   {{#each users}}
-    - {{this.username}} (Shift: {{#if this.turno}}{{this.turno}}{{else}}N/A{{/if}}, Folguista: {{this.folguista}})
+    - {{this.username}} (Shift: {{#if this.turno}}{{this.turno}}{{else}}N/A{{/if}}, Folguista: {{this.folguista}}, Quiosques Permitidos: {{#if this.assignedKioskNames}}{{#each this.assignedKioskNames}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}Todos{{/if}})
   {{/each}}
   - **Kiosks to staff:**
   {{#each kiosks}}
@@ -132,13 +134,14 @@ const prompt = ai.definePrompt({
   {{/each}}
 
   **Rules:**
-  1.  **Coverage:** Every kiosk must have one employee assigned to Turno 1 (T1) and one to Turno 2 (T2) for every single day of the month. This is the top priority.
-  2.  **Strict 6-Day Work Limit:** No employee can work more than 6 consecutive days. After working for 6 days in a row, an employee MUST receive at least one day off. This is a non-negotiable rule. A day off is represented by the employee's name not being assigned to any shift on that day. Folgas can be given before 6 days.
-  3.  **Standard Shifts:** Employees with a fixed 'turno' (T1 or T2) should primarily work that shift.
-  4.  **Folguistas:** Employees marked as 'folguista' (floater) do not have a fixed shift and should be used to cover the days off of other employees. They are essential for filling gaps.
-  5.  **No Back-to-Backs:** An employee cannot work T2 on one day and T1 the very next day.
-  6.  **Fairness:** Distribute the workload and days off as evenly as possible among all employees. Every employee should have a similar number of work days.
-  7.  **Output Format:** You MUST provide a complete schedule. {{#if partialSchedule}}Your output MUST include both the original partial schedule and the new days you have generated, combined into a single complete schedule array for the whole month.{{else}}You MUST provide a complete schedule for every day of the month.{{/if}} The output must be a single JSON object with a key "schedule". The value of "schedule" must be an array of objects, where each object represents a single day. Each day object must have a "date" (string in "YYYY-MM-DD" format) and a "shifts" key. "shifts" must be an array of shift objects. Each shift object must have "kioskName" (string), "turn" (string, "T1" or "T2"), and "employeeUsername" (string, the employee's username).
+  1.  **Kiosk Assignment:** An employee can ONLY be assigned to a shift at a kiosk if that kiosk's name is in their 'Quiosques Permitidos' list. If the list is empty, assume they can work at any kiosk. This is a strict, non-negotiable rule.
+  2.  **Coverage:** Every kiosk must have one employee assigned to Turno 1 (T1) and one to Turno 2 (T2) for every single day of the month. This is the top priority.
+  3.  **Strict 6-Day Work Limit:** No employee can work more than 6 consecutive days. After working for 6 days in a row, an employee MUST receive at least one day off. This is a non-negotiable rule. A day off is represented by the employee's name not being assigned to any shift on that day. Folgas can be given before 6 days.
+  4.  **Standard Shifts:** Employees with a fixed 'turno' (T1 or T2) should primarily work that shift.
+  5.  **Folguistas:** Employees marked as 'folguista' (floater) do not have a fixed shift and should be used to cover the days off of other employees. They are essential for filling gaps.
+  6.  **No Back-to-Backs:** An employee cannot work T2 on one day and T1 the very next day.
+  7.  **Fairness:** Distribute the workload and days off as evenly as possible among all employees. Every employee should have a similar number of work days.
+  8.  **Output Format:** You MUST provide a complete schedule. {{#if partialSchedule}}Your output MUST include both the original partial schedule and the new days you have generated, combined into a single complete schedule array for the whole month.{{else}}You MUST provide a complete schedule for every day of the month.{{/if}} The output must be a single JSON object with a key "schedule". The value of "schedule" must be an array of objects, where each object represents a single day. Each day object must have a "date" (string in "YYYY-MM-DD" format) and a "shifts" key. "shifts" must be an array of shift objects. Each shift object must have "kioskName" (string), "turn" (string, "T1" or "T2"), and "employeeUsername" (string, the employee's username).
 
   Generate the schedule now.
   `,

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -60,7 +61,13 @@ export default function TeamManagement() {
                 });
             
             const kiosksToStaff = kiosks.filter(k => k.id !== 'matriz');
-            const usersToSchedule = users.filter(u => u.operacional).map(u => ({ id: u.id, username: u.username, turno: u.turno, folguista: u.folguista }));
+            const usersToSchedule = users.filter(u => u.operacional).map(u => ({
+                id: u.id,
+                username: u.username,
+                turno: u.turno,
+                folguista: u.folguista,
+                assignedKioskNames: u.assignedKioskIds.map(id => kiosks.find(k => k.id === id)?.name).filter(Boolean) as string[]
+            }));
 
             const result = await generateSchedule({
                 month: currentMonth,

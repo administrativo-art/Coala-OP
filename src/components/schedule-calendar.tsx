@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -61,7 +62,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 id: u.id,
                 username: u.username,
                 turno: u.turno,
-                folguista: u.folguista
+                folguista: u.folguista,
+                assignedKioskNames: u.assignedKioskIds.map(id => kiosks.find(k => k.id === id)?.name).filter(Boolean) as string[]
             }));
         
         const result = await generateSchedule({
@@ -184,9 +186,9 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         <div className="overflow-x-auto border rounded-lg">
             <div className="grid" style={{ gridTemplateColumns: `200px repeat(${daysInMonth.length}, minmax(150px, 1fr))` }}>
                 {/* <!--- Headers ---> */}
-                <div className="sticky left-0 z-20 bg-card border-r border-b font-semibold p-2 flex items-center">Quiosque</div>
+                <div className="sticky left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Quiosque</div>
                 {daysInMonth.map((day, dayIndex) => (
-                    <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b", dayIndex < daysInMonth.length - 1 && "border-r")}>
+                    <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b z-20 bg-card", dayIndex < daysInMonth.length - 1 && "border-r")}>
                         <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
                         <p>{format(day, 'd')}</p>
                     </div>
@@ -202,7 +204,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     return (
                     <React.Fragment key={kiosk.id}>
                         <div className={cn(
-                            "sticky left-0 z-10 border-r p-2 flex items-center gap-3 font-medium text-sm",
+                            "sticky left-0 z-20 border-r p-2 flex items-center gap-3 font-medium text-sm",
                              kioskColor,
                             kioskIndex < kiosksToDisplay.length - 1 && "border-b"
                         )}>
@@ -220,14 +222,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                     key={dayISO} 
                                     onClick={() => handleEditClick(day)}
                                     className={cn(
-                                        "p-1.5 h-full flex items-center justify-center group",
+                                        "p-1.5 h-full flex items-center justify-center group z-10",
+                                        kioskColor,
                                         kioskIndex < kiosksToDisplay.length - 1 && "border-b",
                                         dayIndex < daysInMonth.length - 1 && "border-r",
                                         canManageSchedule && "cursor-pointer hover:bg-muted/50"
                                     )}
                                 >
                                     {dayData ? (
-                                        <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-muted/30">
+                                        <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-card/50">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="font-bold text-sky-600">T1:</span>
                                                 {renderEmployee(t1Employee)}
