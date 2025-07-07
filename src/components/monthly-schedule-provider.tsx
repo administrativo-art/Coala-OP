@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type DailySchedule } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, setDoc } from 'firebase/firestore';
@@ -14,11 +14,11 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
-  const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const fetchSchedule = useCallback((year: number, month: number) => {
-    if (unsubscribe) {
-      unsubscribe();
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
     }
     
     setLoading(true);
@@ -29,7 +29,7 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     const scheduleCollectionPath = `escala/${year}-${monthPadded}/dias`;
     
     const q = query(collection(db, scheduleCollectionPath));
-    const newUnsubscribe = onSnapshot(q, (querySnapshot) => {
+    unsubscribeRef.current = onSnapshot(q, (querySnapshot) => {
       const scheduleData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -42,17 +42,15 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
       setLoading(false);
     });
 
-    setUnsubscribe(() => newUnsubscribe);
-
-  }, [unsubscribe]);
+  }, []);
 
   useEffect(() => {
     fetchSchedule(currentYear, currentMonth);
     
     // Cleanup on component unmount
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,9 +62,6 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     const docRef = doc(db, scheduleDocPath);
 
     try {
-        // Using set with merge: true will create the document if it doesn't exist,
-        // which might be desirable if a day was missed in generation.
-        // Or use updateDoc if you only want to update existing docs.
         await setDoc(docRef, updates, { merge: true });
     } catch(error) {
         console.error("Error updating daily schedule:", error);
