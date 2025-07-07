@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -126,7 +125,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   return (
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Editar Escala - {editingKiosk.name}</DialogTitle>
           <DialogDescription>
@@ -134,8 +133,8 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <div className="space-y-3 py-2">
               {isSunday ? (
                 <FormField
                     control={form.control}
@@ -184,7 +183,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                 </div>
             )}
             
-            <Separator className="my-2" />
+            <Separator className="my-1" />
             
             <FormField
                 control={form.control}
@@ -210,7 +209,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                 )}
             />
 
-            <DialogFooter className="pt-4 border-t">
+            <DialogFooter className="pt-3 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={loading}>Salvar Alterações</Button>
             </DialogFooter>
