@@ -58,9 +58,9 @@ export default function DashboardLayout({
   return (
     <div className={cn("grid min-h-screen w-full", isCollapsed ? "md:grid-cols-[80px_1fr]" : "md:grid-cols-[280px_1fr]")}>
       <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-      <div className="flex flex-col">
+      <div className="flex flex-col min-w-0">
         <Header />
-        <main className="flex-1 p-4 lg:p-6 bg-background">
+        <main className="p-4 lg:p-6 bg-background">
           {children}
         </main>
       </div>
