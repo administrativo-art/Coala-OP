@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from 'react';
@@ -105,12 +104,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return map;
   }, [schedule]);
 
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a,b) => {
-        if (a.operacional && !b.operacional) return -1;
-        if (!a.operacional && b.operacional) return 1;
-        return a.username.localeCompare(b.username);
-    });
+  const operationalUsers = useMemo(() => {
+    return users
+        .filter(u => u.operacional)
+        .sort((a, b) => a.username.localeCompare(b.username));
   }, [users]);
   
   const kioskColorMap = useMemo(() => {
@@ -231,12 +228,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             </div>
 
             {/* <!--- User Rows ---> */}
-            {sortedUsers.map((user, userIndex) => (
+            {operationalUsers.map((user, userIndex) => (
                 <React.Fragment key={user.id}>
                     <div className={cn(
                         "sticky left-0 bg-card border-l p-2 flex items-center gap-3",
-                        userIndex < sortedUsers.length -1 && "border-b",
-                        !user.operacional && "opacity-60"
+                        userIndex < operationalUsers.length -1 && "border-b"
                     )}>
                        <Avatar className="h-8 w-8">
                             <AvatarImage src={user.avatarUrl} alt={user.username} />
@@ -244,7 +240,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         </Avatar>
                         <div className="flex flex-col">
                             <span className="font-medium text-sm">{user.username}</span>
-                            {!user.operacional && <Badge variant="secondary" className="text-xs w-fit h-fit p-0.5 px-1.5 leading-tight">Não Operacional</Badge>}
                         </div>
                     </div>
 
@@ -252,23 +247,19 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                          <div className="grid" style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
                             {/* <!--- Schedule Cells ---> */}
                             {daysInMonth.map(day => {
-                                const shift = user.operacional ? getUserShiftForDay(user, day) : null;
+                                const shift = getUserShiftForDay(user, day);
 
                                 return (
                                     <div 
                                         key={format(day, 'dd')} 
-                                        onClick={() => user.operacional && handleEditClick(day)}
+                                        onClick={() => handleEditClick(day)}
                                         className={cn(
                                             "p-1.5 border-l h-full flex items-center justify-center group",
-                                            userIndex < sortedUsers.length -1 && "border-b",
-                                            canManageSchedule && user.operacional && "cursor-pointer hover:bg-muted/50"
+                                            userIndex < operationalUsers.length -1 && "border-b",
+                                            canManageSchedule && "cursor-pointer hover:bg-muted/50"
                                         )}
                                     >
-                                        {!user.operacional ? (
-                                             <div className="text-center text-muted-foreground/50 text-xs w-full h-full flex items-center justify-center p-1 rounded-md bg-muted/20">
-                                                N/A
-                                            </div>
-                                        ) : shift ? (
+                                        {shift ? (
                                             <div className={cn(
                                                 "w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center",
                                                 kioskColorMap.get(shift.kiosk) || 'bg-gray-100 text-gray-800 border-gray-200'
