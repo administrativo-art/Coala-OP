@@ -228,7 +228,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             {canManageSchedule && (
                 <div className="flex flex-wrap gap-2 pt-4">
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
-                        <Wand2 className="mr-2 h-4 w-4" /> Gerar Escala Automática
+                        <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
                     </Button>
                     <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -367,9 +367,9 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 open={isGenerateConfirmationOpen}
                 onOpenChange={setIsGenerateConfirmationOpen}
                 onConfirm={handleGenerateConfirm}
-                title="Gerar escala automática?"
+                title="Usar preenchimento padrão?"
                 description="Esta ação irá preencher a escala do mês com base nos turnos padrão dos colaboradores. Os dados existentes serão sobrescritos. Deseja continuar?"
-                confirmButtonText="Sim, Gerar Escala"
+                confirmButtonText="Sim, Preencher Padrão"
                 confirmButtonVariant="default"
             />
         )}
