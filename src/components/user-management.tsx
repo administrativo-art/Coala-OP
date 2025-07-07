@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -52,6 +52,7 @@ export function UserManagement() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -74,6 +75,12 @@ export function UserManagement() {
         form.setValue('turno', null);
     }
   }, [isFolguista, form]);
+  
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => 
+      user.username.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [users, searchTerm]);
 
 
   const handleAddNew = () => {
@@ -334,6 +341,17 @@ export function UserManagement() {
                     <Warehouse className="mr-2" /> Gerenciar quiosques
                 </Button>
               </div>
+
+              <div className="relative mt-4">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    placeholder="Filtrar por nome..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+              </div>
+              
               <Separator className="my-4" />
               <div className="space-y-2">
                 <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-5">
@@ -343,7 +361,7 @@ export function UserManagement() {
                   <div>VT Diário</div>
                   <div className="text-right">Ações</div>
                 </div>
-                {users.map(user => (
+                {filteredUsers.map(user => (
                   <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-5">
                     <div className="font-medium">
                       <span className="md:hidden text-muted-foreground">Usuário: </span>
