@@ -1,7 +1,7 @@
+
 "use client"
 
-import * as React from 'react';
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -210,76 +210,66 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         {loading && !isGenerating ? (
             <Skeleton className="h-96 w-full" />
         ) : (
-        <div className="grid border-t border-b border-r rounded-lg" style={{ gridTemplateColumns: 'minmax(200px, 1.5fr) 3fr' }}>
-            {/* <!--- User Header ---> */}
-            <div className="sticky left-0 bg-card border-l font-semibold p-2 flex items-center">Colaborador(a)</div>
+        <div className="overflow-x-auto border rounded-lg">
+            <div className="grid" style={{ gridTemplateColumns: `250px repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
+                {/* <!--- Headers ---> */}
+                <div className="sticky left-0 z-10 bg-card border-r border-b font-semibold p-2 flex items-center">Colaborador(a)</div>
+                {daysInMonth.map((day, dayIndex) => (
+                    <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b", dayIndex < daysInMonth.length -1 && "border-r")}>
+                        <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
+                        <p>{format(day, 'd')}</p>
+                    </div>
+                ))}
 
-            {/* <!--- Scrollable Area ---> */}
-            <div className="overflow-x-auto">
-                <div className="grid" style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
-                    {/* <!--- Day Headers ---> */}
-                    {daysInMonth.map(day => (
-                        <div key={format(day, 'dd')} className="font-semibold p-2 border-l text-center">
-                            <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
-                            <p>{format(day, 'd')}</p>
+                {/* <!--- User Rows ---> */}
+                {operationalUsers.map((user, userIndex) => (
+                    <React.Fragment key={user.id}>
+                        <div className={cn(
+                            "sticky left-0 z-10 bg-card border-r p-2 flex items-center gap-3",
+                            userIndex < operationalUsers.length - 1 && "border-b"
+                        )}>
+                           <Avatar className="h-8 w-8">
+                                <AvatarImage src={user.avatarUrl} alt={user.username} />
+                                <AvatarFallback>{user.username.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                                <span className="font-medium text-sm">{user.username}</span>
+                            </div>
                         </div>
-                    ))}
-                </div>
+
+                        {daysInMonth.map((day, dayIndex) => {
+                            const shift = getUserShiftForDay(user, day);
+                            return (
+                                <div 
+                                    key={format(day, 'dd')} 
+                                    onClick={() => handleEditClick(day)}
+                                    className={cn(
+                                        "p-1.5 h-full flex items-center justify-center group",
+                                        userIndex < operationalUsers.length - 1 && "border-b",
+                                        dayIndex < daysInMonth.length - 1 && "border-r",
+                                        canManageSchedule && "cursor-pointer hover:bg-muted/50"
+                                    )}
+                                >
+                                    {shift ? (
+                                        <div className={cn(
+                                            "w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center",
+                                            kioskColorMap.get(shift.kiosk) || 'bg-gray-100 text-gray-800 border-gray-200'
+                                        )}>
+                                            <p className="font-bold">{shift.kiosk}</p>
+                                            <p>{shift.turn === 'T1' ? '1º Turno' : '2º Turno'}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-muted-foreground text-xs space-y-1 p-2 rounded-md bg-muted/30 w-full h-full flex flex-col items-center justify-center">
+                                             <Bed className="h-4 w-4"/>
+                                            <span>Dia de folga</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </React.Fragment>
+                ))}
             </div>
-
-            {/* <!--- User Rows ---> */}
-            {operationalUsers.map((user, userIndex) => (
-                <React.Fragment key={user.id}>
-                    <div className={cn(
-                        "sticky left-0 bg-card border-l p-2 flex items-center gap-3",
-                        userIndex < operationalUsers.length -1 && "border-b"
-                    )}>
-                       <Avatar className="h-8 w-8">
-                            <AvatarImage src={user.avatarUrl} alt={user.username} />
-                            <AvatarFallback>{user.username.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col">
-                            <span className="font-medium text-sm">{user.username}</span>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                         <div className="grid" style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
-                            {/* <!--- Schedule Cells ---> */}
-                            {daysInMonth.map(day => {
-                                const shift = getUserShiftForDay(user, day);
-
-                                return (
-                                    <div 
-                                        key={format(day, 'dd')} 
-                                        onClick={() => handleEditClick(day)}
-                                        className={cn(
-                                            "p-1.5 border-l h-full flex items-center justify-center group",
-                                            userIndex < operationalUsers.length -1 && "border-b",
-                                            canManageSchedule && "cursor-pointer hover:bg-muted/50"
-                                        )}
-                                    >
-                                        {shift ? (
-                                            <div className={cn(
-                                                "w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center",
-                                                kioskColorMap.get(shift.kiosk) || 'bg-gray-100 text-gray-800 border-gray-200'
-                                            )}>
-                                                <p className="font-bold">{shift.kiosk}</p>
-                                                <p>{shift.turn === 'T1' ? '1º Turno' : '2º Turno'}</p>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center text-muted-foreground text-xs space-y-1 p-2 rounded-md bg-muted/30 w-full h-full flex flex-col items-center justify-center">
-                                                 <Bed className="h-4 w-4"/>
-                                                <span>Dia de folga</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-                </React.Fragment>
-            ))}
         </div>
         )}
       </CardContent>
