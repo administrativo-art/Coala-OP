@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -9,7 +10,6 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -99,7 +99,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
         }
     }
     
-    updates[`${editingKiosk.name} Folga`] = values.folga; 
+    updates[`${editingKiosk.name} Folga`] = transformValue(values.folga ?? ''); 
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
@@ -110,15 +110,13 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
   const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
   const renderSelect = (field: any) => (
-    <Select onValueChange={field.onChange} value={field.value || '_NONE_'}>
+    <Select onValueChange={field.onChange} value={field.value || ''}>
         <FormControl>
             <SelectTrigger>
                 <SelectValue placeholder="Selecione..." />
             </SelectTrigger>
         </FormControl>
         <SelectContent>
-            <SelectItem value="_NONE_">Ninguém</SelectItem>
-            <SelectItem value="FOLGA">FOLGA</SelectItem>
             {availableEmployees.map(emp => (
                 <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
             ))}
@@ -194,9 +192,19 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Folga</FormLabel>
-                    <FormControl>
-                        <Input placeholder="Nome(s) do(s) colaborador(es) de folga" {...field} value={field.value ?? ''} />
-                    </FormControl>
+                     <Select onValueChange={field.onChange} value={field.value || '_NONE_'}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione um colaborador..." />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="_NONE_">Ninguém de folga</SelectItem>
+                            {availableEmployees.map(emp => (
+                                <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                     <FormMessage />
                     </FormItem>
                 )}
