@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -9,14 +10,11 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { ChevronLeft, ChevronRight, Users, Edit, Wand2, Loader2, Bed, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Loader2, Bed } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type DailySchedule, type User } from '@/types';
+import { type DailySchedule } from '@/types';
 import { generateSchedule } from '@/ai/flows/generate-schedule-flow';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule) => void;
@@ -36,7 +34,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   useEffect(() => {
     fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
   }, [currentDate, fetchSchedule]);
-
 
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -87,13 +84,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     }
   };
 
-
   const daysInMonth = useMemo(() => {
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
     return eachDayOfInterval({ start, end });
   }, [currentDate]);
-
 
   const scheduleMap = useMemo(() => {
     const map = new Map<string, DailySchedule>();
@@ -103,66 +98,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return map;
   }, [schedule]);
 
-  const operationalUsers = useMemo(() => {
-    return users
-        .filter(u => u.operacional)
-        .sort((a, b) => a.username.localeCompare(b.username));
-  }, [users]);
-  
-  const kioskColorMap = useMemo(() => {
-      const colorAssignments: { [keyword: string]: string } = {
-          'tirirical': 'bg-blue-100 text-blue-800 border-blue-200',
-          'joão paulo': 'bg-green-100 text-green-800 border-green-200',
-      };
-      const defaultColors = [
-          'bg-yellow-100 text-yellow-800 border-yellow-200',
-          'bg-red-100 text-red-800 border-red-200',
-          'bg-purple-100 text-purple-800 border-purple-200',
-          'bg-indigo-100 text-indigo-800 border-indigo-200',
-      ];
-      let defaultColorIndex = 0;
-      
-      const map = new Map<string, string>();
-      const kiosksToColor = kiosks.filter(k => k.id !== 'matriz');
-      
-      kiosksToColor.forEach(kiosk => {
-          let assignedColorKey: string | null = null;
-          const kioskNameLower = kiosk.name.toLowerCase();
-
-          for (const keyword in colorAssignments) {
-              if (kioskNameLower.includes(keyword)) {
-                  assignedColorKey = keyword;
-                  break;
-              }
-          }
-          if (assignedColorKey) {
-              map.set(kiosk.name, colorAssignments[assignedColorKey]);
-          } else {
-              map.set(kiosk.name, defaultColors[defaultColorIndex % defaultColors.length]);
-              defaultColorIndex++;
-          }
-      });
-      return map;
-  }, [kiosks]);
-
-  const getUserShiftForDay = (user: User, day: Date): {kiosk: string, turn: string} | null => {
-      const dayISO = format(day, 'yyyy-MM-dd');
-      const dayData = scheduleMap.get(dayISO);
-      if (!dayData) return null;
-
-      for (const key in dayData) {
-          if (typeof dayData[key] === 'string' && dayData[key].includes(user.username)) {
-              const parts = key.split(' ');
-              const turn = parts.pop();
-              const kiosk = parts.join(' ');
-              if (turn === 'T1' || turn === 'T2') {
-                  return { kiosk, turn };
-              }
-          }
-      }
-      return null;
-  }
-  
   const handleEditClick = (day: Date) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -179,9 +114,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         }, {} as { [key: string]: any })
     };
     onEditDay(dataToEdit);
-};
-
+  };
   
+  const kiosksToDisplay = useMemo(() => {
+    return kiosks.filter(k => k.id !== 'matriz');
+  }, [kiosks]);
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -210,64 +148,67 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             <Skeleton className="h-96 w-full" />
         ) : (
         <div className="overflow-x-auto border rounded-lg">
-            <div className="grid" style={{ gridTemplateColumns: `250px repeat(${daysInMonth.length}, minmax(140px, 1fr))` }}>
+            <div className="grid" style={{ gridTemplateColumns: `200px repeat(${daysInMonth.length}, minmax(150px, 1fr))` }}>
                 {/* <!--- Headers ---> */}
-                <div className="sticky left-0 z-20 bg-card border-r border-b font-semibold p-2 flex items-center">Colaborador(a)</div>
+                <div className="sticky left-0 z-20 bg-card border-r border-b font-semibold p-2 flex items-center">Quiosque</div>
                 {daysInMonth.map((day, dayIndex) => (
-                    <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b", dayIndex < daysInMonth.length -1 && "border-r")}>
+                    <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b", dayIndex < daysInMonth.length - 1 && "border-r")}>
                         <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
                         <p>{format(day, 'd')}</p>
                     </div>
                 ))}
 
-                {/* <!--- User Rows ---> */}
-                {operationalUsers.map((user, userIndex) => (
-                    <React.Fragment key={user.id}>
+                {/* <!--- Kiosk Rows ---> */}
+                {kiosksToDisplay.map((kiosk, kioskIndex) => {
+                    return (
+                    <React.Fragment key={kiosk.id}>
                         <div className={cn(
-                            "sticky left-0 z-10 bg-card border-r p-2 flex items-center gap-3",
-                            userIndex < operationalUsers.length - 1 && "border-b"
+                            "sticky left-0 z-10 bg-card border-r p-2 flex items-center gap-3 font-medium text-sm",
+                            kioskIndex < kiosksToDisplay.length - 1 && "border-b"
                         )}>
-                           <Avatar className="h-8 w-8">
-                                <AvatarImage src={user.avatarUrl} alt={user.username} />
-                                <AvatarFallback>{user.username.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col">
-                                <span className="font-medium text-sm">{user.username}</span>
-                            </div>
+                           {kiosk.name}
                         </div>
 
                         {daysInMonth.map((day, dayIndex) => {
-                            const shift = getUserShiftForDay(user, day);
+                            const dayISO = format(day, 'yyyy-MM-dd');
+                            const dayData = scheduleMap.get(dayISO);
+                            const t1Employee = dayData?.[`${kiosk.name} T1`] || 'Folga';
+                            const t2Employee = dayData?.[`${kiosk.name} T2`] || 'Folga';
+
                             return (
                                 <div 
-                                    key={format(day, 'dd')} 
+                                    key={dayISO} 
                                     onClick={() => handleEditClick(day)}
                                     className={cn(
                                         "p-1.5 h-full flex items-center justify-center group",
-                                        userIndex < operationalUsers.length - 1 && "border-b",
+                                        kioskIndex < kiosksToDisplay.length - 1 && "border-b",
                                         dayIndex < daysInMonth.length - 1 && "border-r",
                                         canManageSchedule && "cursor-pointer hover:bg-muted/50"
                                     )}
                                 >
-                                    {shift ? (
-                                        <div className={cn(
-                                            "w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center",
-                                            kioskColorMap.get(shift.kiosk) || 'bg-gray-100 text-gray-800 border-gray-200'
-                                        )}>
-                                            <p className="font-bold">{shift.kiosk}</p>
-                                            <p>{shift.turn === 'T1' ? '1º Turno' : '2º Turno'}</p>
+                                    {dayData ? (
+                                        <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-muted/30">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-sky-600">T1:</span>
+                                                <span className="truncate">{t1Employee}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-amber-600">T2:</span>
+                                                <span className="truncate">{t2Employee}</span>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="text-center text-muted-foreground text-xs space-y-1 p-2 rounded-md bg-muted/30 w-full h-full flex flex-col items-center justify-center">
-                                             <Bed className="h-4 w-4"/>
-                                            <span>Dia de folga</span>
+                                            <Bed className="h-4 w-4"/>
+                                            <span>Sem dados</span>
                                         </div>
                                     )}
                                 </div>
                             )
                         })}
                     </React.Fragment>
-                ))}
+                    )
+                })}
             </div>
         </div>
         )}
