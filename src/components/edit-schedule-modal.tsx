@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -80,17 +81,19 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   const onSubmit = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
+    
+    const transformValue = (val: string) => (val === '_NONE_' ? '' : val);
 
     const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
     const updates: Partial<DailySchedule> = {};
 
     if (isSunday) {
-        updates[`${editingKiosk.name} T1`] = values.shifts[0].value;
+        updates[`${editingKiosk.name} T1`] = transformValue(values.shifts[0].value);
         updates[`${editingKiosk.name} T2`] = ''; // Clear T2
         updates[`${editingKiosk.name} T3`] = ''; // Clear T3
     } else {
         values.shifts.forEach(shift => {
-            updates[shift.key] = shift.value;
+            updates[shift.key] = transformValue(shift.value);
         });
         if (!showThirdShift) {
             updates[`${editingKiosk.name} T3`] = '';
@@ -115,7 +118,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
             </SelectTrigger>
         </FormControl>
         <SelectContent>
-            <SelectItem value="">Ninguém</SelectItem>
+            <SelectItem value="_NONE_">Ninguém</SelectItem>
             <SelectItem value="FOLGA">FOLGA</SelectItem>
             <Separator className="my-1"/>
             {availableEmployees.map(emp => (
