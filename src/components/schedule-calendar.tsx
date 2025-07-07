@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -112,20 +111,42 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [kiosks]);
   
   const kioskColorMap = useMemo(() => {
-    const colors = [
+    const colorAssignments: { [key: string]: { text: string; bg: string } } = {
+      'tirirical': { text: 'text-blue-600', bg: 'bg-blue-500' },
+      'joão paulo': { text: 'text-green-600', bg: 'bg-green-500' },
+    };
+    
+    const defaultColors = [
       { text: 'text-red-600', bg: 'bg-red-500' },
-      { text: 'text-blue-600', bg: 'bg-blue-500' },
-      { text: 'text-green-600', bg: 'bg-green-500' },
       { text: 'text-orange-600', bg: 'bg-orange-500' },
       { text: 'text-indigo-600', bg: 'bg-indigo-500' },
       { text: 'text-purple-600', bg: 'bg-purple-500' },
       { text: 'text-pink-600', bg: 'bg-pink-500' },
       { text: 'text-teal-600', bg: 'bg-teal-500' },
     ];
+    let defaultColorIndex = 0;
+    
     const map = new Map<string, { text: string; bg: string }>();
-    kioskList.forEach((kiosk, index) => {
-      map.set(kiosk.id, colors[index % colors.length]);
+    
+    kioskList.forEach(kiosk => {
+      let assignedColor = null;
+      const kioskNameLower = kiosk.name.toLowerCase();
+
+      for (const keyword in colorAssignments) {
+        if (kioskNameLower.includes(keyword)) {
+          assignedColor = colorAssignments[keyword];
+          break;
+        }
+      }
+
+      if (assignedColor) {
+        map.set(kiosk.id, assignedColor);
+      } else {
+        map.set(kiosk.id, defaultColors[defaultColorIndex % defaultColors.length]);
+        defaultColorIndex++;
+      }
     });
+    
     return map;
   }, [kioskList]);
 
