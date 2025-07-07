@@ -1,7 +1,8 @@
+
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -23,12 +24,14 @@ export function Header() {
     const canManageLots = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory);
     const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
     const canManageStock = canManageLots || canAnalyzeStock;
+    const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const isMasterUser = user?.username === 'Tiago Brasil';
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
         { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: canManageStock },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
+        { href: '/dashboard/team', label: 'Gestão de Equipe', icon: Users, show: canManageTeam },
         { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
         { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
     ]

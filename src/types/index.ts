@@ -126,6 +126,16 @@ export type ConsumptionReport = {
   results: ConsumptionAnalysisItem[];
 };
 
+export type Shift = {
+    id: string;
+    userId: string;
+    username: string;
+    kioskId: string;
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:mm
+    endTime: string; // HH:mm
+    notes?: string;
+};
 
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
@@ -137,6 +147,7 @@ export type PermissionSet = {
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
+    team: { manage: boolean, view: boolean };
 };
 
 export type Profile = {
@@ -282,6 +293,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     returns: { add: false, updateStatus: false, delete: false },
+    team: { manage: false, view: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -294,6 +306,7 @@ export const defaultUserPermissions: PermissionSet = {
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
+    team: { manage: false, view: true },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -306,4 +319,5 @@ export const defaultAdminPermissions: PermissionSet = {
     stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     returns: { add: true, updateStatus: true, delete: true },
+    team: { manage: true, view: true },
 };

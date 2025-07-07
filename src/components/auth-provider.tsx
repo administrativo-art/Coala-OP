@@ -80,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profilePermissions?.stockAnalysis },
             consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
             returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
+            team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

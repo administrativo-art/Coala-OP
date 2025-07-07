@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -20,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -34,6 +35,7 @@ const permissionsSchema = z.object({
     stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
+    team: z.object({ manage: z.boolean(), view: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -91,6 +93,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profile.permissions?.stockAnalysis },
       consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profile.permissions?.consumptionAnalysis },
       returns: { ...defaultGuestPermissions.returns, ...profile.permissions?.returns },
+      team: { ...defaultGuestPermissions.team, ...profile.permissions?.team },
     };
 
     form.reset({
@@ -163,7 +166,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                   )}
                 />
                 <ScrollArea className="h-[55vh] pr-6">
-                    <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns']} className="w-full">
+                    <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team']} className="w-full">
+                    <AccordionItem value="team">
+                        <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Gestão de Equipe</AccordionTrigger>
+                        <AccordionContent className="space-y-2 pt-4 p-1">
+                            {renderPermissionSwitch("permissions.team.view", "Visualizar escalas", "Permite que o usuário veja as escalas de trabalho.")}
+                            {renderPermissionSwitch("permissions.team.manage", "Gerenciar escalas", "Permite criar, editar e excluir escalas de trabalho.")}
+                        </AccordionContent>
+                    </AccordionItem>
                     <AccordionItem value="stockAnalysis">
                         <AccordionTrigger className="text-lg font-semibold"><BarChart3 className="mr-2 h-5 w-5" /> Análise de Estoque</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
