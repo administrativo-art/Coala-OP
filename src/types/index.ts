@@ -137,6 +137,22 @@ export type Shift = {
     notes?: string;
 };
 
+export type DailySchedule = {
+  id: string; // YYYY-MM-DD
+  diaDaSemana: string;
+  folguistaDSR?: boolean;
+  [kioskTurnKey: string]: any; // "Quiosque Tirirical T1": "Edna" or "Edna + Carliane"
+};
+
+export interface MonthlyScheduleContextType {
+  schedule: DailySchedule[];
+  loading: boolean;
+  fetchSchedule: (year: number, month: number) => void;
+  currentYear: number;
+  currentMonth: number;
+}
+
+
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
