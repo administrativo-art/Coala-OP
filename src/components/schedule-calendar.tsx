@@ -1,6 +1,7 @@
 
 "use client"
 
+import * as React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
