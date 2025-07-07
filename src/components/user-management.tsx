@@ -19,8 +19,7 @@ import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
 import { ProfileManagementModal } from './profile-management-modal';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
@@ -208,55 +207,47 @@ export function UserManagement() {
                         </FormItem>
                     )}
                     />
-                     <Controller
+                    <Controller
                         control={form.control}
                         name="assignedKioskIds"
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Quiosques</FormLabel>
-                                <Popover>
-                                    <PopoverTrigger asChild>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
                                         <FormControl>
-                                            <Button variant="outline" role="combobox" className={cn("w-full justify-between", field.value?.length === 0 && "text-muted-foreground")}>
+                                            <Button variant="outline" className="w-full justify-between font-normal">
                                                 {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
                                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                             </Button>
                                         </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                        <Command>
-                                            <CommandInput placeholder="Buscar quiosque..." />
-                                            <CommandList>
-                                                <CommandEmpty>Nenhum quiosque encontrado.</CommandEmpty>
-                                                <CommandGroup>
-                                                    <ScrollArea className="h-48">
-                                                    {kiosks.map((kiosk) => (
-                                                        <CommandItem 
-                                                            key={kiosk.id}
-                                                            onSelect={() => {
-                                                                const selected = field.value || [];
-                                                                const isSelected = selected.includes(kiosk.id);
-                                                                field.onChange(isSelected ? selected.filter(id => id !== kiosk.id) : [...selected, kiosk.id]);
-                                                            }}
-                                                            onMouseDown={(e) => {
-                                                              e.preventDefault();
-                                                              e.stopPropagation();
-                                                            }}
-                                                        >
-                                                             <Check className={cn("mr-2 h-4 w-4", (field.value || []).includes(kiosk.id) ? "opacity-100" : "opacity-0")} />
-                                                            {kiosk.name}
-                                                        </CommandItem>
-                                                    ))}
-                                                    </ScrollArea>
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                        <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <ScrollArea className="h-48">
+                                            {kiosks.map((kiosk) => (
+                                                <DropdownMenuCheckboxItem
+                                                    key={kiosk.id}
+                                                    checked={field.value?.includes(kiosk.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        const selected = field.value || [];
+                                                        return checked
+                                                            ? field.onChange([...selected, kiosk.id])
+                                                            : field.onChange(selected.filter((id) => id !== kiosk.id));
+                                                    }}
+                                                    onSelect={(e) => e.preventDefault()}
+                                                >
+                                                    {kiosk.name}
+                                                </DropdownMenuCheckboxItem>
+                                            ))}
+                                        </ScrollArea>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                                 <FormMessage />
                             </FormItem>
                         )}
-                      />
+                        />
                   </div>
 
                   <Separator />
