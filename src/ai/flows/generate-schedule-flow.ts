@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview An AI flow for automatically generating a monthly work schedule.
@@ -10,6 +9,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
+import { enUS } from 'date-fns/locale';
 
 const UserSchema = z.object({
   id: z.string(),
@@ -43,7 +43,7 @@ export async function generateSchedule(input: GenerateScheduleInput): Promise<Ge
   const end = endOfMonth(new Date(input.year, input.month - 1));
   const days = eachDayOfInterval({ start, end }).map(day => ({
     date: format(day, 'yyyy-MM-dd'),
-    dayOfWeek: format(day, 'EEEE', { locale: { code: 'en-US' } }), // Use English for the model
+    dayOfWeek: format(day, 'EEEE', { locale: enUS }), // Use English for the model
   }));
 
   const extendedInput = { ...input, days };
