@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Profile, defaultAdminPermissions, defaultUserPermissions } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
@@ -130,14 +130,14 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profiles]);
 
-  const value: ProfilesContextType = {
+  const value: ProfilesContextType = useMemo(() => ({
     profiles,
     loading,
     addProfile,
     updateProfile,
     deleteProfile,
     adminProfileId
-  };
+  }), [profiles, loading, addProfile, updateProfile, deleteProfile, adminProfileId]);
 
   return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type FormTemplate, type FormSubmission } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
@@ -93,7 +93,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value: FormContextType = {
+  const value: FormContextType = useMemo(() => ({
     templates,
     submissions,
     loading,
@@ -102,7 +102,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     deleteTemplate,
     addSubmission,
     deleteSubmission,
-  };
+  }), [templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission]);
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }

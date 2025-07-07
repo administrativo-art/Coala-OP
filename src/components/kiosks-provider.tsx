@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Kiosk } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDocs, query } from "firebase/firestore";
@@ -75,12 +75,12 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   
-  const value: KiosksContextType = {
+  const value: KiosksContextType = useMemo(() => ({
     kiosks,
     loading,
     addKiosk,
     deleteKiosk,
-  };
+  }), [kiosks, loading, addKiosk, deleteKiosk]);
 
   return <KiosksContext.Provider value={value}>{children}</KiosksContext.Provider>;
 }

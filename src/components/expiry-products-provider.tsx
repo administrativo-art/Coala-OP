@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type LotEntry, type MovementRecord, type Product } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc } from 'firebase/firestore';
@@ -235,7 +235,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       }
   }, []);
 
-  const value: ExpiryProductsContextType = {
+  const value: ExpiryProductsContextType = useMemo(() => ({
       lots,
       loading,
       addLot,
@@ -245,7 +245,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       moveLot,
       moveMultipleLots,
       zeroOutLotsByIds,
-  };
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveLot, moveMultipleLots, zeroOutLotsByIds]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }

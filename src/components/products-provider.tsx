@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
@@ -142,7 +142,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     return `${brandPart}${product.baseName} (${product.packageSize}${product.unit})`;
   }, []);
 
-  const value: ProductsContextType = {
+  const value: ProductsContextType = useMemo(() => ({
     products,
     loading,
     addProduct,
@@ -152,7 +152,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     getProductFullName,
     updateMultipleProducts,
     findOrCreateProduct,
-  };
+  }), [products, loading, addProduct, updateProduct, deleteProduct, deleteMultipleProducts, getProductFullName, updateMultipleProducts, findOrCreateProduct]);
 
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>;
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Location } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query } from "firebase/firestore";
@@ -61,13 +61,13 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   
-  const value: LocationsContextType = {
+  const value: LocationsContextType = useMemo(() => ({
     locations,
     loading,
     addLocation,
     updateLocation,
     deleteLocation,
-  };
+  }), [locations, loading, addLocation, updateLocation, deleteLocation]);
 
   return <LocationsContext.Provider value={value}>{children}</LocationsContext.Provider>;
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useMemo } from 'react';
 import { type MovementRecord } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
@@ -31,10 +31,10 @@ export function MovementHistoryProvider({ children }: { children: React.ReactNod
     return () => unsubscribe();
   }, []);
 
-  const value: MovementHistoryContextType = {
+  const value: MovementHistoryContextType = useMemo(() => ({
       history,
       loading,
-  };
+  }), [history, loading]);
 
   return <MovementHistoryContext.Provider value={value}>{children}</MovementHistoryContext.Provider>;
 }

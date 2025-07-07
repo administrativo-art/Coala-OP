@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db } from '@/lib/firebase';
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [currentUser, logout, profilesContext, profilesContext?.loading, profilesContext?.adminProfileId]);
   
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", password));
     try {
         const querySnapshot = await getDocs(q);
@@ -175,17 +175,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Login error:", error);
         return false;
     }
-  };
+  }, []);
 
-  const addUser = async (userData: Omit<User, 'id'>) => {
+  const addUser = useCallback(async (userData: Omit<User, 'id'>) => {
     try {
         await addDoc(collection(db, "users"), userData as any);
     } catch(error) {
         console.error("Error adding user:", error);
     }
-  };
+  }, []);
 
-  const updateUser = async (updatedUser: User) => {
+  const updateUser = useCallback(async (updatedUser: User) => {
     const userRef = doc(db, "users", updatedUser.id);
     const { id, ...dataToUpdate } = updatedUser;
     try {
@@ -193,18 +193,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
         console.error("Error updating user:", error);
     }
-  };
+  }, []);
 
-  const deleteUser = async (userId: string) => {
+  const deleteUser = useCallback(async (userId: string) => {
     try {
         await deleteDoc(doc(db, "users", userId));
     } catch (error) {
         console.error("Error deleting user:", error);
         throw error;
     }
-  };
+  }, []);
 
-  const changePassword = async (username: string, oldPassword: string, newPassword: string): Promise<boolean> => {
+  const changePassword = useCallback(async (username: string, oldPassword: string, newPassword: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", oldPassword));
     try {
         const querySnapshot = await getDocs(q);
@@ -219,9 +219,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Change password error:", error);
         return false;
     }
-  };
+  }, []);
   
-  const value: AuthContextType = {
+  const value: AuthContextType = useMemo(() => ({
     user: currentUser,
     users,
     isAuthenticated: !!currentUser,
@@ -233,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     deleteUser,
     changePassword,
-  };
+  }), [currentUser, users, authLoading, profilesContext, permissions, login, logout, addUser, updateUser, deleteUser, changePassword]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

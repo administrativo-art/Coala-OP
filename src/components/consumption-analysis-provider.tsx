@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ConsumptionReport } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
@@ -52,12 +52,12 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
     }
   }, []);
   
-  const value: ConsumptionAnalysisContextType = {
+  const value: ConsumptionAnalysisContextType = useMemo(() => ({
       history,
       loading,
       addReport,
       deleteReport
-  };
+  }), [history, loading, addReport, deleteReport]);
 
   return <ConsumptionAnalysisContext.Provider value={value}>{children}</ConsumptionAnalysisContext.Provider>;
 }

@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type DailySchedule } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, setDoc } from 'firebase/firestore';
@@ -74,14 +75,14 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
   }, [currentYear, currentMonth]);
 
 
-  const value: MonthlyScheduleContextType = {
+  const value: MonthlyScheduleContextType = useMemo(() => ({
     schedule,
     loading,
     fetchSchedule,
     currentYear,
     currentMonth,
     updateDailySchedule,
-  };
+  }), [schedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule]);
 
   return <MonthlyScheduleContext.Provider value={value}>{children}</MonthlyScheduleContext.Provider>;
 }

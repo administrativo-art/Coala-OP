@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
@@ -140,7 +140,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     return `${product.baseName} (${product.unit})`;
   }, []);
 
-  const value: StockAnalysisProductsContextType = {
+  const value: StockAnalysisProductsContextType = useMemo(() => ({
     products,
     loading,
     addProduct,
@@ -150,7 +150,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     getProductFullName,
     updateMultipleProducts,
     findOrCreateProduct,
-  };
+  }), [products, loading, addProduct, updateProduct, deleteProduct, deleteMultipleProducts, getProductFullName, updateMultipleProducts, findOrCreateProduct]);
 
   return <StockAnalysisProductsContext.Provider value={value}>{children}</StockAnalysisProductsContext.Provider>;
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Shift } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -60,13 +60,13 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value: ScheduleContextType = {
+  const value: ScheduleContextType = useMemo(() => ({
     shifts,
     loading,
     addShift,
     updateShift,
     deleteShift,
-  };
+  }), [shifts, loading, addShift, updateShift, deleteShift]);
 
   return <ScheduleContext.Provider value={value}>{children}</ScheduleContext.Provider>;
 }

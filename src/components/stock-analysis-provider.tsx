@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type StockAnalysisReport } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, deleteDoc, doc, query, writeBatch, addDoc, updateDoc } from 'firebase/firestore';
@@ -66,13 +66,13 @@ export function StockAnalysisProvider({ children }: { children: React.ReactNode 
     }
   }, []);
   
-  const value: StockAnalysisContextType = {
+  const value: StockAnalysisContextType = useMemo(() => ({
       history,
       loading,
       addReport,
       updateReport,
       deleteReport
-  };
+  }), [history, loading, addReport, updateReport, deleteReport]);
 
   return <StockAnalysisContext.Provider value={value}>{children}</StockAnalysisContext.Provider>;
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type PredefinedList } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
@@ -61,13 +61,13 @@ export function PredefinedListsProvider({ children }: { children: React.ReactNod
     }
   }, []);
 
-  const value: PredefinedListsContextType = {
+  const value: PredefinedListsContextType = useMemo(() => ({
     lists,
     loading,
     addList,
     updateList,
     deleteList,
-  };
+  }), [lists, loading, addList, updateList, deleteList]);
 
   return <PredefinedListsContext.Provider value={value}>{children}</PredefinedListsContext.Provider>;
 }

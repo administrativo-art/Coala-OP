@@ -1,7 +1,7 @@
 
-"use client"
+"use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ReturnRequest, type ReturnRequestHistoricoItem } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction } from 'firebase/firestore';
@@ -148,13 +148,13 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value: ReturnRequestContextType = {
+  const value: ReturnRequestContextType = useMemo(() => ({
     requests,
     loading,
     addReturnRequest,
     updateReturnRequest,
     deleteReturnRequest,
-  };
+  }), [requests, loading, addReturnRequest, updateReturnRequest, deleteReturnRequest]);
 
   return <ReturnRequestContext.Provider value={value}>{children}</ReturnRequestContext.Provider>;
 }
