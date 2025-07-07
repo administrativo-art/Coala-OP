@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, getYear, getMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -21,7 +21,7 @@ interface ScheduleCalendarProps {
 
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { schedule, loading: scheduleLoading, fetchSchedule, currentYear, currentMonth } = useMonthlySchedule();
+  const { schedule, loading: scheduleLoading, fetchSchedule } = useMonthlySchedule();
   const { users, permissions } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -54,6 +54,50 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     });
     return map;
   }, [schedule]);
+  
+  const kiosksToDisplay = useMemo(() => {
+    return kiosks.filter(k => k.id !== 'matriz');
+  }, [kiosks]);
+
+  const workDayCounts = useMemo(() => {
+    const counts = new Map<string, Map<string, number>>();
+    const employeeTrackers = new Map<string, number>();
+
+    // Initialize trackers for all operational users
+    users.filter(u => u.operacional).forEach(u => employeeTrackers.set(u.username, 0));
+
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = scheduleMap.get(dayISO);
+        const todaysWorkers = new Set<string>();
+        const dayCounts = new Map<string, number>();
+
+        if (daySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2'].forEach(turn => {
+                    const employeeName = daySchedule[`${kiosk.name} ${turn}`];
+                    if (employeeName && typeof employeeName === 'string' && employeeName !== 'Folga') {
+                        todaysWorkers.add(employeeName);
+                    }
+                });
+            });
+        }
+
+        for (const [employeeName] of employeeTrackers.entries()) {
+            if (todaysWorkers.has(employeeName)) {
+                const newCount = (employeeTrackers.get(employeeName) || 0) + 1;
+                employeeTrackers.set(employeeName, newCount);
+                dayCounts.set(employeeName, newCount);
+            } else {
+                employeeTrackers.set(employeeName, 0);
+            }
+        }
+        counts.set(dayISO, dayCounts);
+    });
+
+    return counts;
+  }, [daysInMonth, scheduleMap, users, kiosksToDisplay]);
+
 
   const handleEditClick = (day: Date) => {
     if (!canManageSchedule) return;
@@ -63,7 +107,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     const dataToEdit: DailySchedule = dayData || {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
-        ...kiosks.filter(k => k.id !== 'matriz').reduce((acc, kiosk) => {
+        ...kiosksToDisplay.reduce((acc, kiosk) => {
             ['T1', 'T2'].forEach(turn => {
                 acc[`${kiosk.name} ${turn}`] = '';
             });
@@ -73,13 +117,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     onEditDay(dataToEdit);
   };
   
-  const kiosksToDisplay = useMemo(() => {
-    return kiosks.filter(k => k.id !== 'matriz');
-  }, [kiosks]);
-
-  const renderEmployee = (name: string) => {
+  const renderEmployee = (name: string, count?: number) => {
+    const displayName = count ? `${name}.${count}` : name;
+    
     if (!name || name === 'Folga') {
-      return <span className="truncate">{name}</span>;
+      return <span className="truncate">{displayName}</span>;
     }
     
     const isOperational = operationalUserMap.get(name);
@@ -91,7 +133,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             <TooltipTrigger asChild>
               <span className="truncate text-destructive flex items-center gap-1">
                 <UserX className="h-3 w-3 shrink-0" />
-                {name}
+                {displayName}
               </span>
             </TooltipTrigger>
             <TooltipContent>
@@ -102,7 +144,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
       );
     }
 
-    return <span className="truncate">{name}</span>;
+    return <span className="truncate">{displayName}</span>;
   };
 
   return (
@@ -125,7 +167,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             <Skeleton className="h-96 w-full" />
         ) : (
         <div className="overflow-x-auto border rounded-lg">
-            <div className="grid" style={{ gridTemplateColumns: `200px repeat(${daysInMonth.length}, minmax(150px, 1fr))` }}>
+            <div className="grid" style={{ gridTemplateColumns: `minmax(200px, 1fr) repeat(${daysInMonth.length}, minmax(150px, 1fr))` }}>
                 {/* <!--- Headers ---> */}
                 <div className="sticky left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Quiosque</div>
                 {daysInMonth.map((day, dayIndex) => (
@@ -155,8 +197,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         {daysInMonth.map((day, dayIndex) => {
                             const dayISO = format(day, 'yyyy-MM-dd');
                             const dayData = scheduleMap.get(dayISO);
+                            const dayCounts = workDayCounts.get(dayISO);
+
                             const t1Employee = dayData?.[`${kiosk.name} T1`] || 'Folga';
                             const t2Employee = dayData?.[`${kiosk.name} T2`] || 'Folga';
+                            
+                            const t1Count = dayCounts?.get(t1Employee);
+                            const t2Count = dayCounts?.get(t2Employee);
 
                             return (
                                 <div 
@@ -174,11 +221,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                         <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-card/50">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="font-bold text-sky-600">T1:</span>
-                                                {renderEmployee(t1Employee)}
+                                                {renderEmployee(t1Employee, t1Count)}
                                             </div>
                                             <div className="flex items-center gap-1.5">
                                                 <span className="font-bold text-amber-600">T2:</span>
-                                                {renderEmployee(t2Employee)}
+                                                {renderEmployee(t2Employee, t2Count)}
                                             </div>
                                         </div>
                                     ) : (
