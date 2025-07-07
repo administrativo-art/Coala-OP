@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -61,7 +62,7 @@ export function ExpiryControl() {
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
     if (user.username === 'Tiago Brasil' || (permissions.lots.edit && permissions.lots.delete)) return lots;
-    return lots.filter(lot => lot.kioskId === user.kioskId);
+    return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
   }, [lots, user, loading, permissions]);
 
   const sortedKiosks = useMemo(() => {

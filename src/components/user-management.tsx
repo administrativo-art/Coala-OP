@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useEffect } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
@@ -14,19 +14,26 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
 import { ProfileManagementModal } from './profile-management-modal';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Switch } from './ui/switch';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from './ui/scroll-area';
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
-  kioskId: z.string({ required_error: 'É obrigatório vincular o usuário a um quiosque.' }).min(1, 'O quiosque é obrigatório.'),
+  assignedKioskIds: z.array(z.string()).min(1, 'Selecione ao menos um quiosque.'),
+  turno: z.enum(['T1', 'T2']).nullable(),
+  weekdayFolga: z.coerce.number().min(0).max(6),
+  folguista: z.boolean(),
 }).refine(data => {
-    // If a password is provided, it must be at least 4 chars
     return !data.password || data.password.length >= 4;
 }, {
     message: "A senha deve ter pelo menos 4 caracteres.",
@@ -34,6 +41,16 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
+
+const weekDays = [
+    { value: 0, label: 'Domingo' },
+    { value: 1, label: 'Segunda-feira' },
+    { value: 2, label: 'Terça-feira' },
+    { value: 3, label: 'Quarta-feira' },
+    { value: 4, label: 'Quinta-feira' },
+    { value: 5, label: 'Sexta-feira' },
+    { value: 6, label: 'Sábado' },
+];
 
 export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
@@ -48,7 +65,25 @@ export function UserManagement() {
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
+    defaultValues: {
+        username: '',
+        password: '',
+        profileId: '',
+        assignedKioskIds: [],
+        turno: null,
+        weekdayFolga: 0,
+        folguista: false,
+    }
   });
+  
+  const isFolguista = form.watch('folguista');
+
+  useEffect(() => {
+    if (isFolguista) {
+        form.setValue('turno', null);
+    }
+  }, [isFolguista, form]);
+
 
   const handleAddNew = () => {
     setEditingUser(null);
@@ -56,7 +91,10 @@ export function UserManagement() {
       username: '',
       password: '',
       profileId: '',
-      kioskId: '',
+      assignedKioskIds: [],
+      turno: null,
+      weekdayFolga: 0,
+      folguista: false
     });
     setShowForm(true);
   };
@@ -67,7 +105,10 @@ export function UserManagement() {
       username: user.username,
       password: '',
       profileId: user.profileId,
-      kioskId: user.kioskId,
+      assignedKioskIds: user.assignedKioskIds || [],
+      turno: user.turno,
+      weekdayFolga: user.weekdayFolga,
+      folguista: user.folguista
     });
     setShowForm(true);
   };
@@ -87,12 +128,10 @@ export function UserManagement() {
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
       const updatedData: Partial<User> = {
-          username: values.username,
-          profileId: values.profileId,
-          kioskId: values.kioskId,
+          ...values
       };
-      if (values.password && values.password.trim() !== '') {
-        updatedData.password = values.password;
+      if (!values.password || values.password.trim() === '') {
+        delete updatedData.password;
       }
       updateUser({ ...editingUser, ...updatedData });
     } else {
@@ -123,7 +162,10 @@ export function UserManagement() {
   }
   
   const getProfileName = (profileId: string) => profiles.find(p => p.id === profileId)?.name || 'N/A';
-  const getKioskName = (kioskId: string) => kiosks.find(k => k.id === kioskId)?.name || 'N/A';
+  const getKioskNames = (kioskIds: string[]) => {
+    if (!kioskIds || kioskIds.length === 0) return 'N/A';
+    return kioskIds.map(id => kiosks.find(k => k.id === id)?.name || id).join(', ');
+  }
 
   return (
     <>
@@ -132,34 +174,41 @@ export function UserManagement() {
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
             <Users /> Gerenciar usuários
           </CardTitle>
-          <CardDescription className="text-center">Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
+          <CardDescription className="text-center">Adicione ou edite usuários e atribua perfis e escalas.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-                  <FormField control={form.control} name="username" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nome de usuário</FormLabel>
-                        <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'Tiago Brasil'} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField control={form.control} name="password" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Senha</FormLabel>
-                        <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-4 p-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="username" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome de usuário</FormLabel>
+                          <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'Tiago Brasil'} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField control={form.control} name="password" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <Separator />
+                  <h4 className="font-medium text-muted-foreground">Permissões e Alocação</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="profileId" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Perfil de permissão</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={editingUser?.username === 'Tiago Brasil' || profilesLoading}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={editingUser?.username === 'Tiago Brasil' || profilesLoading}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
                             <SelectContent>
                                 {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -169,27 +218,92 @@ export function UserManagement() {
                         </FormItem>
                     )}
                     />
-                  <FormField
-                      control={form.control}
-                      name="kioskId"
-                      render={({ field }) => (
-                          <FormItem>
-                          <FormLabel>Quiosque principal</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={kiosksLoading}>
-                              <FormControl>
-                              <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o quiosque" />
-                              </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                              {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
-                              </SelectContent>
-                          </Select>
-                          <FormMessage />
-                          </FormItem>
-                      )}
-                  />
+                     <Controller
+                        control={form.control}
+                        name="assignedKioskIds"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Quiosques</FormLabel>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Button variant="outline" role="combobox" className={cn("w-full justify-between", field.value?.length === 0 && "text-muted-foreground")}>
+                                                {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Buscar quiosque..." />
+                                            <CommandList>
+                                                <CommandEmpty>Nenhum quiosque encontrado.</CommandEmpty>
+                                                <CommandGroup>
+                                                    <ScrollArea className="h-48">
+                                                    {kiosks.map((kiosk) => (
+                                                        <CommandItem key={kiosk.id} onSelect={() => {
+                                                            const selected = field.value || [];
+                                                            const isSelected = selected.includes(kiosk.id);
+                                                            field.onChange(isSelected ? selected.filter(id => id !== kiosk.id) : [...selected, kiosk.id]);
+                                                        }}>
+                                                             <Check className={cn("mr-2 h-4 w-4", (field.value || []).includes(kiosk.id) ? "opacity-100" : "opacity-0")} />
+                                                            {kiosk.name}
+                                                        </CommandItem>
+                                                    ))}
+                                                    </ScrollArea>
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                      />
+                  </div>
+
+                  <Separator />
+                  <h4 className="font-medium text-muted-foreground">Configuração de Escala</h4>
+                  
+                   <FormField control={form.control} name="folguista" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                            <div className="space-y-0.5">
+                                <FormLabel>É Folguista?</FormLabel>
+                            </div>
+                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                    )}/>
+                    
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="turno" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Turno</FormLabel>
+                            <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
+                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="T1">T1</SelectItem>
+                                    <SelectItem value="T2">T2</SelectItem>
+                                    <SelectItem value="null">Nenhum</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                     <FormField control={form.control} name="weekdayFolga" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Dia de Folga</FormLabel>
+                            <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value.toString()}>
+                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {weekDays.map(day => <SelectItem key={day.value} value={day.value.toString()}>{day.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                             <FormMessage />
+                        </FormItem>
+                    )}/>
+                  </div>
                 </div>
+
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                   <Button type="submit">{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
@@ -214,7 +328,7 @@ export function UserManagement() {
                 <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-4">
                   <div>Usuário</div>
                   <div>Perfil</div>
-                  <div>Quiosque</div>
+                  <div>Quiosque(s)</div>
                   <div className="text-right">Ações</div>
                 </div>
                 {users.map(user => (
@@ -229,9 +343,9 @@ export function UserManagement() {
                         {getProfileName(user.profileId)}
                       </span>
                     </div>
-                    <div className="text-muted-foreground">
-                      <span className="md:hidden font-medium text-card-foreground">Quiosque: </span>
-                      {getKioskName(user.kioskId)}
+                    <div className="text-muted-foreground text-sm truncate">
+                      <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
+                      {getKioskNames(user.assignedKioskIds)}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
@@ -263,6 +377,7 @@ export function UserManagement() {
       {userToDelete && (
         <DeleteConfirmationDialog
           open={!!userToDelete}
+          isDeleting={false}
           onOpenChange={() => setUserToDelete(null)}
           onConfirm={handleDeleteConfirm}
           itemName={`o usuário "${userToDelete.username}"`}

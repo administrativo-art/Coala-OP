@@ -62,7 +62,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
 
     const userVisibleLots = user.username === 'master' 
         ? lots 
-        : lots.filter(lot => lot.kioskId === user.kioskId);
+        : lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
 
     const productLots = userVisibleLots.filter(lot => lot.productId === selectedInsumoId && lot.quantity > 0);
     

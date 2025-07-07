@@ -256,7 +256,9 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
 
     const onSubmit = (values: Record<string, any>) => {
         if (!user) return;
-        const kiosk = kiosks.find(k => k.id === user.kioskId);
+        
+        const primaryKioskId = user.assignedKioskIds?.[0] || 'N/A';
+        const kiosk = kiosks.find(k => k.id === primaryKioskId);
 
         let title = template.submissionTitleFormat || template.name;
         if (template.submissionTitleFormat) {

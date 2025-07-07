@@ -57,7 +57,8 @@ export default function DashboardPage() {
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
-    return user.username === 'Tiago Brasil' ? lots : lots.filter(lot => lot.kioskId === user.kioskId);
+    if (user.username === 'Tiago Brasil') return lots;
+    return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
   }, [lots, user, lotsLoading]);
 
   const expiringSoonCount = useMemo(() => {
@@ -106,7 +107,7 @@ export default function DashboardPage() {
       });
     });
 
-    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.kioskId;
+    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
     let relevantConsumptionData: { [productId: string]: number } = {};
 
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {

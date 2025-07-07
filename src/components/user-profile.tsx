@@ -32,9 +32,10 @@ export function UserProfile() {
     return null;
   }
 
-  const kioskName = user?.kioskId 
-    ? (kiosks.find(k => k.id === user.kioskId)?.name || 'N/A') 
-    : 'N/A';
+  const kioskNames = user.assignedKioskIds
+    .map(id => kiosks.find(k => k.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
   
   const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
   const profileName = profile ? profile.name : 'Perfil não encontrado';
@@ -75,7 +76,7 @@ export function UserProfile() {
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-default focus:bg-transparent focus:text-accent-foreground">
                   <Warehouse className="mr-2 h-4 w-4" />
-                  <span>Quiosque: {kioskName}</span>
+                  <span>Quiosque(s): {kioskNames || 'N/A'}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>

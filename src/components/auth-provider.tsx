@@ -104,7 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               username: 'Tiago Brasil',
               password: 'master',
               profileId: profilesContext.adminProfileId,
-              kioskId: 'matriz',
+              assignedKioskIds: ['matriz'],
+              turno: null,
+              weekdayFolga: 6, // Sábado
+              folguista: false,
             };
             try {
               await addDoc(collection(db, "users"), masterUser as any);
@@ -115,7 +118,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        const usersData = querySnapshot.docs.map(docData => {
+            const data = docData.data();
+            return { 
+                id: docData.id, 
+                ...data,
+                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+                turno: data.turno ?? null,
+                weekdayFolga: data.weekdayFolga ?? 0,
+                folguista: data.folguista ?? false,
+             } as User
+        });
+
         setUsers(usersData);
         
         if (currentUser) {
@@ -143,7 +157,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             const userDoc = querySnapshot.docs[0];
-            const userToLogin = { id: userDoc.id, ...userDoc.data() } as User;
+            const data = userDoc.data();
+            const userToLogin = { 
+                id: userDoc.id, 
+                ...data,
+                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+                turno: data.turno ?? null,
+                weekdayFolga: data.weekdayFolga ?? 0,
+                folguista: data.folguista ?? false,
+             } as User;
             setCurrentUser(userToLogin);
             window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
             return true;
@@ -167,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userRef = doc(db, "users", updatedUser.id);
     const { id, ...dataToUpdate } = updatedUser;
     try {
-        await updateDoc(userRef, dataToUpdate);
+        await updateDoc(userRef, dataToUpdate as any);
     } catch (error) {
         console.error("Error updating user:", error);
     }

@@ -160,9 +160,12 @@ export type Profile = {
 export type User = {
     id:string;
     username: string;
-    password?: string; // Should be hashed in a real app
+    password?: string;
     profileId: string;
-    kioskId: string;
+    assignedKioskIds: string[];
+    turno: 'T1' | 'T2' | null;
+    weekdayFolga: number; // 0=Sun, 1=Mon, ..., 6=Sat
+    folguista: boolean;
     avatarUrl?: string;
 };
 
