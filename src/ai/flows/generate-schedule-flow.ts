@@ -23,7 +23,7 @@ const KioskSchema = z.object({
   name: z.string(),
 });
 
-export const GenerateScheduleInputSchema = z.object({
+const GenerateScheduleInputSchema = z.object({
   month: z.number().min(1).max(12).describe('The month for which to generate the schedule (1-12).'),
   year: z.number().describe('The year for which to generate the schedule.'),
   users: z.array(UserSchema).describe('The list of available employees.'),
@@ -32,7 +32,7 @@ export const GenerateScheduleInputSchema = z.object({
 export type GenerateScheduleInput = z.infer<typeof GenerateScheduleInputSchema>;
 
 
-export const GenerateScheduleOutputSchema = z.record(z.string(), z.record(z.string(), z.string().optional()))
+const GenerateScheduleOutputSchema = z.record(z.string(), z.record(z.string(), z.string().optional()))
   .describe('The complete monthly schedule. The top-level key is the date string "YYYY-MM-DD". The nested value is an object where the key is a string like "Kiosk Name T1" or "Kiosk Name T2", and the value is the assigned employee\'s username.');
 export type GenerateScheduleOutput = z.infer<typeof GenerateScheduleOutputSchema>;
 
