@@ -57,26 +57,37 @@ export function Sidebar() {
           <TooltipProvider delayDuration={0}>
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4 py-4">
               {navItems.map(item => item.show && (
-                <Tooltip key={item.href}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9",
-                        isExpanded ? "justify-start" : "justify-center",
-                        pathname === item.href && "bg-secondary text-secondary-foreground"
-                      )}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span className={cn("whitespace-nowrap", !isExpanded && "hidden")}>{item.label}</span>
-                    </Link>
-                  </TooltipTrigger>
-                  {!isExpanded && (
-                     <TooltipContent side="right" sideOffset={5}>
+                isExpanded ? (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9 justify-start",
+                      pathname === item.href && "bg-secondary text-secondary-foreground"
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span className="whitespace-nowrap">{item.label}</span>
+                  </Link>
+                ) : (
+                  <Tooltip key={item.href}>
+                    <TooltipTrigger asChild>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9 justify-center",
+                          pathname === item.href && "bg-secondary text-secondary-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span className="sr-only">{item.label}</span>
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={5}>
                       {item.label}
                     </TooltipContent>
-                  )}
-                </Tooltip>
+                  </Tooltip>
+                )
               ))}
             </nav>
           </TooltipProvider>
