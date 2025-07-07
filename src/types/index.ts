@@ -139,7 +139,6 @@ export type Shift = {
 export type DailySchedule = {
   id: string; // YYYY-MM-DD
   diaDaSemana: string;
-  folguistaDSR?: boolean;
   [kioskTurnKey: string]: any; // "Quiosque Tirirical T1": "Edna" or "Edna + Carliane"
 };
 
@@ -180,7 +179,6 @@ export type User = {
     profileId: string;
     assignedKioskIds: string[];
     turno: 'T1' | 'T2' | null;
-    weekdayFolga: number; // 0=Sun, 1=Mon, ..., 6=Sat
     folguista: boolean;
     avatarUrl?: string;
 };

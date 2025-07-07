@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -31,7 +30,6 @@ const userSchema = z.object({
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   assignedKioskIds: z.array(z.string()).min(1, 'Selecione ao menos um quiosque.'),
   turno: z.enum(['T1', 'T2']).nullable(),
-  weekdayFolga: z.coerce.number().min(0).max(6),
   folguista: z.boolean(),
 }).refine(data => {
     return !data.password || data.password.length >= 4;
@@ -41,16 +39,6 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
-
-const weekDays = [
-    { value: 0, label: 'Domingo' },
-    { value: 1, label: 'Segunda-feira' },
-    { value: 2, label: 'Terça-feira' },
-    { value: 3, label: 'Quarta-feira' },
-    { value: 4, label: 'Quinta-feira' },
-    { value: 5, label: 'Sexta-feira' },
-    { value: 6, label: 'Sábado' },
-];
 
 export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
@@ -71,7 +59,6 @@ export function UserManagement() {
         profileId: '',
         assignedKioskIds: [],
         turno: null,
-        weekdayFolga: 0,
         folguista: false,
     }
   });
@@ -93,7 +80,6 @@ export function UserManagement() {
       profileId: '',
       assignedKioskIds: [],
       turno: null,
-      weekdayFolga: 0,
       folguista: false
     });
     setShowForm(true);
@@ -107,7 +93,6 @@ export function UserManagement() {
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
       turno: user.turno,
-      weekdayFolga: user.weekdayFolga,
       folguista: user.folguista
     });
     setShowForm(true);
@@ -274,34 +259,20 @@ export function UserManagement() {
                         </FormItem>
                     )}/>
                     
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="turno" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Turno</FormLabel>
-                            <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
-                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="T1">T1</SelectItem>
-                                    <SelectItem value="T2">T2</SelectItem>
-                                    <SelectItem value="null">Nenhum</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                     <FormField control={form.control} name="weekdayFolga" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Dia de Folga</FormLabel>
-                            <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value.toString()}>
-                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {weekDays.map(day => <SelectItem key={day.value} value={day.value.toString()}>{day.label}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                             <FormMessage />
-                        </FormItem>
-                    )}/>
-                  </div>
+                  <FormField control={form.control} name="turno" render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Turno Padrão</FormLabel>
+                          <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione um turno..." /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                  <SelectItem value="T1">T1</SelectItem>
+                                  <SelectItem value="T2">T2</SelectItem>
+                                  <SelectItem value="null">Nenhum (para folguistas)</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <FormMessage />
+                      </FormItem>
+                  )}/>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">

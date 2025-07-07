@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, VenetianMask, Star, Edit } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Star, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
@@ -113,20 +113,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     })}
                 </div>
             ))}
-            {dayData.folguistaDSR && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <div className="absolute bottom-1 right-1 p-1 bg-green-100 dark:bg-green-900 rounded-full cursor-help">
-                                <VenetianMask className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>DSR Folguista</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
           </div>
         ) : (
           <div className="flex-grow"></div>
@@ -170,7 +156,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             )}
             <div className="flex justify-end gap-4 mt-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1"><Star className="h-3 w-3 text-yellow-500"/> = Reforço Folguista</div>
-                <div className="flex items-center gap-1"><VenetianMask className="h-3 w-3 text-green-600"/> = DSR Folguista</div>
             </div>
           </>
         )}

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
@@ -106,7 +105,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               profileId: profilesContext.adminProfileId,
               assignedKioskIds: ['matriz'],
               turno: null,
-              weekdayFolga: 6, // Sábado
               folguista: false,
             };
             try {
@@ -125,7 +123,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ...data,
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
-                weekdayFolga: data.weekdayFolga ?? 0,
                 folguista: data.folguista ?? false,
              } as User
         });
@@ -163,7 +160,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ...data,
                 assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
                 turno: data.turno ?? null,
-                weekdayFolga: data.weekdayFolga ?? 0,
                 folguista: data.folguista ?? false,
              } as User;
             setCurrentUser(userToLogin);

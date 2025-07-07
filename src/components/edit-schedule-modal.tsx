@@ -27,7 +27,6 @@ const scheduleSchema = z.object({
     key: z.string(),
     value: z.string(),
   })),
-  folguistaDSR: z.boolean(),
 });
 
 type FormValues = z.infer<typeof scheduleSchema>;
@@ -41,7 +40,6 @@ export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalPr
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
       shifts: [],
-      folguistaDSR: false,
     },
   });
 
@@ -60,16 +58,13 @@ export function EditScheduleModal({ dayData, onOpenChange }: EditScheduleModalPr
         })));
       
       replace(initialShifts);
-      form.setValue('folguistaDSR', dayData.folguistaDSR || false);
     }
   }, [dayData, kiosks, replace, form]);
 
   const onSubmit = async (values: FormValues) => {
     if (!dayData) return;
     
-    const updates: Partial<DailySchedule> = {
-        folguistaDSR: values.folguistaDSR,
-    };
+    const updates: Partial<DailySchedule> = {};
     values.shifts.forEach(shift => {
       updates[shift.key] = shift.value;
     });
