@@ -76,7 +76,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2'].forEach(turn => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
                     const employeeName = daySchedule[`${kiosk.name} ${turn}`];
                     if (employeeName && typeof employeeName === 'string' && employeeName.toLowerCase() !== 'folga') {
                         todaysWorkers.add(employeeName);
@@ -125,11 +125,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             if (daySchedule) {
                 const t1Employee = daySchedule[`${kiosk.name} T1`];
                 const t2Employee = daySchedule[`${kiosk.name} T2`];
+                const t3Employee = daySchedule[`${kiosk.name} T3`];
                 if (t1Employee && typeof t1Employee === 'string' && t1Employee.toLowerCase() !== 'folga') {
                     workingThisKiosk.add(t1Employee);
                 }
                 if (t2Employee && typeof t2Employee === 'string' && t2Employee.toLowerCase() !== 'folga') {
                     workingThisKiosk.add(t2Employee);
+                }
+                if (t3Employee && typeof t3Employee === 'string' && t3Employee.toLowerCase() !== 'folga') {
+                    workingThisKiosk.add(t3Employee);
                 }
             }
 
@@ -158,7 +162,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
-            ['T1', 'T2'].forEach(turn => {
+            ['T1', 'T2', 'T3'].forEach(turn => {
                 acc[`${kiosk.name} ${turn}`] = '';
             });
             return acc;
@@ -169,7 +173,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
-    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`]);
+    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`]);
 
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
@@ -280,9 +284,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
                                 const t1Employee = dayData?.[`${kiosk.name} T1`];
                                 const t2Employee = dayData?.[`${kiosk.name} T2`];
+                                const t3Employee = dayData?.[`${kiosk.name} T3`];
                                 
                                 const t1Count = t1Employee ? dayCounts?.get(t1Employee) : undefined;
                                 const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
+                                const t3Count = t3Employee ? dayCounts?.get(t3Employee) : undefined;
 
                                 return (
                                     <div 
@@ -306,8 +312,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                     <span className="font-bold text-amber-600">T2:</span>
                                                     {renderEmployee(t2Employee, t2Count)}
                                                 </div>
+                                                {t3Employee && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-bold text-emerald-600">T3:</span>
+                                                        {renderEmployee(t3Employee, t3Count)}
+                                                    </div>
+                                                )}
                                                 {onLeave && onLeave.length > 0 && (
-                                                    <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
+                                                    <div className={cn("flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed", (t1Employee || t2Employee || t3Employee) ? "" : "hidden")}>
                                                         <span className="font-bold text-muted-foreground">F:</span>
                                                         <span className="truncate text-muted-foreground">{onLeave.join(', ')}</span>
                                                     </div>

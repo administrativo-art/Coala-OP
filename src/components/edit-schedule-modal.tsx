@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { type DailySchedule } from '@/types';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
 
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
@@ -33,6 +35,7 @@ type FormValues = z.infer<typeof scheduleSchema>;
 export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
   const { updateDailySchedule, loading } = useMonthlySchedule();
+  const [showThirdShift, setShowThirdShift] = useState(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(scheduleSchema),
@@ -53,7 +56,10 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
 
   useEffect(() => {
     if (dayData && editingKiosk) {
-      const initialShifts = ['T1', 'T2'].map(turn => ({
+      const hasT3Data = !!dayData[`${editingKiosk.name} T3`];
+      setShowThirdShift(hasT3Data);
+
+      const initialShifts = ['T1', 'T2', 'T3'].map(turn => ({
           key: `${editingKiosk.name} ${turn}`,
           value: dayData[`${editingKiosk.name} ${turn}`] || '',
       }));
@@ -63,12 +69,16 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
   }, [dayData, editingKiosk, replace]);
 
   const onSubmit = async (values: FormValues) => {
-    if (!dayData) return;
+    if (!dayData || !editingKiosk) return;
     
     const updates: Partial<DailySchedule> = {};
     values.shifts.forEach(shift => {
       updates[shift.key] = shift.value;
     });
+
+    if (!showThirdShift) {
+        updates[`${editingKiosk.name} T3`] = '';
+    }
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
@@ -88,22 +98,35 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange }: EditSchedu
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-4 py-4">
-              {fields.map((field, index) => (
-                <FormField
-                  key={field.id}
-                  control={form.control}
-                  name={`shifts.${index}.value`}
-                  render={({ field: controllerField }) => (
-                    <FormItem>
-                      <FormLabel>{field.key.endsWith('T1') ? 'Turno 1' : 'Turno 2'}</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ))}
+              {fields.map((field, index) => {
+                if (field.key.endsWith(' T3') && !showThirdShift) {
+                    return null;
+                }
+                return (
+                    <FormField
+                    key={field.id}
+                    control={form.control}
+                    name={`shifts.${index}.value`}
+                    render={({ field: controllerField }) => (
+                        <FormItem>
+                        <FormLabel>{
+                            field.key.endsWith('T1') ? 'Turno 1' 
+                            : field.key.endsWith('T2') ? 'Turno 2' 
+                            : 'Turno 3'
+                        }</FormLabel>
+                        <FormControl>
+                            <Input placeholder="Nome do colaborador ou 'FOLGA'" {...controllerField} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                )
+              })}
+            </div>
+             <div className="flex items-center space-x-2">
+                <Switch id="third-shift-toggle" checked={showThirdShift} onCheckedChange={setShowThirdShift} />
+                <Label htmlFor="third-shift-toggle">Habilitar 3º turno</Label>
             </div>
             <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
