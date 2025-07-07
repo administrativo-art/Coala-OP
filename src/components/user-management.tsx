@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -53,6 +53,8 @@ export function UserManagement() {
   const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [profileFilter, setProfileFilter] = useState('all');
+  const [kioskFilter, setKioskFilter] = useState('all');
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -77,10 +79,13 @@ export function UserManagement() {
   }, [isFolguista, form]);
   
   const filteredUsers = useMemo(() => {
-    return users.filter(user => 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [users, searchTerm]);
+    return users.filter(user => {
+      const searchMatch = user.username.toLowerCase().includes(searchTerm.toLowerCase());
+      const profileMatch = profileFilter === 'all' || user.profileId === profileFilter;
+      const kioskMatch = kioskFilter === 'all' || user.assignedKioskIds.includes(kioskFilter);
+      return searchMatch && profileMatch && kioskMatch;
+    });
+  }, [users, searchTerm, profileFilter, kioskFilter]);
 
 
   const handleAddNew = () => {
@@ -342,14 +347,46 @@ export function UserManagement() {
                 </Button>
               </div>
 
-              <div className="relative mt-4">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    placeholder="Filtrar por nome..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                />
+              <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
+                  <div className="relative flex-grow w-full">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                          placeholder="Buscar por nome..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 w-full"
+                      />
+                  </div>
+                  <Select value={profileFilter} onValueChange={setProfileFilter}>
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder="Perfil" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="all">Todos os Perfis</SelectItem>
+                          {profiles.map(profile => (
+                              <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                  <Select value={kioskFilter} onValueChange={setKioskFilter}>
+                      <SelectTrigger className="w-full sm:w-[220px]">
+                          <SelectValue placeholder="Quiosque" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="all">Todos os Quiosques</SelectItem>
+                          {kiosks.map(kiosk => (
+                              <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                  <Button variant="ghost" onClick={() => {
+                      setSearchTerm('');
+                      setProfileFilter('all');
+                      setKioskFilter('all');
+                  }}>
+                      <Eraser className="mr-2 h-4 w-4" />
+                      Limpar
+                  </Button>
               </div>
               
               <Separator className="my-4" />
