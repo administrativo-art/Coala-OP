@@ -10,12 +10,13 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule, kioskId: string) => void;
@@ -158,6 +159,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
+  const [selectedKiosk, setSelectedKiosk] = useState('all');
+  const [selectedEmployee, setSelectedEmployee] = useState('all');
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -192,6 +195,18 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const kiosksToDisplay = useMemo(() => {
     return kiosks.filter(k => k.id !== 'matriz');
   }, [kiosks]);
+  
+  const filteredKiosks = useMemo(() => {
+    if (selectedKiosk === 'all') {
+        return kiosksToDisplay;
+    }
+    return kiosksToDisplay.filter(k => k.id === selectedKiosk);
+  }, [kiosksToDisplay, selectedKiosk]);
+  
+  const operationalUsers = useMemo(() => {
+    return users.filter(u => u.operacional);
+  }, [users]);
+
 
   const workDayCounts = useMemo(() => {
     const operationalUsers = users.filter(u => u.operacional);
@@ -346,8 +361,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     setIsGenerateConfirmationOpen(false);
   };
 
-  const renderEmployee = (name: string, count?: number, dayISO?: string) => {
+  const renderEmployee = (name: string, count?: number, dayISO?: string, selectedEmployeeFilter?: string) => {
     if (!name) return null;
+    if (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga') {
+        return null;
+    }
     const displayName = count ? `${name}.${count}` : name;
     
     if (name.toLowerCase() === 'folga') {
@@ -424,6 +442,41 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <CardTitle className="flex items-center gap-2"><Users /> Escala de Trabalho</CardTitle>
                 <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
+            
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
+                    <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
+                    <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Select value={selectedKiosk} onValueChange={setSelectedKiosk}>
+                        <SelectTrigger className="w-full sm:w-[220px]">
+                            <SelectValue placeholder="Filtrar por quiosque" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Quiosques</SelectItem>
+                            {kiosksToDisplay.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                        <SelectTrigger className="w-full sm:w-[220px]">
+                            <SelectValue placeholder="Filtrar por colaborador" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Colaboradores</SelectItem>
+                            {operationalUsers.map(u => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Button variant="ghost" onClick={() => {
+                        setSelectedKiosk('all');
+                        setSelectedEmployee('all');
+                    }}>
+                        <Eraser className="mr-2 h-4 w-4" />
+                        Limpar
+                    </Button>
+                </div>
+            </div>
              {canManageSchedule && (
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
@@ -435,22 +488,17 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     </Button>
                 </div>
             )}
-            <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
-                <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
-                <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
-            </div>
         </CardHeader>
         <CardContent>
             {loading ? (
                 <Skeleton className="h-96 w-full" />
             ) : (
             <div className="overflow-x-auto border rounded-lg">
-                <div className="grid" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${kiosksToDisplay.length}, minmax(200px, 1fr))` }}>
+                <div className="grid" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${filteredKiosks.length}, minmax(200px, 1fr))` }}>
                     {/* Headers */}
                     <div className="sticky top-0 left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Dia</div>
-                    {kiosksToDisplay.map((kiosk, kioskIndex) => (
-                        <div key={kiosk.id} className={cn("sticky top-0 font-semibold p-2 text-center border-b z-20 bg-card", kioskIndex < kiosksToDisplay.length - 1 && "border-r")}>
+                    {filteredKiosks.map((kiosk, kioskIndex) => (
+                        <div key={kiosk.id} className={cn("sticky top-0 font-semibold p-2 text-center border-b z-20 bg-card", kioskIndex < filteredKiosks.length - 1 && "border-r")}>
                             {kiosk.name}
                         </div>
                     ))}
@@ -469,7 +517,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                             </div>
 
                             {/* Kiosk cells for the day */}
-                            {kiosksToDisplay.map((kiosk, kioskIndex) => {
+                            {filteredKiosks.map((kiosk, kioskIndex) => {
                                 const dayISO = format(day, 'yyyy-MM-dd');
                                 const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
@@ -494,7 +542,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                             "p-1.5 h-full flex items-center justify-center group z-10",
                                             baseBg,
                                             dayIndex < daysInMonth.length - 1 && "border-b",
-                                            kioskIndex < kiosksToDisplay.length - 1 && "border-r",
+                                            kioskIndex < filteredKiosks.length - 1 && "border-r",
                                             canManageSchedule && "cursor-pointer hover:bg-muted"
                                         )}
                                     >
@@ -503,22 +551,22 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                 {isSunday ? (
                                                      <div className="flex items-center gap-1.5">
                                                         <span className="font-bold text-purple-600">U:</span>
-                                                        {renderEmployee(t1Employee, t1Count, dayISO)}
+                                                        {renderEmployee(t1Employee, t1Count, dayISO, selectedEmployee)}
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-sky-600">T1:</span>
-                                                            {renderEmployee(t1Employee, t1Count, dayISO)}
+                                                            {renderEmployee(t1Employee, t1Count, dayISO, selectedEmployee)}
                                                         </div>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-amber-600">T2:</span>
-                                                            {renderEmployee(t2Employee, t2Count, dayISO)}
+                                                            {renderEmployee(t2Employee, t2Count, dayISO, selectedEmployee)}
                                                         </div>
                                                         {t3Employee && (
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className="font-bold text-emerald-600">T3:</span>
-                                                                {renderEmployee(t3Employee, t3Count, dayISO)}
+                                                                {renderEmployee(t3Employee, t3Count, dayISO, selectedEmployee)}
                                                             </div>
                                                         )}
                                                     </>
@@ -526,7 +574,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                 {folgaEmployee && (
                                                     <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
                                                         <span className="font-bold text-muted-foreground">F:</span>
-                                                        <span className="truncate text-muted-foreground">{folgaEmployee}</span>
+                                                        {renderEmployee(folgaEmployee, undefined, dayISO, selectedEmployee)}
                                                     </div>
                                                 )}
                                             </div>
@@ -551,7 +599,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             <TransportationCostAnalysis 
                 scheduleMap={scheduleMap}
                 users={users}
-                kiosksToDisplay={kiosksToDisplay}
+                kiosksToDisplay={filteredKiosks}
             />
         </div>
 
