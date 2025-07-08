@@ -33,6 +33,7 @@ const userSchema = z.object({
   folguista: z.boolean(),
   operacional: z.boolean(),
   valeTransporte: z.coerce.number().optional(),
+  color: z.string().nullable().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 4;
 }, {
@@ -41,6 +42,8 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
+
+const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
 export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
@@ -67,6 +70,7 @@ export function UserManagement() {
         folguista: false,
         operacional: true,
         valeTransporte: 0,
+        color: null,
     }
   });
   
@@ -99,6 +103,7 @@ export function UserManagement() {
       folguista: false,
       operacional: true,
       valeTransporte: 0,
+      color: null,
     });
     setShowForm(true);
   };
@@ -114,6 +119,7 @@ export function UserManagement() {
       folguista: user.folguista,
       operacional: user.operacional,
       valeTransporte: user.valeTransporte || 0,
+      color: user.color || null,
     });
     setShowForm(true);
   };
@@ -325,6 +331,45 @@ export function UserManagement() {
                         </FormItem>
                     )}/>
                   </div>
+                   <FormField
+                    control={form.control}
+                    name="color"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Cor do Destaque</FormLabel>
+                        <FormControl>
+                            <div className="flex flex-wrap gap-2 pt-2">
+                            {userColors.map((color) => (
+                                <button
+                                key={color}
+                                type="button"
+                                className={cn(
+                                    "h-8 w-8 rounded-full border-2 transition-all",
+                                    field.value === color ? 'border-primary ring-2 ring-ring' : 'border-transparent'
+                                )}
+                                style={{ backgroundColor: color }}
+                                onClick={() => field.onChange(color)}
+                                />
+                            ))}
+                            <button
+                                type="button"
+                                className={cn(
+                                    "h-8 w-8 rounded-full border-2 flex items-center justify-center bg-muted transition-all",
+                                    !field.value ? 'border-primary ring-2 ring-ring' : 'border-transparent'
+                                )}
+                                onClick={() => field.onChange(null)}
+                            >
+                                <Eraser className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                            </div>
+                        </FormControl>
+                        <FormDescription>
+                            Selecione uma cor para destacar o colaborador na escala.
+                        </FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">
@@ -400,7 +445,8 @@ export function UserManagement() {
                 </div>
                 {filteredUsers.map(user => (
                   <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-5">
-                    <div className="font-medium">
+                    <div className="font-medium flex items-center gap-2">
+                      {user.color && <div className="h-3 w-3 rounded-full" style={{ backgroundColor: user.color }}></div>}
                       <span className="md:hidden text-muted-foreground">Usuário: </span>
                       {user.username}
                     </div>

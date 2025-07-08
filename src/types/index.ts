@@ -186,6 +186,7 @@ export type User = {
     operacional: boolean;
     avatarUrl?: string;
     valeTransporte?: number;
+    color?: string | null;
 };
 
 export type PredefinedConversionItem = {

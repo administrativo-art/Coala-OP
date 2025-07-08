@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
@@ -108,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               folguista: false,
               operacional: true,
               valeTransporte: 0,
+              color: null,
             };
             try {
               await addDoc(collection(db, "users"), masterUser as any);
@@ -128,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 folguista: data.folguista ?? false,
                 operacional: data.operacional ?? false,
                 valeTransporte: data.valeTransporte ?? 0,
+                color: data.color ?? null,
              } as User
         });
 
@@ -167,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 folguista: data.folguista ?? false,
                 operacional: data.operacional ?? false,
                 valeTransporte: data.valeTransporte ?? 0,
+                color: data.color ?? null,
              } as User;
             setCurrentUser(userToLogin);
             window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));

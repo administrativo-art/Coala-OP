@@ -171,6 +171,16 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return map;
   }, [users]);
 
+  const userColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    users.forEach(u => {
+        if (u.color) {
+            map.set(u.username, u.color);
+        }
+    });
+    return map;
+  }, [users]);
+
   useEffect(() => {
     fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
   }, [currentDate, fetchSchedule]);
@@ -362,76 +372,79 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   };
 
   const renderEmployee = (name: string, count?: number, dayISO?: string, selectedEmployeeFilter?: string) => {
-    if (!name) return null;
-    if (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga') {
-        return null;
+    if (!name || (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga')) {
+      return null;
     }
+  
+    const userColor = userColorMap.get(name);
     const displayName = count ? `${name}.${count}` : name;
-    
+  
+    const nameElement = (
+      <span
+        className={cn("rounded-sm px-1 py-0.5", !userColor && "px-0 py-0 bg-transparent")}
+        style={userColor ? { backgroundColor: userColor } : {}}
+      >
+        {displayName}
+      </span>
+    );
+  
     if (name.toLowerCase() === 'folga') {
       return <span className="truncate text-muted-foreground">{displayName}</span>;
     }
-    
-    if (count && count > 6) {
-        return (
-            <TooltipProvider>
-                <Tooltip delayDuration={100}>
-                    <TooltipTrigger asChild>
-                        <span className="truncate text-orange-500 font-bold flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3 shrink-0" />
-                            {displayName}
-                        </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Colaborador excedeu 6 dias de trabalho consecutivos.</p>
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-        )
-    }
-
+  
     const isFolguista = folguistaUsernames.has(name);
     const hasDuplicate = dayISO ? duplicateFolguistaAssignments.get(dayISO)?.has(name) : false;
-
-    if (isFolguista && hasDuplicate) {
-        return (
-            <TooltipProvider>
-              <Tooltip delayDuration={100}>
-                <TooltipTrigger asChild>
-                  <span className="truncate text-destructive font-bold flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 shrink-0" />
-                    {displayName}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Folguista escalado em múltiplos quiosques neste dia.</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-        )
-    }
-
     const isOperational = operationalUserMap.get(name);
-
-    if (isOperational === false) { // Explicitly check for false, undefined means user not found
+  
+    if (count && count > 6) {
+      return (
+        <TooltipProvider>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <span className="truncate text-orange-500 font-bold flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                {nameElement}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent><p>Colaborador excedeu 6 dias de trabalho consecutivos.</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+  
+    if (isFolguista && hasDuplicate) {
+      return (
+        <TooltipProvider>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <span className="truncate text-destructive font-bold flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                {nameElement}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent><p>Folguista escalado em múltiplos quiosques neste dia.</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+  
+    if (isOperational === false) {
       return (
         <TooltipProvider>
           <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <span className="truncate text-destructive flex items-center gap-1">
                 <UserX className="h-3 w-3 shrink-0" />
-                {displayName}
+                {nameElement}
               </span>
             </TooltipTrigger>
-            <TooltipContent>
-              <p>{name} não é um colaborador operacional.</p>
-            </TooltipContent>
+            <TooltipContent><p>{name} não é um colaborador operacional.</p></TooltipContent>
           </Tooltip>
         </TooltipProvider>
       );
     }
-
-    return <span className="truncate">{displayName}</span>;
+  
+    return <span className="truncate">{nameElement}</span>;
   };
 
   return (
