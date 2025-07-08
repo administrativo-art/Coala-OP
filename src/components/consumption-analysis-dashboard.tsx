@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -5,11 +6,16 @@ import { useAuth } from "@/hooks/use-auth"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useKiosks } from "@/hooks/use-kiosks"
+import { useToast } from "@/hooks/use-toast"
+import { format } from "date-fns"
+import { ptBR } from 'date-fns/locale'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, UploadCloud, History, Scale } from 'lucide-react'
+import { TrendingUp, ListFilter, UploadCloud, History, Scale, Download } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -24,6 +30,7 @@ export function ConsumptionAnalysisDashboard() {
   const { products, loading: productsLoading } = useStockAnalysisProducts()
   const { history: consumptionHistory, loading: consumptionLoading, addReport, deleteReport } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
+  const { toast } = useToast();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -101,6 +108,44 @@ export function ConsumptionAnalysisDashboard() {
 
   }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
 
+  const handleExportPdf = () => {
+    if (chartData.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Sem dados para exportar",
+            description: "Não há dados de consumo para os filtros selecionados.",
+        });
+        return;
+    }
+
+    const doc = new jsPDF();
+    const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
+    const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
+    
+    doc.setFontSize(18);
+    doc.text(`Relatório de Consumo Médio Mensal`, 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Quiosque: ${kioskName}`, 14, 29);
+    doc.text(`Gerado em: ${monthYear}`, 14, 35);
+
+    const tableHead = [['Produto (unidade)', 'Consumo Médio']];
+    const tableBody = chartData.map(item => [
+        item.name,
+        item.Consumo.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+    ]);
+
+    autoTable(doc, {
+        startY: 45,
+        head: tableHead,
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: '#3F51B5' },
+    });
+    
+    doc.save(`consumo_medio_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
+  };
+
   const handleProductSelection = (productId: string, checked: boolean) => {
     setSelectedProducts(current => checked ? [...current, productId] : current.filter(id => id !== productId));
   };
@@ -144,6 +189,10 @@ export function ConsumptionAnalysisDashboard() {
                     </CardDescription>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={handleExportPdf}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar PDF
+                    </Button>
                     <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsHistoryModalOpen(true)}>
                         <History className="mr-2 h-4 w-4" /> Histórico
                     </Button>

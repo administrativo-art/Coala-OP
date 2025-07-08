@@ -13,7 +13,7 @@ import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -24,6 +24,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { type ReturnRequest, returnRequestStatuses } from "@/types"
 import { cn } from "@/lib/utils"
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 
 export default function DashboardPage() {
@@ -162,6 +164,37 @@ export default function DashboardPage() {
 
   const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading;
   const chartHeight = Math.max(350, chartData.length * 40);
+
+  const handleExportPdf = () => {
+    if (chartData.length === 0) return;
+
+    const doc = new jsPDF();
+    const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
+    const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
+    
+    doc.setFontSize(18);
+    doc.text(`Relatório de Consumo Médio Mensal`, 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Quiosque: ${kioskName}`, 14, 29);
+    doc.text(`Gerado em: ${monthYear}`, 14, 35);
+
+    const tableHead = [['Produto (unidade)', 'Consumo Médio']];
+    const tableBody = chartData.map(item => [
+        item.name,
+        item.Consumo.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+    ]);
+
+    autoTable(doc, {
+        startY: 45,
+        head: tableHead,
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: '#3F51B5' },
+    });
+    
+    doc.save(`consumo_medio_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
+  };
 
   if (initialLoading) {
     return (
@@ -335,6 +368,10 @@ export default function DashboardPage() {
                     </CardDescription>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={handleExportPdf} disabled={chartData.length === 0}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar
+                    </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
