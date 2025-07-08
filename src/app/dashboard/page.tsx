@@ -9,10 +9,11 @@ import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useReturnRequests } from "@/hooks/use-return-requests"
+import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
+  const { schedule, loading: scheduleLoading } = useMonthlySchedule();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -154,8 +156,11 @@ export default function DashboardPage() {
 
   }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
 
+  const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
+  const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
 
-  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading;
+  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading;
   const chartHeight = Math.max(350, chartData.length * 40);
 
   if (initialLoading) {
@@ -216,6 +221,67 @@ export default function DashboardPage() {
       </div>
 
        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-1">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Users className="h-6 w-6" /> Escala de Hoje - {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
+                    </CardTitle>
+                    <CardDescription>
+                        Resumo da escala de trabalho para o dia atual.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {scheduleLoading ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <Skeleton className="h-24 w-full" />
+                            <Skeleton className="h-24 w-full" />
+                        </div>
+                    ) : todaySchedule ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                            {kiosksToDisplay.map(kiosk => {
+                                const t1 = todaySchedule[`${kiosk.name} T1`];
+                                const t2 = todaySchedule[`${kiosk.name} T2`];
+                                const t3 = todaySchedule[`${kiosk.name} T3`];
+                                const folga = todaySchedule[`${kiosk.name} Folga`];
+                                const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
+                                
+                                if (!t1 && !t2 && !t3 && !folga) {
+                                    return (
+                                        <div key={kiosk.id} className="p-3 border rounded-lg bg-muted/50">
+                                            <h4 className="font-semibold">{kiosk.name}</h4>
+                                            <p className="text-sm mt-2 text-muted-foreground">Sem escala para hoje.</p>
+                                        </div>
+                                    )
+                                }
+                                
+                                return (
+                                    <div key={kiosk.id} className="p-3 border rounded-lg bg-muted/50">
+                                        <h4 className="font-semibold">{kiosk.name}</h4>
+                                        <div className="text-sm mt-2 space-y-1">
+                                            {isSunday ? (
+                                                t1 && <p><strong>Turno Único:</strong> {t1}</p>
+                                            ) : (
+                                                <>
+                                                    {t1 && <p><strong>T1:</strong> {t1}</p>}
+                                                    {t2 && <p><strong>T2:</strong> {t2}</p>}
+                                                    {t3 && <p><strong>T3:</strong> {t3}</p>}
+                                                </>
+                                            )}
+                                            {folga && <p className="text-muted-foreground"><strong>Folga:</strong> {folga}</p>}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground text-center py-4">
+                            <Users className="h-10 w-10 mb-2" />
+                            <p className="font-semibold">Nenhuma escala encontrada para hoje.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             {myActiveReturnRequests.length > 0 && (
                 <Card className="md:col-span-2">
                     <CardHeader>
