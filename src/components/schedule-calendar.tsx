@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -214,6 +215,53 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay, previousMonthSchedule]);
 
+  const folguistaUsernames = useMemo(() => {
+    return new Set(users.filter(u => u.folguista).map(u => u.username));
+  }, [users]);
+  
+  const duplicateFolguistaAssignments = useMemo(() => {
+    const dailyDuplicates = new Map<string, Set<string>>();
+
+    if (!scheduleMap.size || !folguistaUsernames.size || !kiosksToDisplay.length) {
+      return dailyDuplicates;
+    }
+
+    daysInMonth.forEach(day => {
+      const dayISO = format(day, 'yyyy-MM-dd');
+      const daySchedule = scheduleMap.get(dayISO);
+      if (!daySchedule) return;
+
+      const todaysFolguistaAssignments = new Map<string, number>();
+
+      kiosksToDisplay.forEach(kiosk => {
+        ['T1', 'T2', 'T3'].forEach(turn => {
+          const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+          if (employeeNames && typeof employeeNames === 'string') {
+            employeeNames.split(' + ').forEach(name => {
+              const trimmedName = name.trim();
+              if (folguistaUsernames.has(trimmedName)) {
+                todaysFolguistaAssignments.set(trimmedName, (todaysFolguistaAssignments.get(trimmedName) || 0) + 1);
+              }
+            });
+          }
+        });
+      });
+
+      const duplicates = new Set<string>();
+      todaysFolguistaAssignments.forEach((count, name) => {
+        if (count > 1) {
+          duplicates.add(name);
+        }
+      });
+
+      if (duplicates.size > 0) {
+        dailyDuplicates.set(dayISO, duplicates);
+      }
+    });
+
+    return dailyDuplicates;
+  }, [scheduleMap, daysInMonth, kiosksToDisplay, folguistaUsernames]);
+
   const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -298,7 +346,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     setIsGenerateConfirmationOpen(false);
   };
 
-  const renderEmployee = (name: string, count?: number) => {
+  const renderEmployee = (name: string, count?: number, dayISO?: string) => {
     if (!name) return null;
     const displayName = count ? `${name}.${count}` : name;
     
@@ -306,6 +354,27 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
       return <span className="truncate text-muted-foreground">{displayName}</span>;
     }
     
+    const isFolguista = folguistaUsernames.has(name);
+    const hasDuplicate = dayISO ? duplicateFolguistaAssignments.get(dayISO)?.has(name) : false;
+
+    if (isFolguista && hasDuplicate) {
+        return (
+            <TooltipProvider>
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <span className="truncate text-destructive font-bold flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    {displayName}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Folguista escalado em múltiplos quiosques neste dia.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+        )
+    }
+
     const isOperational = operationalUserMap.get(name);
 
     if (isOperational === false) { // Explicitly check for false, undefined means user not found
@@ -416,22 +485,22 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                 {isSunday ? (
                                                      <div className="flex items-center gap-1.5">
                                                         <span className="font-bold text-purple-600">U:</span>
-                                                        {renderEmployee(t1Employee, t1Count)}
+                                                        {renderEmployee(t1Employee, t1Count, dayISO)}
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-sky-600">T1:</span>
-                                                            {renderEmployee(t1Employee, t1Count)}
+                                                            {renderEmployee(t1Employee, t1Count, dayISO)}
                                                         </div>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-amber-600">T2:</span>
-                                                            {renderEmployee(t2Employee, t2Count)}
+                                                            {renderEmployee(t2Employee, t2Count, dayISO)}
                                                         </div>
                                                         {t3Employee && (
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className="font-bold text-emerald-600">T3:</span>
-                                                                {renderEmployee(t3Employee, t3Count)}
+                                                                {renderEmployee(t3Employee, t3Count, dayISO)}
                                                             </div>
                                                         )}
                                                     </>
