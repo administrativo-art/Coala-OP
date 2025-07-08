@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -9,7 +8,7 @@ import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useAuth } from '@/hooks/use-auth';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download } from 'lucide-react';
@@ -540,10 +539,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     <Eraser className="mr-2 h-4 w-4" />
                     Limpar
                 </Button>
-                <Button variant="outline" onClick={handleExportPdf} disabled={selectedKiosk === 'all'}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Exportar
-                </Button>
             </div>
 
              {canManageSchedule && (
@@ -662,7 +657,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             </div>
             )}
         </CardContent>
-        </Card>
+        <CardFooter className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={handleExportPdf} disabled={selectedKiosk === 'all'}>
+                <Download className="mr-2 h-4 w-4" />
+                Exportar Escala do Quiosque
+            </Button>
+        </CardFooter>
+      </Card>
 
         <div className="mt-6">
             <TransportationCostAnalysis 
