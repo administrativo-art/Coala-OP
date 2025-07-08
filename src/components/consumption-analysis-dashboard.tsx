@@ -176,6 +176,42 @@ export function ConsumptionAnalysisDashboard() {
     document.body.removeChild(link);
   };
 
+  const handleExportJson = () => {
+    if (chartData.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Sem dados para exportar",
+            description: "Não há dados de consumo para os filtros selecionados.",
+        });
+        return;
+    }
+
+    const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
+    const monthYear = format(new Date(), 'MM-yyyy');
+    
+    const exportData = {
+      kiosk: kioskName,
+      month: monthYear,
+      generated_at: new Date().toISOString(),
+      data: chartData.map(item => ({
+        product_name: item.name,
+        average_consumption: item.Consumo,
+        product_id: item.productId,
+      }))
+    };
+    
+    const jsonData = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const filenameKiosk = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `consumo_medio_${filenameKiosk}_${monthYear}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleProductSelection = (productId: string, checked: boolean) => {
     setSelectedProducts(current => checked ? [...current, productId] : current.filter(id => id !== productId));
   };
@@ -333,6 +369,7 @@ export function ConsumptionAnalysisDashboard() {
                     <DropdownMenuContent>
                         <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
                         <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={handleExportJson}>Exportar como JSON</DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </CardFooter>
