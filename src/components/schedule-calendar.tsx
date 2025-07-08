@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -360,34 +359,30 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <Skeleton className="h-96 w-full" />
             ) : (
             <div className="overflow-x-auto border rounded-lg">
-                <div className="grid" style={{ gridTemplateColumns: `minmax(200px, 1fr) repeat(${daysInMonth.length}, minmax(150px, 1fr))` }}>
-                    {/* <!--- Headers ---> */}
-                    <div className="sticky left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Quiosque</div>
-                    {daysInMonth.map((day, dayIndex) => (
-                        <div key={format(day, 'dd')} className={cn("font-semibold p-2 text-center border-b z-20 bg-card", dayIndex < daysInMonth.length - 1 && "border-r")}>
-                            <span className="text-muted-foreground text-xs uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
-                            <p>{format(day, 'd')}</p>
+                <div className="grid" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${kiosksToDisplay.length}, minmax(200px, 1fr))` }}>
+                    {/* Headers */}
+                    <div className="sticky top-0 left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Dia</div>
+                    {kiosksToDisplay.map((kiosk, kioskIndex) => (
+                        <div key={kiosk.id} className={cn("sticky top-0 font-semibold p-2 text-center border-b z-20 bg-card", kioskIndex < kiosksToDisplay.length - 1 && "border-r")}>
+                            {kiosk.name}
                         </div>
                     ))}
 
-                    {/* <!--- Kiosk Rows ---> */}
-                    {kiosksToDisplay.map((kiosk, kioskIndex) => {
-                        const kioskColor = kiosk.name.toLowerCase().includes('tirirical')
-                        ? 'bg-blue-100 dark:bg-blue-900/30'
-                        : kiosk.name.toLowerCase().includes('joão paulo')
-                        ? 'bg-green-100 dark:bg-green-900/30'
-                        : 'bg-card';
-                        return (
-                        <React.Fragment key={kiosk.id}>
+                    {/* Rows for each day */}
+                    {daysInMonth.map((day, dayIndex) => (
+                        <React.Fragment key={format(day, 'yyyy-MM-dd')}>
+                            {/* Day Cell */}
                             <div className={cn(
-                                "sticky left-0 z-20 border-r p-2 flex items-center gap-3 font-medium text-sm",
-                                kioskColor,
-                                kioskIndex < kiosksToDisplay.length - 1 && "border-b"
+                                "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
+                                dayIndex < daysInMonth.length - 1 && "border-b",
+                                (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50'
                             )}>
-                            {kiosk.name}
+                                <p className={cn("font-bold", day.getDay() === 0 && 'text-red-500')}>{format(day, 'd')}</p>
+                                <p className="text-muted-foreground text-xs uppercase">{format(day, 'EEEE', { locale: ptBR })}</p>
                             </div>
 
-                            {daysInMonth.map((day, dayIndex) => {
+                            {/* Kiosk cells for the day */}
+                            {kiosksToDisplay.map((kiosk, kioskIndex) => {
                                 const dayISO = format(day, 'yyyy-MM-dd');
                                 const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
@@ -401,21 +396,23 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const t1Count = t1Employee ? dayCounts?.get(t1Employee) : undefined;
                                 const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
                                 const t3Count = t3Employee ? dayCounts?.get(t3Employee) : undefined;
+                                
+                                const baseBg = (day.getDay() === 0 || day.getDay() === 6) ? 'bg-muted/50' : 'bg-card';
 
                                 return (
                                     <div 
-                                        key={dayISO} 
+                                        key={kiosk.id} 
                                         onClick={() => handleEditClick(day, kiosk.id)}
                                         className={cn(
                                             "p-1.5 h-full flex items-center justify-center group z-10",
-                                            kioskColor,
-                                            kioskIndex < kiosksToDisplay.length - 1 && "border-b",
-                                            dayIndex < daysInMonth.length - 1 && "border-r",
-                                            canManageSchedule && "cursor-pointer hover:bg-muted/50"
+                                            baseBg,
+                                            dayIndex < daysInMonth.length - 1 && "border-b",
+                                            kioskIndex < kiosksToDisplay.length - 1 && "border-r",
+                                            canManageSchedule && "cursor-pointer hover:bg-muted"
                                         )}
                                     >
                                         {dayData ? (
-                                            <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-card/50">
+                                            <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-background/50">
                                                 {isSunday ? (
                                                      <div className="flex items-center gap-1.5">
                                                         <span className="font-bold text-purple-600">U:</span>
@@ -453,11 +450,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                             </div>
                                         )}
                                     </div>
-                                )
+                                );
                             })}
                         </React.Fragment>
-                        )
-                    })}
+                    ))}
                 </div>
             </div>
             )}
