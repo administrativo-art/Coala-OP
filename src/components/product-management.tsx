@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
@@ -11,6 +11,7 @@ import * as z from 'zod';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
+import { useToast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -20,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, PlusCircle, Camera, Archive } from 'lucide-react';
+import { Edit, Trash2, PlusCircle, Camera, Archive, Upload } from 'lucide-react';
 import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -61,6 +62,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
+    const { toast } = useToast();
 
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [showForm, setShowForm] = useState(false);
@@ -71,6 +73,7 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -199,6 +202,25 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
         form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
     };
 
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) { // 2MB limit
+                toast({
+                    variant: 'destructive',
+                    title: 'Arquivo muito grande',
+                    description: 'Por favor, selecione um arquivo de imagem menor que 2MB.',
+                });
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                form.setValue('imageUrl', reader.result as string, { shouldValidate: true, shouldDirty: true });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const onSubmit = (values: ProductFormValues) => {
         if (editingProduct) {
             updateProduct({ ...editingProduct, ...values });
@@ -246,16 +268,26 @@ export function ProductManagement({ open, onOpenChange }: ProductManagementProps
                                                 <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}>
                                                     <Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra foto' : 'Tirar foto'}
                                                 </Button>
+                                                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                                    <Upload className="mr-2" /> Fazer Upload
+                                                </Button>
                                                 {form.watch('imageUrl') && (
-                                                    <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldValidate: true })}>
+                                                    <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldValidate: true, shouldDirty: true })}>
                                                         <Trash2 className="mr-2" /> Remover foto
                                                     </Button>
                                                 )}
                                             </div>
                                         </div>
+                                        <Input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleFileUpload}
+                                        />
                                         <FormField control={form.control} name="imageUrl" render={({ field }) => (
                                             <FormItem className="hidden">
-                                                <FormControl><Input {...field} /></FormControl>
+                                                <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}/>
