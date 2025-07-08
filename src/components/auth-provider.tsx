@@ -9,9 +9,11 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where
 import { ProfilesContext } from '@/components/profiles-provider';
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
+const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user'; // New key
 
 export interface AuthContextType {
   user: User | null;
+  originalUser: User | null; // To track impersonation
   users: User[];
   isAuthenticated: boolean;
   loading: boolean;
@@ -22,6 +24,8 @@ export interface AuthContextType {
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   changePassword: (username: string, oldPassword: string, newPassword: string) => Promise<boolean>;
+  impersonate: (userId: string) => void;
+  stopImpersonating: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +33,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [originalUser, setOriginalUser] = useState<User | null>(null); // New state for impersonation
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
   const [authLoading, setAuthLoading] = useState(true);
   const router = useRouter();
@@ -37,18 +42,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const storedCurrentUser = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      const storedOriginalUser = window.localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
       if (storedCurrentUser) {
         setCurrentUser(JSON.parse(storedCurrentUser));
       }
+      if (storedOriginalUser) {
+        setOriginalUser(JSON.parse(storedOriginalUser));
+      }
     } catch (error) {
-        console.error("Failed to load current user", error);
+        console.error("Failed to load user state from storage", error);
     }
+    setAuthLoading(false); // Initial load done
   }, []);
 
   const logout = useCallback(() => {
     setCurrentUser(null);
+    setOriginalUser(null); // Clear impersonation state
     setPermissions(defaultGuestPermissions);
     window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY); // Clear impersonation from storage
     router.push('/login');
   }, [router]);
 
@@ -59,6 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (currentUser) {
+      // The master user has hardcoded admin permissions.
+      // When impersonating, currentUser is not the master, so they get their profile's permissions.
+      // This logic correctly handles permission switching during impersonation.
       if (currentUser.username === 'Tiago Brasil') {
         setPermissions(defaultAdminPermissions);
         return;
@@ -136,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUsers(usersData);
         
+        // Update current user if their data changed in Firestore
         if (currentUser) {
             const foundUser = usersData.find(u => u.id === currentUser.id);
             if (!foundUser) {
@@ -146,14 +162,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         }
         
-        setAuthLoading(false);
+        // Update original user if their data changed
+        if (originalUser) {
+            const foundOriginalUser = usersData.find(u => u.id === originalUser.id);
+            if (!foundOriginalUser) {
+                logout(); // If the original user was deleted, log out entirely.
+            } else if (JSON.stringify(foundOriginalUser) !== JSON.stringify(originalUser)) {
+                setOriginalUser(foundOriginalUser);
+                window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(foundOriginalUser));
+            }
+        }
+        
     }, (error) => {
         console.error("Error fetching users from Firestore: ", error);
-        setAuthLoading(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser, logout, profilesContext, profilesContext?.loading, profilesContext?.adminProfileId]);
+  }, [currentUser, originalUser, logout, profilesContext, profilesContext?.loading, profilesContext?.adminProfileId]);
   
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", password));
@@ -227,8 +252,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   
+  const impersonate = useCallback((userId: string) => {
+    const realUser = originalUser || currentUser;
+    if (realUser?.username !== 'Tiago Brasil') {
+        console.error("Only the master user can impersonate.");
+        return;
+    }
+    const userToImpersonate = users.find(u => u.id === userId);
+    if (userToImpersonate) {
+        setOriginalUser(realUser);
+        setCurrentUser(userToImpersonate);
+        window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(realUser));
+        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToImpersonate));
+    }
+  }, [users, currentUser, originalUser]);
+
+  const stopImpersonating = useCallback(() => {
+    if (originalUser) {
+        setCurrentUser(originalUser);
+        setOriginalUser(null);
+        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(originalUser));
+        window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
+    }
+  }, [originalUser]);
+
   const value: AuthContextType = useMemo(() => ({
     user: currentUser,
+    originalUser,
     users,
     isAuthenticated: !!currentUser,
     loading: authLoading || (!!currentUser && (!profilesContext || profilesContext.loading)),
@@ -239,7 +289,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     deleteUser,
     changePassword,
-  }), [currentUser, users, authLoading, profilesContext, permissions, login, logout, addUser, updateUser, deleteUser, changePassword]);
+    impersonate,
+    stopImpersonating,
+  }), [currentUser, originalUser, users, authLoading, profilesContext, permissions, login, logout, addUser, updateUser, deleteUser, changePassword, impersonate, stopImpersonating]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

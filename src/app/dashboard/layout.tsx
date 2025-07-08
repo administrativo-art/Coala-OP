@@ -8,13 +8,15 @@ import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Undo2 } from 'lucide-react';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, originalUser, stopImpersonating } = useAuth();
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -60,6 +62,15 @@ export default function DashboardLayout({
       <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className="flex flex-col min-w-0">
         <Header />
+        {originalUser && (
+          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
+            <span>Você está navegando como <strong>{user?.username}</strong>.</span>
+            <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
+              <Undo2 className="mr-1 h-4 w-4"/>
+              Voltar para sua conta
+            </Button>
+          </div>
+        )}
         <main className="p-4 lg:p-6 bg-background">
           {children}
         </main>

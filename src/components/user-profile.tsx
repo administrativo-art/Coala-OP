@@ -12,11 +12,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from "@/components/ui/button";
 import { Input } from '@/components/ui/input';
-import { LogOut, Warehouse, Camera, Upload } from 'lucide-react';
+import { LogOut, Warehouse, Camera, Upload, Users, Undo2 } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 
@@ -58,13 +63,16 @@ const resizeImage = (dataUrl: string, maxWidth: number, maxHeight: number): Prom
 };
 
 export function UserProfile() {
-  const { user, logout, updateUser } = useAuth();
+  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
 
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const isMasterUser = (originalUser || user)?.username === 'Tiago Brasil';
+  const isImpersonating = !!originalUser;
 
   if (!user) {
     return null;
@@ -92,11 +100,11 @@ export function UserProfile() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
         toast({
           variant: 'destructive',
           title: 'Arquivo muito grande',
-          description: 'Por favor, selecione um arquivo de imagem menor que 5MB.',
+          description: 'Por favor, selecione um arquivo de imagem menor que 2MB.',
         });
         return;
       }
@@ -136,6 +144,19 @@ export function UserProfile() {
               </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+              {isImpersonating && (
+                <>
+                  <DropdownMenuLabel className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">
+                    Navegando como {user.username}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={stopImpersonating}>
+                    <Undo2 className="mr-2" />
+                    <span>Voltar para {originalUser.username}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">{user.username}</p>
@@ -159,6 +180,33 @@ export function UserProfile() {
                   <span>Carregar foto</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+
+              {isMasterUser && !isImpersonating && (
+                <>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Users className="mr-2 h-4 w-4" />
+                      <span>Navegar como</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent>
+                        <ScrollArea className="h-64">
+                          {users
+                            .filter(u => u.id !== user.id)
+                            .sort((a,b) => a.username.localeCompare(b.username))
+                            .map(u => (
+                              <DropdownMenuItem key={u.id} onSelect={() => impersonate(u.id)}>
+                                  {u.username}
+                              </DropdownMenuItem>
+                          ))}
+                        </ScrollArea>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
               <DropdownMenuItem onClick={logout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sair</span>
