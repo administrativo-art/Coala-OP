@@ -4,13 +4,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -371,6 +373,56 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     setIsGenerateConfirmationOpen(false);
   };
 
+  const handleExportPdf = () => {
+    if (selectedKiosk === 'all' || !scheduleMap.size) {
+        return;
+    }
+
+    const kiosk = kiosks.find(k => k.id === selectedKiosk);
+    if (!kiosk) return;
+
+    const doc = new jsPDF();
+    const monthYear = format(currentDate, 'MMMM yyyy', { locale: ptBR });
+    const title = `Escala de Trabalho - ${kiosk.name}`;
+
+    doc.setFontSize(18);
+    doc.text(title, 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(monthYear.charAt(0).toUpperCase() + monthYear.slice(1), 14, 29);
+
+    const head = [['Data', 'Dia da Semana', 'Turno 1', 'Turno 2', 'Turno 3', 'Folga']];
+    const body = daysInMonth.map(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = scheduleMap.get(dayISO);
+        const isSunday = day.getDay() === 0;
+        
+        const t1 = daySchedule?.[`${kiosk.name} T1`] || '';
+        const t2 = !isSunday ? (daySchedule?.[`${kiosk.name} T2`] || '') : '';
+        const t3 = !isSunday ? (daySchedule?.[`${kiosk.name} T3`] || '') : '';
+        const folga = daySchedule?.[`${kiosk.name} Folga`] || '';
+
+        return [
+            format(day, 'dd/MM'),
+            format(day, 'EEEE', { locale: ptBR }),
+            t1,
+            t2,
+            t3,
+            folga
+        ];
+    });
+
+    autoTable(doc, {
+        startY: 35,
+        head: head,
+        body: body,
+        theme: 'grid',
+        headStyles: { fillColor: '#3F51B5' },
+    });
+    
+    doc.save(`escala_${kiosk.name.replace(/\s/g, '_')}_${format(currentDate, 'MM-yyyy')}.pdf`);
+  };
+
   const renderEmployee = (name: string, count?: number, dayISO?: string, selectedEmployeeFilter?: string) => {
     if (!name || (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga')) {
       return null;
@@ -456,40 +508,44 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
             
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
-                    <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
-                    <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <Select value={selectedKiosk} onValueChange={setSelectedKiosk}>
-                        <SelectTrigger className="w-full sm:w-[220px]">
-                            <SelectValue placeholder="Filtrar por quiosque" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos os Quiosques</SelectItem>
-                            {kiosksToDisplay.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                        <SelectTrigger className="w-full sm:w-[220px]">
-                            <SelectValue placeholder="Filtrar por colaborador" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos os Colaboradores</SelectItem>
-                            {operationalUsers.map(u => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <Button variant="ghost" onClick={() => {
-                        setSelectedKiosk('all');
-                        setSelectedEmployee('all');
-                    }}>
-                        <Eraser className="mr-2 h-4 w-4" />
-                        Limpar
-                    </Button>
-                </div>
+            <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
+                <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
+                <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
             </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={selectedKiosk} onValueChange={setSelectedKiosk}>
+                    <SelectTrigger className="w-full sm:w-[220px]">
+                        <SelectValue placeholder="Filtrar por quiosque" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos os Quiosques</SelectItem>
+                        {kiosksToDisplay.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                    <SelectTrigger className="w-full sm:w-[220px]">
+                        <SelectValue placeholder="Filtrar por colaborador" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos os Colaboradores</SelectItem>
+                        {operationalUsers.map(u => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Button variant="ghost" onClick={() => {
+                    setSelectedKiosk('all');
+                    setSelectedEmployee('all');
+                }}>
+                    <Eraser className="mr-2 h-4 w-4" />
+                    Limpar
+                </Button>
+                <Button variant="outline" onClick={handleExportPdf} disabled={selectedKiosk === 'all'}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar
+                </Button>
+            </div>
+
              {canManageSchedule && (
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
