@@ -1,8 +1,7 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -590,10 +589,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                             <div className={cn(
                                 "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
                                 dayIndex < daysInMonth.length - 1 && "border-b",
-                                (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50'
+                                (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50',
+                                isToday(day) && 'bg-accent text-accent-foreground'
                             )}>
-                                <p className={cn("font-bold", day.getDay() === 0 && 'text-red-500')}>{format(day, 'd')}</p>
-                                <p className="text-muted-foreground text-xs uppercase">{format(day, 'EEEE', { locale: ptBR })}</p>
+                                <p className={cn("font-bold", day.getDay() === 0 && !isToday(day) && 'text-red-500')}>{format(day, 'd')}</p>
+                                <p className={cn("text-xs uppercase", isToday(day) ? "text-accent-foreground/80" : "text-muted-foreground")}>{format(day, 'EEEE', { locale: ptBR })}</p>
                             </div>
 
                             {/* Kiosk cells for the day */}
@@ -612,7 +612,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
                                 const t3Count = t3Employee ? dayCounts?.get(t3Employee) : undefined;
                                 
-                                const baseBg = (day.getDay() === 0 || day.getDay() === 6) ? 'bg-muted/50' : 'bg-card';
+                                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                                let baseBg = isWeekend ? 'bg-muted/50' : 'bg-card';
+                                if (isToday(day)) {
+                                    baseBg = 'bg-accent/10';
+                                }
 
                                 return (
                                     <div 
