@@ -20,6 +20,42 @@ import { LogOut, Warehouse, Camera, Upload } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 
+const resizeImage = (dataUrl: string, maxWidth: number, maxHeight: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = Math.round(height * (maxWidth / width));
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = Math.round(width * (maxHeight / height));
+                    height = maxHeight;
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return reject(new Error('Could not get canvas context'));
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = (err) => {
+            reject(new Error('Failed to load image'));
+        };
+        img.src = dataUrl;
+    });
+};
 
 export function UserProfile() {
   const { user, logout, updateUser } = useAuth();
@@ -56,17 +92,27 @@ export function UserProfile() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
         toast({
           variant: 'destructive',
           title: 'Arquivo muito grande',
-          description: 'Por favor, selecione um arquivo de imagem menor que 2MB.',
+          description: 'Por favor, selecione um arquivo de imagem menor que 5MB.',
         });
         return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        handlePhotoUpdate(reader.result as string);
+      reader.onloadend = async () => {
+        try {
+            const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
+            handlePhotoUpdate(resizedDataUrl);
+        } catch (error) {
+            console.error("Image resize error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Erro ao processar imagem',
+                description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.'
+            });
+        }
       };
       reader.readAsDataURL(file);
     }
