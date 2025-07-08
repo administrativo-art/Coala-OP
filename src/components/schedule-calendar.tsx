@@ -354,6 +354,24 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
       return <span className="truncate text-muted-foreground">{displayName}</span>;
     }
     
+    if (count && count > 6) {
+        return (
+            <TooltipProvider>
+                <Tooltip delayDuration={100}>
+                    <TooltipTrigger asChild>
+                        <span className="truncate text-orange-500 font-bold flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            {displayName}
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Colaborador excedeu 6 dias de trabalho consecutivos.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        )
+    }
+
     const isFolguista = folguistaUsernames.has(name);
     const hasDuplicate = dayISO ? duplicateFolguistaAssignments.get(dayISO)?.has(name) : false;
 
