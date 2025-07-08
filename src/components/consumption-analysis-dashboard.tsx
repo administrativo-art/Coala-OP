@@ -11,8 +11,9 @@ import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import Papa from 'papaparse';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrendingUp, ListFilter, UploadCloud, History, Scale, Download } from 'lucide-react'
@@ -146,6 +147,35 @@ export function ConsumptionAnalysisDashboard() {
     doc.save(`consumo_medio_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
   };
 
+  const handleExportCsv = () => {
+    if (chartData.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Sem dados para exportar",
+            description: "Não há dados de consumo para os filtros selecionados.",
+        });
+        return;
+    }
+
+    const kioskName = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
+    const monthYear = format(new Date(), 'MM-yyyy');
+    
+    const csvData = chartData.map(item => ({
+        "Produto (unidade)": item.name,
+        "Consumo Medio": item.Consumo,
+    }));
+
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `consumo_medio_${kioskName}_${monthYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleProductSelection = (productId: string, checked: boolean) => {
     setSelectedProducts(current => checked ? [...current, productId] : current.filter(id => id !== productId));
   };
@@ -189,10 +219,6 @@ export function ConsumptionAnalysisDashboard() {
                     </CardDescription>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
-                    <Button variant="outline" className="w-full sm:w-auto" onClick={handleExportPdf}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Exportar PDF
-                    </Button>
                     <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsHistoryModalOpen(true)}>
                         <History className="mr-2 h-4 w-4" /> Histórico
                     </Button>
@@ -296,6 +322,20 @@ export function ConsumptionAnalysisDashboard() {
                     </div>
                     )}
             </CardContent>
+            <CardFooter className="pt-4 border-t justify-end">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Download className="mr-2 h-4 w-4" />
+                            Exportar Relatório
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </CardFooter>
             </Card>
         </div>
 
