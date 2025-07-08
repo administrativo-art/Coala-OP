@@ -21,14 +21,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const permissionsSchema = z.object({
     products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
-    users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
+    users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
     forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
@@ -247,6 +247,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             {renderPermissionSwitch("permissions.users.add", "Adicionar usuários", "Permite criar novos usuários e definir suas permissões.")}
                             {renderPermissionSwitch("permissions.users.edit", "Editar usuários", "Permite editar informações e perfis de outros usuários.")}
                             {renderPermissionSwitch("permissions.users.delete", "Excluir outros usuários do sistema.")}
+                            {renderPermissionSwitch("permissions.users.impersonate", "Navegar como outro usuário", "Permite acessar o sistema como se fosse outro colaborador.")}
                         </AccordionContent>
                     </AccordionItem>
                     </Accordion>

@@ -63,7 +63,7 @@ const resizeImage = (dataUrl: string, maxWidth: number, maxHeight: number): Prom
 };
 
 export function UserProfile() {
-  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
+  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
@@ -71,7 +71,6 @@ export function UserProfile() {
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const isMasterUser = (originalUser || user)?.username === 'Tiago Brasil';
   const isImpersonating = !!originalUser;
 
   if (!user) {
@@ -181,7 +180,7 @@ export function UserProfile() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
 
-              {isMasterUser && !isImpersonating && (
+              {permissions.users.impersonate && !isImpersonating && (
                 <>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>

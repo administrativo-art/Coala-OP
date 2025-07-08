@@ -71,9 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (currentUser) {
-      // The master user has hardcoded admin permissions.
-      // When impersonating, currentUser is not the master, so they get their profile's permissions.
-      // This logic correctly handles permission switching during impersonation.
       if (currentUser.username === 'Tiago Brasil') {
         setPermissions(defaultAdminPermissions);
         return;
@@ -253,19 +250,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   const impersonate = useCallback((userId: string) => {
-    const realUser = originalUser || currentUser;
-    if (realUser?.username !== 'Tiago Brasil') {
-        console.error("Only the master user can impersonate.");
+    if (!permissions.users.impersonate) {
+        console.error("User does not have permission to impersonate.");
         return;
     }
     const userToImpersonate = users.find(u => u.id === userId);
     if (userToImpersonate) {
-        setOriginalUser(realUser);
+        setOriginalUser(currentUser);
         setCurrentUser(userToImpersonate);
-        window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(realUser));
+        window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
         window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToImpersonate));
     }
-  }, [users, currentUser, originalUser]);
+  }, [users, currentUser, permissions]);
 
   const stopImpersonating = useCallback(() => {
     if (originalUser) {

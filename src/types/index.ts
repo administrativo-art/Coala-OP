@@ -158,7 +158,7 @@ export interface MonthlyScheduleContextType {
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-    users: { add: boolean; edit: boolean; delete: boolean };
+    users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean };
     kiosks: { add: boolean; delete: boolean };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean };
     forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean };
@@ -309,7 +309,7 @@ export interface ReturnRequestContextType {
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
-    users: { add: false, edit: false, delete: false },
+    users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     forms: { manage: false, fill: false, viewHistory: false, deleteHistory: false },
@@ -322,7 +322,7 @@ export const defaultGuestPermissions: PermissionSet = {
 export const defaultUserPermissions: PermissionSet = {
     products: { add: true, edit: false, delete: false },
     lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
-    users: { add: false, edit: false, delete: false },
+    users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
     forms: { manage: false, fill: true, viewHistory: true, deleteHistory: false },
@@ -335,7 +335,7 @@ export const defaultUserPermissions: PermissionSet = {
 export const defaultAdminPermissions: PermissionSet = {
     products: { add: true, edit: true, delete: true },
     lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
-    users: { add: true, edit: true, delete: true },
+    users: { add: true, edit: true, delete: true, impersonate: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
     forms: { manage: true, fill: true, viewHistory: true, deleteHistory: true },
