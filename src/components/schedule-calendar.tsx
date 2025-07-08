@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -18,6 +19,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from "@/hooks/use-toast";
 
 interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule, kioskId: string) => void;
@@ -157,6 +159,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, previousMonthSchedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
   const { users, permissions } = useAuth();
+  const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
@@ -373,7 +376,20 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   };
 
   const handleExportPdf = () => {
-    if (selectedKiosk === 'all' || !scheduleMap.size) {
+    if (selectedKiosk === 'all') {
+        toast({
+            variant: "destructive",
+            title: "Selecione um quiosque",
+            description: "Por favor, filtre por um quiosque específico para poder exportar a escala.",
+        });
+        return;
+    }
+    
+    if (!scheduleMap.size) {
+        toast({
+            title: "Sem dados para exportar",
+            description: "Não há dados de escala para o mês atual.",
+        });
         return;
     }
 
@@ -658,7 +674,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             )}
         </CardContent>
         <CardFooter className="flex justify-end pt-4 border-t">
-            <Button variant="outline" onClick={handleExportPdf} disabled={selectedKiosk === 'all'}>
+            <Button variant="outline" onClick={handleExportPdf}>
                 <Download className="mr-2 h-4 w-4" />
                 Exportar Escala do Quiosque
             </Button>
