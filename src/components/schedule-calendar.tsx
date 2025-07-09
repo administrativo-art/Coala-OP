@@ -1,9 +1,10 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
+import jsPDF, { type CellHookData } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -386,6 +387,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     
     if (!scheduleMap.size) {
         toast({
+            variant: "destructive",
             title: "Sem dados para exportar",
             description: "Não há dados de escala para o mês atual.",
         });
@@ -432,6 +434,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         body: body,
         theme: 'grid',
         headStyles: { fillColor: '#3F51B5' },
+        willDrawCell: (data: CellHookData) => {
+            if (data.section === 'body' && data.cell.text.length > 0) {
+                const cellText = data.cell.text[0];
+                const color = userColorMap.get(cellText);
+                if (color) {
+                    data.cell.styles.fillColor = color;
+                }
+            }
+        }
     });
     
     doc.save(`escala_${kiosk.name.replace(/\s/g, '_')}_${format(currentDate, 'MM-yyyy')}.pdf`);
