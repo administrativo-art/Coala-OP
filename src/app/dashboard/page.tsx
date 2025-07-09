@@ -70,7 +70,7 @@ export default function DashboardPage() {
     if (lotsLoading) return [];
     return lotsInKiosk.filter(lot => {
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
-        return days >= 0 && days <= 7;
+        return days >= 0 && days <= 7 && lot.quantity > 0;
     }).sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
   }, [lotsInKiosk, lotsLoading]);
 
@@ -80,7 +80,7 @@ export default function DashboardPage() {
 
   const expiredCount = useMemo(() => {
      if (lotsLoading) return 0;
-    return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0).length;
+    return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
   
   const myActiveReturnRequests = useMemo(() => {
