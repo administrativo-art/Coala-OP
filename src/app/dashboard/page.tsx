@@ -66,13 +66,17 @@ export default function DashboardPage() {
     return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
   }, [lots, user, lotsLoading]);
 
-  const expiringSoonCount = useMemo(() => {
-    if (lotsLoading) return 0;
+  const expiringSoonLots = useMemo(() => {
+    if (lotsLoading) return [];
     return lotsInKiosk.filter(lot => {
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
         return days >= 0 && days <= 7;
-    }).length;
+    }).sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
   }, [lotsInKiosk, lotsLoading]);
+
+  const expiringSoonCount = useMemo(() => {
+    return expiringSoonLots.length;
+  }, [expiringSoonLots]);
 
   const expiredCount = useMemo(() => {
      if (lotsLoading) return 0;
@@ -304,6 +308,43 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+        {expiringSoonLots.length > 0 && (
+          <div className="mt-6">
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Insumos Vencendo em Breve</CardTitle>
+                      <CardDescription>
+                          Estes são os insumos que vencerão nos próximos 7 dias.
+                      </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2 pr-4">
+                            {expiringSoonLots.map(lot => (
+                                <Link href="/dashboard/stock/inventory-control" key={lot.id}>
+                                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                                    <div>
+                                        <p className="font-semibold">{lot.productName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Lote: {lot.lotNumber} | Quiosque: {kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-bold text-lg">{lot.quantity} un.</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Vence em: {format(parseISO(lot.expiryDate), "dd/MM/yyyy")}
+                                      </p>
+                                    </div>
+                                </div>
+                                </Link>
+                            ))}
+                        </div>
+                      </ScrollArea>
+                  </CardContent>
+              </Card>
+          </div>
+      )}
 
        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-1">
             <Card>
