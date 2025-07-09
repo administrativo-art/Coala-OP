@@ -46,7 +46,7 @@ export function StockAnalyzer() {
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
-    const { lots: allLots, loading: lotsLoading, moveMultipleLots, getProductFullName } = useExpiryProducts();
+    const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
@@ -81,9 +81,13 @@ export function StockAnalyzer() {
         destinationKioskId: string
     ): Omit<StockAnalysisResultItem, keyof Omit<StockAnalysisResultItem, 'statusMessage' | 'isActionable' | 'distributionSuggestion'>> => {
         const sourceKioskId = 'matriz';
+        const productInfo = findAnalysisProductByName(productBaseName);
+        if (!productInfo) {
+             return { statusMessage: `Configuração do insumo '${productBaseName}' não encontrada.`, isActionable: false, distributionSuggestion: [] };
+        }
 
         const availableLots = allLots.filter(lot => 
-            lot.kioskId === sourceKioskId && normalizeString(lot.productName.split('(')[0]) === normalizeString(productBaseName)
+            lot.kioskId === sourceKioskId && lot.productId === productInfo.id
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
 
@@ -97,11 +101,14 @@ export function StockAnalyzer() {
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
             
-            const packageValueInBaseUnit = lot.quantity * (findAnalysisProductByName(productBaseName)?.packageSize || 1);
-            const availablePackages = lot.quantity;
+            const lotProductInfo = analysisProducts.find(p => p.id === lot.productId);
+            if (!lotProductInfo) continue;
             
-            const neededPackages = Math.ceil(remainingNeeded / packageValueInBaseUnit);
-            const packagesToTake = Math.min(availablePackages, neededPackages);
+            const packageValueInBaseUnit = lotProductInfo.packageSize || 1;
+            const availableInLotInBaseUnits = lot.quantity * packageValueInBaseUnit;
+
+            const qtyToTakeInBaseUnits = Math.min(remainingNeeded, availableInLotInBaseUnits);
+            const packagesToTake = Math.ceil(qtyToTakeInBaseUnits / packageValueInBaseUnit);
             
             if (packagesToTake > 0) {
                 suggestion.push({
@@ -110,8 +117,8 @@ export function StockAnalyzer() {
                     productName: lot.productName,
                     fromKioskId: sourceKioskId,
                     quantityToMove: packagesToTake,
-                    baseUnitValue: packageValueInBaseUnit * packagesToTake,
-                    baseUnit: findAnalysisProductByName(productBaseName)?.unit || '',
+                    baseUnitValue: packagesToTake * packageValueInBaseUnit,
+                    baseUnit: productInfo.unit,
                     lotNumber: lot.lotNumber,
                     expiryDate: lot.expiryDate,
                 });
@@ -120,7 +127,7 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-             const productUnit = findAnalysisProductByName(productBaseName)?.unit || '';
+             const productUnit = productInfo.unit;
             return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productBaseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
@@ -349,9 +356,17 @@ export function StockAnalyzer() {
                 await updateStockReport({ ...reportToUpdate, results: updatedResults });
             }
 
-            console.log(`Movimentação de ${resultItem.productName} para ${resultItem.kioskName} executada.`);
-        } catch (error) {
-            console.error("Failed to execute distribution:", error);
+            toast({
+                title: "Sucesso!",
+                description: `Movimentação de ${resultItem.productName} para ${resultItem.kioskName} executada.`
+            });
+
+        } catch (error: any) {
+             toast({
+                variant: "destructive",
+                title: "Erro na movimentação",
+                description: error.message || "Não foi possível efetivar a movimentação de estoque."
+            });
         }
     };
     

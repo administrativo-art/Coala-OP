@@ -227,7 +227,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
       const batch = writeBatch(db);
       try {
-        await Promise.all(paramsArray.map(params => executeMove(batch, params)));
+        for (const params of paramsArray) {
+            await executeMove(batch, params);
+        }
         await batch.commit();
       } catch (error) {
         console.error("Error moving multiple lots:", error);
