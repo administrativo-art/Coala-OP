@@ -56,10 +56,20 @@ export function LotCard({
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
+  const getProductForTitle = () => {
+      const firstLot = groupedProduct.lots[0];
+      if (!firstLot) return null;
+      return products.find(p => p.id === firstLot.productId);
+  };
+
+  const productForTitle = getProductForTitle();
+
   return (
     <Card className="w-full">
       <CardHeader className="p-4">
-        <CardTitle className="text-xl">{groupedProduct.productBaseName}</CardTitle>
+        <CardTitle className="text-xl">
+            {productForTitle ? getProductFullName(productForTitle).replace(/\s*\([^)]*\)$/, '') : groupedProduct.productBaseName}
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-3">
         {groupedProduct.lots.map(lot => {
@@ -98,7 +108,7 @@ export function LotCard({
                         <div className="flex items-center gap-2"><Barcode className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Cód. Barras:</span> {product.barcode || 'N/A'}</div></div>
                         <div className="flex items-center gap-2"><Package className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Lote:</span> {lot.lotNumber}</div></div>
                         <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Validade:</span> {format(expiry, "dd/MM/yyyy")}</div></div>
-                        <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Medida:</span> {getProductFullName(product)}</div></div>
+                        <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Medida:</span> {`(${product.packageSize}${product.unit})`}</div></div>
                     </div>
                      <div className="flex flex-col items-center justify-center p-4 bg-muted md:w-48 text-center border-t md:border-t-0 md:border-l">
                         <div className="text-4xl font-bold">{lot.quantity}</div>
