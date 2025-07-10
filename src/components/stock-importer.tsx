@@ -87,7 +87,7 @@ export function StockAnalyzer() {
         }
 
         const availableLots = allLots.filter(lot => 
-            lot.kioskId === sourceKioskId && lot.productId === productInfo.id
+            lot.kioskId === sourceKioskId && lot.productId === productInfo.id && lot.quantity > 0
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
 
