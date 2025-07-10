@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -436,10 +437,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         headStyles: { fillColor: '#3F51B5' },
         willDrawCell: (data: CellHookData) => {
             if (data.section === 'body' && data.cell.text.length > 0) {
-                const cellText = data.cell.text[0];
-                const color = userColorMap.get(cellText);
-                if (color) {
+                const cellText = data.cell.text[0].split('.')[0].trim();
+                const names = cellText.split(' + ').map(name => name.trim());
+                for (const name of names) {
+                  const color = userColorMap.get(name);
+                  if (color) {
                     data.cell.styles.fillColor = color;
+                    break; 
+                  }
                 }
             }
         }
