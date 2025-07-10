@@ -1,6 +1,6 @@
 
 "use client"
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { type Product, unitCategories } from '@/types';
-import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown } from 'lucide-react';
+import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown, Search, Eraser } from 'lucide-react';
 import { units } from '@/lib/conversion';
 import { Checkbox } from './ui/checkbox';
 
@@ -42,6 +42,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
   const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useStockAnalysisProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const [isImporting, setIsImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const importFileRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<FormValues>({
@@ -53,6 +54,11 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     name: "products",
     keyName: "formId"
   });
+  
+  const filteredFields = useMemo(() => {
+    if (!searchTerm) return fields;
+    return fields.filter(field => getProductFullName(field).toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [fields, searchTerm, getProductFullName]);
 
   useEffect(() => {
     if (!productsLoading && !kiosksLoading) {
@@ -296,7 +302,7 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
     onDelete?.(product);
   }
   
-  const allProductsSelected = fields.length > 0 && selectedProducts.size === fields.length;
+  const allProductsSelected = filteredFields.length > 0 && selectedProducts.size === filteredFields.length;
 
   return (
     <Form {...form}>
@@ -324,6 +330,21 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
                 </Button>
             )}
         </div>
+
+        <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+            <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar por nome do insumo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-full"
+                />
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setSearchTerm('')}>
+                <Eraser className="h-4 w-4" />
+            </Button>
+        </div>
         
         {fields.length > 0 && (
             <div className="flex items-center gap-3 px-4 py-2 border-y bg-muted/50">
@@ -342,120 +363,123 @@ export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selected
             </div>
         )}
 
-        {fields.length === 0 ? (
+        {filteredFields.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhum insumo cadastrado para análise.</p>
-                <p className="text-sm">Clique em "Adicionar Novo Insumo" para começar.</p>
+                <p>Nenhum insumo encontrado.</p>
+                {searchTerm && <p className="text-sm">Tente uma busca diferente ou adicione um novo insumo.</p>}
             </div>
         ) : (
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={fields.map(field => field.id)}>
-          {fields.map((field, index) => (
-            <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
-              <RadixAccordion.Header className="flex w-full items-center p-4">
-                  <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                        className="mr-3"
-                        onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
-                        checked={selectedProducts.has(field.id)}
-                        aria-label={`Selecionar ${getProductFullName(field)}`}
+        <Accordion type="multiple" className="w-full space-y-4" defaultValue={filteredFields.map(field => field.id)}>
+          {filteredFields.map((field) => {
+            const originalIndex = fields.findIndex(f => f.id === field.id);
+            return (
+              <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
+                <RadixAccordion.Header className="flex w-full items-center p-4">
+                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                          className="mr-3"
+                          onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
+                          checked={selectedProducts.has(field.id)}
+                          aria-label={`Selecionar ${getProductFullName(field)}`}
+                      />
+                    </div>
+                    <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
+                        <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </RadixAccordion.Trigger>
+                    <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                        {onEdit && (
+                            <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
+                                <Edit className="h-4 w-4" />
+                            </Button>
+                        )}
+                        {onDelete && (
+                            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                </RadixAccordion.Header>
+                <AccordionContent className="p-4 pt-0">
+                  <div className="space-y-4">
+                     <FormField
+                      control={form.control}
+                      name={`products.${originalIndex}.pdfUnit`}
+                      render={({ field: pdfUnitField }) => {
+                        const categoryUnits = (field.category && units[field.category]) ? Object.keys(units[field.category]) : [];
+                        return (
+                          <FormItem className="pt-2">
+                            <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
+                            <Select
+                              onValueChange={(value) => pdfUnitField.onChange(value === 'none' ? '' : value)}
+                              value={pdfUnitField.value || 'none'}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione a unidade do relatório" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">-- Mesma unidade da embalagem ({field.unit}) --</SelectItem>
+                                {categoryUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              Se a unidade no relatório for diferente da unidade da embalagem, especifique aqui para a conversão correta.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )
+                      }}
                     />
+                    <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
+                     <div className="rounded-md border">
+                      <Table>
+                          <TableHeader>
+                              <TableRow>
+                                  <TableHead>Quiosque</TableHead>
+                                  <TableHead className="text-right w-[150px]">Estoque Mínimo</TableHead>
+                                  <TableHead className="text-right w-[150px]">Estoque Máximo</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {kiosks.map(kiosk => (
+                                  <TableRow key={kiosk.id}>
+                                      <TableCell className="font-medium">{kiosk.name}</TableCell>
+                                      <TableCell className="text-right">
+                                          <FormField
+                                              control={form.control}
+                                              name={`products.${originalIndex}.stockLevels.${kiosk.id}.min`}
+                                              render={({ field: minField }) => (
+                                                  <FormItem>
+                                                      <FormControl><Input type="number" className="text-right" {...minField} onChange={e => minField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                              />
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                          <FormField
+                                              control={form.control}
+                                              name={`products.${originalIndex}.stockLevels.${kiosk.id}.max`}
+                                              render={({ field: maxField }) => (
+                                                  <FormItem>
+                                                      <FormControl><Input type="number" className="text-right" {...maxField} onChange={e => maxField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                              />
+                                      </TableCell>
+                                  </TableRow>
+                              ))}
+                          </TableBody>
+                      </Table>
+                     </div>
                   </div>
-                  <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
-                      <span className="flex-grow text-left">{getProductFullName(field)}</span>
-                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                  </RadixAccordion.Trigger>
-                  <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-                      {onEdit && (
-                          <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
-                              <Edit className="h-4 w-4" />
-                          </Button>
-                      )}
-                      {onDelete && (
-                          <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}>
-                              <Trash2 className="h-4 w-4" />
-                          </Button>
-                      )}
-                  </div>
-              </RadixAccordion.Header>
-              <AccordionContent className="p-4 pt-0">
-                <div className="space-y-4">
-                   <FormField
-                    control={form.control}
-                    name={`products.${index}.pdfUnit`}
-                    render={({ field: pdfUnitField }) => {
-                      const categoryUnits = (field.category && units[field.category]) ? Object.keys(units[field.category]) : [];
-                      return (
-                        <FormItem className="pt-2">
-                          <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
-                          <Select
-                            onValueChange={(value) => pdfUnitField.onChange(value === 'none' ? '' : value)}
-                            value={pdfUnitField.value || 'none'}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione a unidade do relatório" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="none">-- Mesma unidade da embalagem ({field.unit}) --</SelectItem>
-                              {categoryUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription>
-                            Se a unidade no relatório for diferente da unidade da embalagem, especifique aqui para a conversão correta.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )
-                    }}
-                  />
-                  <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
-                   <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Quiosque</TableHead>
-                                <TableHead className="text-right w-[150px]">Estoque Mínimo</TableHead>
-                                <TableHead className="text-right w-[150px]">Estoque Máximo</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {kiosks.map(kiosk => (
-                                <TableRow key={kiosk.id}>
-                                    <TableCell className="font-medium">{kiosk.name}</TableCell>
-                                    <TableCell className="text-right">
-                                        <FormField
-                                            control={form.control}
-                                            name={`products.${index}.stockLevels.${kiosk.id}.min`}
-                                            render={({ field: minField }) => (
-                                                <FormItem>
-                                                    <FormControl><Input type="number" className="text-right" {...minField} onChange={e => minField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                            />
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <FormField
-                                            control={form.control}
-                                            name={`products.${index}.stockLevels.${kiosk.id}.max`}
-                                            render={({ field: maxField }) => (
-                                                <FormItem>
-                                                    <FormControl><Input type="number" className="text-right" {...maxField} onChange={e => maxField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                            />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                   </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
+                </AccordionContent>
+              </AccordionItem>
+            )
+          })}
         </Accordion>
         )}
         <div className="flex justify-end pt-4 mt-6 border-t">
