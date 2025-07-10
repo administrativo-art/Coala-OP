@@ -4,12 +4,13 @@
 import Image from 'next/image';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Pencil, Trash2, Truck, History, Eraser, Info, Package, Barcode, Warehouse, MapPin, Calendar, Hash } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
+import { useMemo } from 'react';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -62,14 +63,28 @@ export function LotCard({
       return products.find(p => p.id === firstLot.productId);
   };
 
+  const totalQuantity = useMemo(() => {
+    return groupedProduct.lots.reduce((acc, lot) => acc + lot.quantity, 0);
+  }, [groupedProduct.lots]);
+
   const productForTitle = getProductForTitle();
 
   return (
     <Card className="w-full">
-      <CardHeader className="p-4">
-        <CardTitle className="text-xl">
-            {productForTitle ? getProductFullName(productForTitle) : groupedProduct.productBaseName}
-        </CardTitle>
+      <CardHeader className="p-4 flex flex-row items-center gap-4">
+        {productForTitle?.imageUrl && (
+            <div className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                <Image src={productForTitle.imageUrl} alt={`Foto de ${productForTitle.baseName}`} width={80} height={80} className="object-cover" />
+            </div>
+        )}
+        <div className="flex-grow">
+            <CardTitle className="text-xl">
+                {productForTitle ? getProductFullName(productForTitle) : groupedProduct.productBaseName}
+            </CardTitle>
+            <CardDescription className="mt-1">
+                Quantidade Total em Estoque: <span className="font-bold text-foreground">{totalQuantity}</span>
+            </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-3">
         {groupedProduct.lots.map(lot => {
