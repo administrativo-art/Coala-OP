@@ -437,14 +437,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         headStyles: { fillColor: '#3F51B5' },
         willDrawCell: (data: CellHookData) => {
             if (data.section === 'body' && data.cell.text.length > 0) {
-                const cellText = data.cell.text[0].split('.')[0].trim();
-                const names = cellText.split(' + ').map(name => name.trim());
-                for (const name of names) {
-                  const color = userColorMap.get(name);
-                  if (color) {
-                    data.cell.styles.fillColor = color;
-                    break; 
-                  }
+                const namesInCell = data.cell.text[0].split('+').map((name: string) => name.trim().split('.')[0]);
+                for (const name of namesInCell) {
+                    const color = userColorMap.get(name);
+                    if (color) {
+                        data.cell.styles.fillColor = color;
+                        break; 
+                    }
                 }
             }
         }
@@ -606,10 +605,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
                                 dayIndex < daysInMonth.length - 1 && "border-b",
                                 (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50',
-                                isToday(day) && 'bg-accent text-accent-foreground'
+                                isToday(day) && 'bg-accent/20'
                             )}>
-                                <p className={cn("font-bold", day.getDay() === 0 && !isToday(day) && 'text-red-500')}>{format(day, 'd')}</p>
-                                <p className={cn("text-xs uppercase", isToday(day) ? "text-accent-foreground/80" : "text-muted-foreground")}>{format(day, 'EEEE', { locale: ptBR })}</p>
+                                <p className={cn("font-bold", isToday(day) ? 'text-primary' : (day.getDay() === 0 && 'text-red-500'))}>{format(day, 'd')}</p>
+                                <p className={cn("text-xs uppercase", isToday(day) ? "text-primary/80" : "text-muted-foreground")}>{format(day, 'EEEE', { locale: ptBR })}</p>
                             </div>
 
                             {/* Kiosk cells for the day */}
