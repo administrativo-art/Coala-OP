@@ -4,183 +4,138 @@
 import Image from 'next/image';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, MapPin, Camera, History, Eraser, Info } from 'lucide-react';
-import { type Kiosk } from '@/types';
-import { useLocations } from '@/hooks/use-locations';
+import { Pencil, Trash2, Truck, History, Eraser, Info, Package, Barcode, Warehouse, MapPin, Calendar, Hash } from 'lucide-react';
+import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
 
-export type GroupedLot = {
-  productId: string;
-  productName: string;
-  lotNumber: string;
-  barcode?: string;
-  expiryDate: string;
-  totalQuantity: number;
-  imageUrl?: string;
-  alertThreshold?: number;
-  urgentThreshold?: number;
-  notes?: string;
-  kiosks: {
-    id: string; // This is the unique LotEntry ID
-    kioskId: string;
-    quantity: number;
-    locationId?: string;
-  }[];
+export type GroupedProduct = {
+  productBaseName: string;
+  lots: LotEntry[];
 };
 
 type LotCardProps = {
-  groupedLot: GroupedLot;
+  groupedProduct: GroupedProduct;
+  products: Product[];
+  getProductFullName: (product: Product) => string;
   kiosks: Kiosk[];
+  locations: Location[];
   onEdit: (lotId: string) => void;
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
-  onViewHistory: (lot: GroupedLot) => void;
-  onZeroOut: (groupedLot: GroupedLot) => void;
+  onViewHistory: (lot: LotEntry) => void;
+  onZeroOut: (lot: LotEntry) => void;
   canEdit: boolean;
   canMove: boolean;
   canDelete: boolean;
   canViewHistory: boolean;
 };
 
-export function LotCard({ groupedLot, kiosks, onEdit, onMove, onDelete, onViewHistory, onZeroOut, canEdit, canMove, canDelete, canViewHistory }: LotCardProps) {
-  const { locations } = useLocations();
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const expiry = parseISO(groupedLot.expiryDate);
-  const daysUntilExpiry = differenceInDays(expiry, now);
+export function LotCard({
+    groupedProduct,
+    products,
+    getProductFullName,
+    kiosks,
+    locations,
+    onEdit,
+    onMove,
+    onDelete,
+    onViewHistory,
+    onZeroOut,
+    canEdit,
+    canMove,
+    canDelete,
+    canViewHistory,
+}: LotCardProps) {
   
-  const urgentThreshold = groupedLot.urgentThreshold ?? DEFAULT_URGENT_THRESHOLD;
-  const alertThreshold = groupedLot.alertThreshold ?? DEFAULT_ALERT_THRESHOLD;
+  const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
+  const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
-  let status: { color: string, text: string };
-  if (daysUntilExpiry < 0) {
-    status = { color: 'bg-red-600 hover:bg-red-700', text: `Vencido há ${Math.abs(daysUntilExpiry)} dias` };
-  } else if (daysUntilExpiry === 0) {
-    status = { color: 'bg-red-600 hover:bg-red-700', text: 'Vence hoje' };
-  } else if (daysUntilExpiry <= urgentThreshold) {
-    status = { color: 'bg-orange-500 hover:bg-orange-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
-  } else if (daysUntilExpiry <= alertThreshold) {
-    status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
-  } else {
-    status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
-  }
-
-  const getKioskName = (id: string) => {
-    return kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
-  };
-  
   return (
     <Card className="w-full">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
-        <div className="flex flex-grow items-start gap-4">
-          {groupedLot.imageUrl ? (
-            <Image src={groupedLot.imageUrl} alt={groupedLot.productName} width={64} height={64} className="rounded-md object-cover aspect-square" />
-          ) : (
-            <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center bg-secondary rounded-md">
-              <Camera className="h-8 w-8 text-muted-foreground" />
-            </div>
-          )}
-          <div className="flex-grow">
-            <CardTitle className="text-xl">{groupedLot.productName}</CardTitle>
-            <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-              <span>Lote: <strong>{groupedLot.lotNumber}</strong></span>
-              {groupedLot.barcode && <span>Cód. Barras: <strong>{groupedLot.barcode}</strong></span>}
-              <span>Total: <strong>{groupedLot.totalQuantity} un.</strong></span>
-            </CardDescription>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-            {canViewHistory && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onViewHistory(groupedLot)}>
-                                <History className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Ver Histórico de Movimentação</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
-            {groupedLot.notes && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-7 w-7 cursor-help text-muted-foreground">
-                                <Info className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs" side="top">
-                            <p className="whitespace-pre-wrap text-sm">{groupedLot.notes}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
-             {canEdit && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onZeroOut(groupedLot)}>
-                                <Eraser className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Zerar estoque do lote</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
-            <Badge className={`text-white text-sm ${status.color} self-start`}>{status.text}</Badge>
-        </div>
+      <CardHeader className="p-4">
+        <CardTitle className="text-xl">{groupedProduct.productBaseName}</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="px-4 pb-2 text-sm text-muted-foreground">
-          Validade: {format(expiry, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-        </div>
-        <Separator />
-        <div className="p-4 space-y-2">
-            {groupedLot.kiosks.map(kioskEntry => {
-                const locationCode = kioskEntry.locationId ? locations.find(l => l.id === kioskEntry.locationId)?.code : null;
-                return (
-                    <div key={`${kioskEntry.id}-${kioskEntry.kioskId}`} className="flex items-center justify-between p-2 rounded-md bg-secondary/50">
-                        <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{getKioskName(kioskEntry.kioskId)}:</span>
-                            <span>{kioskEntry.quantity} un.</span>
-                            {locationCode && <span className="text-muted-foreground text-xs font-semibold">{locationCode}</span>}
-                        </div>
-                        {(canMove || canEdit || canDelete) && (
-                          <div className="flex gap-1">
-                              {canMove && kioskEntry.quantity > 0 && (
-                                <Button variant="ghost" size="icon" onClick={() => onMove(kioskEntry.id)}>
-                                    <Truck className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {canEdit && (
-                                <Button variant="ghost" size="icon" onClick={() => onEdit(kioskEntry.id)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {canDelete && (
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(kioskEntry.id)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                          </div>
-                        )}
+      <CardContent className="p-4 pt-0 space-y-3">
+        {groupedProduct.lots.map(lot => {
+          const product = products.find(p => p.id === lot.productId);
+          if (!product) return null;
+
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const expiry = parseISO(lot.expiryDate);
+          const daysUntilExpiry = differenceInDays(expiry, now);
+          
+          const urgentThreshold = product.urgentThreshold ?? DEFAULT_URGENT_THRESHOLD;
+          const alertThreshold = product.alertThreshold ?? DEFAULT_ALERT_THRESHOLD;
+
+          let status: { color: string, text: string };
+            if (daysUntilExpiry < 0) {
+                status = { color: 'bg-red-600 hover:bg-red-700', text: `Vencido há ${Math.abs(daysUntilExpiry)} dias` };
+            } else if (daysUntilExpiry === 0) {
+                status = { color: 'bg-red-600 hover:bg-red-700', text: 'Vence hoje' };
+            } else if (daysUntilExpiry <= urgentThreshold) {
+                status = { color: 'bg-orange-500 hover:bg-orange-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
+            } else if (daysUntilExpiry <= alertThreshold) {
+                status = { color: 'bg-yellow-500 hover:bg-yellow-600', text: `Vence em ${daysUntilExpiry} dia(s)` };
+            } else {
+                status = { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
+            }
+          
+          const locationName = getLocationName(lot.locationId);
+          
+          return (
+            <Card key={lot.id} className="bg-muted/50 overflow-hidden">
+                <div className="flex flex-col md:flex-row">
+                    <div className="flex-grow p-4 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                        <div className="flex items-center gap-2"><Warehouse className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Loja:</span> {getKioskName(lot.kioskId)}</div></div>
+                        <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Local:</span> {locationName || 'N/A'}</div></div>
+                        <div className="flex items-center gap-2"><Barcode className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Cód. Barras:</span> {product.barcode || 'N/A'}</div></div>
+                        <div className="flex items-center gap-2"><Package className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Lote:</span> {lot.lotNumber}</div></div>
+                        <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Validade:</span> {format(expiry, "dd/MM/yyyy")}</div></div>
+                        <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> <div><span className="font-semibold">Medida:</span> {getProductFullName(product)}</div></div>
                     </div>
-                )
-            })}
-        </div>
+                     <div className="flex flex-col items-center justify-center p-4 bg-muted md:w-48 text-center border-t md:border-t-0 md:border-l">
+                        <div className="text-4xl font-bold">{lot.quantity}</div>
+                        <div className="text-muted-foreground">unidades</div>
+                        <Badge className={`mt-2 text-white ${status.color}`}>{status.text}</Badge>
+                    </div>
+                </div>
+                 <div className="p-2 bg-background/50 border-t flex justify-end gap-1">
+                    {canViewHistory && (
+                        <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => onViewHistory(lot)}><History className="h-4 w-4" /></Button>
+                        </TooltipTrigger><TooltipContent><p>Histórico</p></TooltipContent></Tooltip></TooltipProvider>
+                    )}
+                    {canEdit && (
+                         <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => onZeroOut(lot)}><Eraser className="h-4 w-4" /></Button>
+                        </TooltipTrigger><TooltipContent><p>Zerar Estoque</p></TooltipContent></Tooltip></TooltipProvider>
+                    )}
+                     {canMove && lot.quantity > 0 && (
+                        <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onMove(lot.id)}><Truck className="h-4 w-4" /></Button>
+                        </TooltipTrigger><TooltipContent><p>Mover</p></TooltipContent></Tooltip></TooltipProvider>
+                    )}
+                    {canEdit && (
+                        <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(lot.id)}><Pencil className="h-4 w-4" /></Button>
+                        </TooltipTrigger><TooltipContent><p>Editar</p></TooltipContent></Tooltip></TooltipProvider>
+                    )}
+                    {canDelete && (
+                        <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => onDelete(lot.id)}><Trash2 className="h-4 w-4" /></Button>
+                        </TooltipTrigger><TooltipContent><p>Excluir</p></TooltipContent></Tooltip></TooltipProvider>
+                    )}
+                </div>
+            </Card>
+          )
+        })}
       </CardContent>
     </Card>
   );

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo } from 'react';
@@ -9,10 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { History } from 'lucide-react';
 import { useMovementHistory } from '@/hooks/use-movement-history';
-import { type GroupedLot } from './lot-card';
+import { type LotEntry } from '@/types';
 
 interface LotMovementHistoryModalProps {
-  lot: GroupedLot | null;
+  lot: LotEntry | null;
   onOpenChange: (open: boolean) => void;
 }
 

@@ -18,7 +18,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { type LotEntry } from '@/types';
-import { LotCard, type GroupedLot } from './lot-card';
+import { LotCard, type GroupedProduct } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -36,7 +36,7 @@ export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
-  const { products, loading: productsLoading } = useProducts();
+  const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,8 +49,8 @@ export function ExpiryControl() {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [lotForHistory, setLotForHistory] = useState<GroupedLot | null>(null);
-  const [lotToZeroOut, setLotToZeroOut] = useState<GroupedLot | null>(null);
+  const [lotForHistory, setLotForHistory] = useState<LotEntry | null>(null);
+  const [lotToZeroOut, setLotToZeroOut] = useState<LotEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
@@ -81,7 +81,7 @@ export function ExpiryControl() {
   }, [sortedKiosks, initialKioskSelectionMade]);
 
 
-  const groupedLots = useMemo(() => {
+  const groupedProducts = useMemo(() => {
     const kioskFilteredLots = (user?.username === 'Tiago Brasil')
       ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
       : visibleLots;
@@ -89,7 +89,7 @@ export function ExpiryControl() {
     const activeLots = kioskFilteredLots.filter(lot => lot.quantity > 0);
 
     const preFilteredLots = activeLots.filter(lot => {
-        if (statusFilters.length === 0) return true; // Show all if no filter is active
+        if (statusFilters.length === 0) return true;
 
         const product = products.find(p => p.id === lot.productId);
         const urgentThreshold = product?.urgentThreshold ?? 7;
@@ -116,36 +116,28 @@ export function ExpiryControl() {
       );
     });
 
-    const groups: { [key: string]: GroupedLot } = {};
+    const groups: { [key: string]: GroupedProduct } = {};
+    
     filteredLots.forEach(lot => {
-      const key = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate}`;
       const product = products.find(p => p.id === lot.productId);
+      if (!product) return;
 
+      const key = product.baseName;
       if (!groups[key]) {
         groups[key] = {
-          productId: lot.productId,
-          productName: lot.productName,
-          lotNumber: lot.lotNumber,
-          barcode: product?.barcode,
-          expiryDate: lot.expiryDate,
-          imageUrl: lot.imageUrl || product?.imageUrl,
-          totalQuantity: 0,
-          kiosks: [],
-          alertThreshold: product?.alertThreshold,
-          urgentThreshold: product?.urgentThreshold,
-          notes: product?.notes,
+          productBaseName: product.baseName,
+          lots: [],
         };
       }
-      groups[key].totalQuantity += lot.quantity;
-      groups[key].kiosks.push({
-        id: lot.id,
-        kioskId: lot.kioskId,
-        quantity: lot.quantity,
-        locationId: lot.locationId || undefined,
-      });
+      groups[key].lots.push(lot);
     });
 
-    return Object.values(groups).sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+    // Sort lots within each group by expiry date
+    Object.values(groups).forEach(group => {
+        group.lots.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+    });
+
+    return Object.values(groups).sort((a, b) => a.productBaseName.localeCompare(b.productBaseName));
   }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKiosks, user]);
   
   const handleAddClick = () => {
@@ -173,19 +165,18 @@ export function ExpiryControl() {
     setDeleteTargetId(lotId);
   };
   
-  const handleViewHistoryClick = (lot: GroupedLot) => {
+  const handleViewHistoryClick = (lot: LotEntry) => {
     setLotForHistory(lot);
   };
 
-  const handleZeroOutClick = (lot: GroupedLot) => {
+  const handleZeroOutClick = (lot: LotEntry) => {
     setLotToZeroOut(lot);
   };
 
   const handleZeroOutConfirm = async () => {
     if (!lotToZeroOut) return;
     setIsProcessing(true);
-    const idsToZero = lotToZeroOut.kiosks.map(k => k.id);
-    await zeroOutLotsByIds(idsToZero);
+    await zeroOutLotsByIds([lotToZeroOut.id]);
     setLotToZeroOut(null);
     setIsProcessing(false);
   };
@@ -194,27 +185,7 @@ export function ExpiryControl() {
     if (!deleteTargetId) return;
 
     setIsDeleting(true);
-    const lotToDelete = lots.find(l => l.id === deleteTargetId);
-    if (!lotToDelete) {
-        console.error(`Lot with ID ${deleteTargetId} not found.`);
-        setIsDeleting(false);
-        setDeleteTargetId(null);
-        return;
-    }
-    
-    // Find all lot entries that belong to the same visual group
-    const groupToDelete = groupedLots.find(group => 
-        group.kiosks.some(kioskLot => kioskLot.id === deleteTargetId)
-    );
-
-    let success = false;
-    if (groupToDelete) {
-        const idsToDelete = groupToDelete.kiosks.map(k => k.id);
-        success = await deleteLotsByIds(idsToDelete);
-    } else {
-        // Fallback for lots that might not be in the grouped view (e.g., corrupted data)
-        success = await forceDeleteLotById(deleteTargetId);
-    }
+    const success = await forceDeleteLotById(deleteTargetId);
     
     if (!success) {
       console.error(`Failed to delete lot with target ID: ${deleteTargetId}.`);
@@ -279,7 +250,7 @@ export function ExpiryControl() {
         );
     }
 
-    if (groupedLots.length === 0) {
+    if (groupedProducts.length === 0) {
         return (
             <div className="text-center py-16 text-muted-foreground">
                 <p>Nenhum resultado encontrado com os filtros e busca atuais.</p>
@@ -289,11 +260,14 @@ export function ExpiryControl() {
     
     return (
       <div className="space-y-4">
-        {groupedLots.map(group => (
+        {groupedProducts.map(group => (
           <LotCard
-            key={`${group.productId}-${group.lotNumber}-${group.expiryDate}`}
-            groupedLot={group}
+            key={group.productBaseName}
+            groupedProduct={group}
+            products={products}
+            getProductFullName={getProductFullName}
             kiosks={kiosks}
+            locations={locations}
             onEdit={handleEditClick}
             onMove={handleMoveClick}
             onDelete={handleDeleteClick}
@@ -439,7 +413,9 @@ export function ExpiryControl() {
 
       <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
       
-      <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
+      {lotForHistory && (
+          <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
+      )}
 
       {lotToMove && (
         <MoveStockModal 
@@ -463,8 +439,6 @@ export function ExpiryControl() {
             }}
             onConfirm={handleDeleteConfirm}
             itemName={`o lote selecionado`}
-            showForceDeleteOption={true}
-            onForceDeleteChange={setForceDelete}
         />
       )}
 
@@ -483,7 +457,7 @@ export function ExpiryControl() {
             onOpenChange={() => setLotToZeroOut(null)}
             onConfirm={handleZeroOutConfirm}
             title="Zerar estoque do lote?"
-            description={`Isso definirá a quantidade do lote ${lotToZeroOut.lotNumber} como 0 em todos os quiosques. O lote será movido para a auditoria de lotes arquivados. Esta ação não pode ser desfeita.`}
+            description={`Isso definirá a quantidade do lote ${lotToZeroOut.lotNumber} como 0. O lote será movido para a auditoria de lotes arquivados. Esta ação não pode ser desfeita.`}
             confirmButtonText="Zerar Estoque"
             confirmButtonVariant="destructive"
         />
