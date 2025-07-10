@@ -220,9 +220,8 @@ export function StockAnalyzer() {
                         const currentStockInBaseUnit = quantityFromCsv;
                         
                         const stockLevels = product.stockLevels?.[kiosk.id];
-                        const minStock = stockLevels?.min ?? 0;
                         const maxStock = stockLevels?.max ?? 0;
-                        const neededInBaseUnit = currentStockInBaseUnit < minStock ? maxStock - currentStockInBaseUnit : 0;
+                        const neededInBaseUnit = Math.max(0, maxStock - currentStockInBaseUnit);
                         
                         const suggestionDetails = neededInBaseUnit > 0 
                             ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
@@ -245,9 +244,8 @@ export function StockAnalyzer() {
                          const stockLevels = product.stockLevels?.[kiosk.id];
                          if (!stockLevels) continue;
 
-                        const minStock = stockLevels.min ?? 0;
                         const maxStock = stockLevels.max ?? 0;
-                        const neededInBaseUnit = 0 < minStock ? maxStock - 0 : 0;
+                        const neededInBaseUnit = Math.max(0, maxStock - 0);
                         
                         const suggestionDetails = neededInBaseUnit > 0 
                             ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
