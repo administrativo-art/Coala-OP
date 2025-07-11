@@ -16,6 +16,7 @@ import { PlusCircle, Trash2 } from 'lucide-react';
 import { type Product, type PredefinedList } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 
@@ -216,6 +217,19 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                                 Marque os produtos que deseja adicionar.
                             </p>
                         </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">Opções</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                <DropdownMenuItem onSelect={() => setProductsToAdd(new Set(activeProducts.map(p => p.id)))}>
+                                    Selecionar Todos
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setProductsToAdd(new Set())}>
+                                    Limpar Seleção
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <ScrollArea className="h-48">
                             <div className="space-y-2 p-1">
                                 {activeProducts
