@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { History, Truck } from 'lucide-react';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
+import { useProducts } from '@/hooks/use-products';
 
 interface ZeroedLotsAuditModalProps {
   open: boolean;
@@ -19,6 +20,21 @@ interface ZeroedLotsAuditModalProps {
 
 export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModalProps) {
   const { history, loading } = useMovementHistory();
+  const { products, getProductFullName } = useProducts();
+
+  const historyWithProducts = useMemo(() => {
+    if (loading || !products.length) return [];
+    return history.map(record => {
+      // The productName in the record is the full name, we need to find the base product
+      const product = products.find(p => record.productName.startsWith(p.baseName));
+      return {
+        ...record,
+        // The record's productName is already formatted, we can use it directly
+        // but it might be stale. Let's re-format if we find the product.
+        displayName: product ? getProductFullName(product) : record.productName,
+      };
+    });
+  }, [history, products, loading, getProductFullName]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -38,7 +54,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                       <Skeleton className="h-12 w-full" />
                       <Skeleton className="h-12 w-full" />
                   </div>
-              ) : history.length > 0 ? (
+              ) : historyWithProducts.length > 0 ? (
                   <div className="rounded-md border">
                       <Table>
                           <TableHeader>
@@ -53,12 +69,12 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                           </TableRow>
                           </TableHeader>
                           <TableBody>
-                          {history.map((item) => (
+                          {historyWithProducts.map((item) => (
                               <TableRow key={item.id}>
                                   <TableCell className="text-sm">
                                       {format(parseISO(item.movedAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
                                   </TableCell>
-                                  <TableCell className="font-medium">{item.productName}</TableCell>
+                                  <TableCell className="font-medium">{item.displayName}</TableCell>
                                   <TableCell>{item.lotNumber}</TableCell>
                                   <TableCell>{item.fromKioskName}</TableCell>
                                   <TableCell>{item.toKioskName}</TableCell>

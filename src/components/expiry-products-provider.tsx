@@ -15,7 +15,7 @@ export type MoveLotParams = {
   toKioskName: string;
   movedByUserId: string;
   movedByUsername: string;
-  productName: string;
+  productName: string; // This should be the full formatted name
   lotNumber: string;
 };
 

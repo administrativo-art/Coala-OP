@@ -15,6 +15,7 @@ import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useToast } from '@/hooks/use-toast';
+import { useProducts } from '@/hooks/use-products';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,7 +47,8 @@ export function StockAnalyzer() {
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
     const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
     const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
-    const { lots: allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
+    const { allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
+    const { products, getProductFullName } = useProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
@@ -327,18 +329,21 @@ export function StockAnalyzer() {
     const executeDistribution = async (reportId: string, resultItem: StockAnalysisResultItem) => {
         if (!user || !resultItem.isActionable || !resultItem.distributionSuggestion) return;
         
-        const params: MoveLotParams[] = resultItem.distributionSuggestion.map(item => ({
-            lotId: item.lotId,
-            toKioskId: resultItem.kioskId,
-            quantityToMove: item.quantityToMove,
-            fromKioskId: item.fromKioskId,
-            fromKioskName: kiosks.find(k => k.id === item.fromKioskId)?.name || 'CD',
-            toKioskName: resultItem.kioskName,
-            movedByUserId: user.id,
-            movedByUsername: user.username,
-            productName: item.productName,
-            lotNumber: item.lotNumber,
-        }));
+        const params: MoveLotParams[] = resultItem.distributionSuggestion.map(item => {
+            const product = products.find(p => p.id === item.productId);
+            return {
+                lotId: item.lotId,
+                toKioskId: resultItem.kioskId,
+                quantityToMove: item.quantityToMove,
+                fromKioskId: item.fromKioskId,
+                fromKioskName: kiosks.find(k => k.id === item.fromKioskId)?.name || 'CD',
+                toKioskName: resultItem.kioskName,
+                movedByUserId: user.id,
+                movedByUsername: user.username,
+                productName: product ? getProductFullName(product) : item.productName,
+                lotNumber: item.lotNumber,
+            };
+        });
         
         try {
             await moveMultipleLots(params);

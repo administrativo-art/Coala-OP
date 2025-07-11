@@ -2,17 +2,31 @@
 "use client"
 
 import { useMovementHistory } from "@/hooks/use-movement-history";
+import { useProducts } from "@/hooks/use-products";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { History } from 'lucide-react';
+import { useMemo } from "react";
 
 export function MovementAnalysis() {
     const { history, loading } = useMovementHistory();
+    const { products, getProductFullName, loading: productsLoading } = useProducts();
 
-    if (loading) {
+    const historyWithProducts = useMemo(() => {
+        if (loading || productsLoading || !products.length) return [];
+        return history.map(record => {
+          const product = products.find(p => record.productName.startsWith(p.baseName));
+          return {
+            ...record,
+            displayName: product ? getProductFullName(product) : record.productName,
+          };
+        });
+    }, [history, products, loading, productsLoading, getProductFullName]);
+
+    if (loading || productsLoading) {
         return (
             <Card>
                 <CardHeader>
@@ -26,7 +40,7 @@ export function MovementAnalysis() {
         )
     }
 
-    if (history.length === 0) {
+    if (historyWithProducts.length === 0) {
         return (
             <div className="text-center py-16 flex flex-col items-center text-muted-foreground border-2 border-dashed rounded-lg">
                 <History className="h-16 w-16 mb-4" />
@@ -57,15 +71,15 @@ export function MovementAnalysis() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {history.map(item => (
+                            {historyWithProducts.map(item => (
                                 <TableRow key={item.id}>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span>{format(new Date(item.movedAt), "dd/MM/yy", { locale: ptBR })}</span>
-                                            <span className="text-xs text-muted-foreground">{format(new Date(item.movedAt), "HH:mm", { locale: ptBR })}</span>
+                                            <span>{format(parseISO(item.movedAt), "dd/MM/yy", { locale: ptBR })}</span>
+                                            <span className="text-xs text-muted-foreground">{format(parseISO(item.movedAt), "HH:mm", { locale: ptBR })}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-medium">{item.productName}</TableCell>
+                                    <TableCell className="font-medium">{item.displayName}</TableCell>
                                     <TableCell>{item.lotNumber}</TableCell>
                                     <TableCell className="text-right font-semibold">{item.quantityMoved}</TableCell>
                                     <TableCell>{item.fromKioskName}</TableCell>

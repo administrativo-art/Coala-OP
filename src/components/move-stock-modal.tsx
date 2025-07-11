@@ -11,7 +11,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { type LotEntry, type Kiosk } from '@/types';
+import { useProducts } from '@/hooks/use-products';
+import { type LotEntry, type Kiosk, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 
 type MoveStockModalProps = {
@@ -24,6 +25,7 @@ type MoveStockModalProps = {
 
 export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveConfirm }: MoveStockModalProps) {
   const { user } = useAuth();
+  const { products, getProductFullName } = useProducts();
   const availableKiosks = kiosks.filter(l => l.id !== lotToMove.kioskId);
   
   const moveSchema = z.object({
@@ -46,6 +48,8 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
 
     const fromKioskName = kiosks.find(k => k.id === lotToMove.kioskId)?.name || 'Quiosque Desconhecido';
     const toKioskName = kiosks.find(k => k.id === values.destinationId)?.name || 'Quiosque Desconhecido';
+    
+    const product = products.find(p => p.id === lotToMove.productId);
 
     const params: MoveLotParams = {
         lotId: lotToMove.id,
@@ -56,7 +60,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         toKioskName: toKioskName,
         movedByUserId: user.id,
         movedByUsername: user.username,
-        productName: lotToMove.productName,
+        productName: product ? getProductFullName(product) : lotToMove.productName,
         lotNumber: lotToMove.lotNumber,
     };
     onMoveConfirm(params);
@@ -64,6 +68,8 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
   };
   
   const sourceKioskName = kiosks.find(l => l.id === lotToMove.kioskId)?.name || 'Desconhecido';
+  const product = products.find(p => p.id === lotToMove.productId);
+  const productNameForDisplay = product ? getProductFullName(product) : lotToMove.productName;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -74,11 +80,11 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         <DialogHeader>
           <DialogTitle>Mover estoque</DialogTitle>
           <DialogDescription>
-            Mova unidades do item <strong>{lotToMove.productName}</strong> (Lote: {lotToMove.lotNumber}) de <strong>{sourceKioskName}</strong>.
+            Mova unidades do item <strong>{productNameForDisplay}</strong> (Lote: {lotToMove.lotNumber}) de <strong>{sourceKioskName}</strong>.
           </DialogDescription>
         </DialogHeader>
         <div className="py-2">
-            <p><strong>Produto:</strong> {lotToMove.productName}</p>
+            <p><strong>Produto:</strong> {productNameForDisplay}</p>
             <p><strong>Quantidade disponível:</strong> {lotToMove.quantity}</p>
         </div>
         <Form {...form}>
