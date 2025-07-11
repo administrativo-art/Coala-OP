@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo } from 'react';
@@ -16,6 +17,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
+import { useProducts } from '@/hooks/use-products';
 
 
 const consumptionUploadSchema = z.object({
@@ -79,6 +81,7 @@ interface ConsumptionImportModalProps {
 export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
+    const { getProductFullName } = useProducts();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     
@@ -94,7 +97,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
         }
     });
 
-    const findAnalysisProductByName = (baseName: string): Product | undefined => {
+    const findProductByName = (baseName: string): Product | undefined => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
         return activeProducts.find(p => normalizeString(p.baseName) === normalizedName);
@@ -130,7 +133,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         
                         if (!itemName || !quantityStr) continue;
 
-                        const productConfig = findAnalysisProductByName(itemName);
+                        const productConfig = findProductByName(itemName);
                         if (!productConfig) {
                             unmatchedItems.add(itemName);
                             continue;
@@ -143,7 +146,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         
                         if (!analysisResults[productConfig.id]) {
                             analysisResults[productConfig.id] = { 
-                                productName: productConfig.baseName,
+                                productName: getProductFullName(productConfig),
                                 consumedQuantity: 0,
                                 count: 0
                             };

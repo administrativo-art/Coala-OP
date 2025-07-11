@@ -16,6 +16,7 @@ import { type ConsumptionReport, type Product, type Kiosk } from "@/types";
 import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Copy } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useProducts } from '@/hooks/use-products';
 
 interface ConsumptionComparisonModalProps {
     open: boolean;
@@ -51,6 +52,7 @@ Recomendação Principal: Forneça uma recomendação clara e assertiva para a g
 export function ConsumptionComparisonModal({ open, onOpenChange, history, products, kiosks }: ConsumptionComparisonModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
+    const { getProductFullName } = useProducts();
     const [kioskId, setKioskId] = useState<string>('');
     const [periodA, setPeriodA] = useState({ month: '', year: '' });
     const [periodB, setPeriodB] = useState({ month: '', year: '' });
@@ -61,8 +63,8 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         
         if(user?.username === 'Tiago Brasil') {
             setKioskId('');
-        } else if (user?.kioskId) {
-            setKioskId(user.kioskId);
+        } else if (user?.assignedKioskIds[0]) {
+            setKioskId(user.assignedKioskIds[0]);
         }
 
         setPeriodA({ month: '', year: '' });
@@ -145,7 +147,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             }
             
             results.push({
-                productName: productInfo.baseName,
+                productName: getProductFullName(productInfo),
                 unit: productInfo.unit,
                 consumptionA,
                 consumptionB,
@@ -189,7 +191,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             }
 
             return [
-                `${item.productName} (${item.unit})`,
+                item.productName,
                 item.consumptionA.toLocaleString(undefined, { maximumFractionDigits: 2 }),
                 item.consumptionB.toLocaleString(undefined, { maximumFractionDigits: 2 }),
                 item.variation.toLocaleString(undefined, { maximumFractionDigits: 2 }),
@@ -331,7 +333,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                             <TableBody>
                                                 {comparisonResults.map(item => (
                                                     <TableRow key={item.productName}>
-                                                        <TableCell>{item.productName} <span className="text-muted-foreground">({item.unit})</span></TableCell>
+                                                        <TableCell>{item.productName}</TableCell>
                                                         <TableCell className="text-right">{item.consumptionA.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                                                         <TableCell className="text-right">{item.consumptionB.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
                                                         <TableCell className="text-right">{getVariationCell(item.variation, item.percentageChange)}</TableCell>

@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
-import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
+import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -28,7 +28,7 @@ import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 
 export function ConsumptionAnalysisDashboard() {
   const { user } = useAuth()
-  const { products, loading: productsLoading } = useStockAnalysisProducts()
+  const { products, loading: productsLoading } = useProducts()
   const { history: consumptionHistory, loading: consumptionLoading, addReport, deleteReport } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
@@ -68,7 +68,7 @@ export function ConsumptionAnalysisDashboard() {
       });
     });
 
-    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.kioskId;
+    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.assignedKioskIds[0] || 'matriz';
     let relevantConsumptionData: { [productId: string]: number } = {};
 
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {

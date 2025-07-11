@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,11 +11,9 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useStockAnalysis } from '@/hooks/use-stock-analysis';
-import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useToast } from '@/hooks/use-toast';
-import { useProducts } from '@/hooks/use-products';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +26,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, AlertCircle, FileClock, Trash2, Loader2, Send, Settings, Download } from 'lucide-react';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { type StockAnalysisReport, type ConsumptionReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
+import { type StockAnalysisReport, type StockAnalysisResultItem, type DistributionItem, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -45,14 +43,11 @@ export function StockAnalyzer() {
     const { user, permissions } = useAuth();
     const { kiosks } = useKiosks();
     const { history: stockHistory, loading: stockHistoryLoading, addReport: addStockReport, deleteReport: deleteStockReport, updateReport: updateStockReport } = useStockAnalysis();
-    const { history: consumptionHistory, loading: consumptionHistoryLoading, addReport: addConsumptionReport, deleteReport: deleteConsumptionReport } = useConsumptionAnalysis();
-    const { products: analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
-    const { allLots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
-    const { products, getProductFullName } = useProducts();
+    const { products, getProductFullName, loading: productsLoading } = useProducts();
+    const { lots, loading: lotsLoading, moveMultipleLots } = useExpiryProducts();
     const { toast } = useToast();
 
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
-    const [consumptionReportToDelete, setConsumptionReportToDelete] = useState<ConsumptionReport | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
@@ -71,30 +66,26 @@ export function StockAnalyzer() {
             .trim();
     };
     
-    const findAnalysisProductByName = (baseName: string): Product | undefined => {
+    const findProductByName = (baseName: string): Product | undefined => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
-        return analysisProducts.find(p => normalizeString(p.baseName) === normalizedName);
+        return products.find(p => normalizeString(p.baseName) === normalizedName);
     }
 
     const generateDistributionSuggestion = (
         neededInBaseUnit: number,
-        productBaseName: string,
+        product: Product,
         destinationKioskId: string
     ): Omit<StockAnalysisResultItem, keyof Omit<StockAnalysisResultItem, 'statusMessage' | 'isActionable' | 'distributionSuggestion'>> => {
         const sourceKioskId = 'matriz';
-        const productInfo = findAnalysisProductByName(productBaseName);
-        if (!productInfo) {
-             return { statusMessage: `Configuração do insumo '${productBaseName}' não encontrada.`, isActionable: false, distributionSuggestion: [] };
-        }
 
-        const availableLots = allLots.filter(lot => 
-            lot.kioskId === sourceKioskId && lot.productId === productInfo.id && lot.quantity > 0
+        const availableLots = lots.filter(lot => 
+            lot.kioskId === sourceKioskId && lot.productId === product.id && lot.quantity > 0
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
 
         if (availableLots.length === 0) {
-            return { statusMessage: `Sem estoque de ${productBaseName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
+            return { statusMessage: `Sem estoque de ${product.baseName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
         }
 
         let remainingNeeded = neededInBaseUnit;
@@ -103,7 +94,7 @@ export function StockAnalyzer() {
         for (const lot of availableLots) {
             if (remainingNeeded <= 0) break;
             
-            const lotProductInfo = analysisProducts.find(p => p.id === lot.productId);
+            const lotProductInfo = products.find(p => p.id === lot.productId);
             if (!lotProductInfo) continue;
             
             const packageValueInBaseUnit = lotProductInfo.packageSize || 1;
@@ -116,11 +107,11 @@ export function StockAnalyzer() {
                 suggestion.push({
                     lotId: lot.id,
                     productId: lot.productId,
-                    productName: lot.productName,
+                    productName: getProductFullName(lotProductInfo),
                     fromKioskId: sourceKioskId,
                     quantityToMove: packagesToTake,
                     baseUnitValue: packagesToTake * packageValueInBaseUnit,
-                    baseUnit: productInfo.unit,
+                    baseUnit: product.unit,
                     lotNumber: lot.lotNumber,
                     expiryDate: lot.expiryDate,
                 });
@@ -129,8 +120,7 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-             const productUnit = productInfo.unit;
-            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${productUnit} de ${productBaseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
+            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${product.unit} de ${product.baseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
         return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
@@ -198,14 +188,14 @@ export function StockAnalyzer() {
 
                     const analysisResults: StockAnalysisResultItem[] = [];
                     const unmatchedItems: string[] = [];
-                    const allConfiguredProducts = [...analysisProducts];
+                    const allConfiguredProducts = [...products];
 
                     // Process rows from CSV
                     for (const row of rows) {
                         const originalItemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
                         if (!originalItemName) continue;
                         
-                        const product = findAnalysisProductByName(originalItemName);
+                        const product = findProductByName(originalItemName);
                         if (!product) {
                             unmatchedItems.push(originalItemName);
                             continue;
@@ -216,17 +206,17 @@ export function StockAnalyzer() {
                         if (productIndex > -1) {
                             allConfiguredProducts.splice(productIndex, 1);
                         }
-
-                        const quantityFromCsv = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
                         
-                        const currentStockInBaseUnit = quantityFromCsv;
+                        const unitFromCsv = (row['Unidade'] || row['unidade'])?.trim() || product.pdfUnit || product.unit;
+                        const quantityFromCsv = parseQuantity(row['Qtde.'] || row['Quantidade'] || row['Qtd']);
+                        const currentStockInBaseUnit = convertValue(quantityFromCsv, unitFromCsv, product.unit, product.category);
                         
                         const stockLevels = product.stockLevels?.[kiosk.id];
                         const maxStock = stockLevels?.max ?? 0;
                         const neededInBaseUnit = Math.max(0, maxStock - currentStockInBaseUnit);
                         
                         const suggestionDetails = neededInBaseUnit > 0 
-                            ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
+                            ? generateDistributionSuggestion(neededInBaseUnit, product, kiosk.id)
                             : { statusMessage: 'Estoque OK.', isActionable: false, distributionSuggestion: [] };
                         
                         analysisResults.push({
@@ -250,7 +240,7 @@ export function StockAnalyzer() {
                         const neededInBaseUnit = Math.max(0, maxStock - 0);
                         
                         const suggestionDetails = neededInBaseUnit > 0 
-                            ? generateDistributionSuggestion(neededInBaseUnit, product.baseName, kiosk.id)
+                            ? generateDistributionSuggestion(neededInBaseUnit, product, kiosk.id)
                             : { statusMessage: 'Estoque OK (insumo não estava no relatório).', isActionable: false, distributionSuggestion: [] };
                         
                         analysisResults.push({
@@ -374,9 +364,7 @@ export function StockAnalyzer() {
     };
     
     const handleDeleteStockReportClick = (report: StockAnalysisReport) => setStockReportToDelete(report);
-    const handleDeleteConsumptionReportClick = (report: ConsumptionReport) => setConsumptionReportToDelete(report);
     const handleDeleteStockReportConfirm = async () => { if (stockReportToDelete) { await deleteStockReport(stockReportToDelete.id); setStockReportToDelete(null); } };
-    const handleDeleteConsumptionReportConfirm = async () => { if (consumptionReportToDelete) { await deleteConsumptionReport(consumptionReportToDelete.id); setConsumptionReportToDelete(null); } };
 
     const handleExportReportPdf = (report: StockAnalysisReport) => {
         const doc = new jsPDF();
@@ -412,7 +400,7 @@ export function StockAnalyzer() {
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
-            const productUnit = findAnalysisProductByName(item.productName)?.unit || '';
+            const productUnit = findProductByName(item.productName)?.unit || '';
             doc.text(`Estoque Apurado: ${(item.currentStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
             addPageIfNeeded();
@@ -498,9 +486,9 @@ export function StockAnalyzer() {
                                             <div>
                                                 <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
                                                 <div className="text-sm text-muted-foreground space-y-1 mt-1">
-                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findAnalysisProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
                                                 </div>
                                             </div>
                                             {item.isActionable && item.neededInBaseUnit > 0 && <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
@@ -550,7 +538,7 @@ export function StockAnalyzer() {
                          {canManageAnalysisProducts && (
                             <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
                                 <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar Insumos para Análise
+                                Gerenciar Insumos
                             </Button>
                         )}
                     </div>
@@ -573,7 +561,7 @@ export function StockAnalyzer() {
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
+                                            {kiosks.filter(k => k.id !== 'matriz').map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
                                         </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -613,7 +601,6 @@ export function StockAnalyzer() {
             <ItemManagement open={isItemManagementOpen} onOpenChange={setIsItemManagementOpen} />
             
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
-            {consumptionReportToDelete && <DeleteConfirmationDialog open={!!consumptionReportToDelete} onOpenChange={() => setConsumptionReportToDelete(null)} onConfirm={handleDeleteConsumptionReportConfirm} itemName={`a análise de consumo "${consumptionReportToDelete.reportName}"`} />}
         </>
     );
 }

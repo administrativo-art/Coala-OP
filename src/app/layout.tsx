@@ -13,7 +13,6 @@ import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
-import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
 import { ReturnsProvider } from '@/components/return-request-provider';
 import { ScheduleProvider } from '@/components/schedule-provider';
 import { MonthlyScheduleProvider } from '@/components/monthly-schedule-provider';
@@ -42,7 +41,6 @@ export default function RootLayout({
             <KiosksProvider>
               <LocationsProvider>
                 <ProductsProvider>
-                  <StockAnalysisProductsProvider>
                     <ExpiryProductsProvider>
                       <PredefinedListsProvider>
                         <FormProvider>
@@ -65,7 +63,6 @@ export default function RootLayout({
                         </FormProvider>
                       </PredefinedListsProvider>
                     </ExpiryProductsProvider>
-                  </StockAnalysisProductsProvider>
                 </ProductsProvider>
               </LocationsProvider>
             </KiosksProvider>

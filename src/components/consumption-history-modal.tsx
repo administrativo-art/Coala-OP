@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react";
@@ -5,7 +6,7 @@ import { format } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 import { type ConsumptionReport } from "@/types";
-import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products";
+import { useProducts } from "@/hooks/use-products";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -27,7 +28,7 @@ interface ConsumptionHistoryModalProps {
 }
 
 export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, deleteReport }: ConsumptionHistoryModalProps) {
-    const { products: activeProducts, loading: productsLoading } = useStockAnalysisProducts()
+    const { products, loading: productsLoading } = useProducts()
     const [reportToDelete, setReportToDelete] = useState<ConsumptionReport | null>(null);
 
     const handleDeleteClick = (report: ConsumptionReport) => setReportToDelete(report);
@@ -102,7 +103,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                                     <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. Consumida (Unidade Base)</TableHead></TableRow></TableHeader>
                                                                     <TableBody>
                                                                         {report.results.map((item, index) => {
-                                                                            const productConfig = activeProducts.find(p => p.id === item.productId);
+                                                                            const productConfig = products.find(p => p.id === item.productId);
                                                                             return (
                                                                                 <TableRow key={index}>
                                                                                     <TableCell>{item.productName}</TableCell>
