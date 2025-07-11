@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
-import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products"
+import { useProducts } from "@/hooks/use-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useReturnRequests } from "@/hooks/use-return-requests"
@@ -32,7 +32,7 @@ import Papa from 'papaparse';
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
-  const { products, loading: productsLoading } = useStockAnalysisProducts()
+  const { products, loading: productsLoading } = useProducts()
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
@@ -578,3 +578,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
