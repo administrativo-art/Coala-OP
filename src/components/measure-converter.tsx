@@ -13,7 +13,7 @@ export function MeasureConverter() {
         <Tabs defaultValue="inventory" className="w-full">
             <TabsList className="grid w-full grid-cols-2 max-w-lg">
                 <TabsTrigger value="inventory"><ArrowLeftRight className="mr-2 h-4 w-4" /> Conversão de Inventário</TabsTrigger>
-                <TabsTrigger value="predefined"><ClipboardList className="mr-2 h-4 w-4" /> Listas Predefinidas</TabsTrigger>
+                <TabsTrigger value="predefined"><ClipboardList className="mr-2 h-4 w-4" /> Contagem de Estoque</TabsTrigger>
             </TabsList>
             <TabsContent value="inventory" className="mt-4">
                 <InventoryConverter />
