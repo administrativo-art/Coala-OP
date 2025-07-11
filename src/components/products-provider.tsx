@@ -33,7 +33,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
             let category: UnitCategory = 'Unidade'; // Default value
 
             if (originalCategory) {
-                const formatted = originalCategory.charAt(0).toUpperCase() + originalCategory.slice(1).toLowerCase();
+                const formatted = originalCategory.charAt(0).toUpperCase() + original-category.slice(1).toLowerCase();
                 if (unitCategories.includes(formatted as UnitCategory)) {
                     category = formatted as UnitCategory;
                 }
@@ -139,7 +139,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const getProductFullName = useCallback((product: Product) => {
     if (!product) return '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
-    return `${product.baseName}${brandPart}`;
+    const sizePart = product.packageSize && product.unit ? ` - ${product.packageSize}${product.unit}` : '';
+    return `${product.baseName}${brandPart}${sizePart}`;
   }, []);
 
   const value: ProductsContextType = useMemo(() => ({
