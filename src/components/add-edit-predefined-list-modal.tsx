@@ -27,8 +27,8 @@ const predefinedItemSchema = z.object({
 });
 
 const predefinedListSchema = z.object({
-  name: z.string().min(1, 'O nome da lista é obrigatório.'),
-  items: z.array(predefinedItemSchema).min(1, "A lista precisa ter pelo menos um item."),
+  name: z.string().min(1, 'O nome do modelo é obrigatório.'),
+  items: z.array(predefinedItemSchema).min(1, "O modelo precisa ter pelo menos um item."),
 });
 
 type ListFormValues = z.infer<typeof predefinedListSchema>;
@@ -119,9 +119,9 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{listToEdit ? 'Editar lista' : 'Criar nova lista predefinida'}</DialogTitle>
+          <DialogTitle>{listToEdit ? 'Editar modelo de contagem' : 'Criar novo modelo de contagem'}</DialogTitle>
           <DialogDescription>
-            {listToEdit ? 'Atualize o nome e os itens da lista.' : 'Crie uma lista com conversões rápidas para usar no dia a dia.'}
+            {listToEdit ? 'Atualize o nome e os itens do modelo.' : 'Crie um modelo com conversões rápidas para usar no dia a dia.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -131,14 +131,14 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome da lista</FormLabel>
-                  <FormControl><Input placeholder="ex: Receitas de Milkshake" {...field} /></FormControl>
+                  <FormLabel>Nome do modelo</FormLabel>
+                  <FormControl><Input placeholder="ex: Contagem Semanal de Freezer" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <Separator />
-            <h3 className="text-md font-medium">Itens da lista</h3>
+            <h3 className="text-md font-medium">Itens do modelo</h3>
             <ScrollArea className="h-60">
               <div className="space-y-4 pr-4">
                 {fields.map((field, index) => {
@@ -205,7 +205,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
              <Popover open={isAddProductPopoverOpen} onOpenChange={setIsAddProductPopoverOpen}>
                 <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full">
-                        <PlusCircle className="mr-2" /> Adicionar item(s) à lista
+                        <PlusCircle className="mr-2" /> Adicionar item(s) ao modelo
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80">
@@ -242,7 +242,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
             </Popover>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{listToEdit ? 'Salvar alterações' : 'Criar lista'}</Button>
+              <Button type="submit">{listToEdit ? 'Salvar alterações' : 'Criar modelo'}</Button>
             </DialogFooter>
           </form>
         </Form>

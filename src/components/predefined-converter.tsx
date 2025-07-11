@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Edit, Trash2, ClipboardList, ListPlus, Wand2 } from 'lucide-react';
+import { Edit, Trash2, ClipboardList, ListPlus } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
@@ -59,13 +59,13 @@ export function PredefinedConverter() {
     if (lists.length === 0) {
       return (
         <div className="text-center py-8 flex flex-col items-center">
-            <Wand2 className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-xl font-semibold">Nenhuma lista predefinida criada</h3>
+            <ClipboardList className="h-16 w-16 text-muted-foreground/50 mb-4" />
+            <h3 className="text-xl font-semibold">Nenhum modelo de contagem criado</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Crie listas de conversões rápidas para agilizar as tarefas do dia a dia.
+                Crie modelos de contagem para agilizar as tarefas do dia a dia.
             </p>
             <Button size="lg" onClick={handleAddNew} disabled={!permissions.predefinedLists.add}>
-                <ListPlus className="mr-2 h-5 w-5" /> Criar sua primeira lista
+                <ListPlus className="mr-2 h-5 w-5" /> Criar seu primeiro modelo
             </Button>
         </div>
       );
@@ -102,7 +102,7 @@ export function PredefinedConverter() {
                       products={products}
                     />
                   )) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">Esta lista está vazia.</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">Este modelo de contagem está vazio.</p>
                   )}
                 </div>
               </AccordionContent>
@@ -118,13 +118,13 @@ export function PredefinedConverter() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <ClipboardList /> Conversão predefinida
+            <ClipboardList /> Contagem de Estoque
           </CardTitle>
-          <CardDescription className="text-center">Use listas de conversão rápida para as tarefas comuns.</CardDescription>
+          <CardDescription className="text-center">Use modelos de contagem para agilizar as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <Button onClick={handleAddNew} className="w-full" disabled={!permissions.predefinedLists.add}>
-              <ListPlus className="mr-2 h-4 w-4" /> Criar nova lista de conversão
+              <ListPlus className="mr-2 h-4 w-4" /> Criar novo modelo de contagem
           </Button>
           <div className="mt-6">
             {renderContent()}
@@ -147,7 +147,7 @@ export function PredefinedConverter() {
           open={!!listToDelete}
           onOpenChange={() => setListToDelete(null)}
           onConfirm={handleDeleteConfirm}
-          itemName={`a lista "${listToDelete.name}"`}
+          itemName={`o modelo "${listToDelete.name}"`}
         />
       )}
     </>
