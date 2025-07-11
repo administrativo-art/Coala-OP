@@ -8,9 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { History } from 'lucide-react';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { useKiosks } from '@/hooks/use-kiosks';
+import { History, Truck } from 'lucide-react';
+import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
 
 interface ZeroedLotsAuditModalProps {
@@ -19,27 +18,15 @@ interface ZeroedLotsAuditModalProps {
 }
 
 export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModalProps) {
-  const { lots, loading: lotsLoading } = useExpiryProducts();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
-
-  const zeroedLots = useMemo(() => {
-    if (lotsLoading || kiosksLoading) return [];
-    return lots
-      .filter(lot => lot.quantity <= 0)
-      .sort((a, b) => parseISO(b.expiryDate).getTime() - parseISO(a.expiryDate).getTime());
-  }, [lots, lotsLoading, kiosks, kiosksLoading]);
-  
-  const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'N/A';
-
-  const loading = lotsLoading || kiosksLoading;
+  const { history, loading } = useMovementHistory();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Auditoria de Lotes Arquivados</DialogTitle>
+          <DialogTitle>Auditoria de Movimentações</DialogTitle>
           <DialogDescription>
-            Consulte todos os lotes cujo estoque chegou a zero e foram arquivados.
+            Consulte todo o histórico de transferências de estoque entre os quiosques.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-hidden">
@@ -51,26 +38,32 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                       <Skeleton className="h-12 w-full" />
                       <Skeleton className="h-12 w-full" />
                   </div>
-              ) : zeroedLots.length > 0 ? (
+              ) : history.length > 0 ? (
                   <div className="rounded-md border">
                       <Table>
                           <TableHeader>
                           <TableRow>
+                              <TableHead>Data</TableHead>
                               <TableHead>Produto</TableHead>
                               <TableHead>Lote</TableHead>
-                              <TableHead>Validade</TableHead>
-                              <TableHead>Último Quiosque</TableHead>
+                              <TableHead>Origem</TableHead>
+                              <TableHead>Destino</TableHead>
+                              <TableHead className="text-right">Qtd.</TableHead>
+                              <TableHead>Usuário</TableHead>
                           </TableRow>
                           </TableHeader>
                           <TableBody>
-                          {zeroedLots.map((lot) => (
-                              <TableRow key={lot.id}>
-                                  <TableCell className="font-medium">{lot.productName}</TableCell>
-                                  <TableCell>{lot.lotNumber}</TableCell>
-                                  <TableCell>
-                                      {format(parseISO(lot.expiryDate), "dd/MM/yyyy", { locale: ptBR })}
+                          {history.map((item) => (
+                              <TableRow key={item.id}>
+                                  <TableCell className="text-sm">
+                                      {format(parseISO(item.movedAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
                                   </TableCell>
-                                  <TableCell>{getKioskName(lot.kioskId)}</TableCell>
+                                  <TableCell className="font-medium">{item.productName}</TableCell>
+                                  <TableCell>{item.lotNumber}</TableCell>
+                                  <TableCell>{item.fromKioskName}</TableCell>
+                                  <TableCell>{item.toKioskName}</TableCell>
+                                  <TableCell className="text-right font-semibold">{item.quantityMoved}</TableCell>
+                                  <TableCell>{item.movedByUsername}</TableCell>
                               </TableRow>
                           ))}
                           </TableBody>
@@ -78,9 +71,9 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                   </div>
               ) : (
                 <div className="flex h-60 flex-col items-center justify-center text-center text-muted-foreground">
-                  <History className="h-12 w-12 mb-4" />
-                  <p className="font-semibold">Nenhum lote arquivado encontrado</p>
-                  <p className="text-sm">O histórico de lotes com estoque zerado (arquivados) aparecerá aqui.</p>
+                  <Truck className="h-12 w-12 mb-4" />
+                  <p className="font-semibold">Nenhuma movimentação encontrada</p>
+                  <p className="text-sm">O histórico de transferências de estoque aparecerá aqui.</p>
                 </div>
               )}
             </div>
