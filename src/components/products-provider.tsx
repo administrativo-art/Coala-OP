@@ -33,7 +33,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
             let category: UnitCategory = 'Unidade'; // Default value
 
             if (originalCategory) {
-                const formatted = originalCategory.charAt(0).toUpperCase() + original-category.slice(1).toLowerCase();
+                const formatted = originalCategory.charAt(0).toUpperCase() + originalCategory.slice(1).toLowerCase();
                 if (unitCategories.includes(formatted as UnitCategory)) {
                     category = formatted as UnitCategory;
                 }
