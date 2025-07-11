@@ -127,23 +127,28 @@ export function LotCard({
                     const representativeLot = lotGroup[0];
                     const product = products.find(p => p.id === representativeLot.productId);
                     const status = getStatus(representativeLot, product);
+                    const sortedLotGroup = [...lotGroup].sort((a, b) => {
+                        if (a.kioskId === 'matriz' && b.kioskId !== 'matriz') return -1;
+                        if (a.kioskId !== 'matriz' && b.kioskId === 'matriz') return 1;
+                        return getKioskName(a.kioskId).localeCompare(getKioskName(b.kioskId));
+                    });
 
                     return (
                         <AccordionItem value={representativeLot.lotNumber} key={`${representativeLot.lotNumber}-${index}`} className="border-none">
                             <Card className="bg-muted/30 overflow-hidden">
                                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
                                     <div className="flex items-center justify-between w-full">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
                                             <div className="flex items-center gap-2 font-semibold"><Tag className="h-4 w-4 text-primary"/> Lote: {representativeLot.lotNumber}</div>
                                             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> Validade: {format(parseISO(representativeLot.expiryDate), "dd/MM/yyyy")}</div>
-                                            <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> Medida: {`${product?.packageSize}${product?.unit}`}</div>
+                                            <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> Medida: {product ? `${product.packageSize}${product.unit}` : 'N/A'}</div>
                                         </div>
                                         <Badge className={`ml-4 text-white text-xs ${status.color}`}>{status.text}</Badge>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-0">
                                    <div className="px-4 pb-4 space-y-2">
-                                    {lotGroup.map(lotInstance => {
+                                    {sortedLotGroup.map(lotInstance => {
                                         const locationName = getLocationName(lotInstance.locationId);
                                         return (
                                             <div key={lotInstance.id} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-background">
