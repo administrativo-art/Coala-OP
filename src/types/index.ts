@@ -202,6 +202,27 @@ export type PredefinedList = {
   items: PredefinedConversionItem[];
 };
 
+export type StockCountItem = {
+    productId: string;
+    productName: string;
+    fromUnit: string;
+    toUnit: string;
+    value: string;
+    result: string;
+};
+
+export type StockCount = {
+    id: string;
+    listId: string;
+    listName: string;
+    userId: string;
+    username: string;
+    kioskId: string;
+    createdAt: string; // ISO String
+    items: StockCountItem[];
+};
+
+
 export type FormQuestion = {
     id: string;
     label: string;

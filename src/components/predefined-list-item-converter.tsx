@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { ArrowRight } from 'lucide-react';
 import { type Product, type PredefinedConversionItem } from '@/types';
@@ -10,11 +11,12 @@ import { units, convertValue } from '@/lib/conversion';
 type PredefinedListItemConverterProps = {
   item: PredefinedConversionItem;
   products: Product[];
+  value: string;
+  onValueChange: (value: string, result: string) => void;
 };
 
-export function PredefinedListItemConverter({ item, products }: PredefinedListItemConverterProps) {
+export function PredefinedListItemConverter({ item, products, value, onValueChange }: PredefinedListItemConverterProps) {
   const { getProductFullName } = useProducts();
-  const [value, setValue] = useState('1');
 
   const selectedProduct = useMemo(() => {
     return products.find(p => p.id === item.productId);
@@ -50,6 +52,10 @@ export function PredefinedListItemConverter({ item, products }: PredefinedListIt
     return finalResult.toLocaleString(undefined, { maximumFractionDigits: 5 });
 
   }, [value, item, selectedProduct]);
+  
+  useEffect(() => {
+    onValueChange(value, result);
+  }, [value, result, onValueChange]);
 
   if (!selectedProduct) {
     return <div className="text-sm text-destructive p-3 border rounded-md bg-destructive/10">Produto não encontrado. Este item pode ter sido removido.</div>;
@@ -60,7 +66,7 @@ export function PredefinedListItemConverter({ item, products }: PredefinedListIt
         <p className="font-medium mb-2">{getProductFullName(selectedProduct)}</p>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
             <div className="flex items-center gap-2">
-                <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} className="flex-grow bg-background" />
+                <Input type="number" value={value} onChange={(e) => onValueChange(e.target.value, result)} className="flex-grow bg-background" />
                 <span className="text-sm font-semibold">{item.fromUnit}</span>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
