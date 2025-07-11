@@ -21,23 +21,6 @@ export type GroupedProduct = {
   lots: LotEntry[];
 };
 
-type LotCardProps = {
-  groupedProduct: GroupedProduct;
-  products: Product[];
-  getProductFullName: (product: Product) => string;
-  kiosks: Kiosk[];
-  locations: Location[];
-  onEdit: (lotId: string) => void;
-  onMove: (lotId: string) => void;
-  onDelete: (lotId: string) => void;
-  onViewHistory: (lot: LotEntry) => void;
-  onZeroOut: (lot: LotEntry) => void;
-  canEdit: boolean;
-  canMove: boolean;
-  canDelete: boolean;
-  canViewHistory: boolean;
-};
-
 const getStatus = (lot: LotEntry, product?: Product) => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -133,11 +116,14 @@ export function LotCard({
                         <AccordionItem value={representativeLot.lotNumber} key={`${representativeLot.lotNumber}-${index}`} className="border-none">
                             <Card className="bg-muted/30 overflow-hidden">
                                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
-                                        <div className="flex items-center gap-2 font-semibold"><Tag className="h-4 w-4 text-primary"/> Lote: {representativeLot.lotNumber}</div>
-                                        <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> Validade: {format(parseISO(representativeLot.expiryDate), "dd/MM/yyyy")}</div>
-                                        <div className="flex items-center gap-2"><Barcode className="h-4 w-4 text-primary"/> Cód. Barras: {product?.barcode || 'N/A'}</div>
-                                        <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> Medida: {`${product?.packageSize}${product?.unit}`}</div>
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
+                                            <div className="flex items-center gap-2 font-semibold"><Tag className="h-4 w-4 text-primary"/> Lote: {representativeLot.lotNumber}</div>
+                                            <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> Validade: {format(parseISO(representativeLot.expiryDate), "dd/MM/yyyy")}</div>
+                                            <div className="flex items-center gap-2"><Barcode className="h-4 w-4 text-primary"/> Cód. Barras: {product?.barcode || 'N/A'}</div>
+                                            <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> Medida: {`${product?.packageSize}${product?.unit}`}</div>
+                                        </div>
+                                        <Badge className={`ml-4 text-white text-xs ${status.color}`}>{status.text}</Badge>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-0">
@@ -154,7 +140,6 @@ export function LotCard({
                                                     <div className="flex flex-col items-center justify-center p-2 bg-muted rounded-md w-32 text-center">
                                                         <div className="text-3xl font-bold">{lotInstance.quantity}</div>
                                                         <div className="text-muted-foreground text-xs">unidades</div>
-                                                        <Badge className={`mt-2 text-white text-xs ${status.color}`}>{status.text}</Badge>
                                                     </div>
                                                     <div className="flex flex-col gap-1">
                                                         {canViewHistory && (
@@ -195,4 +180,3 @@ export function LotCard({
     </Card>
   );
 }
-
