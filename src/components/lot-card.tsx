@@ -45,6 +45,22 @@ const getStatus = (lot: LotEntry, product?: Product) => {
     return { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
 };
 
+type LotCardProps = {
+  groupedProduct: GroupedProduct;
+  products: Product[];
+  getProductFullName: (product: Product) => string;
+  kiosks: Kiosk[];
+  locations: Location[];
+  onEdit: (lotId: string) => void;
+  onMove: (lotId: string) => void;
+  onDelete: (lotId: string) => void;
+  onViewHistory: (lot: LotEntry) => void;
+  onZeroOut: (lot: LotEntry) => void;
+  canEdit: boolean;
+  canMove: boolean;
+  canDelete: boolean;
+  canViewHistory: boolean;
+};
 
 export function LotCard({
     groupedProduct,
@@ -117,10 +133,9 @@ export function LotCard({
                             <Card className="bg-muted/30 overflow-hidden">
                                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
                                     <div className="flex items-center justify-between w-full">
-                                        <div className="grid grid-cols-2 md:grid-cols-4 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-x-4 gap-y-2 text-sm w-full text-left">
                                             <div className="flex items-center gap-2 font-semibold"><Tag className="h-4 w-4 text-primary"/> Lote: {representativeLot.lotNumber}</div>
                                             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> Validade: {format(parseISO(representativeLot.expiryDate), "dd/MM/yyyy")}</div>
-                                            <div className="flex items-center gap-2"><Barcode className="h-4 w-4 text-primary"/> Cód. Barras: {product?.barcode || 'N/A'}</div>
                                             <div className="flex items-center gap-2"><Hash className="h-4 w-4 text-primary"/> Medida: {`${product?.packageSize}${product?.unit}`}</div>
                                         </div>
                                         <Badge className={`ml-4 text-white text-xs ${status.color}`}>{status.text}</Badge>
