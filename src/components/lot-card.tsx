@@ -104,87 +104,101 @@ export function LotCard({
 
   const handlePrintLabel = async (lot: LotEntry, product: Product) => {
     const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes.find(s => s.id === '6080') || labelSizes[0];
-
+    
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
       format: [selectedSize.width, selectedSize.height]
     });
-    
-    // Define margins and available space
+
     const margin = 2;
     const availableWidth = selectedSize.width - 2 * margin;
     const availableHeight = selectedSize.height - 2 * margin;
-
-    // QR Code
-    const qrCodeSize = Math.min(availableHeight, availableWidth * 0.3); // QR code is responsive to height
+    const qrCodeSize = Math.min(availableHeight, availableWidth * 0.3);
     const qrCodeX = selectedSize.width - qrCodeSize - margin;
     const qrCodeY = (selectedSize.height - qrCodeSize) / 2;
 
     try {
-        const url = `${window.location.origin}/dashboard/stock/inventory-control?lotId=${lot.id}`;
-        const qrCodeDataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'H', margin: 1, width: 256 });
-        doc.addImage(qrCodeDataUrl, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
+      const url = `${window.location.origin}/dashboard/stock/inventory-control?lotId=${lot.id}`;
+      const qrCodeDataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'H', margin: 1, width: 256 });
+      doc.addImage(qrCodeDataUrl, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
     } catch (err) {
-        console.error("Failed to generate QR Code", err);
+      console.error("Failed to generate QR Code", err);
     }
-    
-    const textMaxWidth = availableWidth - qrCodeSize - margin;
-    let currentY = margin;
-    
-    // Logo
+
+    const textBlockWidth = availableWidth - qrCodeSize - margin;
+
+    // Vertical separator line
+    const separatorX = qrCodeX - margin / 2;
+    doc.setDrawColor(200, 200, 200); // Light gray
+    doc.line(separatorX, margin, separatorX, selectedSize.height - margin);
+
+    let currentY = margin + 1; // Start with a small top margin
+
     if (logoUrl) {
-      const logoMaxHeight = availableHeight * 0.25;
-      const logoMaxWidth = textMaxWidth * 0.5;
-      const img = new (window as any).Image();
-      img.src = logoUrl;
-      await new Promise(resolve => img.onload = resolve);
-      
-      let logoWidth = img.width;
-      let logoHeight = img.height;
-      let ratio = logoWidth / logoHeight;
-      
-      if (logoHeight > logoMaxHeight) {
-          logoHeight = logoMaxHeight;
-          logoWidth = logoHeight * ratio;
-      }
-      if (logoWidth > logoMaxWidth) {
-          logoWidth = logoMaxWidth;
-          logoHeight = logoWidth / ratio;
-      }
+      try {
+        const logoMaxHeight = availableHeight * 0.2;
+        const logoMaxWidth = textBlockWidth * 0.4;
+        const img = new (window as any).Image();
+        img.src = logoUrl;
+        await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+        
+        let logoWidth = img.width;
+        let logoHeight = img.height;
+        let ratio = logoWidth / logoHeight;
+        
+        if (logoHeight > logoMaxHeight) {
+            logoHeight = logoMaxHeight;
+            logoWidth = logoHeight * ratio;
+        }
+        if (logoWidth > logoMaxWidth) {
+            logoWidth = logoMaxWidth;
+            logoHeight = logoWidth / ratio;
+        }
 
-      doc.addImage(logoUrl, 'JPEG', margin, currentY, logoWidth, logoHeight);
-      currentY += logoHeight + 1;
+        doc.addImage(logoUrl, 'JPEG', margin, currentY, logoWidth, logoHeight);
+        currentY += logoHeight + 1;
+        doc.setDrawColor(220, 220, 220);
+        doc.line(margin, currentY, textBlockWidth, currentY); // Horizontal line
+        currentY += 2;
+      } catch (e) {
+        console.error("Could not add logo", e);
+      }
     }
-
+    
     const productName = getProductFullName(product);
     const lotNumber = lot.lotNumber;
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
     const kioskName = getKioskName(lot.kioskId);
     const locationName = getLocationName(lot.locationId);
 
-    // Product Name
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text(productName, margin, currentY, { maxWidth: textMaxWidth });
-    currentY += doc.getTextDimensions(productName, { maxWidth: textMaxWidth }).h + 1;
-    
+    doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
+    currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 1;
+
+    doc.setDrawColor(220, 220, 220);
+    doc.line(margin, currentY, textBlockWidth, currentY); // Horizontal line
+    currentY += 2;
+
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
 
-    // Lot Info
-    doc.text(`Lote: ${lotNumber}`, margin, currentY);
+    const lotText = `Lote: ${lotNumber}`;
+    doc.text(lotText, margin, currentY);
     currentY += 3;
     
-    // Kiosk and Location
     const locationText = locationName ? `${kioskName} / ${locationName}` : kioskName;
-    doc.text(locationText, margin, currentY, { maxWidth: textMaxWidth });
+    doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
     currentY += 3;
+
+    doc.setDrawColor(220, 220, 220);
+    doc.line(margin, currentY, textBlockWidth, currentY); // Horizontal line
+    currentY += 2;
     
-    // Expiry Date (Highlighted)
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Vence em: ${expiryDate}`, margin, currentY, { maxWidth: textMaxWidth });
+    doc.text(`VALIDADE: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
     doc.save(`etiqueta_${productName.replace(/ /g,"_")}_${lotNumber}.pdf`);
   };
