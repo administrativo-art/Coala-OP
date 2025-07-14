@@ -75,28 +75,28 @@ export function BaseProductManagement() {
                 return (
                  <AccordionItem value={product.id} key={product.id} className="border-none">
                     <Card>
-                        <AccordionTrigger className="p-4 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                            <div className="flex items-center justify-between w-full">
-                                <div className="flex flex-col text-left">
-                                    <span className="font-semibold">{product.name}</span>
-                                    <span className="text-xs text-muted-foreground">{linkedProductsCount} insumo(s) vinculado(s)</span>
-                                </div>
-                                <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        </AccordionTrigger>
+                        <div className="flex items-center p-2">
+                          <AccordionTrigger className="p-2 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
+                              <div className="flex flex-col text-left">
+                                  <span className="font-semibold">{product.name}</span>
+                                  <span className="text-xs text-muted-foreground">{linkedProductsCount} insumo(s) vinculado(s)</span>
+                              </div>
+                          </AccordionTrigger>
+                          <div className="flex items-center shrink-0">
+                              <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
+                                  <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
+                                  <Trash2 className="h-4 w-4" />
+                              </Button>
+                          </div>
+                        </div>
                         <AccordionContent className="p-4 pt-0">
                            <div className="text-sm space-y-2">
                                 <p><strong>Unidade de medida para estoque:</strong> <span className="font-semibold">{product.unit || 'Não definida'}</span></p>
                                 <div>
                                     <h4 className="font-semibold mb-1">Níveis de estoque mínimo:</h4>
-                                    {Object.keys(product.stockLevels).length > 0 ? (
+                                    {Object.keys(product.stockLevels || {}).length > 0 ? (
                                         <ul className="list-disc pl-5">
                                             {Object.entries(product.stockLevels).map(([kioskId, levels]) => (
                                                 <li key={kioskId}>
