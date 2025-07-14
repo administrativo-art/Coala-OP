@@ -120,7 +120,7 @@ function LabelSettings() {
         const expiryDate = "31/12/2099";
         const locationText = "Quiosque Teste / Prateleira A";
 
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
         currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 1;
@@ -129,7 +129,6 @@ function LabelSettings() {
         doc.line(margin, currentY, textBlockWidth, currentY);
         currentY += 2;
 
-        doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.text(`Lote: ${lotNumber}`, margin, currentY);
         currentY += 3;
@@ -140,7 +139,6 @@ function LabelSettings() {
         doc.line(margin, currentY, textBlockWidth, currentY);
         currentY += 2;
         
-        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text(`VALIDADE: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 

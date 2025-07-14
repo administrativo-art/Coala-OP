@@ -131,7 +131,7 @@ export function LotCard({
     // Vertical separator line
     const separatorX = qrCodeX - margin / 2;
     doc.setDrawColor(200, 200, 200); // Light gray
-    doc.line(separatorX, margin, separatorX, selectedSize.height - margin);
+    doc.line(separatorX, margin, selectedSize.height - margin);
 
     let currentY = margin + 1; // Start with a small top margin
 
@@ -172,7 +172,7 @@ export function LotCard({
     const kioskName = getKioskName(lot.kioskId);
     const locationName = getLocationName(lot.locationId);
 
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
     currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 1;
@@ -181,7 +181,6 @@ export function LotCard({
     doc.line(margin, currentY, textBlockWidth, currentY); // Horizontal line
     currentY += 2;
 
-    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
 
     const lotText = `Lote: ${lotNumber}`;
@@ -196,7 +195,6 @@ export function LotCard({
     doc.line(margin, currentY, textBlockWidth, currentY); // Horizontal line
     currentY += 2;
     
-    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.text(`VALIDADE: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
