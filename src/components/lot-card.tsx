@@ -17,7 +17,7 @@ const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
 
 export type GroupedProduct = {
-  productBaseName: string;
+  product: Product;
   lots: LotEntry[];
 };
 
@@ -46,8 +46,7 @@ const getStatus = (lot: LotEntry, product?: Product) => {
 };
 
 type LotCardProps = {
-  groupedProduct: GroupedProduct;
-  products: Product[];
+  productGroup: GroupedProduct;
   getProductFullName: (product: Product) => string;
   kiosks: Kiosk[];
   locations: Location[];
@@ -63,8 +62,7 @@ type LotCardProps = {
 };
 
 export function LotCard({
-    groupedProduct,
-    products,
+    productGroup,
     getProductFullName,
     kiosks,
     locations,
@@ -82,38 +80,34 @@ export function LotCard({
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
-  const productForTitle = useMemo(() => {
-    const firstLot = groupedProduct.lots[0];
-    if (!firstLot) return null;
-    return products.find(p => p.id === firstLot.productId);
-  }, [groupedProduct.lots, products]);
-
   const totalQuantity = useMemo(() => {
-    return groupedProduct.lots.reduce((acc, lot) => acc + lot.quantity, 0);
-  }, [groupedProduct.lots]);
+    return productGroup.lots.reduce((acc, lot) => acc + lot.quantity, 0);
+  }, [productGroup.lots]);
 
   const lotsGroupedByNumber = useMemo(() => {
     const groups: { [lotNumber: string]: LotEntry[] } = {};
-    groupedProduct.lots.forEach(lot => {
+    productGroup.lots.forEach(lot => {
         if (!groups[lot.lotNumber]) {
             groups[lot.lotNumber] = [];
         }
         groups[lot.lotNumber].push(lot);
     });
     return Object.values(groups);
-  }, [groupedProduct.lots]);
+  }, [productGroup.lots]);
+
+  const { product } = productGroup;
 
   return (
     <Card className="w-full">
       <CardHeader className="p-4 flex flex-row items-center gap-4">
-        {productForTitle?.imageUrl && (
+        {product.imageUrl && (
             <div className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden shrink-0">
-                <Image src={productForTitle.imageUrl} alt={`Foto de ${productForTitle.baseName}`} width={80} height={80} className="object-cover" />
+                <Image src={product.imageUrl} alt={`Foto de ${product.baseName}`} width={80} height={80} className="object-cover" />
             </div>
         )}
         <div className="flex-grow">
             <CardTitle className="text-xl">
-                {productForTitle ? getProductFullName(productForTitle) : groupedProduct.productBaseName}
+                {getProductFullName(product)}
             </CardTitle>
             <CardDescription className="mt-1">
                 Quantidade Total em Estoque: <span className="font-bold text-foreground">{totalQuantity}</span>
@@ -125,7 +119,6 @@ export function LotCard({
             <Accordion type="multiple" defaultValue={lotsGroupedByNumber.map(group => group[0].lotNumber)} className="w-full space-y-3">
                 {lotsGroupedByNumber.map((lotGroup, index) => {
                     const representativeLot = lotGroup[0];
-                    const product = products.find(p => p.id === representativeLot.productId);
                     const status = getStatus(representativeLot, product);
                     const sortedLotGroup = [...lotGroup].sort((a, b) => {
                         if (a.kioskId === 'matriz' && b.kioskId !== 'matriz') return -1;
@@ -200,3 +193,5 @@ export function LotCard({
     </Card>
   );
 }
+
+    

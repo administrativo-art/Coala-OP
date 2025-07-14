@@ -17,13 +17,15 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
-import { type LotEntry } from '@/types';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { type LotEntry, type Product } from '@/types';
 import { LotCard, type GroupedProduct } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 
 const BarcodeScannerModal = dynamic(
@@ -31,11 +33,25 @@ const BarcodeScannerModal = dynamic(
   { ssr: false }
 );
 
+export type GroupedByBrand = {
+  brandName: string;
+  products: GroupedProduct[];
+};
+
+export type GroupedByBaseProduct = {
+  isBaseProduct: boolean;
+  baseProductId: string | null;
+  name: string;
+  brands: GroupedByBrand[];
+};
+
+
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { locations, loading: locationsLoading } = useLocations();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,65 +95,97 @@ export function ExpiryControl() {
   }, [sortedKiosks, initialKioskSelectionMade]);
 
 
-  const groupedProducts = useMemo(() => {
+ const groupedData = useMemo(() => {
     const kioskFilteredLots = (user?.username === 'Tiago Brasil')
       ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
       : visibleLots;
 
     const activeLots = kioskFilteredLots.filter(lot => lot.quantity > 0);
-
+    
     const preFilteredLots = activeLots.filter(lot => {
         if (statusFilters.length === 0) return true;
-
         const product = products.find(p => p.id === lot.productId);
         const urgentThreshold = product?.urgentThreshold ?? 7;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
-
         const isExpiring = statusFilters.includes('expiring') && (days >= 0 && days <= urgentThreshold);
         const isExpired = statusFilters.includes('expired') && days < 0;
-
         return isExpiring || isExpired;
     });
 
     const filteredLots = preFilteredLots.filter(lot => {
       const search = searchTerm.toLowerCase();
       const product = products.find(p => p.id === lot.productId);
+      if (!product) return false;
       const expiryDateFormatted = format(parseISO(lot.expiryDate), 'dd/MM/yyyy');
       const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
 
+      const productBase = baseProducts.find(bp => bp.id === product.baseProductId);
+      const baseProductMatch = productBase?.name.toLowerCase().includes(search);
+
       return (
-        lot.productName.toLowerCase().includes(search) ||
+        product.baseName.toLowerCase().includes(search) ||
+        (product.brand && product.brand.toLowerCase().includes(search)) ||
         lot.lotNumber.toLowerCase().includes(search) ||
         (product?.barcode && product.barcode.toLowerCase().includes(search)) ||
         expiryDateFormatted.includes(search) ||
-        kioskName.includes(search)
+        kioskName.includes(search) ||
+        baseProductMatch
       );
     });
 
-    const groups: { [key: string]: GroupedProduct } = {};
-    
+    const groups: Map<string, GroupedByBaseProduct> = new Map();
+
     filteredLots.forEach(lot => {
       const product = products.find(p => p.id === lot.productId);
       if (!product) return;
 
-      const key = product.baseName;
-      if (!groups[key]) {
-        groups[key] = {
-          productBaseName: product.baseName,
-          lots: [],
-        };
+      const baseProductId = product.baseProductId || `avulso-${product.id}`;
+      const baseProduct = product.baseProductId ? baseProducts.find(bp => bp.id === product.baseProductId) : null;
+      const groupName = baseProduct ? baseProduct.name : getProductFullName(product);
+      const isBaseProdGroup = !!baseProduct;
+      const brandName = product.brand || 'Sem Marca';
+
+      if (!groups.has(baseProductId)) {
+        groups.set(baseProductId, {
+          isBaseProduct: isBaseProdGroup,
+          baseProductId: product.baseProductId || null,
+          name: groupName,
+          brands: [],
+        });
       }
-      groups[key].lots.push(lot);
+
+      const baseProductGroup = groups.get(baseProductId)!;
+      let brandGroup = baseProductGroup.brands.find(b => b.brandName === brandName);
+
+      if (!brandGroup) {
+        brandGroup = { brandName, products: [] };
+        baseProductGroup.brands.push(brandGroup);
+      }
+      
+      let productGroup = brandGroup.products.find(p => p.product.id === product.id);
+      
+      if (!productGroup) {
+        productGroup = { product: product, lots: [] };
+        brandGroup.products.push(productGroup);
+      }
+      
+      productGroup.lots.push(lot);
     });
 
-    // Sort lots within each group by expiry date
-    Object.values(groups).forEach(group => {
-        group.lots.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+    // Sort lots within each product group by expiry date
+    groups.forEach(baseGroup => {
+        baseGroup.brands.forEach(brandGroup => {
+            brandGroup.products.forEach(productGroup => {
+                productGroup.lots.sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+            });
+            brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
+        });
+        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
     });
 
-    return Object.values(groups).sort((a, b) => a.productBaseName.localeCompare(b.productBaseName));
-  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKiosks, user]);
-  
+    return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
+  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKiosks, user, baseProducts, getProductFullName]);
+
   const handleAddClick = () => {
     setLotToEdit(null);
     setIsAddEditModalOpen(true);
@@ -223,7 +271,7 @@ export function ExpiryControl() {
 
 
   const renderContent = () => {
-    if (loading || productsLoading || locationsLoading) {
+    if (loading || productsLoading || locationsLoading || baseProductsLoading) {
       return (
         <div className="space-y-4">
           <Skeleton className="h-40 w-full" />
@@ -248,7 +296,7 @@ export function ExpiryControl() {
         );
     }
 
-    if (groupedProducts.length === 0) {
+    if (groupedData.length === 0) {
         return (
             <div className="text-center py-16 text-muted-foreground">
                 <p>Nenhum resultado encontrado com os filtros e busca atuais.</p>
@@ -258,25 +306,44 @@ export function ExpiryControl() {
     
     return (
       <div className="space-y-4">
-        {groupedProducts.map(group => (
-          <LotCard
-            key={group.productBaseName}
-            groupedProduct={group}
-            products={products}
-            getProductFullName={getProductFullName}
-            kiosks={kiosks}
-            locations={locations}
-            onEdit={handleEditClick}
-            onMove={handleMoveClick}
-            onDelete={handleDeleteClick}
-            onViewHistory={handleViewHistoryClick}
-            onZeroOut={handleZeroOutClick}
-            canEdit={permissions.lots.edit}
-            canMove={permissions.lots.move}
-            canDelete={permissions.lots.delete}
-            canViewHistory={permissions.lots.viewMovementHistory}
-          />
-        ))}
+         <Accordion type="multiple" className="w-full space-y-4">
+            {groupedData.map(baseGroup => (
+                <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">
+                    <Card className="bg-muted/30">
+                        <AccordionTrigger className="p-4 hover:no-underline rounded-lg text-xl font-semibold [&[data-state=open]]:bg-muted [&[data-state=open]]:rounded-b-none">
+                            {baseGroup.name}
+                        </AccordionTrigger>
+                        <AccordionContent className="p-4 space-y-3">
+                           {baseGroup.brands.map(brandGroup => (
+                               <div key={brandGroup.brandName}>
+                                 <h3 className="font-semibold text-lg text-muted-foreground mb-2 pl-1">{brandGroup.brandName}</h3>
+                                  <div className="space-y-4">
+                                      {brandGroup.products.map(productGroup => (
+                                          <LotCard
+                                            key={productGroup.product.id}
+                                            productGroup={productGroup}
+                                            getProductFullName={getProductFullName}
+                                            kiosks={kiosks}
+                                            locations={locations}
+                                            onEdit={handleEditClick}
+                                            onMove={handleMoveClick}
+                                            onDelete={handleDeleteClick}
+                                            onViewHistory={handleViewHistoryClick}
+                                            onZeroOut={handleZeroOutClick}
+                                            canEdit={permissions.lots.edit}
+                                            canMove={permissions.lots.move}
+                                            canDelete={permissions.lots.delete}
+                                            canViewHistory={permissions.lots.viewMovementHistory}
+                                          />
+                                      ))}
+                                  </div>
+                               </div>
+                           ))}
+                        </AccordionContent>
+                    </Card>
+                </AccordionItem>
+            ))}
+        </Accordion>
       </div>
     );
   };
@@ -286,7 +353,7 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            <ClipboardCheck /> Controle de lotes em estoque
+            <ClipboardCheck /> Controle de insumos
           </CardTitle>
           <CardDescription>Gerencie os lotes em estoque, seus vencimentos e transferências.</CardDescription>
         </CardHeader>
@@ -295,7 +362,7 @@ export function ExpiryControl() {
                 <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por produto, lote, código..."
+                        placeholder="Buscar por insumo base, produto, lote, código..."
                         className="pl-10 pr-12"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -318,7 +385,7 @@ export function ExpiryControl() {
                 </Button>
                 {permissions.lots.viewMovementHistory && (
                     <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
-                        <Archive className="mr-2" /> Auditar lotes arquivados
+                        <History className="mr-2" /> Histórico de movimentações
                     </Button>
                 )}
             </div>
@@ -461,3 +528,5 @@ export function ExpiryControl() {
     </>
   );
 }
+
+    
