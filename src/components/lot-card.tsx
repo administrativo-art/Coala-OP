@@ -119,7 +119,7 @@ export function LotCard({
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
 
     doc.setFontSize(8);
-    doc.text(productName, 3, currentY, { maxWidth: 45 });
+    doc.text(productName, 25, currentY, { align: 'center', maxWidth: 45 });
     
     currentY += 8;
     doc.setFontSize(10);
