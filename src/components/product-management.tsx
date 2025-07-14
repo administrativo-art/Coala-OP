@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
@@ -237,7 +238,15 @@ export function ProductManagement({ open, onOpenChange, productToEdit: initialPr
     };
 
     const handlePhotoCaptured = (dataUrl: string) => {
+        handlePhotoUpdate(dataUrl);
+    };
+
+    const handlePhotoUpdate = (dataUrl: string) => {
+        if (editingProduct) {
+          updateProduct({ ...editingProduct, imageUrl: dataUrl });
+        }
         form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
+        toast({ title: "Foto do insumo atualizada!" });
     };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -251,7 +260,7 @@ export function ProductManagement({ open, onOpenChange, productToEdit: initialPr
             reader.onloadend = async () => {
                 try {
                     const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-                    form.setValue('imageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
+                    handlePhotoUpdate(resizedDataUrl);
                 } catch (error) {
                     toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.' });
                 }
