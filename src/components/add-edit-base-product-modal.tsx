@@ -72,7 +72,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
         });
       }
     }
-  }, [productToEdit, open, form, kiosksToDisplay]);
+  }, [productToEdit, open, form]);
 
   const onSubmit = (values: BaseProductFormValues) => {
     const stockLevelsObject: { [kioskId: string]: { min: number } } = {};
