@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -9,7 +10,7 @@ export function StockManagement() {
     return (
         <div className="w-full max-w-7xl mx-auto">
             <div className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight">Gestão de Estoque</h1>
+                <h1 className="text-4xl font-bold tracking-tight">Gestão de estoque</h1>
                 <p className="text-lg text-muted-foreground mt-2">Gerencie lotes, vencimentos, reposição e consumo do seu estoque em um só lugar.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -18,13 +19,13 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <ClipboardCheck className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Controle de Insumos</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Controle de insumos</CardTitle>
                         <CardDescription>Acompanhe a validade dos lotes, adicione novos insumos e faça transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/inventory-control" className="w-full">
                             <Button className="w-full text-lg py-6">
-                                Acessar Controle <ArrowRight className="ml-2" />
+                                Acessar controle <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
@@ -34,13 +35,13 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <BarChart3 className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Análise de Estoque</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Análise de estoque</CardTitle>
                         <CardDescription>Analise relatórios de reposição de estoque e visualize o consumo médio dos produtos.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis" className="w-full">
                              <Button className="w-full text-lg py-6">
-                                Acessar Análises <ArrowRight className="ml-2" />
+                                Acessar análises <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
@@ -50,13 +51,13 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Truck className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Devoluções e Bonificações</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Devoluções e bonificações</CardTitle>
                         <CardDescription>Gerencie o processo de devolução e bonificação de insumos com fornecedores.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/returns" className="w-full">
                             <Button className="w-full text-lg py-6">
-                                Acessar Módulo <ArrowRight className="ml-2" />
+                                Acessar módulo <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>

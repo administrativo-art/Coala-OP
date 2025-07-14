@@ -173,13 +173,13 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         const periodBLabel = `${getMonthLabel(periodB.month)}/${periodB.year}`;
 
         doc.setFontSize(18);
-        doc.text(`Comparativo de Consumo - ${kioskName}`, 14, 22);
+        doc.text(`Comparativo de consumo - ${kioskName}`, 14, 22);
         doc.setFontSize(11);
         doc.setTextColor(100);
         doc.text(`Período A: ${periodALabel}`, 14, 30);
         doc.text(`Período B: ${periodBLabel}`, 14, 36);
 
-        const tableHead = [['Insumo', `Consumo A`, `Consumo B`, 'Variação Absoluta', 'Variação %']];
+        const tableHead = [['Insumo', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
         const tableBody = comparisonResults.map(item => {
             let percentageText: string;
             if (item.percentageChange === null) {
@@ -249,7 +249,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2"><Scale /> Comparar Consumo Mensal</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2"><Scale /> Comparar consumo mensal</DialogTitle>
                     <DialogDescription>
                         Selecione o quiosque e os dois períodos que deseja comparar para analisar a variação no consumo de insumos.
                     </DialogDescription>
@@ -313,7 +313,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                         <div className="space-y-4">
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">
-                                    <CardTitle>Resultados da Comparação</CardTitle>
+                                    <CardTitle>Resultados da comparação</CardTitle>
                                     <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={!comparisonResults || comparisonResults.length === 0}>
                                         <Download className="mr-2 h-4 w-4" />
                                         Exportar PDF
@@ -327,7 +327,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                                     <TableHead>Insumo</TableHead>
                                                     <TableHead className="text-right">Período A</TableHead>
                                                     <TableHead className="text-right">Período B</TableHead>
-                                                    <TableHead className="text-right">Variação (Absoluta e %)</TableHead>
+                                                    <TableHead className="text-right">Variação (absoluta e %)</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -347,7 +347,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
 
                              <Card>
                                 <CardHeader>
-                                    <CardTitle>Sugestão de Prompt para Análise Externa</CardTitle>
+                                    <CardTitle>Sugestão de prompt para análise externa</CardTitle>
                                     <CardDescription>
                                         Copie o prompt abaixo e cole-o em sua ferramenta de IA de preferência, junto com os dados exportados da tabela, para obter uma análise detalhada.
                                     </CardDescription>
@@ -360,7 +360,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                     />
                                     <Button onClick={handleCopyPrompt} className="w-full">
                                         <Copy className="mr-2 h-4 w-4" />
-                                        Copiar Prompt
+                                        Copiar prompt
                                     </Button>
                                 </CardContent>
                             </Card>

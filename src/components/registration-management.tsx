@@ -37,12 +37,12 @@ export function RegistrationManagement() {
         <div className="w-full space-y-6">
             <div className="mb-6">
                 <h1 className="text-3xl font-bold">Cadastros</h1>
-                <p className="text-muted-foreground">Gerencie cadastro dos insumos do estoque</p>
+                <p className="text-muted-foreground">Gerencie o cadastro dos insumos do estoque</p>
             </div>
             
             <Tabs defaultValue="items" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="items">Cadastro de Insumos</TabsTrigger>
+                    <TabsTrigger value="items">Cadastro de insumos</TabsTrigger>
                     <TabsTrigger value="categories">Gerenciar produto base</TabsTrigger>
                 </TabsList>
                 <TabsContent value="items" className="mt-4">

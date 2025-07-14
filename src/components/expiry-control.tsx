@@ -286,7 +286,7 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            <ClipboardCheck /> Controle de Lotes em Estoque
+            <ClipboardCheck /> Controle de lotes em estoque
           </CardTitle>
           <CardDescription>Gerencie os lotes em estoque, seus vencimentos e transferências.</CardDescription>
         </CardHeader>
@@ -366,10 +366,10 @@ export function ExpiryControl() {
                             <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
-                                Selecionar Todos
+                                Selecionar todos
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                Limpar Seleção
+                                Limpar seleção
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-48">
@@ -414,7 +414,7 @@ export function ExpiryControl() {
             onOpenChange={setIsMoveModalOpen}
             lotToMove={lotToMove}
             kiosks={kiosks}
-            onMoveConfirm={moveLot}
+            onMoveConfirm={moveMultipleLots}
         />
       )}
 
@@ -449,7 +449,7 @@ export function ExpiryControl() {
             onConfirm={handleZeroOutConfirm}
             title="Zerar estoque do lote?"
             description={`Isso definirá a quantidade do lote ${lotToZeroOut.lotNumber} como 0. O lote será movido para a auditoria de lotes arquivados. Esta ação não pode ser desfeita.`}
-            confirmButtonText="Zerar Estoque"
+            confirmButtonText="Zerar estoque"
             confirmButtonVariant="destructive"
         />
       )}

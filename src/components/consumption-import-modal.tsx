@@ -185,7 +185,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                     onOpenChange(false);
 
                 } catch (error: any) {
-                    toast({ variant: 'destructive', title: 'Erro na Análise', description: error.message || 'Não foi possível analisar o relatório.' });
+                    toast({ variant: 'destructive', title: 'Erro na análise', description: error.message || 'Não foi possível analisar o relatório.' });
                 } finally {
                     setIsAnalyzing(false);
                     uploadForm.reset({ ...uploadForm.getValues(), file: undefined });
@@ -199,7 +199,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Importar Relatório de Consumo</DialogTitle>
+                    <DialogTitle>Importar relatório de consumo</DialogTitle>
                     <DialogDescription>
                         Faça o upload de um relatório de vendas/consumo em formato CSV para análise.
                     </DialogDescription>
@@ -244,7 +244,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                             <Button type="submit" disabled={isAnalyzing}>
                                 {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <UploadCloud className="mr-2" />}
-                                {isAnalyzing ? 'Analisando...' : 'Analisar Relatório'}
+                                {isAnalyzing ? 'Analisando...' : 'Analisar relatório'}
                             </Button>
                         </DialogFooter>
                     </form>

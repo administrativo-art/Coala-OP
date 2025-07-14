@@ -108,7 +108,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Abrir Chamado de Devolução/Bonificação</DialogTitle>
+          <DialogTitle>Abrir chamado de devolução/bonificação</DialogTitle>
           <DialogDescription>
             Preencha os detalhes abaixo para iniciar um novo processo.
           </DialogDescription>
@@ -120,7 +120,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
               name="tipo"
               render={({ field }) => (
                 <FormItem className="space-y-3">
-                  <FormLabel>Tipo de Chamado</FormLabel>
+                  <FormLabel>Tipo de chamado</FormLabel>
                   <FormControl>
                     <RadioGroup
                       onValueChange={field.onChange}
@@ -225,7 +225,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={addingRequest}>
-                {addingRequest ? 'Salvando...' : 'Abrir Chamado'}
+                {addingRequest ? 'Salvando...' : 'Abrir chamado'}
               </Button>
             </DialogFooter>
           </form>

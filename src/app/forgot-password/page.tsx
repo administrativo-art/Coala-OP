@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
       
       <div className="w-full max-w-sm rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
         <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-black/60" style={{textShadow: '0 1px 3px rgba(255,255,255,0.4)'}}>Alterar Senha</h1>
+            <h1 className="text-2xl font-bold text-black/60" style={{textShadow: '0 1px 3px rgba(255,255,255,0.4)'}}>Alterar senha</h1>
             <p className="text-sm text-black/50 mt-1">Informe seus dados para definir uma nova senha.</p>
         </div>
         
@@ -164,7 +164,7 @@ export default function ForgotPasswordPage() {
                     disabled={isSubmitting}
                   >
                     {isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                    Salvar Nova Senha
+                    Salvar nova senha
                 </Button>
               </div>
             </form>

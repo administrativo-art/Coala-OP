@@ -81,7 +81,7 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
             } else {
                 if (height > MAX_HEIGHT) {
                     width = Math.round(width * (MAX_HEIGHT / height));
-                    height = MAX_HEIGHT;
+                    height = maxHeight;
                 }
             }
             
@@ -141,7 +141,7 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
                  <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                     <Button onClick={handleCapture} disabled={permissionState !== 'granted'}>
-                        <Camera className="mr-2" /> Capturar Foto
+                        <Camera className="mr-2" /> Capturar foto
                     </Button>
                 </DialogFooter>
             </DialogContent>

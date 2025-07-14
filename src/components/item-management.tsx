@@ -47,7 +47,7 @@ export function ItemManagement() {
       if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
 
       if (messages.length > 0) {
-          alert(`Não é possível excluir o insumo: Este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
+          alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
           return;
       }
       setProductToDelete(product);
@@ -108,15 +108,15 @@ export function ItemManagement() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Insumos Cadastrados</CardTitle>
+          <CardTitle>Insumos cadastrados</CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
             <div className="flex gap-2">
               <Button onClick={handleAddNewClick} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Insumo
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo insumo
               </Button>
                <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)} className="w-full">
-                <Archive className="mr-2" /> Ver Arquivados
+                <Archive className="mr-2" /> Ver arquivados
               </Button>
             </div>
 
@@ -162,7 +162,7 @@ export function ItemManagement() {
                         )) : (
                              <div className="text-center py-12 text-muted-foreground">
                                 <p>Nenhum insumo cadastrado.</p>
-                                <p className="text-sm">Clique em "Adicionar Novo Insumo" para começar.</p>
+                                <p className="text-sm">Clique em "Adicionar novo insumo" para começar.</p>
                             </div>
                         )}
                     </Accordion>
@@ -170,7 +170,7 @@ export function ItemManagement() {
                 {activeProducts.length > 0 && (
                     <div className="pt-4 border-t mt-4 shrink-0 flex justify-start">
                         <Button type="button" variant="destructive" onClick={handleDeleteSelectedClick} disabled={selectedProducts.size === 0}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Excluir Selecionados ({selectedProducts.size})
+                            <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
                         </Button>
                     </div>
                 )}

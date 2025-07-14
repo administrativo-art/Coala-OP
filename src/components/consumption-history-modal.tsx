@@ -100,7 +100,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                         {report.results && report.results.length > 0 ? (
                                                         <div className="rounded-md border">
                                                                 <Table>
-                                                                    <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. Consumida (Unidade Base)</TableHead></TableRow></TableHeader>
+                                                                    <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. consumida (unidade base)</TableHead></TableRow></TableHeader>
                                                                     <TableBody>
                                                                         {report.results.map((item, index) => {
                                                                             const productConfig = products.find(p => p.id === item.productId);
@@ -134,7 +134,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Histórico de Análises de Consumo</DialogTitle>
+                        <DialogTitle>Histórico de análises de consumo</DialogTitle>
                         <DialogDescription>
                             Consulte, expanda e exclua análises de consumo de meses anteriores.
                         </DialogDescription>

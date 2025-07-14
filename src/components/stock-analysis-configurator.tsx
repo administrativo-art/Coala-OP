@@ -40,7 +40,7 @@ export function StockAnalysisConfigurator({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gerenciar produto base (Produto Macro)</CardTitle>
+        <CardTitle>Gerenciar produto base</CardTitle>
         <CardDescription>
           Produtos base servem para agrupar diferentes embalagens de um mesmo insumo. Por exemplo, o produto base "Ovomaltine" pode agrupar os insumos "Ovomaltine 250g" e "Ovomaltine 500g".
         </CardDescription>
@@ -53,14 +53,14 @@ export function StockAnalysisConfigurator({
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onAddCategory(); }}
             />
-            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar Produto Base</Button>
+            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar produto base</Button>
         </div>
 
          <div className="rounded-md border">
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>Nome do Produto Base</TableHead>
+                        <TableHead>Nome do produto base</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                 </TableHeader>

@@ -123,7 +123,7 @@ export function InventoryConverter() {
             <Boxes className="h-16 w-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-xl font-semibold">Nenhum produto cadastrado</h3>
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-                Cadastre ou desarquive insumos na tela de "Gestão de Estoque" para poder fazer conversões aqui.
+                Cadastre ou desarquive insumos na tela de "Gestão de estoque" para poder fazer conversões aqui.
             </p>
         </div>
       );

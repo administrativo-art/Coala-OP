@@ -178,7 +178,7 @@ export default function DashboardPage() {
     const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
     doc.setFontSize(18);
-    doc.text(`Relatório de Consumo Médio Mensal`, 14, 22);
+    doc.text(`Relatório de consumo médio mensal`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
@@ -313,7 +313,7 @@ export default function DashboardPage() {
           <div className="mt-6">
               <Card>
                   <CardHeader>
-                      <CardTitle>Insumos Vencendo em Breve</CardTitle>
+                      <CardTitle>Insumos vencendo em breve</CardTitle>
                       <CardDescription>
                           Estes são os insumos que vencerão nos próximos 7 dias.
                       </CardDescription>
@@ -350,7 +350,7 @@ export default function DashboardPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Users className="h-6 w-6" /> Escala de Hoje - {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
+                        <Users className="h-6 w-6" /> Escala de hoje - {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
                     </CardTitle>
                     <CardDescription>
                         Resumo da escala de trabalho para o dia atual.
@@ -412,7 +412,7 @@ export default function DashboardPage() {
                 <Card className="md:col-span-2">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Truck className="h-6 w-6" /> Chamados de Devolução/Bonificação Abertos
+                            <Truck className="h-6 w-6" /> Chamados de devolução/bonificação abertos
                         </CardTitle>
                         <CardDescription>
                             Estes são os seus chamados que precisam de atenção. Clique em um chamado para ver os detalhes.
@@ -432,7 +432,7 @@ export default function DashboardPage() {
                                             <div>
                                                 <p className="font-semibold">{req.numero}: <span className="font-normal">{req.insumoNome}</span></p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Previsão de Conclusão: {format(parseISO(req.dataPrevisaoRetorno), "dd/MM/yyyy", { locale: ptBR })}
+                                                    Previsão de conclusão: {format(parseISO(req.dataPrevisaoRetorno), "dd/MM/yyyy", { locale: ptBR })}
                                                 </p>
                                             </div>
                                             {statusInfo && (
@@ -452,7 +452,7 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-col gap-4">
                 <div>
                     <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6" /> Consumo Médio Mensal
+                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal
                     </CardTitle>
                     <CardDescription>
                         {user?.username === 'Tiago Brasil' 
@@ -465,14 +465,14 @@ export default function DashboardPage() {
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
                                 <ListFilter className="mr-2 h-4 w-4" />
-                                Filtrar Produtos ({selectedProducts.length})
+                                Filtrar produtos ({selectedProducts.length})
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-64">
-                            <DropdownMenuLabel>Exibir Produtos</DropdownMenuLabel>
+                            <DropdownMenuLabel>Exibir produtos</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar Todos</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar Seleção</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
                             {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
@@ -492,7 +492,7 @@ export default function DashboardPage() {
                     {user?.username === 'Tiago Brasil' && (
                         <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
                             <SelectTrigger className="w-full sm:w-[240px]">
-                                <SelectValue placeholder="Selecionar Quiosque" />
+                                <SelectValue placeholder="Selecionar quiosque" />
                             </SelectTrigger>
                             <SelectContent>
                                 {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
@@ -563,7 +563,7 @@ export default function DashboardPage() {
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" disabled={chartData.length === 0}>
                             <Download className="mr-2 h-4 w-4" />
-                            Exportar Relatório
+                            Exportar relatório
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>

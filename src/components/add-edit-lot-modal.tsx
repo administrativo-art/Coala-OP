@@ -197,7 +197,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 <ScrollArea className="h-[60vh] pr-4">
                     <div className="space-y-4 py-4">
                         <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
-                            <Label className="text-sm font-medium">{isEditing ? 'Insumo Vinculado' : '1. Encontre o insumo'}</Label>
+                            <Label className="text-sm font-medium">{isEditing ? 'Insumo vinculado' : '1. Encontre o insumo'}</Label>
                             <FormDescription>{isEditing ? 'Para alterar o insumo, use a busca abaixo.' : 'Use a busca para encontrar o insumo pelo nome ou código de barras.'}</FormDescription>
                             <div className="flex gap-2">
                                 <div className="relative flex-grow">
@@ -226,7 +226,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                         {selectedProduct ? (
                             <>
                                 <div className="p-4 border rounded-lg space-y-4">
-                                    <h4 className="text-sm font-medium text-muted-foreground">Detalhes do Insumo</h4>
+                                    <h4 className="text-sm font-medium text-muted-foreground">Detalhes do insumo</h4>
                                      <div className="flex items-start gap-4">
                                           {(currentImageUrl || selectedProduct.imageUrl) && (
                                             <Image src={currentImageUrl || selectedProduct.imageUrl || ''} alt="Foto do insumo" width={64} height={64} className="rounded-md object-cover aspect-square" />
@@ -241,7 +241,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                       </div>
                                 </div>
                                 <div className="p-4 border rounded-lg space-y-4">
-                                    <h4 className="text-sm font-medium text-muted-foreground">{isEditing ? 'Editar detalhes do Lote' : '2. Detalhes do Lote'}</h4>
+                                    <h4 className="text-sm font-medium text-muted-foreground">{isEditing ? 'Editar detalhes do lote' : '2. Detalhes do lote'}</h4>
                                     <FormField
                                         control={form.control}
                                         name="lotNumber"
@@ -332,7 +332,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                         name="locationId"
                                         render={({ field }) => (
                                             <FormItem>
-                                            <FormLabel>Localização (Opcional)</FormLabel>
+                                            <FormLabel>Localização (opcional)</FormLabel>
                                             <div className="flex gap-2 items-center">
                                                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedKioskId}>
                                                     <FormControl>

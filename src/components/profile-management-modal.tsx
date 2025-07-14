@@ -168,14 +168,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                 <ScrollArea className="h-[55vh] pr-6">
                     <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team']} className="w-full">
                     <AccordionItem value="team">
-                        <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Gestão de Equipe</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Gestão de equipe</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.team.view", "Visualizar escalas", "Permite que o usuário veja as escalas de trabalho.")}
                             {renderPermissionSwitch("permissions.team.manage", "Gerenciar escalas", "Permite criar, editar e excluir escalas de trabalho.")}
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="stockAnalysis">
-                        <AccordionTrigger className="text-lg font-semibold"><BarChart3 className="mr-2 h-5 w-5" /> Análise de Estoque</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><BarChart3 className="mr-2 h-5 w-5" /> Análise de estoque</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.stockAnalysis.upload", "Fazer upload de relatório", "Permite que o usuário suba arquivos PDF para analisar o estoque.")}
                             {renderPermissionSwitch("permissions.stockAnalysis.configure", "Configurar parâmetros", "Permite que o usuário defina o estoque ideal e parâmetros de análise.")}
@@ -184,7 +184,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="consumptionAnalysis">
-                        <AccordionTrigger className="text-lg font-semibold"><TrendingUp className="mr-2 h-5 w-5" /> Análise de Consumo</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><TrendingUp className="mr-2 h-5 w-5" /> Análise de consumo</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.consumptionAnalysis.upload", "Fazer upload de relatório", "Permite subir relatórios de vendas/consumo para análise.")}
                             {renderPermissionSwitch("permissions.consumptionAnalysis.viewHistory", "Ver histórico de consumo", "Permite visualizar análises de consumo de meses anteriores.")}
@@ -192,7 +192,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         </AccordionContent>
                     </AccordionItem>
                      <AccordionItem value="returns">
-                        <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Devoluções e Bonificações</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Devoluções e bonificações</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.returns.add", "Abrir chamados", "Permite abrir novos chamados de devolução ou bonificação.")}
                             {renderPermissionSwitch("permissions.returns.updateStatus", "Atualizar status", "Permite alterar o status de um chamado (ex: de aberta para em andamento).")}

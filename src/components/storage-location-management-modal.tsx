@@ -86,7 +86,7 @@ export function StorageLocationManagementModal({ open, onOpenChange, kiosks }: S
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Gerenciar Localizações de Estoque</DialogTitle>
+            <DialogTitle>Gerenciar localizações de estoque</DialogTitle>
             <DialogDescription>Adicione ou edite os locais de armazenamento para cada quiosque.</DialogDescription>
           </DialogHeader>
            <ScrollArea className="flex-1 pr-6">
@@ -108,23 +108,23 @@ export function StorageLocationManagementModal({ open, onOpenChange, kiosks }: S
                         <FormItem><FormLabel>Nome</FormLabel><FormControl><Input placeholder="Prateleira A-1" {...field} /></FormControl><FormMessage /></FormItem>
                     )}/>
                      <FormField control={form.control} name="code" render={({ field }) => (
-                        <FormItem><FormLabel>Código (Opcional)</FormLabel><FormControl><Input placeholder="PA1" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Código (opcional)</FormLabel><FormControl><Input placeholder="PA1" {...field} /></FormControl><FormMessage /></FormItem>
                     )}/>
                   </div>
                   <div className="flex justify-end gap-2">
-                    {editingLocation && <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar Edição</Button>}
-                    <Button type="submit">{editingLocation ? 'Salvar Alterações' : 'Adicionar'}</Button>
+                    {editingLocation && <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar edição</Button>}
+                    <Button type="submit">{editingLocation ? 'Salvar alterações' : 'Adicionar'}</Button>
                   </div>
                 </form>
               </Form>
 
               <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                      <h3 className="font-semibold text-lg">Localizações Cadastradas</h3>
+                      <h3 className="font-semibold text-lg">Localizações cadastradas</h3>
                       <Select value={selectedKioskFilter} onValueChange={setSelectedKioskFilter}>
                           <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                              <SelectItem value="all">Todos os Quiosques</SelectItem>
+                              <SelectItem value="all">Todos os quiosques</SelectItem>
                               {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
                           </SelectContent>
                       </Select>

@@ -40,7 +40,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Auditoria de Movimentações</DialogTitle>
+          <DialogTitle>Auditoria de movimentações</DialogTitle>
           <DialogDescription>
             Consulte todo o histórico de transferências de estoque entre os quiosques.
           </DialogDescription>

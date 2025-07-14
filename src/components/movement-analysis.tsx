@@ -53,7 +53,7 @@ export function MovementAnalysis() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Histórico de Movimentações</CardTitle>
+                <CardTitle>Histórico de movimentações</CardTitle>
                 <CardDescription>Veja todas as transferências de estoque entre os quiosques.</CardDescription>
             </CardHeader>
             <CardContent>

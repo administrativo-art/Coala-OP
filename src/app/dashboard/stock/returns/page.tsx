@@ -19,12 +19,12 @@ export default function ReturnsPage() {
                 <Link href="/dashboard/stock">
                     <Button variant="outline">
                         <ArrowLeft className="mr-2" />
-                        Voltar para Gestão de Estoque
+                        Voltar para gestão de estoque
                     </Button>
                 </Link>
                 {permissions.returns.add && (
                     <Button onClick={() => setIsAddModalOpen(true)}>
-                        <PlusCircle className="mr-2" /> Abrir Chamado
+                        <PlusCircle className="mr-2" /> Abrir chamado
                     </Button>
                 )}
             </div>

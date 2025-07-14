@@ -35,9 +35,9 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     <Dialog open={!!lot} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Histórico de Movimentação</DialogTitle>
+          <DialogTitle>Histórico de movimentação</DialogTitle>
           <DialogDescription>
-            Exibindo histórico para {lot.productName} (Lote: {lot.lotNumber})
+            Exibindo histórico para {lot.productName} (lote: {lot.lotNumber})
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="h-96 pr-4">

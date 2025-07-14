@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -32,9 +33,9 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
-    { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: canManageStock },
-    { href: '/dashboard/team', label: 'Gestão de Equipe', icon: Users, show: canManageTeam },
-    { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
+    { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
+    { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
+    { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
     { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
   ];
 
