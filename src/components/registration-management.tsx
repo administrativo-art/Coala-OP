@@ -1,38 +1,68 @@
 
 "use client";
 
-import { useState } from 'react';
-import { ItemManagement } from './item-management';
-import { BaseProductManagement } from './base-product-management';
-import { EntityManagement } from './entity-management';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useBaseProducts } from '@/hooks/use-base-products';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Package, Box, Users } from 'lucide-react';
 
 export function RegistrationManagement() {
-
     return (
-        <div className="w-full space-y-6">
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold">Cadastros</h1>
-                <p className="text-muted-foreground">Adicione, edite ou exclua os insumos, produtos base e outras entidades do sistema.</p>
+        <div className="w-full max-w-7xl mx-auto">
+             <div className="text-center mb-10">
+                <h1 className="text-4xl font-bold tracking-tight">Cadastros</h1>
+                <p className="text-lg text-muted-foreground mt-2">Adicione, edite ou exclua os insumos, produtos base e outras entidades do sistema.</p>
             </div>
-            
-             <Tabs defaultValue="items" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="items">Gerenciar insumos</TabsTrigger>
-                    <TabsTrigger value="baseProducts">Gerenciar produto base</TabsTrigger>
-                    <TabsTrigger value="entities">Pessoas e Empresas</TabsTrigger>
-                </TabsList>
-                <TabsContent value="items" className="mt-4">
-                    <ItemManagement />
-                </TabsContent>
-                <TabsContent value="baseProducts" className="mt-4">
-                    <BaseProductManagement />
-                </TabsContent>
-                 <TabsContent value="entities" className="mt-4">
-                    <EntityManagement />
-                </TabsContent>
-            </Tabs>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-4 bg-primary/10 rounded-full mb-4">
+                            <Package className="h-10 w-10 text-primary" />
+                        </div>
+                        <CardTitle className="text-2xl mb-2">Gerenciar Insumos</CardTitle>
+                        <CardDescription>Cadastre os produtos físicos que compõem seu estoque, como Ovomaltine, Leite, etc.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/registration/items" className="w-full">
+                            <Button className="w-full text-lg py-6">
+                                Acessar insumos <ArrowRight className="ml-2" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-4 bg-primary/10 rounded-full mb-4">
+                            <Box className="h-10 w-10 text-primary" />
+                        </div>
+                        <CardTitle className="text-2xl mb-2">Gerenciar Produto Base</CardTitle>
+                        <CardDescription>Agrupe insumos para definir metas de estoque e facilitar a visualização.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/registration/base-products" className="w-full">
+                            <Button className="w-full text-lg py-6">
+                                Acessar produto base <ArrowRight className="ml-2" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-4 bg-primary/10 rounded-full mb-4">
+                            <Users className="h-10 w-10 text-primary" />
+                        </div>
+                        <CardTitle className="text-2xl mb-2">Pessoas e Empresas</CardTitle>
+                        <CardDescription>Gerencie seus contatos, clientes e fornecedores em um único lugar.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/registration/entities" className="w-full">
+                            <Button className="w-full text-lg py-6">
+                                Acessar cadastros <ArrowRight className="ml-2" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     )
 }
