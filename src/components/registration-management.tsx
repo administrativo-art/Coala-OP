@@ -37,7 +37,7 @@ export function RegistrationManagement() {
         <div className="w-full space-y-6">
             <div className="mb-6">
                 <h1 className="text-3xl font-bold">Cadastros</h1>
-                <p className="text-muted-foreground">Gerencie os insumos e as categorias do seu estoque.</p>
+                <p className="text-muted-foreground">Gerencie cadastro dos insumos do estoque</p>
             </div>
             
             <Tabs defaultValue="items" className="w-full">
