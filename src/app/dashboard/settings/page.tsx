@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef } from 'react';
@@ -86,8 +87,8 @@ function LabelSettings() {
 
         if (logoUrl) {
           try {
-            const logoMaxHeight = availableHeight * 0.2;
-            const logoMaxWidth = textBlockWidth * 0.4;
+            const logoMaxHeight = availableHeight * 0.25;
+            const logoMaxWidth = textBlockWidth * 0.5;
             const img = new (window as any).Image();
             img.src = logoUrl;
             await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
@@ -104,12 +105,10 @@ function LabelSettings() {
                 logoWidth = logoMaxWidth;
                 logoHeight = logoWidth / ratio;
             }
-
-            doc.addImage(logoUrl, 'JPEG', margin, currentY, logoWidth, logoHeight);
-            currentY += logoHeight + 1;
-            doc.setDrawColor(220, 220, 220);
-            doc.line(margin, currentY, textBlockWidth, currentY);
-            currentY += 2;
+            
+            const logoX = margin + (textBlockWidth - logoWidth) / 2; // Center the logo
+            doc.addImage(logoUrl, 'JPEG', logoX, currentY, logoWidth, logoHeight);
+            currentY += logoHeight + 2;
           } catch (e) {
             console.error("Could not add logo", e);
           }
@@ -123,24 +122,15 @@ function LabelSettings() {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 1;
-
-        doc.setDrawColor(220, 220, 220);
-        doc.line(margin, currentY, textBlockWidth, currentY);
-        currentY += 2;
+        currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 2;
 
         doc.setFont('helvetica', 'normal');
         doc.text(`Lote: ${lotNumber}`, margin, currentY);
         currentY += 3;
         doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
         currentY += 3;
-
-        doc.setDrawColor(220, 220, 220);
-        doc.line(margin, currentY, textBlockWidth, currentY);
-        currentY += 2;
         
-        doc.setFont('helvetica', 'bold');
-        doc.text(`VALIDADE: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
+        doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
         doc.save(`etiqueta_exemplo_${selectedSize.name.replace(/\s/g, '_')}.pdf`);
     };
