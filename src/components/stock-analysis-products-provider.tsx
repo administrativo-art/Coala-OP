@@ -2,30 +2,30 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type AnalysisProduct } from '@/types';
+import { type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
 
 export interface StockAnalysisProductsContextType {
-  analysisProducts: AnalysisProduct[];
+  analysisProducts: BaseProduct[];
   loading: boolean;
-  addAnalysisProduct: (product: Omit<AnalysisProduct, 'id'>) => Promise<void>;
-  updateAnalysisProduct: (product: AnalysisProduct) => Promise<void>;
-  updateMultipleAnalysisProducts: (products: AnalysisProduct[]) => Promise<void>;
+  addAnalysisProduct: (product: Omit<BaseProduct, 'id'>) => Promise<void>;
+  updateAnalysisProduct: (product: BaseProduct) => Promise<void>;
+  updateMultipleAnalysisProducts: (products: BaseProduct[]) => Promise<void>;
   deleteAnalysisProduct: (productId: string) => Promise<void>;
 }
 
 export const StockAnalysisProductsContext = createContext<StockAnalysisProductsContextType | undefined>(undefined);
 
 export function StockAnalysisProductsProvider({ children }: { children: React.ReactNode }) {
-  const [analysisProducts, setAnalysisProducts] = useState<AnalysisProduct[]>([]);
+  const [analysisProducts, setAnalysisProducts] = useState<BaseProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const q = query(collection(db, "stockAnalysisProducts"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnalysisProduct));
-        setAnalysisProducts(productsData.sort((a,b) => (a.itemName || '').localeCompare(b.itemName || '')));
+        const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BaseProduct));
+        setAnalysisProducts(productsData.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
         setLoading(false);
     }, (error) => {
         console.error("Error fetching stock analysis products from Firestore: ", error);
@@ -35,7 +35,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     return () => unsubscribe();
   }, []);
 
-  const addAnalysisProduct = useCallback(async (product: Omit<AnalysisProduct, 'id'>) => {
+  const addAnalysisProduct = useCallback(async (product: Omit<BaseProduct, 'id'>) => {
     try {
         await addDoc(collection(db, "stockAnalysisProducts"), product);
     } catch(error) {
@@ -43,7 +43,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     }
   }, []);
 
-  const updateAnalysisProduct = useCallback(async (product: AnalysisProduct) => {
+  const updateAnalysisProduct = useCallback(async (product: BaseProduct) => {
     const productRef = doc(db, "stockAnalysisProducts", product.id);
     const { id, ...dataToUpdate } = product;
     try {
@@ -54,7 +54,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     }
   }, []);
   
-  const updateMultipleAnalysisProducts = useCallback(async (productsToUpdate: AnalysisProduct[]) => {
+  const updateMultipleAnalysisProducts = useCallback(async (productsToUpdate: BaseProduct[]) => {
     const batch = writeBatch(db);
     productsToUpdate.forEach(product => {
       if(product.id) {

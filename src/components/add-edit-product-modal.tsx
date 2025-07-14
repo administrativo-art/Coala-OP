@@ -9,7 +9,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { useToast } from '@/hooks/use-toast';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { type Product, type UnitCategory, unitCategories } from '@/types';
@@ -43,7 +43,7 @@ const productFormSchema = z.object({
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
-  analysisProductId: z.string().optional(),
+  baseProductId: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -93,7 +93,7 @@ interface AddEditProductModalProps {
 
 export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
-    const { analysisProducts } = useStockAnalysisProducts();
+    const { baseProducts } = useBaseProducts();
     const { toast } = useToast();
 
     const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -105,7 +105,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', analysisProductId: ''
+            notes: '', baseProductId: ''
         }
     });
     
@@ -123,13 +123,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                     packageSize: productToEdit.packageSize,
                     unit: productToEdit.unit,
                     notes: productToEdit.notes || '',
-                    analysisProductId: productToEdit.analysisProductId || '',
+                    baseProductId: productToEdit.baseProductId || '',
                 });
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
-                    notes: '', analysisProductId: ''
+                    notes: '', baseProductId: ''
                 });
             }
         }
@@ -192,7 +192,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>{productToEdit ? `Editando ${getProductFullName(productToEdit)}` : 'Adicionar Novo Insumo'}</DialogTitle>
+                        <DialogTitle>{productToEdit ? `Editando ${getProductFullName(productToEdit)}` : 'Adicionar novo insumo'}</DialogTitle>
                         <DialogDescription>
                             Preencha os detalhes do insumo abaixo.
                         </DialogDescription>
@@ -202,7 +202,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                         <ScrollArea className="h-[60vh] -mx-6 px-6 pr-8">
                             <div className="space-y-4 pt-4">
                                 <div className="space-y-2">
-                                    <FormLabel>Foto do Insumo</FormLabel>
+                                    <FormLabel>Foto do insumo</FormLabel>
                                     <div className="flex items-center gap-4">
                                         <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
                                             {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
@@ -219,11 +219,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca (Opcional)</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca (opcional)</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 
                                 <FormField control={form.control} name="barcode" render={({ field }) => (
-                                    <FormItem><FormLabel>Código de Barras</FormLabel><div className="flex gap-2"><FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl><Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button></div><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Código de barras</FormLabel><div className="flex gap-2"><FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl><Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button></div><FormMessage /></FormItem>
                                 )}/>
 
                                 <div className="grid grid-cols-3 gap-4">
@@ -232,8 +232,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
 
-                                <FormField control={form.control} name="analysisProductId" render={({ field }) => (
-                                    <FormItem><FormLabel>Categoria (Agrupador Macro)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{analysisProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.itemName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                                    <FormItem><FormLabel>Produto base (agrupador)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                                 )}/>
                                 
                                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
@@ -253,4 +253,3 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
         </>
     );
 }
-

@@ -10,14 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { PlusCircle, Trash2, Save, Link as LinkIcon } from 'lucide-react';
-import { type AnalysisProduct, type Kiosk, type Product } from '@/types';
+import { type BaseProduct, type Kiosk, type Product } from '@/types';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { Separator } from './ui/separator';
 
 interface StockAnalysisConfiguratorProps {
-    analysisProducts: AnalysisProduct[];
+    baseProducts: BaseProduct[];
     loading: boolean;
     newCategoryName: string;
     setNewCategoryName: (name: string) => void;
@@ -26,35 +26,35 @@ interface StockAnalysisConfiguratorProps {
 }
 
 interface StockLevelFormProps {
-    analysisProduct: AnalysisProduct;
+    baseProduct: BaseProduct;
     kiosks: Kiosk[];
 }
 
-const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks }) => {
-    const { updateAnalysisProduct } = useStockAnalysisProducts();
+const StockLevelForm: React.FC<StockLevelFormProps> = ({ baseProduct, kiosks }) => {
+    const { updateBaseProduct } = useBaseProducts();
     const { products } = useProducts();
     const { handleSubmit, control, formState, reset } = useForm({
-        defaultValues: analysisProduct.stockLevels || {}
+        defaultValues: baseProduct.stockLevels || {}
     });
 
     React.useEffect(() => {
-        reset(analysisProduct.stockLevels || {});
-    }, [analysisProduct, reset]);
+        reset(baseProduct.stockLevels || {});
+    }, [baseProduct, reset]);
 
     const onSubmit = (data: any) => {
         const stockLevels: { [key: string]: { max: number } } = {};
         for(const kioskId in data) {
             stockLevels[kioskId] = { max: Number(data[kioskId].max) || 0 };
         }
-        updateAnalysisProduct({ ...analysisProduct, stockLevels });
+        updateBaseProduct({ ...baseProduct, stockLevels });
     };
 
     const linkedProducts = useMemo(() => {
-        return products.filter(p => p.analysisProductId === analysisProduct.id);
-    }, [products, analysisProduct.id]);
+        return products.filter(p => p.baseProductId === baseProduct.id);
+    }, [products, baseProduct.id]);
     
     if (linkedProducts.length === 0) {
-        return <div className="p-4 text-sm text-muted-foreground">nenhum insumo específico vinculado a este produto base. vincule um insumo na tela de 'cadastro de insumos' para configurar os níveis de estoque.</div>
+        return <div className="p-4 text-sm text-muted-foreground">Nenhum insumo específico vinculado a este produto base. Vincule um insumo na tela de 'Cadastro de insumos' para configurar os níveis de estoque.</div>
     }
 
     const firstProductUnit = products.find(p => p.id === linkedProducts[0].id)?.unit;
@@ -62,14 +62,14 @@ const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <p className="text-sm text-muted-foreground">
-                defina o estoque máximo desejado para <span className="font-semibold">{analysisProduct.itemName}</span> em cada quiosque. o sistema usará esta informação para calcular as necessidades de reposição. a unidade de medida para o estoque é <span className="font-semibold">{firstProductUnit || 'unidade base'}</span>.
+                Defina o estoque máximo desejado para <span className="font-semibold">{baseProduct.name}</span> em cada quiosque. O sistema usará esta informação para calcular as necessidades de reposição. A unidade de medida para o estoque é <span className="font-semibold">{firstProductUnit || 'unidade base'}</span>.
             </p>
             <div className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>quiosque</TableHead>
-                            <TableHead className="text-right">estoque máximo</TableHead>
+                            <TableHead>Quiosque</TableHead>
+                            <TableHead className="text-right">Estoque máximo</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -80,7 +80,7 @@ const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks
                                     <Controller
                                         name={`${kiosk.id}.max` as const}
                                         control={control}
-                                        defaultValue={analysisProduct.stockLevels?.[kiosk.id]?.max || 0}
+                                        defaultValue={baseProduct.stockLevels?.[kiosk.id]?.max || 0}
                                         render={({ field }) => (
                                             <Input
                                                 type="number"
@@ -99,7 +99,7 @@ const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks
             </div>
             <div className="flex justify-end">
                 <Button type="submit" disabled={!formState.isDirty}>
-                    <Save className="mr-2" /> salvar níveis de estoque
+                    <Save className="mr-2" /> Salvar níveis de estoque
                 </Button>
             </div>
         </form>
@@ -107,7 +107,7 @@ const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks
 }
 
 export function StockAnalysisConfigurator({
-    analysisProducts,
+    baseProducts,
     loading,
     newCategoryName,
     setNewCategoryName,
@@ -118,8 +118,8 @@ export function StockAnalysisConfigurator({
   const { products: allProducts } = useProducts();
   const { kiosks } = useKiosks();
 
-  const getLinkedProductsCount = (analysisProductId: string) => {
-    return allProducts.filter(p => p.analysisProductId === analysisProductId).length;
+  const getLinkedProductsCount = (baseProductId: string) => {
+    return allProducts.filter(p => p.baseProductId === baseProductId).length;
   };
 
   if (loading) {
@@ -134,24 +134,24 @@ export function StockAnalysisConfigurator({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>gerenciar produto base</CardTitle>
+        <CardTitle>Gerenciar produto base</CardTitle>
         <CardDescription>
-          produtos base agrupam diferentes insumos. configure aqui o estoque máximo desejado para cada produto base em cada quiosque.
+          Produtos base agrupam diferentes insumos. Configure aqui o estoque máximo desejado para cada produto base em cada quiosque.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 p-1">
             <Input 
-                placeholder="nome do novo produto base"
+                placeholder="Nome do novo produto base"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onAddCategory(); }}
             />
-            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> adicionar produto base</Button>
+            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar produto base</Button>
         </div>
 
         <Accordion type="multiple" className="w-full space-y-3">
-            {analysisProducts.length > 0 ? analysisProducts.map(product => {
+            {baseProducts.length > 0 ? baseProducts.map(product => {
                 const linkedCount = getLinkedProductsCount(product.id);
                 return (
                     <AccordionItem value={product.id} key={product.id} className="border-none">
@@ -159,7 +159,7 @@ export function StockAnalysisConfigurator({
                            <div className="flex items-center px-4 py-2">
                              <AccordionTrigger className="hover:no-underline w-full flex-grow">
                                 <div className="flex flex-col items-start text-left">
-                                  <span className="font-semibold text-lg">{product.itemName}</span>
+                                  <span className="font-semibold text-lg">{product.name}</span>
                                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                                       <LinkIcon className="h-3 w-3" /> {linkedCount} insumo(s) vinculado(s)
                                   </span>
@@ -171,14 +171,14 @@ export function StockAnalysisConfigurator({
                            </div>
                             <AccordionContent className="p-4 pt-0">
                                 <Separator className="mb-4" />
-                                <StockLevelForm analysisProduct={product} kiosks={kiosks} />
+                                <StockLevelForm baseProduct={product} kiosks={kiosks} />
                             </AccordionContent>
                         </Card>
                     </AccordionItem>
                 )
             }) : (
                 <div className="text-center text-muted-foreground py-10">
-                    <p>nenhum produto base cadastrado.</p>
+                    <p>Nenhum produto base cadastrado.</p>
                 </div>
             )}
         </Accordion>

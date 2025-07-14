@@ -4,9 +4,9 @@ export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as c
 
 export type UnitCategory = (typeof unitCategories)[number];
 
-export type AnalysisProduct = {
+export type BaseProduct = {
   id: string;
-  itemName: string;
+  name: string;
   stockLevels?: { [kioskId: string]: { max: number } };
 }
 
@@ -32,7 +32,7 @@ export type Product = {
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
-  analysisProductId?: string; // Link to the "Macro" product
+  baseProductId?: string;
 };
 
 export type ProductDefinition = {
