@@ -156,17 +156,19 @@ export function StockAnalysisConfigurator({
                 return (
                     <AccordionItem value={product.id} key={product.id} className="border-none">
                         <Card className="overflow-hidden">
-                            <AccordionTrigger className="px-4 py-2 hover:no-underline w-full flex justify-between items-center rounded-lg">
+                           <div className="flex items-center px-4 py-2">
+                             <AccordionTrigger className="hover:no-underline w-full flex-grow">
                                 <div className="flex flex-col items-start text-left">
                                   <span className="font-semibold text-lg">{product.itemName}</span>
                                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                                       <LinkIcon className="h-3 w-3" /> {linkedCount} insumo(s) vinculado(s)
                                   </span>
                                 </div>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); onDeleteCategory(product.id)}}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
                             </AccordionTrigger>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); onDeleteCategory(product.id)}}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                           </div>
                             <AccordionContent className="p-4 pt-0">
                                 <Separator className="mb-4" />
                                 <StockLevelForm analysisProduct={product} kiosks={kiosks} />
