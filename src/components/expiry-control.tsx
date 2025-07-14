@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -33,7 +34,7 @@ const BarcodeScannerModal = dynamic(
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, moveLot, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
 
