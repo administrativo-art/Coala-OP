@@ -1,491 +1,106 @@
 
 "use client"
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+
+import React, { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
-import { useKiosks } from '@/hooks/use-kiosks';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import Papa from 'papaparse';
-import * as RadixAccordion from "@radix-ui/react-accordion";
-import { Accordion, AccordionContent, AccordionItem } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { type Product, unitCategories } from '@/types';
-import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown, Search, Eraser } from 'lucide-react';
-import { units } from '@/lib/conversion';
-import { Checkbox } from './ui/checkbox';
+import { useProducts } from '@/hooks/use-products';
 
-type FormProduct = Product & {
-  formId?: string; // from useFieldArray
-};
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { type AnalysisProduct } from '@/types';
+import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 type FormValues = {
-  products: FormProduct[];
+  analysisProducts: AnalysisProduct[];
 };
 
-interface StockAnalysisConfiguratorProps {
-    onAddNew?: () => void;
-    onEdit?: (product: Product) => void;
-    onDelete?: (product: Product) => void;
-    selectedProducts: Set<string>;
-    onProductSelectionChange: (id: string, isSelected: boolean) => void;
-    onSelectAllChange: (isSelected: boolean) => void;
-}
-
-export function StockAnalysisConfigurator({ onAddNew, onEdit, onDelete, selectedProducts, onProductSelectionChange, onSelectAllChange }: StockAnalysisConfiguratorProps) {
-  const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useStockAnalysisProducts();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
-  const [isImporting, setIsImporting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const importFileRef = useRef<HTMLInputElement>(null);
-
-  const form = useForm<FormValues>({
-    defaultValues: { products: [] },
-  });
-
-  const { fields, replace } = useFieldArray({
-    control: form.control,
-    name: "products",
-    keyName: "formId"
-  });
+export function StockAnalysisConfigurator() {
+  const { analysisProducts, loading, addAnalysisProduct, updateMultipleAnalysisProducts, deleteAnalysisProduct } = useStockAnalysisProducts();
+  const { products } = useProducts();
+  const { toast } = useToast();
   
-  const filteredFields = useMemo(() => {
-    if (!searchTerm) return fields;
-    return fields.filter(field => getProductFullName(field).toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [fields, searchTerm, getProductFullName]);
+  const [editingProduct, setEditingProduct] = useState<AnalysisProduct | null>(null);
+  const [newProductName, setNewProductName] = useState('');
 
-  useEffect(() => {
-    if (!productsLoading && !kiosksLoading) {
-      const initialData: FormProduct[] = products.map(p => {
-        const newStockLevels: { [kioskId: string]: { min: number; max: number } } = {};
-        kiosks.forEach(kiosk => {
-            newStockLevels[kiosk.id] = {
-                min: p.stockLevels?.[kiosk.id]?.min || 0,
-                max: p.stockLevels?.[kiosk.id]?.max || 0,
-            };
+
+  const handleAddProduct = async () => {
+    if (newProductName.trim()) {
+      await addAnalysisProduct({ itemName: newProductName.trim(), minStock: 0, maxStock: 0 });
+      setNewProductName('');
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    // Check if any product is using this analysis product
+    const isUsed = products.some(p => p.analysisProductId === id);
+    if(isUsed) {
+        toast({
+            variant: "destructive",
+            title: "Erro ao excluir",
+            description: "Este item de análise está sendo usado por um ou mais insumos e não pode ser excluído.",
         });
-
-        return {
-            ...p,
-            stockLevels: newStockLevels,
-            pdfUnit: p.pdfUnit || '',
-        };
-      });
-      replace(initialData);
-    }
-  }, [products, kiosks, productsLoading, kiosksLoading, replace]);
-  
-  const onSubmit = (data: FormValues) => {
-    const productsToUpdate: Product[] = data.products.map(p => {
-        const { formId, ...productData } = p;
-        return productData;
-    });
-
-    updateMultipleProducts(productsToUpdate).then(() => {
-        console.log("Parâmetros salvos!");
-    }).catch((err) => {
-         console.error("Erro ao salvar os parâmetros.", err);
-    });
-  };
-
-  const handleExportPdf = () => {
-    const data = form.getValues('products');
-    
-    if (!data.length || !kiosks.length) {
-      console.error('Sem dados para exportar. Não há insumos configurados para análise.');
-      return;
-    }
-
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text("Parâmetros de Análise de Estoque", 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Exportado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
-
-    const head = [['Insumo', 'Unidade Base', 'Quiosque', 'Estoque Mínimo', 'Estoque Máximo']];
-    const body: any[] = [];
-
-    data.forEach(product => {
-      const productInfo = [
-        {
-          content: getProductFullName(product),
-          rowSpan: kiosks.length,
-          styles: { valign: 'middle' },
-        },
-        {
-          content: product.unit,
-          rowSpan: kiosks.length,
-          styles: { valign: 'middle' },
-        },
-      ];
-
-      kiosks.forEach((kiosk, index) => {
-        const minStock = product.stockLevels?.[kiosk.id]?.min ?? 0;
-        const maxStock = product.stockLevels?.[kiosk.id]?.max ?? 0;
-        const row = [
-          kiosk.name,
-          `${minStock.toLocaleString()} ${product.unit}`,
-          `${maxStock.toLocaleString()} ${product.unit}`,
-        ];
-        if (index === 0) {
-          body.push([...productInfo, ...row]);
-        } else {
-          body.push(row);
-        }
-      });
-    });
-
-    autoTable(doc, {
-      startY: 35,
-      head: head,
-      body: body,
-      theme: 'grid',
-      headStyles: { fillColor: '#3F51B5' },
-    });
-
-    doc.save('parametros_de_analise.pdf');
-  };
-  
-  const handleDownloadTemplate = () => {
-    if (kiosksLoading || kiosks.length === 0) {
-        console.error('Quiosques não carregados. Aguarde para gerar o modelo.');
         return;
     }
-
-    const headers = [
-        'baseName',
-        'category',
-        'unit',
-        'pdfUnit',
-        ...kiosks.flatMap(kiosk => [`min_${kiosk.name}`, `max_${kiosk.name}`])
-    ];
-
-    const exampleRow = [
-        'Exemplo de Insumo', // baseName
-        'Massa', // category
-        'kg', // unit
-        'g', // pdfUnit
-        ...kiosks.flatMap(kiosk => ['10', '20']) // example min/max for each kiosk
-    ];
-
-    const csvContent = [
-        headers.join(','),
-        exampleRow.join(',')
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.href) {
-        URL.revokeObjectURL(link.href);
-    }
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.setAttribute('download', 'modelo_importacao_insumos.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    await deleteAnalysisProduct(id);
   };
-
-  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    console.log("Importando planilha...");
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const rows = results.data as any[];
-          if (rows.length === 0) {
-            throw new Error("A planilha está vazia ou em formato inválido.");
-          }
-
-          const kioskNameMap = new Map<string, string>(kiosks.map(k => [k.name.toLowerCase(), k.id]));
-          const productsToUpdate: Partial<Product>[] = [];
-          const productsToAdd: Omit<Product, 'id'>[] = [];
-
-          const capitalize = (s: string) => {
-              if (!s) return '';
-              return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-          };
-
-          for (const row of rows) {
-            const baseName = row.baseName?.trim();
-            if (!baseName) continue; // Skip rows without a baseName
-
-            const stockLevels: { [kioskId: string]: { min: number; max: number } } = {};
-            for (const key in row) {
-              if (key.startsWith('min_') || key.startsWith('max_')) {
-                const parts = key.split('_');
-                const type = parts[0];
-                const kioskName = parts.slice(1).join('_').toLowerCase();
-                const kioskId = kioskNameMap.get(kioskName);
-
-                if (kioskId) {
-                  if (!stockLevels[kioskId]) stockLevels[kioskId] = { min: 0, max: 0 };
-                  stockLevels[kioskId][type as 'min' | 'max'] = parseInt(row[key], 10) || 0;
-                }
-              }
-            }
-            
-            const category = capitalize(row.category?.trim() || 'Unidade');
-            
-            const productData = {
-              baseName,
-              category: unitCategories.includes(category as any) ? category : 'Unidade',
-              unit: row.unit?.trim() || 'un',
-              pdfUnit: row.pdfUnit?.trim() || '',
-              packageSize: 1, // Always 1 for analysis items
-              stockLevels,
-            };
-
-            const existingProduct = products.find(p => p.baseName.toLowerCase() === baseName.toLowerCase());
-
-            if (existingProduct) {
-              productsToUpdate.push({ id: existingProduct.id, ...productData });
-            } else {
-              productsToAdd.push(productData);
-            }
-          }
-
-          if (productsToUpdate.length > 0) {
-            await updateMultipleProducts(productsToUpdate);
-          }
-          if (productsToAdd.length > 0) {
-            await Promise.all(productsToAdd.map(p => addProduct(p)));
-          }
-
-          console.log(`Importação concluída! ${productsToAdd.length} insumos adicionados e ${productsToUpdate.length} insumos atualizados.`);
-
-        } catch (error: any) {
-          console.error("Erro na importação: ", error.message || "Verifique o formato da planilha e tente novamente.");
-        } finally {
-          setIsImporting(false);
-          if (event.target) event.target.value = "";
-        }
-      },
-      error: (error: any) => {
-        console.error("Erro ao ler o arquivo: ", error.message);
-        setIsImporting(false);
-        if (event.target) event.target.value = "";
-      }
-    });
-  };
-
-  if (productsLoading || kiosksLoading) {
+  
+  if (loading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-24 w-full" />
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
     );
   }
-  
-  const handleEditClick = (e: React.MouseEvent, product: Product) => {
-    onEdit?.(product);
-  }
-
-  const handleDeleteClick = (e: React.MouseEvent, product: Product) => {
-    onDelete?.(product);
-  }
-  
-  const allProductsSelected = filteredFields.length > 0 && selectedProducts.size === filteredFields.length;
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <div className="space-y-6">
         <Alert>
           <Info className="h-4 w-4" />
-          <AlertTitle>Como importar insumos em massa?</AlertTitle>
+          <AlertTitle>O que são Itens de Análise?</AlertTitle>
           <AlertDescription>
-            Clique em "Baixar Modelo" para obter uma planilha CSV com as colunas corretas.
-            Os nomes dos quiosques devem corresponder aos cadastrados no sistema. A coluna `pdfUnit` é opcional.
+            Itens de Análise (ou Produtos Macro) são categorias para agrupar diferentes embalagens de um mesmo insumo. Por exemplo, o item "Ovomaltine" pode agrupar os insumos "Ovomaltine 250g" e "Ovomaltine 500g".
           </AlertDescription>
         </Alert>
-        <div className="flex justify-end gap-2 p-1">
-             <Button type="button" variant="outline" onClick={handleDownloadTemplate}>
-                <Download className="mr-2" /> Baixar Modelo
-             </Button>
-             <input type="file" accept=".csv" ref={importFileRef} onChange={handleFileImport} className="hidden" />
-             <Button type="button" variant="outline" onClick={() => importFileRef.current?.click()} disabled={isImporting}>
-                {isImporting ? <Loader2 className="mr-2 animate-spin" /> : <FileUp className="mr-2" />}
-                {isImporting ? 'Importando...' : 'Importar de planilha'}
-             </Button>
-             {onAddNew && (
-                <Button type="button" onClick={onAddNew}>
-                    <PlusCircle className="mr-2" /> Adicionar Novo Insumo
-                </Button>
-            )}
+
+        <div className="flex gap-2 p-1">
+            <Input 
+                placeholder="Nome do novo item de análise (ex: Leite Ninho)"
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddProduct(); }}
+            />
+            <Button onClick={handleAddProduct}><PlusCircle className="mr-2"/> Adicionar</Button>
         </div>
 
-        <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
-            <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    placeholder="Buscar por nome do insumo..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full"
-                />
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setSearchTerm('')}>
-                <Eraser className="h-4 w-4" />
-            </Button>
+         <div className="rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Nome do Item de Análise</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {analysisProducts.map(product => (
+                        <TableRow key={product.id}>
+                            <TableCell className="font-medium">{product.itemName}</TableCell>
+                            <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteProduct(product.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
         </div>
-        
-        {fields.length > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 border-y bg-muted/50">
-                <Checkbox
-                    id="select-all"
-                    checked={allProductsSelected}
-                    onCheckedChange={(checked) => onSelectAllChange(!!checked)}
-                    aria-label="Selecionar todos os insumos"
-                />
-                <label
-                    htmlFor="select-all"
-                    className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                    Selecionar todos
-                </label>
-            </div>
-        )}
-
-        {filteredFields.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhum insumo encontrado.</p>
-                {searchTerm && <p className="text-sm">Tente uma busca diferente ou adicione um novo insumo.</p>}
-            </div>
-        ) : (
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={filteredFields.map(field => field.id)}>
-          {filteredFields.map((field) => {
-            const originalIndex = fields.findIndex(f => f.id === field.id);
-            return (
-              <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
-                <RadixAccordion.Header className="flex w-full items-center p-4">
-                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                          className="mr-3"
-                          onCheckedChange={(checked) => onProductSelectionChange(field.id, !!checked)}
-                          checked={selectedProducts.has(field.id)}
-                          aria-label={`Selecionar ${getProductFullName(field)}`}
-                      />
-                    </div>
-                    <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
-                        <span className="flex-grow text-left">{getProductFullName(field)}</span>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </RadixAccordion.Trigger>
-                    <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-                        {onEdit && (
-                            <Button type="button" variant="ghost" size="icon" onClick={(e) => handleEditClick(e, field)}>
-                                <Edit className="h-4 w-4" />
-                            </Button>
-                        )}
-                        {onDelete && (
-                            <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => handleDeleteClick(e, field)}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        )}
-                    </div>
-                </RadixAccordion.Header>
-                <AccordionContent className="p-4 pt-0">
-                  <div className="space-y-4">
-                     <FormField
-                      control={form.control}
-                      name={`products.${originalIndex}.pdfUnit`}
-                      render={({ field: pdfUnitField }) => {
-                        const categoryUnits = (field.category && units[field.category]) ? Object.keys(units[field.category]) : [];
-                        return (
-                          <FormItem className="pt-2">
-                            <FormLabel>Unidade de Medida no Relatório (PDF)</FormLabel>
-                            <Select
-                              onValueChange={(value) => pdfUnitField.onChange(value === 'none' ? '' : value)}
-                              value={pdfUnitField.value || 'none'}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione a unidade do relatório" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="none">-- Mesma unidade da embalagem ({field.unit}) --</SelectItem>
-                                {categoryUnits.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <FormDescription>
-                              Se a unidade no relatório for diferente da unidade da embalagem, especifique aqui para a conversão correta.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )
-                      }}
-                    />
-                    <h4 className="font-medium text-sm text-muted-foreground pt-2">Níveis de Estoque (em {field.unit})</h4>
-                     <div className="rounded-md border">
-                      <Table>
-                          <TableHeader>
-                              <TableRow>
-                                  <TableHead>Quiosque</TableHead>
-                                  <TableHead className="text-right w-[150px]">Estoque Mínimo</TableHead>
-                                  <TableHead className="text-right w-[150px]">Estoque Máximo</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                              {kiosks.map(kiosk => (
-                                  <TableRow key={kiosk.id}>
-                                      <TableCell className="font-medium">{kiosk.name}</TableCell>
-                                      <TableCell className="text-right">
-                                          <FormField
-                                              control={form.control}
-                                              name={`products.${originalIndex}.stockLevels.${kiosk.id}.min`}
-                                              render={({ field: minField }) => (
-                                                  <FormItem>
-                                                      <FormControl><Input type="number" className="text-right" {...minField} onChange={e => minField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                                                      <FormMessage />
-                                                  </FormItem>
-                                              )}
-                                              />
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                          <FormField
-                                              control={form.control}
-                                              name={`products.${originalIndex}.stockLevels.${kiosk.id}.max`}
-                                              render={({ field: maxField }) => (
-                                                  <FormItem>
-                                                      <FormControl><Input type="number" className="text-right" {...maxField} onChange={e => maxField.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                                                      <FormMessage />
-                                                  </FormItem>
-                                              )}
-                                              />
-                                      </TableCell>
-                                  </TableRow>
-                              ))}
-                          </TableBody>
-                      </Table>
-                     </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )
-          })}
-        </Accordion>
-        )}
-        <div className="flex justify-end pt-4 mt-6 border-t">
-          <Button type="submit" disabled={form.formState.isSubmitting}>Salvar Alterações Gerais</Button>
-        </div>
-      </form>
-    </Form>
+    </div>
   );
 }

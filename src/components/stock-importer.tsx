@@ -32,6 +32,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ItemManagement } from './item-management';
 import { convertValue } from '@/lib/conversion';
+import { ProductManagement } from './product-management';
 
 const importSchema = z.object({
   kioskId: z.string().min(1, { message: "Por favor, selecione um quiosque." }),
@@ -50,7 +51,7 @@ export function StockAnalyzer() {
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isItemManagementOpen, setIsItemManagementOpen] = useState(false);
+    const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
 
     const form = useForm<ImportFormValues>({
         resolver: zodResolver(importSchema),
@@ -66,7 +67,7 @@ export function StockAnalyzer() {
             .trim();
     };
     
-    const findProductByName = (baseName: string): Product | undefined => {
+    const findProductByBaseName = (baseName: string): Product | undefined => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
         return products.find(p => normalizeString(p.baseName) === normalizedName);
@@ -80,12 +81,12 @@ export function StockAnalyzer() {
         const sourceKioskId = 'matriz';
 
         const availableLots = lots.filter(lot => 
-            lot.kioskId === sourceKioskId && lot.productId === product.id && lot.quantity > 0
+            lot.productId === product.id && lot.kioskId === sourceKioskId && lot.quantity > 0
         ).sort((a,b) => parseISO(a.expiryDate).getTime() - parseISO(b.expiryDate).getTime());
 
 
         if (availableLots.length === 0) {
-            return { statusMessage: `Sem estoque de ${product.baseName} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
+            return { statusMessage: `Sem estoque de ${getProductFullName(product)} no Centro de Distribuição.`, isActionable: false, distributionSuggestion: [] };
         }
 
         let remainingNeeded = neededInBaseUnit;
@@ -120,7 +121,7 @@ export function StockAnalyzer() {
         }
         
         if (remainingNeeded > 0) {
-            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${product.unit} de ${product.baseName}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
+            return { statusMessage: `Estoque insuficiente no CD. Faltam ${remainingNeeded.toLocaleString()}${product.unit} de ${getProductFullName(product)}.`, isActionable: suggestion.length > 0, distributionSuggestion: suggestion };
         }
 
         return { statusMessage: 'Sugestão de distribuição gerada com sucesso.', isActionable: true, distributionSuggestion: suggestion };
@@ -195,7 +196,7 @@ export function StockAnalyzer() {
                         const originalItemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
                         if (!originalItemName) continue;
                         
-                        const product = findProductByName(originalItemName);
+                        const product = findProductByBaseName(originalItemName);
                         if (!product) {
                             unmatchedItems.push(originalItemName);
                             continue;
@@ -221,7 +222,7 @@ export function StockAnalyzer() {
                         
                         analysisResults.push({
                             productId: product.id,
-                            productName: product.baseName,
+                            productName: getProductFullName(product),
                             kioskId: kiosk.id,
                             kioskName: kiosk.name,
                             currentStockInBaseUnit,
@@ -245,7 +246,7 @@ export function StockAnalyzer() {
                         
                         analysisResults.push({
                             productId: product.id,
-                            productName: product.baseName,
+                            productName: getProductFullName(product),
                             kioskId: kiosk.id,
                             kioskName: kiosk.name,
                             currentStockInBaseUnit: 0,
@@ -400,7 +401,7 @@ export function StockAnalyzer() {
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
-            const productUnit = findProductByName(item.productName)?.unit || '';
+            const productUnit = products.find(p => p.id === item.productId)?.unit || '';
             doc.text(`Estoque Apurado: ${(item.currentStockInBaseUnit || 0).toLocaleString()} ${productUnit}`, 14, yPos);
             yPos += 5;
             addPageIfNeeded();
@@ -484,11 +485,11 @@ export function StockAnalyzer() {
                                     <div key={index} className="border rounded-lg p-4">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h4 className="font-semibold">{item.productName} para {item.kioskName}</h4>
+                                                <h4 className="font-semibold">{item.productName}</h4>
                                                 <div className="text-sm text-muted-foreground space-y-1 mt-1">
-                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
-                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {findProductByName(item.productName)?.unit}</span></p>
+                                                    <p>Estoque Apurado: <span className="font-semibold text-foreground">{(item.currentStockInBaseUnit || 0).toLocaleString()} {products.find(p => p.id === item.productId)?.unit}</span></p>
+                                                    <p>Estoque Máximo Configurado: <span className="font-semibold text-foreground">{(item.maxStockInBaseUnit || 0).toLocaleString()} {products.find(p => p.id === item.productId)?.unit}</span></p>
+                                                    <p>Necessidade: <span className={item.neededInBaseUnit > 0 ? "font-bold text-destructive" : "font-semibold text-foreground"}>{(item.neededInBaseUnit || 0).toLocaleString()} {products.find(p => p.id === item.productId)?.unit}</span></p>
                                                 </div>
                                             </div>
                                             {item.isActionable && item.neededInBaseUnit > 0 && <Button size="sm" disabled={!item.isActionable || isAnalyzing} onClick={() => executeDistribution(report.id, item)}>
@@ -536,7 +537,7 @@ export function StockAnalyzer() {
                             <CardDescription>Importe sua planilha de estoque para calcular as necessidades e gerar sugestões de distribuição.</CardDescription>
                         </div>
                          {canManageAnalysisProducts && (
-                            <Button variant="outline" className="shrink-0" onClick={() => setIsItemManagementOpen(true)}>
+                            <Button variant="outline" className="shrink-0" onClick={() => setIsProductManagementOpen(true)}>
                                 <Settings className="mr-2 h-4 w-4" />
                                 Gerenciar Insumos
                             </Button>
@@ -598,7 +599,7 @@ export function StockAnalyzer() {
                 </div>
             )}
             
-            <ItemManagement open={isItemManagementOpen} onOpenChange={setIsItemManagementOpen} />
+            <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
             
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
         </>

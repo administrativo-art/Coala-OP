@@ -2,50 +2,29 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
+import { type AnalysisProduct } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
 
 export interface StockAnalysisProductsContextType {
-  products: Product[];
+  analysisProducts: AnalysisProduct[];
   loading: boolean;
-  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
-  updateProduct: (updatedProduct: Product) => Promise<void>;
-  deleteProduct: (productId: string) => Promise<void>;
-  deleteMultipleProducts: (productIds: string[]) => Promise<void>;
-  getProductFullName: (product: Product) => string;
-  updateMultipleProducts: (products: Partial<Product>[]) => Promise<void>;
-  findOrCreateProduct: (productDef: ProductDefinition) => Promise<Product | null>;
+  addAnalysisProduct: (product: Omit<AnalysisProduct, 'id'>) => Promise<void>;
+  updateMultipleAnalysisProducts: (products: AnalysisProduct[]) => Promise<void>;
+  deleteAnalysisProduct: (productId: string) => Promise<void>;
 }
 
 export const StockAnalysisProductsContext = createContext<StockAnalysisProductsContextType | undefined>(undefined);
 
 export function StockAnalysisProductsProvider({ children }: { children: React.ReactNode }) {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [analysisProducts, setAnalysisProducts] = useState<AnalysisProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "stockAnalysisProducts")); // New collection
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const productsData = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            const originalCategory = data.category as string | undefined;
-            let category: UnitCategory = 'Unidade'; // Default value
-
-            if (originalCategory) {
-                const formatted = originalCategory.charAt(0).toUpperCase() + originalCategory.slice(1).toLowerCase();
-                if (unitCategories.includes(formatted as UnitCategory)) {
-                    category = formatted as UnitCategory;
-                }
-            }
-            
-            return {
-                id: doc.id,
-                ...data,
-                category,
-            } as Product
-        });
-        setProducts(productsData.sort((a,b) => a.baseName.localeCompare(b.baseName)));
+    const q = query(collection(db, "stockAnalysisProducts"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnalysisProduct));
+        setAnalysisProducts(productsData.sort((a,b) => a.itemName.localeCompare(b.itemName)));
         setLoading(false);
     }, (error) => {
         console.error("Error fetching stock analysis products from Firestore: ", error);
@@ -55,47 +34,15 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     return () => unsubscribe();
   }, []);
 
-  const findOrCreateProduct = useCallback(async (productDef: ProductDefinition): Promise<Product | null> => {
-    const q = query(
-        collection(db, "stockAnalysisProducts"),
-        where("baseName", "==", productDef.baseName),
-        where("unit", "==", productDef.unit)
-    );
-
-    try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const existingDoc = querySnapshot.docs[0];
-            return { id: existingDoc.id, ...existingDoc.data() } as Product;
-        } else {
-            const docRef = await addDoc(collection(db, "stockAnalysisProducts"), productDef);
-            return { id: docRef.id, ...productDef } as Product;
-        }
-    } catch (error) {
-        console.error("Error finding or creating product:", error);
-        return null;
-    }
-  }, []);
-
-  const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
+  const addAnalysisProduct = useCallback(async (product: Omit<AnalysisProduct, 'id'>) => {
     try {
         await addDoc(collection(db, "stockAnalysisProducts"), product);
     } catch(error) {
-        console.error("Error adding product:", error);
-    }
-  }, []);
-
-  const updateProduct = useCallback(async (updatedProduct: Product) => {
-    const productRef = doc(db, "stockAnalysisProducts", updatedProduct.id);
-    const { id, ...dataToUpdate } = updatedProduct;
-    try {
-        await updateDoc(productRef, dataToUpdate);
-    } catch(error) {
-        console.error("Error updating product:", error);
+        console.error("Error adding analysis product:", error);
     }
   }, []);
   
-  const updateMultipleProducts = useCallback(async (productsToUpdate: Partial<Product>[]) => {
+  const updateMultipleAnalysisProducts = useCallback(async (productsToUpdate: AnalysisProduct[]) => {
     const batch = writeBatch(db);
     productsToUpdate.forEach(product => {
       if(product.id) {
@@ -107,50 +54,27 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     try {
       await batch.commit();
     } catch(error) {
-      console.error("Error updating multiple products:", error);
+      console.error("Error updating multiple analysis products:", error);
       throw error;
     }
   }, []);
 
-  const deleteProduct = useCallback(async (productId: string) => {
+  const deleteAnalysisProduct = useCallback(async (productId: string) => {
     try {
         await deleteDoc(doc(db, "stockAnalysisProducts", productId));
     } catch (error) {
-        console.error("Error deleting product:", error);
-        throw error;
-    }
-  }, []);
-
-  const deleteMultipleProducts = useCallback(async (productIds: string[]) => {
-    const batch = writeBatch(db);
-    productIds.forEach(productId => {
-        const productRef = doc(db, "stockAnalysisProducts", productId);
-        batch.delete(productRef);
-    });
-    try {
-        await batch.commit();
-    } catch(error) {
-        console.error("Error deleting multiple products:", error);
+        console.error("Error deleting analysis product:", error);
         throw error;
     }
   }, []);
   
-  const getProductFullName = useCallback((product: Product) => {
-    if (!product) return '';
-    return `${product.baseName} (${product.unit})`;
-  }, []);
-
   const value: StockAnalysisProductsContextType = useMemo(() => ({
-    products,
+    analysisProducts,
     loading,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    deleteMultipleProducts,
-    getProductFullName,
-    updateMultipleProducts,
-    findOrCreateProduct,
-  }), [products, loading, addProduct, updateProduct, deleteProduct, deleteMultipleProducts, getProductFullName, updateMultipleProducts, findOrCreateProduct]);
+    addAnalysisProduct,
+    updateMultipleAnalysisProducts,
+    deleteAnalysisProduct,
+  }), [analysisProducts, loading, addAnalysisProduct, updateMultipleAnalysisProducts, deleteAnalysisProduct]);
 
   return <StockAnalysisProductsContext.Provider value={value}>{children}</StockAnalysisProductsContext.Provider>;
 }

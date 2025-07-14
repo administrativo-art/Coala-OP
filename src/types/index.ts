@@ -4,6 +4,11 @@ export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as c
 
 export type UnitCategory = (typeof unitCategories)[number];
 
+export type AnalysisProduct = {
+  id: string;
+  itemName: string;
+}
+
 export type Location = {
   id: string;
   name: string; // e.g., "Prateleira A1"
@@ -26,6 +31,7 @@ export type Product = {
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
+  analysisProductId?: string; // Link to the "Macro" product
 };
 
 export type ProductDefinition = {
@@ -156,7 +162,7 @@ export interface MonthlyScheduleContextType {
 
 
 export type PermissionSet = {
-    products: { add: boolean; edit: boolean; delete: boolean };
+    products: { add: boolean; edit: boolean; delete: boolean; };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
     users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean };
     kiosks: { add: boolean; delete: boolean };

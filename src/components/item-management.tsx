@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useProducts } from '@/hooks/use-products';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -17,7 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDes
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { type Product, unitCategories } from '@/types';
+import { type Product, type AnalysisProduct, unitCategories } from '@/types';
 import { Download, PlusCircle, Edit, Trash2, FileUp, Loader2, Info, ChevronDown, Search, Eraser } from 'lucide-react';
 import { units } from '@/lib/conversion';
 import { Checkbox } from './ui/checkbox';
@@ -37,7 +38,8 @@ interface ItemManagementProps {
 }
 
 export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
-  const { products, loading: productsLoading, addProduct, updateMultipleProducts, getProductFullName } = useProducts();
+  const { products, loading: productsLoading, updateMultipleProducts, getProductFullName } = useProducts();
+  const { analysisProducts, loading: analysisProductsLoading } = useStockAnalysisProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,8 +59,13 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
   
   const filteredFields = useMemo(() => {
     if (!searchTerm) return fields;
-    return fields.filter(field => getProductFullName(field).toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [fields, searchTerm, getProductFullName]);
+    const lowerCaseSearch = searchTerm.toLowerCase();
+    
+    return fields.filter(field => {
+      const macroName = analysisProducts.find(ap => ap.id === field.analysisProductId)?.itemName || '';
+      return getProductFullName(field).toLowerCase().includes(lowerCaseSearch) || macroName.toLowerCase().includes(lowerCaseSearch);
+    });
+  }, [fields, searchTerm, getProductFullName, analysisProducts]);
 
   useEffect(() => {
     if (!productsLoading && !kiosksLoading) {
@@ -125,7 +132,7 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
               <div className="relative flex-grow">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                      placeholder="Buscar por nome do insumo..."
+                      placeholder="Buscar por nome do insumo ou item de análise..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-10 w-full"
@@ -145,11 +152,16 @@ export function ItemManagement({ open, onOpenChange }: ItemManagementProps) {
           <Accordion type="multiple" className="w-full space-y-4" defaultValue={filteredFields.map(field => field.id)}>
             {filteredFields.map((field) => {
               const originalIndex = fields.findIndex(f => f.id === field.id);
+              const analysisProduct = analysisProducts.find(ap => ap.id === field.analysisProductId);
+
               return (
                 <AccordionItem value={field.id} key={field.formId} className="border rounded-lg bg-card">
                   <RadixAccordion.Header className="flex w-full items-center p-4">
                       <RadixAccordion.Trigger className="flex flex-1 items-center justify-between text-left hover:no-underline font-semibold text-base px-0 py-0 [&[data-state=open]>svg]:rotate-180">
-                          <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                          <div>
+                            <span className="flex-grow text-left">{getProductFullName(field)}</span>
+                            {analysisProduct && <p className="text-xs font-normal text-muted-foreground">Item de Análise: {analysisProduct.itemName}</p>}
+                          </div>
                           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
                       </RadixAccordion.Trigger>
                       <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>

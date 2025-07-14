@@ -11,6 +11,7 @@ import { PredefinedListsProvider } from '@/components/predefined-lists-provider'
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { FormProvider } from '@/components/form-provider';
 import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
+import { StockAnalysisProductsProvider } from '@/components/stock-analysis-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
 import { ReturnsProvider } from '@/components/return-request-provider';
@@ -40,30 +41,32 @@ export default function RootLayout({
           <AuthProvider>
             <KiosksProvider>
               <LocationsProvider>
-                <ProductsProvider>
-                    <ExpiryProductsProvider>
-                      <PredefinedListsProvider>
-                        <FormProvider>
-                          <StockAnalysisProvider>
-                              <ConsumptionAnalysisProvider>
-                                <MovementHistoryProvider>
-                                  <ReturnsProvider>
-                                    <ScheduleProvider>
-                                      <MonthlyScheduleProvider>
-                                        <StockCountProvider>
-                                          {children}
-                                          <Toaster />
-                                        </StockCountProvider>
-                                      </MonthlyScheduleProvider>
-                                    </ScheduleProvider>
-                                  </ReturnsProvider>
-                                </MovementHistoryProvider>
-                              </ConsumptionAnalysisProvider>
-                          </StockAnalysisProvider>
-                        </FormProvider>
-                      </PredefinedListsProvider>
-                    </ExpiryProductsProvider>
-                </ProductsProvider>
+                  <StockAnalysisProductsProvider>
+                    <ProductsProvider>
+                        <ExpiryProductsProvider>
+                          <PredefinedListsProvider>
+                            <FormProvider>
+                              <StockAnalysisProvider>
+                                  <ConsumptionAnalysisProvider>
+                                    <MovementHistoryProvider>
+                                      <ReturnsProvider>
+                                        <ScheduleProvider>
+                                          <MonthlyScheduleProvider>
+                                            <StockCountProvider>
+                                              {children}
+                                              <Toaster />
+                                            </StockCountProvider>
+                                          </MonthlyScheduleProvider>
+                                        </ScheduleProvider>
+                                      </ReturnsProvider>
+                                    </MovementHistoryProvider>
+                                  </ConsumptionAnalysisProvider>
+                              </StockAnalysisProvider>
+                            </FormProvider>
+                          </PredefinedListsProvider>
+                        </ExpiryProductsProvider>
+                    </ProductsProvider>
+                  </StockAnalysisProductsProvider>
               </LocationsProvider>
             </KiosksProvider>
           </AuthProvider>
