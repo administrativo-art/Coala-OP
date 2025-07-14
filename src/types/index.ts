@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Comprimento", "Unidade"] as const;
 
@@ -302,6 +303,7 @@ export type Entity = {
   id: string;
   type: 'pessoa_fisica' | 'pessoa_juridica';
   name: string;
+  fantasyName?: string;
   document: string; // CPF ou CNPJ
   address: {
     street: string;

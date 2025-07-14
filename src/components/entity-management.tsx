@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState } from 'react';
@@ -21,6 +22,7 @@ import { ScrollArea } from './ui/scroll-area';
 const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
   name: z.string().min(1, 'O nome é obrigatório.'),
+  fantasyName: z.string().optional(),
   document: z.string().min(1, 'O documento é obrigatório.'),
   address: z.object({
     zipCode: z.string().min(8, 'CEP inválido'),
@@ -53,7 +55,9 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         resolver: zodResolver(entitySchema),
         defaultValues: entityToEdit || {
             type: 'pessoa_fisica',
-            name: '', document: '',
+            name: '',
+            fantasyName: '',
+            document: '',
             address: { zipCode: '', street: '', number: '', neighborhood: '', city: '', state: '' },
             contact: { phone: '', email: '' },
             responsible: '',
@@ -108,10 +112,17 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                 )}/>
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome Completo / Razão Social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>{entityType === 'pessoa_fisica' ? 'CPF' : 'CNPJ'}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    {entityType === 'pessoa_juridica' ? (
+                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    ) : (
+                                        <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CPF</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    )}
                                 </div>
                                 {entityType === 'pessoa_juridica' && (
-                                    <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
                                 )}
 
                                 <h3 className="text-md font-medium border-t pt-4">Endereço</h3>
@@ -201,7 +212,7 @@ export function EntityManagement() {
                             <div className="flex items-center gap-4">
                                 {entity.type === 'pessoa_juridica' ? <Building className="h-6 w-6 text-primary"/> : <User className="h-6 w-6 text-primary"/>}
                                 <div>
-                                    <p className="font-semibold">{entity.name}</p>
+                                    <p className="font-semibold">{entity.fantasyName || entity.name}</p>
                                     <p className="text-sm text-muted-foreground">{entity.document}</p>
                                 </div>
                             </div>
