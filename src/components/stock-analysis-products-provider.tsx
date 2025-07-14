@@ -24,7 +24,7 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     const q = query(collection(db, "stockAnalysisProducts"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnalysisProduct));
-        setAnalysisProducts(productsData.sort((a,b) => a.itemName.localeCompare(b.itemName)));
+        setAnalysisProducts(productsData.sort((a,b) => (a.itemName || '').localeCompare(b.itemName || '')));
         setLoading(false);
     }, (error) => {
         console.error("Error fetching stock analysis products from Firestore: ", error);
