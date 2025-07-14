@@ -250,7 +250,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                  <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Agrupador macro (opcional)</FormLabel>
+                                        <FormLabel>Insumo base</FormLabel>
                                         <div className="flex gap-2 items-center">
                                             <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
                                                 <FormControl>
