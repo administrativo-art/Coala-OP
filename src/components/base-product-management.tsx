@@ -16,6 +16,7 @@ import { type BaseProduct, unitCategories } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
 import { units } from '@/lib/conversion';
+import { Label } from './ui/label';
 
 type EditableStockLevels = {
     [kioskId: string]: { min: string };
@@ -118,7 +119,7 @@ export function BaseProductManagement() {
           <CardDescription>Produtos base agrupam insumos e definem metas de estoque por quiosque.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
+           <div className="flex gap-2">
             <Input
               placeholder="Nome do novo produto base"
               value={newBaseProductName}
@@ -129,7 +130,7 @@ export function BaseProductManagement() {
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
             </Button>
           </div>
-           <Accordion type="multiple" className="w-full space-y-2">
+           <Accordion type="multiple" className="w-full space-y-2 pt-4 border-t">
             {loading ? (
               <div className="space-y-2">
                 <Skeleton className="h-12 w-full" />
