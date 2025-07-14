@@ -6,18 +6,11 @@ import { useProducts } from '@/hooks/use-products';
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { type AnalysisProduct } from '@/types';
-import { PlusCircle, Trash2, Info } from 'lucide-react';
+import { PlusCircle, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-
-type FormValues = {
-  analysisProducts: AnalysisProduct[];
-};
 
 export function StockAnalysisConfigurator() {
   const { analysisProducts, loading, addAnalysisProduct, deleteAnalysisProduct } = useStockAnalysisProducts();
@@ -25,7 +18,6 @@ export function StockAnalysisConfigurator() {
   const { toast } = useToast();
   
   const [newProductName, setNewProductName] = useState('');
-
 
   const handleAddProduct = async () => {
     if (newProductName.trim()) {
@@ -35,7 +27,6 @@ export function StockAnalysisConfigurator() {
   };
 
   const handleDeleteProduct = async (id: string) => {
-    // Check if any product is using this analysis product
     const isUsed = products.some(p => p.analysisProductId === id);
     if(isUsed) {
         toast({
@@ -85,7 +76,7 @@ export function StockAnalysisConfigurator() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {analysisProducts.map(product => (
+                    {analysisProducts.length > 0 ? analysisProducts.map(product => (
                         <TableRow key={product.id}>
                             <TableCell className="font-medium">{product.itemName}</TableCell>
                             <TableCell className="text-right">
@@ -94,8 +85,7 @@ export function StockAnalysisConfigurator() {
                                 </Button>
                             </TableCell>
                         </TableRow>
-                    ))}
-                     {analysisProducts.length === 0 && (
+                    )) : (
                         <TableRow>
                             <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
                                 Nenhuma categoria cadastrada.
