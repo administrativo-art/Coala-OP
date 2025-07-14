@@ -5,10 +5,10 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListPlus, PackagePlus } from "lucide-react";
 import { StockAnalysisConfigurator } from "./stock-analysis-configurator";
-import { ItemManagement } from "./item-management";
 import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products";
 import { useProducts } from "@/hooks/use-products";
 import { useToast } from "@/hooks/use-toast";
+import { ItemManagement } from "./item-management";
 
 export function RegistrationManagement() {
   const { analysisProducts, loading: analysisProductsLoading, addAnalysisProduct, deleteAnalysisProduct } = useStockAnalysisProducts();
