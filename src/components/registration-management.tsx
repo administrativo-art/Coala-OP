@@ -26,7 +26,7 @@ export function RegistrationManagement() {
         <div className="w-full space-y-6">
             <div className="mb-6">
                 <h1 className="text-3xl font-bold">Cadastros</h1>
-                <p className="text-muted-foreground">Adicione, edite ou exclua os insumos (itens físicos) do seu estoque e os produtos base para agrupamento.</p>
+                <p className="text-muted-foreground">Adicione, edite ou exclua os insumos e os produtos base do cadastro.</p>
             </div>
             
              <Tabs defaultValue="items" className="w-full">
