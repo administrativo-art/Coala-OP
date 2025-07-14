@@ -7,7 +7,8 @@ export type UnitCategory = (typeof unitCategories)[number];
 export type BaseProduct = {
   id: string;
   name: string;
-  stockLevels?: { [kioskId: string]: { max: number } };
+  unit: string;
+  stockLevels: { [kioskId: string]: { min: number } };
 }
 
 export type Location = {
