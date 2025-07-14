@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -41,7 +41,13 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
   const { addBaseProduct, updateBaseProduct } = useBaseProducts();
   const { kiosks } = useKiosks();
 
-  const kiosksToDisplay = kiosks;
+  const sortedKiosks = useMemo(() => {
+    return [...kiosks].sort((a,b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
+  }, [kiosks]);
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
@@ -59,7 +65,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
         form.reset({
           name: productToEdit.name,
           unit: productToEdit.unit,
-          stockLevels: kiosksToDisplay.map(kiosk => ({
+          stockLevels: sortedKiosks.map(kiosk => ({
             kioskId: kiosk.id,
             min: productToEdit.stockLevels?.[kiosk.id]?.min ?? 0
           }))
@@ -68,11 +74,11 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
         form.reset({
           name: '',
           unit: 'g',
-          stockLevels: kiosksToDisplay.map(kiosk => ({ kioskId: kiosk.id, min: 0 }))
+          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0 }))
         });
       }
     }
-  }, [productToEdit, open, form, kiosksToDisplay]);
+  }, [productToEdit, open, form, sortedKiosks]);
 
   const onSubmit = (values: BaseProductFormValues) => {
     const stockLevelsObject: { [kioskId: string]: { min: number } } = {};
@@ -150,7 +156,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
                             {fields.map((field, index) => (
                                 <TableRow key={field.id}>
                                 <TableCell className="font-medium">
-                                    {kiosksToDisplay.find(k => k.id === field.kioskId)?.name}
+                                    {sortedKiosks.find(k => k.id === field.kioskId)?.name}
                                 </TableCell>
                                 <TableCell>
                                     <FormField
