@@ -8,19 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useBaseProducts } from '@/hooks/use-base-products';
 
 export function RegistrationManagement() {
-    const { addBaseProduct } = useBaseProducts();
-    const [newBaseProductName, setNewBaseProductName] = useState('');
-
-    const handleAddBaseProduct = () => {
-        if (newBaseProductName.trim()) {
-            addBaseProduct({ 
-                name: newBaseProductName.trim(),
-                unit: 'g', // Default unit
-                stockLevels: {}
-            });
-            setNewBaseProductName('');
-        }
-    };
 
     return (
         <div className="w-full space-y-6">
@@ -38,11 +25,7 @@ export function RegistrationManagement() {
                     <ItemManagement />
                 </TabsContent>
                 <TabsContent value="baseProducts" className="mt-4">
-                    <BaseProductManagement 
-                        newBaseProductName={newBaseProductName}
-                        setNewBaseProductName={setNewBaseProductName}
-                        onAddBaseProduct={handleAddBaseProduct}
-                    />
+                    <BaseProductManagement />
                 </TabsContent>
             </Tabs>
         </div>
