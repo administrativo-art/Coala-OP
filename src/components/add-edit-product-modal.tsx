@@ -20,8 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Trash2, Upload } from 'lucide-react';
+import { Camera, Trash2, Upload, Info } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const BarcodeScannerModal = dynamic(
@@ -228,7 +229,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
 
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem><FormLabel>Qtd. Embalagem</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel>Qtd. Embalagem</FormLabel>
+                                            <TooltipProvider delayDuration={100}>
+                                                <Tooltip>
+                                                    <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
+                                                        <Info className="h-4 w-4 text-muted-foreground" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Informe o conteúdo da embalagem. Ex: para 400g, digite 400.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
+                                        <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
                                 
