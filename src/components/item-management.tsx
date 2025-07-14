@@ -135,28 +135,29 @@ export function ItemManagement() {
                         ) : activeProducts.length > 0 ? activeProducts.map(product => (
                         <AccordionItem value={product.id} key={product.id} className="border-none">
                             <Card>
-                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg">
-                                <div className="flex items-center gap-3 w-full">
+                                <div className="flex items-center p-4">
                                     <Checkbox
                                         id={`active-product-${product.id}`}
                                         checked={selectedProducts.has(product.id)}
                                         onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
-                                        onClick={(e) => e.stopPropagation()}
                                     />
-                                    {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />}
-                                    <span className="font-semibold">{getProductFullName(product)}</span>
+                                    <AccordionTrigger className="p-0 pl-3 hover:no-underline rounded-lg w-full">
+                                        <div className="flex items-center gap-3 w-full">
+                                            {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />}
+                                            <span className="font-semibold">{getProductFullName(product)}</span>
+                                        </div>
+                                    </AccordionTrigger>
                                 </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
-                                <p><strong>Categoria:</strong> {product.category}</p>
-                                <p><strong>Cód. Barras:</strong> {product.barcode || 'N/A'}</p>
-                                {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
-                                <div className="flex items-center gap-1 mt-4 pt-4 border-t">
-                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /> <span className="sr-only">Editar</span></Button>
-                                    <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /> <span className="sr-only">Arquivar</span></Button>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /> <span className="sr-only">Excluir</span></Button>
-                                </div>
-                            </AccordionContent>
+                                <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
+                                    <p><strong>Categoria:</strong> {product.category}</p>
+                                    <p><strong>Cód. Barras:</strong> {product.barcode || 'N/A'}</p>
+                                    {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
+                                    <div className="flex items-center gap-1 mt-4 pt-4 border-t">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /> <span className="sr-only">Editar</span></Button>
+                                        <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /> <span className="sr-only">Arquivar</span></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /> <span className="sr-only">Excluir</span></Button>
+                                    </div>
+                                </AccordionContent>
                             </Card>
                         </AccordionItem>
                         )) : (
