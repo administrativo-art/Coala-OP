@@ -4,6 +4,7 @@
 import Image from 'next/image';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -97,6 +98,31 @@ export function LotCard({
 
   const { product } = productGroup;
 
+  const handlePrintLabel = (lot: LotEntry, product: Product) => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [50, 30] // A common label size
+    });
+
+    const productName = getProductFullName(product);
+    const lotNumber = lot.lotNumber;
+    const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
+
+    doc.setFontSize(8);
+    doc.text(productName, 3, 7, { maxWidth: 45 });
+    
+    doc.setFontSize(10);
+    doc.text(`Lote: ${lotNumber}`, 3, 15);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`VALIDADE:`, 3, 22);
+    doc.text(expiryDate, 25, 22);
+
+    doc.save(`etiqueta_${productName.replace(/ /g,"_")}_${lotNumber}.pdf`);
+  };
+
   return (
     <Card className="w-full">
       <CardHeader className="p-4 flex flex-row items-center gap-4">
@@ -160,6 +186,9 @@ export function LotCard({
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onViewHistory(lotInstance)}><History className="h-4 w-4" /></Button>
                                                             </TooltipTrigger><TooltipContent><p>Histórico</p></TooltipContent></Tooltip></TooltipProvider>
                                                         )}
+                                                         <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handlePrintLabel(lotInstance, product)}><Tag className="h-4 w-4" /></Button>
+                                                        </TooltipTrigger><TooltipContent><p>Imprimir Etiqueta</p></TooltipContent></Tooltip></TooltipProvider>
                                                         {canMove && lotInstance.quantity > 0 && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onMove(lotInstance.id)}><Truck className="h-4 w-4" /></Button>
@@ -193,5 +222,3 @@ export function LotCard({
     </Card>
   );
 }
-
-    
