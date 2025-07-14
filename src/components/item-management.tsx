@@ -16,14 +16,14 @@ import { ScrollArea } from './ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { PlusCircle, Edit, Trash2, Archive, Settings } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Archive, Settings, Box } from 'lucide-react';
 import { ArchivedProductsModal } from './archived-products-modal';
 import { AddEditProductModal } from './add-edit-product-modal';
 import { BaseProductManagement } from './base-product-management';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 export function ItemManagement() {
-  const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
+  const { products, loading: productsLoading, getProductFullName, updateProduct, deleteMultipleProducts } = useProducts();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { lists, loading: listsLoading } = usePredefinedLists();
 
@@ -59,7 +59,10 @@ export function ItemManagement() {
   const handleDeleteConfirm = async () => {
       if (productToDelete) {
           setIsDeleting(true);
-          try { await deleteProduct(productToDelete.id); } 
+          try { 
+            const productRef = products.find(p => p.id === productToDelete.id);
+            if(productRef) await deleteMultipleProducts([productRef.id]); 
+          } 
           finally { setIsDeleting(false); setProductToDelete(null); }
       }
   };
@@ -112,11 +115,15 @@ export function ItemManagement() {
       <Card>
         <CardHeader>
           <CardTitle>Insumos cadastrados</CardTitle>
+          <CardDescription>Adicione insumos e agrupe-os em "produtos base" para gerenciar o estoque.</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
             <div className="flex gap-2">
               <Button onClick={handleAddNewClick} className="w-full">
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo insumo
+              </Button>
+              <Button variant="outline" onClick={() => setIsBaseProductModalOpen(true)} className="w-full">
+                <Box className="mr-2 h-4 w-4" /> Gerenciar produto base
               </Button>
                <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)} className="w-full">
                 <Archive className="mr-2" /> Ver arquivados
