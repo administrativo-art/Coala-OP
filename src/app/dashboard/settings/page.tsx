@@ -87,8 +87,8 @@ function LabelSettings() {
 
         if (logoUrl) {
           try {
-            const logoMaxHeight = availableHeight * 0.25;
-            const logoMaxWidth = textBlockWidth * 0.5;
+            const logoMaxHeight = availableHeight * 0.35; // Increased logo height
+            const logoMaxWidth = textBlockWidth * 0.6; // Increased logo width
             const img = new (window as any).Image();
             img.src = logoUrl;
             await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
@@ -128,7 +128,7 @@ function LabelSettings() {
         doc.text(`Lote: ${lotNumber}`, margin, currentY);
         currentY += 3;
         doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += 3;
+        currentY += 4; // Increased space before validity
         
         doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
