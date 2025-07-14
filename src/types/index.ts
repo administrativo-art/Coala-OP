@@ -298,6 +298,27 @@ export interface ReturnRequestContextType {
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }
 
+export type Entity = {
+  id: string;
+  type: 'pessoa_fisica' | 'pessoa_juridica';
+  name: string;
+  document: string; // CPF ou CNPJ
+  address: {
+    street: string;
+    number: string;
+    complement?: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
+  contact: {
+    phone?: string;
+    email?: string;
+  };
+  responsible?: string; // Only for pessoa_juridica
+};
+
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },

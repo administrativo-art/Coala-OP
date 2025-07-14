@@ -18,6 +18,7 @@ import { ScheduleProvider } from '@/components/schedule-provider';
 import { MonthlyScheduleProvider } from '@/components/monthly-schedule-provider';
 import { StockCountProvider } from '@/components/stock-count-provider';
 import { CompanySettingsProvider } from '@/components/company-settings-provider';
+import { EntitiesProvider } from '@/components/entities-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -47,6 +48,7 @@ export default function RootLayout({
                         <ExpiryProductsProvider>
                           <PredefinedListsProvider>
                             <FormProvider>
+                              <EntitiesProvider>
                                   <ConsumptionAnalysisProvider>
                                     <MovementHistoryProvider>
                                       <ReturnsProvider>
@@ -61,6 +63,7 @@ export default function RootLayout({
                                       </ReturnsProvider>
                                     </MovementHistoryProvider>
                                   </ConsumptionAnalysisProvider>
+                              </EntitiesProvider>
                             </FormProvider>
                           </PredefinedListsProvider>
                         </ExpiryProductsProvider>
