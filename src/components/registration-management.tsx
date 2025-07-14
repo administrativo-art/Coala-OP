@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -8,14 +7,43 @@ import { StockAnalysisConfigurator } from "./stock-analysis-configurator";
 import { ProductManagement } from "./product-management";
 import { Button } from "./ui/button";
 import { PlusCircle } from "lucide-react";
+import { useStockAnalysisProducts } from "@/hooks/use-stock-analysis-products";
+import { useProducts } from "@/hooks/use-products";
+import { useToast } from "@/hooks/use-toast";
 
 export function RegistrationManagement() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState(null);
+  
+  // Logic moved from child to parent
+  const { analysisProducts, loading, addAnalysisProduct, deleteAnalysisProduct } = useStockAnalysisProducts();
+  const { products } = useProducts();
+  const { toast } = useToast();
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   const handleAddNewProduct = () => {
     setProductToEdit(null);
     setIsProductModalOpen(true);
+  };
+  
+  const handleAddCategory = async () => {
+    if (newCategoryName.trim()) {
+      await addAnalysisProduct({ itemName: newCategoryName.trim() });
+      setNewCategoryName('');
+    }
+  };
+  
+  const handleDeleteCategory = async (id: string) => {
+    const isUsed = products.some(p => p.analysisProductId === id);
+    if (isUsed) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir",
+        description: "Esta categoria está sendo usada por um ou mais insumos e não pode ser excluída.",
+      });
+      return;
+    }
+    await deleteAnalysisProduct(id);
   };
 
   return (
@@ -36,10 +64,16 @@ export function RegistrationManagement() {
                         <PlusCircle className="mr-2" /> Adicionar Novo Insumo
                     </Button>
                 </div>
-                {/* O conteúdo da tabela de insumos será renderizado pelo ProductManagementModal */}
               </TabsContent>
               <TabsContent value="categories" className="mt-4">
-                  <StockAnalysisConfigurator />
+                  <StockAnalysisConfigurator
+                    analysisProducts={analysisProducts}
+                    loading={loading}
+                    newCategoryName={newCategoryName}
+                    setNewCategoryName={setNewCategoryName}
+                    onAddCategory={handleAddCategory}
+                    onDeleteCategory={handleDeleteCategory}
+                  />
               </TabsContent>
           </Tabs>
       </div>

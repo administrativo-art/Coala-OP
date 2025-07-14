@@ -1,45 +1,32 @@
-
 "use client"
 
-import React, { useState } from 'react';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
-import { useProducts } from '@/hooks/use-products';
-
+import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { PlusCircle, Trash2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { type AnalysisProduct } from '@/types';
 
-export function StockAnalysisConfigurator() {
-  const { analysisProducts, loading, addAnalysisProduct, deleteAnalysisProduct } = useStockAnalysisProducts();
-  const { products } = useProducts();
-  const { toast } = useToast();
-  
-  const [newProductName, setNewProductName] = useState('');
+interface StockAnalysisConfiguratorProps {
+    analysisProducts: AnalysisProduct[];
+    loading: boolean;
+    newCategoryName: string;
+    setNewCategoryName: (name: string) => void;
+    onAddCategory: () => void;
+    onDeleteCategory: (id: string) => void;
+}
 
-  const handleAddProduct = async () => {
-    if (newProductName.trim()) {
-      await addAnalysisProduct({ itemName: newProductName.trim() });
-      setNewProductName('');
-    }
-  };
+export function StockAnalysisConfigurator({
+    analysisProducts,
+    loading,
+    newCategoryName,
+    setNewCategoryName,
+    onAddCategory,
+    onDeleteCategory,
+}: StockAnalysisConfiguratorProps) {
 
-  const handleDeleteProduct = async (id: string) => {
-    const isUsed = products.some(p => p.analysisProductId === id);
-    if(isUsed) {
-        toast({
-            variant: "destructive",
-            title: "Erro ao excluir",
-            description: "Esta categoria está sendo usada por um ou mais insumos e não pode ser excluída.",
-        });
-        return;
-    }
-    await deleteAnalysisProduct(id);
-  };
-  
   if (loading) {
     return (
       <div className="space-y-4">
@@ -61,11 +48,11 @@ export function StockAnalysisConfigurator() {
         <div className="flex gap-2 p-1">
             <Input 
                 placeholder="Nome da nova categoria (ex: Leite Ninho)"
-                value={newProductName}
-                onChange={(e) => setNewProductName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddProduct(); }}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onAddCategory(); }}
             />
-            <Button onClick={handleAddProduct}><PlusCircle className="mr-2"/> Adicionar Categoria</Button>
+            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar Categoria</Button>
         </div>
 
          <div className="rounded-md border">
@@ -81,7 +68,7 @@ export function StockAnalysisConfigurator() {
                         <TableRow key={product.id}>
                             <TableCell className="font-medium">{product.itemName}</TableCell>
                             <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteProduct(product.id)}>
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDeleteCategory(product.id)}>
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             </TableCell>
