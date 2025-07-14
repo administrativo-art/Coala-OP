@@ -109,7 +109,6 @@ export function ItemManagement() {
       <Card>
         <CardHeader>
           <CardTitle>Insumos Cadastrados</CardTitle>
-          <CardDescription>Adicione, edite ou exclua os insumos (itens físicos) do seu estoque.</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
             <div className="flex gap-2">
