@@ -2,14 +2,14 @@
 
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, Building, User, Phone, Mail, MapPin } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser } from 'lucide-react';
 import { type Entity } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
@@ -47,27 +47,16 @@ const entitySchema = z.object({
                 path: ['fantasyName'],
             });
         }
-    }
-
-    if (data.type === 'pessoa_fisica') {
-        if(!data.address.zipCode || data.address.zipCode.length < 8) {
-            ctx.addIssue({ code: 'custom', message: 'CEP inválido.', path: ['address.zipCode'] });
-        }
-        if(!data.address.street) {
-             ctx.addIssue({ code: 'custom', message: 'A rua é obrigatória.', path: ['address.street'] });
-        }
-         if(!data.address.number) {
-             ctx.addIssue({ code: 'custom', message: 'O número é obrigatório.', path: ['address.number'] });
-        }
-         if(!data.address.neighborhood) {
-             ctx.addIssue({ code: 'custom', message: 'O bairro é obrigatório.', path: ['address.neighborhood'] });
-        }
-         if(!data.address.city) {
-             ctx.addIssue({ code: 'custom', message: 'A cidade é obrigatória.', path: ['address.city'] });
-        }
-        if(!data.address.state || data.address.state.length !== 2) {
-             ctx.addIssue({ code: 'custom', message: 'UF inválido.', path: ['address.state'] });
-        }
+    } else {
+       if (!data.address.zipCode || data.address.street || data.address.number || data.address.neighborhood || data.address.city || data.address.state) {
+            // Se um campo de endereço for preenchido, todos se tornam obrigatórios
+            if (!data.address.zipCode) ctx.addIssue({ code: 'custom', message: 'CEP inválido.', path: ['address.zipCode'] });
+            if (!data.address.street) ctx.addIssue({ code: 'custom', message: 'A rua é obrigatória.', path: ['address.street'] });
+            if (!data.address.number) ctx.addIssue({ code: 'custom', message: 'O número é obrigatório.', path: ['address.number'] });
+            if (!data.address.neighborhood) ctx.addIssue({ code: 'custom', message: 'O bairro é obrigatório.', path: ['address.neighborhood'] });
+            if (!data.address.city) ctx.addIssue({ code: 'custom', message: 'A cidade é obrigatória.', path: ['address.city'] });
+            if (!data.address.state) ctx.addIssue({ code: 'custom', message: 'UF inválido.', path: ['address.state'] });
+       }
     }
 });
 
@@ -201,6 +190,20 @@ export function EntityManagement() {
   const [entityToDelete, setEntityToDelete] = useState<Entity | null>(null);
   const [entityToEdit, setEntityToEdit] = useState<Entity | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+
+  const filteredEntities = useMemo(() => {
+    return entities.filter(entity => {
+      const search = searchTerm.toLowerCase();
+      const typeMatch = typeFilter === 'all' || entity.type === typeFilter;
+      const searchMatch = entity.name.toLowerCase().includes(search) ||
+                          (entity.fantasyName && entity.fantasyName.toLowerCase().includes(search)) ||
+                          entity.document.includes(search);
+      
+      return typeMatch && searchMatch;
+    });
+  }, [entities, searchTerm, typeFilter]);
 
   const handleDeleteClick = (entity: Entity) => {
     setEntityToDelete(entity);
@@ -234,6 +237,32 @@ export function EntityManagement() {
            <Button onClick={handleAddNew} className="w-full">
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Cadastro
            </Button>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
+                <div className="relative flex-grow w-full">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por nome, fantasia ou documento..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full"
+                    />
+                </div>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-full sm:w-[220px]">
+                        <SelectValue placeholder="Filtrar por tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos os Tipos</SelectItem>
+                        <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
+                        <SelectItem value="pessoa_juridica">Pessoa Jurídica</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
+                    <Eraser className="mr-2 h-4 w-4" />
+                    Limpar
+                </Button>
+            </div>
            
             <div className="space-y-2 pt-4 border-t">
                 {loading ? (
@@ -241,8 +270,8 @@ export function EntityManagement() {
                         <Skeleton className="h-16 w-full" />
                         <Skeleton className="h-16 w-full" />
                     </div>
-                ) : entities.length > 0 ? (
-                    entities.map(entity => (
+                ) : filteredEntities.length > 0 ? (
+                    filteredEntities.map(entity => (
                         <div key={entity.id} className="p-3 border rounded-lg flex items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 {entity.type === 'pessoa_juridica' ? <Building className="h-6 w-6 text-primary"/> : <User className="h-6 w-6 text-primary"/>}
@@ -261,7 +290,7 @@ export function EntityManagement() {
                     <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
                         <User className="mx-auto h-10 w-10 mb-2" />
                         <p className="font-semibold">Nenhum cadastro encontrado.</p>
-                        <p className="text-sm">Clique no botão acima para adicionar.</p>
+                        <p className="text-sm">Tente ajustar a busca ou os filtros.</p>
                     </div>
                 )}
             </div>
