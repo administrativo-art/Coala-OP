@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -35,7 +35,7 @@ export function Header() {
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
         { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
         { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
-        { href: '/dashboard/users', label: 'Gerenciar usuários', icon: UserCog, show: canManageUsers },
+        { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
     ]
 
   return (

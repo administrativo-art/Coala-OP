@@ -180,12 +180,12 @@ export function UserManagement() {
 
   return (
     <>
-      <Card className="w-full max-w-4xl mx-auto animate-in fade-in zoom-in-95">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <Users /> Gerenciar usuários
+          <CardTitle>
+            Usuários e Perfis
           </CardTitle>
-          <CardDescription className="text-center">Adicione ou edite usuários e atribua perfis e escalas.</CardDescription>
+          <CardDescription>Adicione ou edite usuários e atribua perfis e escalas.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           {showForm ? (
