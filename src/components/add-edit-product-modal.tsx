@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Trash2, Upload, Info } from 'lucide-react';
+import { Camera, Trash2, Upload, Info, Settings } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -90,9 +90,10 @@ interface AddEditProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   productToEdit: Product | null;
+  onManageBaseProducts: () => void;
 }
 
-export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEditProductModalProps) {
+export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
     const { toast } = useToast();
@@ -248,7 +249,23 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                                 </div>
                                 
                                  <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                    <FormItem><FormLabel>Agrupador macro (opcional)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                    <FormItem>
+                                        <FormLabel>Agrupador macro (opcional)</FormLabel>
+                                        <div className="flex gap-2 items-center">
+                                            <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
+                                                <FormControl>
+                                                    <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
+                                                <Settings className="h-4 w-4"/>
+                                            </Button>
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
                                 )}/>
                                 
                                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>

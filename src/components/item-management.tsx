@@ -16,9 +16,11 @@ import { ScrollArea } from './ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { PlusCircle, Edit, Trash2, Archive } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Archive, Settings } from 'lucide-react';
 import { ArchivedProductsModal } from './archived-products-modal';
 import { AddEditProductModal } from './add-edit-product-modal';
+import { BaseProductManagement } from './base-product-management';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 export function ItemManagement() {
   const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
@@ -27,6 +29,7 @@ export function ItemManagement() {
 
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBaseProductModalOpen, setIsBaseProductModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
@@ -182,9 +185,21 @@ export function ItemManagement() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         productToEdit={productToEdit}
+        onManageBaseProducts={() => setIsBaseProductModalOpen(true)}
       />
       
       <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
+
+      <Dialog open={isBaseProductModalOpen} onOpenChange={setIsBaseProductModalOpen}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle>Gerenciar Produto Base</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto p-1">
+                <BaseProductManagement />
+            </div>
+        </DialogContent>
+      </Dialog>
 
       {productToDelete && <DeleteConfirmationDialog open={!!productToDelete} isDeleting={isDeleting} onOpenChange={() => setProductToDelete(null)} onConfirm={handleDeleteConfirm} itemName={`o insumo "${getProductFullName(productToDelete)}"`} />}
       {productsToDelete.length > 0 && <DeleteConfirmationDialog open={productsToDelete.length > 0} isDeleting={isDeleting} onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} onConfirm={handleDeleteMultipleConfirm} itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`} />}
