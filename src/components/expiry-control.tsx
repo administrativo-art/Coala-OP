@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -22,7 +21,6 @@ import { LotCard, type GroupedProduct } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { ProductManagement } from './product-management';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 
@@ -55,7 +53,6 @@ export function ExpiryControl() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
-  const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
 
@@ -288,9 +285,9 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            <ClipboardCheck /> Controle de insumos em estoque
+            <ClipboardCheck /> Controle de Lotes em Estoque
           </CardTitle>
-          <CardDescription>Gerencie os insumos em estoque, seus vencimentos e transferências.</CardDescription>
+          <CardDescription>Gerencie os lotes em estoque, seus vencimentos e transferências.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
             <div className="mb-4">
@@ -318,11 +315,6 @@ export function ExpiryControl() {
                 <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
                     <Plus className="mr-2" /> Adicionar lote
                 </Button>
-                {canManageProducts && (
-                    <Button variant="outline" onClick={() => setIsProductManagementOpen(true)} className="w-full sm:w-auto">
-                        <Settings className="mr-2" /> Gerenciar Insumos
-                    </Button>
-                )}
                 {permissions.lots.viewMovementHistory && (
                     <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
                         <Archive className="mr-2" /> Auditar lotes arquivados
@@ -410,8 +402,6 @@ export function ExpiryControl() {
         updateLot={updateLot}
         lots={lots}
       />
-
-      <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
       
       {lotForHistory && (
           <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />

@@ -1,8 +1,7 @@
-
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -26,9 +25,11 @@ export function Header() {
     const canManageStock = canManageLots || canAnalyzeStock;
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const isMasterUser = user?.username === 'Tiago Brasil';
+    const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+        { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: canManageStock },
         { href: '/dashboard/team', label: 'Gestão de Equipe', icon: Users, show: canManageTeam },

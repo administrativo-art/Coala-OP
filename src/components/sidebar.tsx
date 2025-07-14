@@ -1,11 +1,10 @@
-
 "use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -26,10 +25,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canManageStock = canManageLots || canAnalyzeStock;
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const isMasterUser = user?.username === 'Tiago Brasil';
+  const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
 
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
     { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: canManageStock },
     { href: '/dashboard/team', label: 'Gestão de Equipe', icon: Users, show: canManageTeam },
@@ -67,7 +68,8 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                         className={cn(
                           "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary-foreground h-9",
                           isCollapsed ? "justify-center" : "justify-start",
-                          pathname === item.href && "bg-secondary text-secondary-foreground"
+                          pathname.startsWith(item.href) && item.href !== '/dashboard' && "bg-secondary text-secondary-foreground",
+                          pathname === item.href && item.href === '/dashboard' && "bg-secondary text-secondary-foreground"
                         )}
                       >
                         <item.icon className="h-5 w-5" />
