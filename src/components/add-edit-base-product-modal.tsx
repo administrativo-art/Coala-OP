@@ -41,7 +41,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
   const { addBaseProduct, updateBaseProduct } = useBaseProducts();
   const { kiosks } = useKiosks();
 
-  const kiosksToDisplay = kiosks.filter(k => k.id !== 'matriz');
+  const kiosksToDisplay = kiosks;
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
@@ -72,7 +72,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
         });
       }
     }
-  }, [productToEdit, open, form]);
+  }, [productToEdit, open, form, kiosksToDisplay]);
 
   const onSubmit = (values: BaseProductFormValues) => {
     const stockLevelsObject: { [kioskId: string]: { min: number } } = {};
