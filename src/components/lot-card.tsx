@@ -103,7 +103,7 @@ export function LotCard({
   const { product } = productGroup;
 
   const handlePrintLabel = async (lot: LotEntry, product: Product) => {
-    const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes[0];
+    const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes.find(s => s.id === '6080') || labelSizes[0];
 
     const doc = new jsPDF({
       orientation: 'landscape',
@@ -111,44 +111,80 @@ export function LotCard({
       format: [selectedSize.width, selectedSize.height]
     });
     
-    const qrCodeSize = 20;
-    const qrCodeX = selectedSize.width - qrCodeSize - 3;
+    // Define margins and available space
+    const margin = 2;
+    const availableWidth = selectedSize.width - 2 * margin;
+    const availableHeight = selectedSize.height - 2 * margin;
+
+    // QR Code
+    const qrCodeSize = Math.min(availableHeight, availableWidth * 0.3); // QR code is responsive to height
+    const qrCodeX = selectedSize.width - qrCodeSize - margin;
     const qrCodeY = (selectedSize.height - qrCodeSize) / 2;
 
     try {
         const url = `${window.location.origin}/dashboard/stock/inventory-control?lotId=${lot.id}`;
-        const qrCodeDataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'H', margin: 1 });
+        const qrCodeDataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'H', margin: 1, width: 256 });
         doc.addImage(qrCodeDataUrl, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
     } catch (err) {
         console.error("Failed to generate QR Code", err);
     }
-
-    let currentY = 3;
-
+    
+    const textMaxWidth = availableWidth - qrCodeSize - margin;
+    let currentY = margin;
+    
+    // Logo
     if (logoUrl) {
-        const logoWidth = 15;
-        const logoHeight = 7.5;
-        const logoX = 3;
-        doc.addImage(logoUrl, 'JPEG', logoX, 2, logoWidth, logoHeight);
-        currentY = 12;
+      const logoMaxHeight = availableHeight * 0.25;
+      const logoMaxWidth = textMaxWidth * 0.5;
+      const img = new (window as any).Image();
+      img.src = logoUrl;
+      await new Promise(resolve => img.onload = resolve);
+      
+      let logoWidth = img.width;
+      let logoHeight = img.height;
+      let ratio = logoWidth / logoHeight;
+      
+      if (logoHeight > logoMaxHeight) {
+          logoHeight = logoMaxHeight;
+          logoWidth = logoHeight * ratio;
+      }
+      if (logoWidth > logoMaxWidth) {
+          logoWidth = logoMaxWidth;
+          logoHeight = logoWidth / ratio;
+      }
+
+      doc.addImage(logoUrl, 'JPEG', margin, currentY, logoWidth, logoHeight);
+      currentY += logoHeight + 1;
     }
 
     const productName = getProductFullName(product);
     const lotNumber = lot.lotNumber;
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
+    const kioskName = getKioskName(lot.kioskId);
+    const locationName = getLocationName(lot.locationId);
 
+    // Product Name
     doc.setFontSize(8);
-    doc.text(productName, 3, currentY, { maxWidth: selectedSize.width - qrCodeSize - 8 });
-    
-    currentY += 8;
-    doc.setFontSize(10);
-    doc.text(`Lote: ${lotNumber}`, 3, currentY);
-
-    currentY += 7;
-    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`VALIDADE:`, 3, currentY);
-    doc.text(expiryDate, 25, currentY);
+    doc.text(productName, margin, currentY, { maxWidth: textMaxWidth });
+    currentY += doc.getTextDimensions(productName, { maxWidth: textMaxWidth }).h + 1;
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+
+    // Lot Info
+    doc.text(`Lote: ${lotNumber}`, margin, currentY);
+    currentY += 3;
+    
+    // Kiosk and Location
+    const locationText = locationName ? `${kioskName} / ${locationName}` : kioskName;
+    doc.text(locationText, margin, currentY, { maxWidth: textMaxWidth });
+    currentY += 3;
+    
+    // Expiry Date (Highlighted)
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Vence em: ${expiryDate}`, margin, currentY, { maxWidth: textMaxWidth });
 
     doc.save(`etiqueta_${productName.replace(/ /g,"_")}_${lotNumber}.pdf`);
   };
