@@ -9,7 +9,6 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
-import { useBaseProducts } from '@/hooks/use-base-products';
 import { useToast } from '@/hooks/use-toast';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { type Product, type UnitCategory, unitCategories } from '@/types';
@@ -43,7 +42,6 @@ const productFormSchema = z.object({
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
-  baseProductId: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -93,7 +91,6 @@ interface AddEditProductModalProps {
 
 export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
-    const { baseProducts } = useBaseProducts();
     const { toast } = useToast();
 
     const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -105,7 +102,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', baseProductId: ''
+            notes: ''
         }
     });
     
@@ -123,13 +120,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                     packageSize: productToEdit.packageSize,
                     unit: productToEdit.unit,
                     notes: productToEdit.notes || '',
-                    baseProductId: productToEdit.baseProductId || '',
                 });
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
-                    notes: '', baseProductId: ''
+                    notes: ''
                 });
             }
         }
@@ -231,10 +227,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit }: AddEd
                                     <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
-
-                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                    <FormItem><FormLabel>Produto base (agrupador)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-                                )}/>
                                 
                                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                             </div>

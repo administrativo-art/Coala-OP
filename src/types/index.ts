@@ -28,11 +28,9 @@ export type Product = {
   unit: string;
   notes?: string;
   pdfUnit?: string;
-  stockLevels?: { [kioskId: string]: { min: number; max: number } };
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
-  baseProductId?: string;
 };
 
 export type ProductDefinition = {
@@ -77,42 +75,6 @@ export type MovementRecord = {
   movedByUserId: string;
   movedByUsername: string;
   movedAt: string; // ISO String
-};
-
-// A single item suggested for distribution
-export type DistributionItem = {
-  lotId: string;
-  productId: string;
-  productName: string; // Full name, e.g., Ovomaltine (250g)
-  fromKioskId: string;
-  quantityToMove: number; // Number of packages
-  baseUnitValue: number; // e.g., 250 (for a 250g package)
-  baseUnit: string; // e.g., g
-  lotNumber: string;
-  expiryDate: string;
-};
-
-export type StockAnalysisResultItem = {
-  productId: string; // ID of the product from analysis config
-  productName: string; // Base name, e.g., Ovomaltine
-  kioskId: string;
-  kioskName: string;
-  currentStockInBaseUnit: number;
-  maxStockInBaseUnit: number;
-  neededInBaseUnit: number;
-  statusMessage: string; // e.g., "Suggestion generated" or "Not enough stock at origin"
-  isActionable: boolean;
-  distributionSuggestion: DistributionItem[];
-};
-
-export type StockAnalysisReport = {
-  id: string;
-  reportName: string;
-  displayName?: string;
-  createdAt: string; // ISO String
-  status: 'completed' | 'processing' | 'error';
-  summary: string;
-  results: StockAnalysisResultItem[];
 };
 
 export type ConsumptionAnalysisItem = {
@@ -279,9 +241,9 @@ export type FormSubmission = {
 export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
 
 export const returnRequestStatuses: { [key in ReturnRequestStatus]: { label: string; color: string } } = {
-    em_andamento: { label: 'em andamento', color: 'bg-orange-500' },
-    finalizado_sucesso: { label: 'finalizado (sucesso)', color: 'bg-green-600' },
-    finalizado_erro: { label: 'finalizado (erro)', color: 'bg-red-600' },
+    em_andamento: { label: 'Em andamento', color: 'bg-orange-500' },
+    finalizado_sucesso: { label: 'Finalizado (sucesso)', color: 'bg-green-600' },
+    finalizado_erro: { label: 'Finalizado (erro)', color: 'bg-red-600' },
 };
 
 export type ReturnRequestHistoricoItem = {

@@ -10,7 +10,6 @@ import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { FormProvider } from '@/components/form-provider';
-import { StockAnalysisProvider } from '@/components/stock-analysis-provider';
 import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
@@ -46,7 +45,6 @@ export default function RootLayout({
                         <ExpiryProductsProvider>
                           <PredefinedListsProvider>
                             <FormProvider>
-                              <StockAnalysisProvider>
                                   <ConsumptionAnalysisProvider>
                                     <MovementHistoryProvider>
                                       <ReturnsProvider>
@@ -61,7 +59,6 @@ export default function RootLayout({
                                       </ReturnsProvider>
                                     </MovementHistoryProvider>
                                   </ConsumptionAnalysisProvider>
-                              </StockAnalysisProvider>
                             </FormProvider>
                           </PredefinedListsProvider>
                         </ExpiryProductsProvider>
