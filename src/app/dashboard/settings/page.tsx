@@ -68,8 +68,10 @@ function LabelSettings() {
         doc.setFont('helvetica', 'normal');
         doc.text(`Lote: ${lotNumber}`, margin, currentY);
         currentY += 4;
+        
+        const locationDimensions = doc.getTextDimensions(locationText, { maxWidth: textBlockWidth - margin });
         doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += 4; 
+        currentY += locationDimensions.h + 4; 
         
         doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
