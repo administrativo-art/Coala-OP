@@ -301,11 +301,6 @@ export function ItemManagement() {
                   <AccordionTrigger className="p-4 hover:no-underline rounded-lg">
                     <div className="flex justify-between items-center w-full">
                       <span className="font-semibold">{getProductFullName(product)}</span>
-                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
-                      </div>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
@@ -313,6 +308,11 @@ export function ItemManagement() {
                     <p><strong>Cód. Barras:</strong> {product.barcode || 'N/A'}</p>
                     <p><strong>Categoria Macro:</strong> {analysisProducts.find(ap => ap.id === product.analysisProductId)?.itemName || 'N/A'}</p>
                     {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
+                     <div className="flex items-center gap-1 mt-4 pt-4 border-t">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /> <span className="sr-only">Editar</span></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /> <span className="sr-only">Arquivar</span></Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /> <span className="sr-only">Excluir</span></Button>
+                      </div>
                   </AccordionContent>
                 </Card>
               </AccordionItem>
