@@ -1,14 +1,20 @@
 
 "use client"
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
-import { PlusCircle, Trash2 } from 'lucide-react';
-import { type AnalysisProduct } from '@/types';
+import { PlusCircle, Trash2, Save, Link as LinkIcon, AlertTriangle } from 'lucide-react';
+import { type AnalysisProduct, type Kiosk, type Product } from '@/types';
+import { useProducts } from '@/hooks/use-products';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
+import { Separator } from './ui/separator';
 
 interface StockAnalysisConfiguratorProps {
     analysisProducts: AnalysisProduct[];
@@ -19,6 +25,87 @@ interface StockAnalysisConfiguratorProps {
     onDeleteCategory: (id: string) => void;
 }
 
+interface StockLevelFormProps {
+    analysisProduct: AnalysisProduct;
+    kiosks: Kiosk[];
+}
+
+const StockLevelForm: React.FC<StockLevelFormProps> = ({ analysisProduct, kiosks }) => {
+    const { updateAnalysisProduct } = useStockAnalysisProducts();
+    const { products } = useProducts();
+    const { handleSubmit, control, formState, reset } = useForm({
+        defaultValues: analysisProduct.stockLevels || {}
+    });
+
+    React.useEffect(() => {
+        reset(analysisProduct.stockLevels || {});
+    }, [analysisProduct, reset]);
+
+    const onSubmit = (data: any) => {
+        const stockLevels: { [key: string]: { max: number } } = {};
+        for(const kioskId in data) {
+            stockLevels[kioskId] = { max: Number(data[kioskId].max) || 0 };
+        }
+        updateAnalysisProduct({ ...analysisProduct, stockLevels });
+    };
+
+    const linkedProducts = useMemo(() => {
+        return products.filter(p => p.analysisProductId === analysisProduct.id);
+    }, [products, analysisProduct.id]);
+    
+    if (linkedProducts.length === 0) {
+        return <div className="p-4 text-sm text-muted-foreground">Nenhum insumo específico vinculado a este produto base. Vincule um insumo na tela de 'cadastro de insumos' para configurar os níveis de estoque.</div>
+    }
+
+    const firstProductUnit = products.find(p => p.id === linkedProducts[0].id)?.unit;
+
+    return (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+                Defina o estoque máximo desejado para <span className="font-semibold">{analysisProduct.itemName}</span> em cada quiosque. O sistema usará esta informação para calcular as necessidades de reposição. A unidade de medida para o estoque é <span className="font-semibold">{firstProductUnit || 'unidade base'}</span>.
+            </p>
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Quiosque</TableHead>
+                            <TableHead className="text-right">Estoque máximo</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {kiosks.filter(k => k.id !== 'matriz').map(kiosk => (
+                            <TableRow key={kiosk.id}>
+                                <TableCell className="font-medium">{kiosk.name}</TableCell>
+                                <TableCell className="text-right">
+                                    <Controller
+                                        name={`${kiosk.id}.max` as const}
+                                        control={control}
+                                        defaultValue={analysisProduct.stockLevels?.[kiosk.id]?.max || 0}
+                                        render={({ field }) => (
+                                            <Input
+                                                type="number"
+                                                className="w-32 ml-auto text-right"
+                                                {...field}
+                                                onChange={e => field.onChange(parseFloat(e.target.value))}
+                                                value={field.value || ''}
+                                            />
+                                        )}
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            <div className="flex justify-end">
+                <Button type="submit" disabled={!formState.isDirty}>
+                    <Save className="mr-2" /> Salvar níveis de estoque
+                </Button>
+            </div>
+        </form>
+    );
+}
+
 export function StockAnalysisConfigurator({
     analysisProducts,
     loading,
@@ -27,6 +114,13 @@ export function StockAnalysisConfigurator({
     onAddCategory,
     onDeleteCategory,
 }: StockAnalysisConfiguratorProps) {
+  
+  const { products: allProducts } = useProducts();
+  const { kiosks } = useKiosks();
+
+  const getLinkedProductsCount = (analysisProductId: string) => {
+    return allProducts.filter(p => p.analysisProductId === analysisProductId).length;
+  };
 
   if (loading) {
     return (
@@ -42,13 +136,13 @@ export function StockAnalysisConfigurator({
       <CardHeader>
         <CardTitle>Gerenciar produto base</CardTitle>
         <CardDescription>
-          Produtos base servem para agrupar diferentes embalagens de um mesmo insumo. por exemplo, o produto base "ovomaltine" pode agrupar os insumos "ovomaltine 250g" e "ovomaltine 500g".
+          Produtos base agrupam diferentes insumos. configure aqui o estoque máximo desejado para cada produto base em cada quiosque.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 p-1">
             <Input 
-                placeholder="Nome do novo produto base (ex: Leite Ninho)"
+                placeholder="Nome do novo produto base (ex: leite ninho)"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onAddCategory(); }}
@@ -56,34 +150,36 @@ export function StockAnalysisConfigurator({
             <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar produto base</Button>
         </div>
 
-         <div className="rounded-md border">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Nome do produto base</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {analysisProducts.length > 0 ? analysisProducts.map(product => (
-                        <TableRow key={product.id}>
-                            <TableCell className="font-medium">{product.itemName}</TableCell>
-                            <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDeleteCategory(product.id)}>
+        <Accordion type="multiple" className="w-full space-y-3">
+            {analysisProducts.length > 0 ? analysisProducts.map(product => {
+                const linkedCount = getLinkedProductsCount(product.id);
+                return (
+                    <AccordionItem value={product.id} key={product.id} className="border-none">
+                        <Card className="overflow-hidden">
+                            <AccordionTrigger className="px-4 py-2 hover:no-underline w-full flex justify-between items-center rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-semibold text-lg">{product.itemName}</span>
+                                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                      <LinkIcon className="h-3 w-3" /> {linkedCount} insumo(s) vinculado(s)
+                                  </span>
+                                </div>
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteCategory(product.id)}}>
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
-                            </TableCell>
-                        </TableRow>
-                    )) : (
-                        <TableRow>
-                            <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
-                                Nenhum produto base cadastrado.
-                            </TableCell>
-                        </TableRow>
-                     )}
-                </TableBody>
-            </Table>
-        </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 pt-0">
+                                <Separator className="mb-4" />
+                                <StockLevelForm analysisProduct={product} kiosks={kiosks} />
+                            </AccordionContent>
+                        </Card>
+                    </AccordionItem>
+                )
+            }) : (
+                <div className="text-center text-muted-foreground py-10">
+                    <p>Nenhum produto base cadastrado.</p>
+                </div>
+            )}
+        </Accordion>
     </CardContent>
     </Card>
   );

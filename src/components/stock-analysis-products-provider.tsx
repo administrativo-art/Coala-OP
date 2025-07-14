@@ -10,6 +10,7 @@ export interface StockAnalysisProductsContextType {
   analysisProducts: AnalysisProduct[];
   loading: boolean;
   addAnalysisProduct: (product: Omit<AnalysisProduct, 'id'>) => Promise<void>;
+  updateAnalysisProduct: (product: AnalysisProduct) => Promise<void>;
   updateMultipleAnalysisProducts: (products: AnalysisProduct[]) => Promise<void>;
   deleteAnalysisProduct: (productId: string) => Promise<void>;
 }
@@ -39,6 +40,17 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
         await addDoc(collection(db, "stockAnalysisProducts"), product);
     } catch(error) {
         console.error("Error adding analysis product:", error);
+    }
+  }, []);
+
+  const updateAnalysisProduct = useCallback(async (product: AnalysisProduct) => {
+    const productRef = doc(db, "stockAnalysisProducts", product.id);
+    const { id, ...dataToUpdate } = product;
+    try {
+        await updateDoc(productRef, dataToUpdate);
+    } catch (error) {
+        console.error("Error updating analysis product:", error);
+        throw error;
     }
   }, []);
   
@@ -72,9 +84,10 @@ export function StockAnalysisProductsProvider({ children }: { children: React.Re
     analysisProducts,
     loading,
     addAnalysisProduct,
+    updateAnalysisProduct,
     updateMultipleAnalysisProducts,
     deleteAnalysisProduct,
-  }), [analysisProducts, loading, addAnalysisProduct, updateMultipleAnalysisProducts, deleteAnalysisProduct]);
+  }), [analysisProducts, loading, addAnalysisProduct, updateAnalysisProduct, updateMultipleAnalysisProducts, deleteAnalysisProduct]);
 
   return <StockAnalysisProductsContext.Provider value={value}>{children}</StockAnalysisProductsContext.Provider>;
 }

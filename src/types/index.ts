@@ -7,6 +7,7 @@ export type UnitCategory = (typeof unitCategories)[number];
 export type AnalysisProduct = {
   id: string;
   itemName: string;
+  stockLevels?: { [kioskId: string]: { max: number } };
 }
 
 export type Location = {
@@ -278,9 +279,9 @@ export type FormSubmission = {
 export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
 
 export const returnRequestStatuses: { [key in ReturnRequestStatus]: { label: string; color: string } } = {
-    em_andamento: { label: 'Em andamento', color: 'bg-orange-500' },
-    finalizado_sucesso: { label: 'Finalizado (sucesso)', color: 'bg-green-600' },
-    finalizado_erro: { label: 'Finalizado (erro)', color: 'bg-red-600' },
+    em_andamento: { label: 'em andamento', color: 'bg-orange-500' },
+    finalizado_sucesso: { label: 'finalizado (sucesso)', color: 'bg-green-600' },
+    finalizado_erro: { label: 'finalizado (erro)', color: 'bg-red-600' },
 };
 
 export type ReturnRequestHistoricoItem = {
