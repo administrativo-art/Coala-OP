@@ -81,7 +81,7 @@ export function LotCard({
     canDelete,
     canViewHistory,
 }: LotCardProps) {
-  const { logoUrl, labelSizeId } = useCompanySettings();
+  const { labelSizeId } = useCompanySettings();
   
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
@@ -132,36 +132,7 @@ export function LotCard({
     doc.setDrawColor(200, 200, 200);
     doc.line(separatorX, margin, separatorX, selectedSize.height - margin);
 
-    let currentY = margin + 1;
-
-    if (logoUrl) {
-      try {
-        const logoMaxHeight = availableHeight * 0.35; // Increased logo height
-        const logoMaxWidth = textBlockWidth * 0.6; // Increased logo width
-        const img = new (window as any).Image();
-        img.src = logoUrl;
-        await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
-        
-        let logoWidth = img.width;
-        let logoHeight = img.height;
-        let ratio = logoWidth / logoHeight;
-        
-        if (logoHeight > logoMaxHeight) {
-            logoHeight = logoMaxHeight;
-            logoWidth = logoHeight * ratio;
-        }
-        if (logoWidth > logoMaxWidth) {
-            logoWidth = logoMaxWidth;
-            logoHeight = logoWidth / ratio;
-        }
-        
-        const logoX = margin + (textBlockWidth - logoWidth) / 2; // Center the logo
-        doc.addImage(logoUrl, 'JPEG', logoX, currentY, logoWidth, logoHeight);
-        currentY += logoHeight + 2;
-      } catch (e) {
-        console.error("Could not add logo", e);
-      }
-    }
+    let currentY = margin + 4;
     
     const productName = getProductFullName(product);
     const lotNumber = lot.lotNumber;
@@ -174,13 +145,13 @@ export function LotCard({
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
-    currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 2;
+    currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 3;
 
     doc.setFont('helvetica', 'normal');
     doc.text(`Lote: ${lotNumber}`, margin, currentY);
-    currentY += 3;
+    currentY += 4;
     doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
-    currentY += 4; // Increased space before validity
+    currentY += 4;
     
     doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 

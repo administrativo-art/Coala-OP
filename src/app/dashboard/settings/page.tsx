@@ -3,53 +3,23 @@
 "use client";
 
 import { useState, useRef } from 'react';
-import Image from 'next/image';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
-import { useAuth } from '@/hooks/use-auth';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useToast } from '@/hooks/use-toast';
 import { UserManagement } from '@/components/user-management';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Ticket, Upload, Trash2, Loader2, Eye } from 'lucide-react';
-import { resizeImage } from '@/lib/image-utils';
+import { Users, Ticket, Loader2, Eye } from 'lucide-react';
 import { labelSizes, type LabelSize } from '@/lib/label-sizes';
+import { useAuth } from '@/hooks/use-auth';
 
 function LabelSettings() {
-    const { logoUrl, labelSizeId, updateLogo, updateLabelSize, loading } = useCompanySettings();
+    const { labelSizeId, updateLabelSize, loading } = useCompanySettings();
     const { toast } = useToast();
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            if (file.size > 2 * 1024 * 1024) { // 2MB limit
-                toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Por favor, selecione um arquivo menor que 2MB.' });
-                return;
-            }
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                try {
-                    const resizedDataUrl = await resizeImage(reader.result as string, 200, 100);
-                    await updateLogo(resizedDataUrl);
-                    toast({ title: 'Logo atualizado com sucesso!' });
-                } catch (error) {
-                    toast({ variant: 'destructive', title: 'Erro ao processar imagem.' });
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-    
-    const handleRemoveLogo = async () => {
-        await updateLogo(null);
-        toast({ title: 'Logo removido.' });
-    };
-    
     const handleSizeChange = async (sizeId: string) => {
         await updateLabelSize(sizeId);
         toast({ title: 'Tamanho da etiqueta atualizado.' });
@@ -83,36 +53,7 @@ function LabelSettings() {
         doc.setDrawColor(200, 200, 200);
         doc.line(separatorX, margin, separatorX, selectedSize.height - margin);
 
-        let currentY = margin + 1;
-
-        if (logoUrl) {
-          try {
-            const logoMaxHeight = availableHeight * 0.35; // Increased logo height
-            const logoMaxWidth = textBlockWidth * 0.6; // Increased logo width
-            const img = new (window as any).Image();
-            img.src = logoUrl;
-            await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
-            
-            let logoWidth = img.width;
-            let logoHeight = img.height;
-            let ratio = logoWidth / logoHeight;
-            
-            if (logoHeight > logoMaxHeight) {
-                logoHeight = logoMaxHeight;
-                logoWidth = logoHeight * ratio;
-            }
-            if (logoWidth > logoMaxWidth) {
-                logoWidth = logoMaxWidth;
-                logoHeight = logoWidth / ratio;
-            }
-            
-            const logoX = margin + (textBlockWidth - logoWidth) / 2; // Center the logo
-            doc.addImage(logoUrl, 'JPEG', logoX, currentY, logoWidth, logoHeight);
-            currentY += logoHeight + 2;
-          } catch (e) {
-            console.error("Could not add logo", e);
-          }
-        }
+        let currentY = margin + 4;
         
         const productName = "Produto Exemplo - 500g";
         const lotNumber = "LOTE-12345";
@@ -122,13 +63,13 @@ function LabelSettings() {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 2;
+        currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 3;
 
         doc.setFont('helvetica', 'normal');
         doc.text(`Lote: ${lotNumber}`, margin, currentY);
-        currentY += 3;
+        currentY += 4;
         doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += 4; // Increased space before validity
+        currentY += 4; 
         
         doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
 
@@ -143,40 +84,8 @@ function LabelSettings() {
                     Personalize a aparência das etiquetas de lote.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                <div>
-                    <h3 className="text-lg font-medium">Logotipo da Empresa</h3>
-                    <p className="text-sm text-muted-foreground">Este logo aparecerá no topo de todas as etiquetas impressas.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-start gap-6">
-                    <div className="w-48 h-24 rounded-md border-2 border-dashed bg-muted flex items-center justify-center">
-                        {loading ? (
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        ) : logoUrl ? (
-                            <Image src={logoUrl} alt="Logo da empresa" width={192} height={96} className="object-contain p-2" />
-                        ) : (
-                            <span className="text-sm text-muted-foreground">Sem logo</span>
-                        )}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
-                            <Upload className="mr-2 h-4 w-4" /> Enviar novo logo
-                        </Button>
-                        <Input 
-                            type="file" 
-                            ref={fileInputRef} 
-                            className="hidden" 
-                            accept="image/png, image/jpeg, image/svg+xml" 
-                            onChange={handleFileUpload}
-                        />
-                        {logoUrl && (
-                            <Button variant="destructive" onClick={handleRemoveLogo} disabled={loading}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Remover logo
-                            </Button>
-                        )}
-                    </div>
-                </div>
-                 <div className="border-t pt-6 space-y-2">
+            <CardContent>
+                 <div className="space-y-2">
                     <h3 className="text-lg font-medium">Tamanho da Etiqueta</h3>
                     <p className="text-sm text-muted-foreground">
                         Selecione o modelo de etiqueta que você utiliza para a impressão.
@@ -195,7 +104,7 @@ function LabelSettings() {
                             </SelectContent>
                         </Select>
                         <Button variant="outline" onClick={handlePrintSample} disabled={loading}>
-                            <Eye className="mr-2 h-4 w-4" /> Ver Exemplo
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Eye className="mr-2 h-4 w-4" />} Ver Exemplo
                         </Button>
                     </div>
                 </div>
