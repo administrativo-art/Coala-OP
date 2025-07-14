@@ -42,7 +42,7 @@ export function StockAnalysisConfigurator({
       <CardHeader>
         <CardTitle>Gerenciar produto base</CardTitle>
         <CardDescription>
-          Produtos base servem para agrupar diferentes embalagens de um mesmo insumo. Por exemplo, o produto base "Ovomaltine" pode agrupar os insumos "Ovomaltine 250g" e "Ovomaltine 500g".
+          Produtos base servem para agrupar diferentes embalagens de um mesmo insumo. por exemplo, o produto base "ovomaltine" pode agrupar os insumos "ovomaltine 250g" e "ovomaltine 500g".
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
