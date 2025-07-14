@@ -11,11 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, Ticket, Upload, Trash2, Loader2 } from 'lucide-react';
 import { resizeImage } from '@/lib/image-utils';
+import { labelSizes, type LabelSize } from '@/lib/label-sizes';
 
 function LabelSettings() {
-    const { logoUrl, updateLogo, loading } = useCompanySettings();
+    const { logoUrl, labelSizeId, updateLogo, updateLabelSize, loading } = useCompanySettings();
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,13 +46,18 @@ function LabelSettings() {
         await updateLogo(null);
         toast({ title: 'Logo removido.' });
     };
+    
+    const handleSizeChange = async (sizeId: string) => {
+        await updateLabelSize(sizeId);
+        toast({ title: 'Tamanho da etiqueta atualizado.' });
+    };
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Configurações de Etiqueta</CardTitle>
                 <CardDescription>
-                    Personalize a aparência das etiquetas de lote fazendo o upload de um logotipo.
+                    Personalize a aparência das etiquetas de lote.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -85,6 +92,24 @@ function LabelSettings() {
                             </Button>
                         )}
                     </div>
+                </div>
+                 <div className="border-t pt-6 space-y-2">
+                    <h3 className="text-lg font-medium">Tamanho da Etiqueta</h3>
+                    <p className="text-sm text-muted-foreground">
+                        Selecione o modelo de etiqueta que você utiliza para a impressão.
+                    </p>
+                    <Select value={labelSizeId || ''} onValueChange={handleSizeChange} disabled={loading}>
+                        <SelectTrigger className="w-full max-w-sm">
+                            <SelectValue placeholder="Selecione um tamanho..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {labelSizes.map((size: LabelSize) => (
+                                <SelectItem key={size.id} value={size.id}>
+                                    {size.name} ({size.width}mm x {size.height}mm)
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </CardContent>
         </Card>

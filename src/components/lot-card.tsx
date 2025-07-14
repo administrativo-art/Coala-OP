@@ -14,6 +14,7 @@ import { type Kiosk, type LotEntry, type Product, type Location } from '@/types'
 import { useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import { labelSizes } from '@/lib/label-sizes';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -78,7 +79,7 @@ export function LotCard({
     canDelete,
     canViewHistory,
 }: LotCardProps) {
-  const { logoUrl } = useCompanySettings();
+  const { logoUrl, labelSizeId } = useCompanySettings();
   
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
@@ -101,16 +102,21 @@ export function LotCard({
   const { product } = productGroup;
 
   const handlePrintLabel = (lot: LotEntry, product: Product) => {
+    const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes[0];
+
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [50, 30]
+      format: [selectedSize.width, selectedSize.height]
     });
 
     let currentY = 3;
 
     if (logoUrl) {
-        doc.addImage(logoUrl, 'JPEG', 17.5, 2, 15, 7.5);
+        const logoWidth = 15;
+        const logoHeight = 7.5;
+        const logoX = (selectedSize.width - logoWidth) / 2;
+        doc.addImage(logoUrl, 'JPEG', logoX, 2, logoWidth, logoHeight);
         currentY = 12;
     }
 
@@ -119,7 +125,7 @@ export function LotCard({
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
 
     doc.setFontSize(8);
-    doc.text(productName, 25, currentY, { align: 'center', maxWidth: 45 });
+    doc.text(productName, selectedSize.width / 2, currentY, { align: 'center', maxWidth: selectedSize.width - 4 });
     
     currentY += 8;
     doc.setFontSize(10);
