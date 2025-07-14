@@ -31,6 +31,7 @@ export type Product = {
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
+  baseProductId?: string;
 };
 
 export type ProductDefinition = {
