@@ -13,6 +13,7 @@ import { Pencil, Trash2, Truck, History, Eraser, Package, Barcode, Warehouse, Ma
 import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
 import { useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { useCompanySettings } from '@/hooks/use-company-settings';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -77,6 +78,7 @@ export function LotCard({
     canDelete,
     canViewHistory,
 }: LotCardProps) {
+  const { logoUrl } = useCompanySettings();
   
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
@@ -102,23 +104,32 @@ export function LotCard({
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [50, 30] // A common label size
+      format: [50, 30]
     });
+
+    let currentY = 3;
+
+    if (logoUrl) {
+        doc.addImage(logoUrl, 'JPEG', 17.5, 2, 15, 7.5);
+        currentY = 12;
+    }
 
     const productName = getProductFullName(product);
     const lotNumber = lot.lotNumber;
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
 
     doc.setFontSize(8);
-    doc.text(productName, 3, 7, { maxWidth: 45 });
+    doc.text(productName, 3, currentY, { maxWidth: 45 });
     
+    currentY += 8;
     doc.setFontSize(10);
-    doc.text(`Lote: ${lotNumber}`, 3, 15);
+    doc.text(`Lote: ${lotNumber}`, 3, currentY);
 
+    currentY += 7;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`VALIDADE:`, 3, 22);
-    doc.text(expiryDate, 25, 22);
+    doc.text(`VALIDADE:`, 3, currentY);
+    doc.text(expiryDate, 25, currentY);
 
     doc.save(`etiqueta_${productName.replace(/ /g,"_")}_${lotNumber}.pdf`);
   };

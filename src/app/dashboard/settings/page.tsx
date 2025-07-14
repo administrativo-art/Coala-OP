@@ -1,31 +1,95 @@
 
 "use client";
 
+import { useState, useRef } from 'react';
+import Image from 'next/image';
+import { useAuth } from '@/hooks/use-auth';
+import { useCompanySettings } from '@/hooks/use-company-settings';
+import { useToast } from '@/hooks/use-toast';
 import { UserManagement } from '@/components/user-management';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Ticket } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Users, Ticket, Upload, Trash2, Loader2 } from 'lucide-react';
+import { resizeImage } from '@/lib/image-utils';
 
-// Placeholder for the upcoming label settings component
 function LabelSettings() {
+    const { logoUrl, updateLogo, loading } = useCompanySettings();
+    const { toast } = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) { // 2MB limit
+                toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Por favor, selecione um arquivo menor que 2MB.' });
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                try {
+                    const resizedDataUrl = await resizeImage(reader.result as string, 200, 100);
+                    await updateLogo(resizedDataUrl);
+                    toast({ title: 'Logo atualizado com sucesso!' });
+                } catch (error) {
+                    toast({ variant: 'destructive', title: 'Erro ao processar imagem.' });
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    
+    const handleRemoveLogo = async () => {
+        await updateLogo(null);
+        toast({ title: 'Logo removido.' });
+    };
+
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Configurações de Etiqueta</CardTitle>
                 <CardDescription>
-                    Personalize a aparência das etiquetas de lote. Em breve, você poderá fazer upload de um logotipo e definir tamanhos personalizados.
+                    Personalize a aparência das etiquetas de lote fazendo o upload de um logotipo.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
-                <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
-                    <p>Funcionalidade em desenvolvimento.</p>
+            <CardContent className="space-y-6">
+                <div>
+                    <h3 className="text-lg font-medium">Logotipo da Empresa</h3>
+                    <p className="text-sm text-muted-foreground">Este logo aparecerá no topo de todas as etiquetas impressas.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-start gap-6">
+                    <div className="w-48 h-24 rounded-md border-2 border-dashed bg-muted flex items-center justify-center">
+                        {loading ? (
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        ) : logoUrl ? (
+                            <Image src={logoUrl} alt="Logo da empresa" width={192} height={96} className="object-contain p-2" />
+                        ) : (
+                            <span className="text-sm text-muted-foreground">Sem logo</span>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
+                            <Upload className="mr-2 h-4 w-4" /> Enviar novo logo
+                        </Button>
+                        <Input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept="image/png, image/jpeg, image/svg+xml" 
+                            onChange={handleFileUpload}
+                        />
+                        {logoUrl && (
+                            <Button variant="destructive" onClick={handleRemoveLogo} disabled={loading}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Remover logo
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </CardContent>
         </Card>
     )
 }
-
 
 export default function SettingsPage() {
     const { permissions } = useAuth();

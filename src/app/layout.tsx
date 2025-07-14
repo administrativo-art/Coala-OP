@@ -17,6 +17,7 @@ import { ReturnsProvider } from '@/components/return-request-provider';
 import { ScheduleProvider } from '@/components/schedule-provider';
 import { MonthlyScheduleProvider } from '@/components/monthly-schedule-provider';
 import { StockCountProvider } from '@/components/stock-count-provider';
+import { CompanySettingsProvider } from '@/components/company-settings-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -40,6 +41,7 @@ export default function RootLayout({
           <AuthProvider>
             <KiosksProvider>
               <LocationsProvider>
+                <CompanySettingsProvider>
                   <BaseProductsProvider>
                     <ProductsProvider>
                         <ExpiryProductsProvider>
@@ -64,6 +66,7 @@ export default function RootLayout({
                         </ExpiryProductsProvider>
                     </ProductsProvider>
                   </BaseProductsProvider>
+                </CompanySettingsProvider>
               </LocationsProvider>
             </KiosksProvider>
           </AuthProvider>
