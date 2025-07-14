@@ -25,25 +25,50 @@ const entitySchema = z.object({
   fantasyName: z.string().optional(),
   document: z.string().min(1, 'O documento é obrigatório.'),
   address: z.object({
-    zipCode: z.string().min(8, 'CEP inválido'),
-    street: z.string().min(1, 'A rua é obrigatória.'),
-    number: z.string().min(1, 'O número é obrigatório.'),
+    zipCode: z.string().optional(),
+    street: z.string().optional(),
+    number: z.string().optional(),
     complement: z.string().optional(),
-    neighborhood: z.string().min(1, 'O bairro é obrigatório.'),
-    city: z.string().min(1, 'A cidade é obrigatória.'),
-    state: z.string().min(2, 'UF inválido').max(2, 'UF inválido'),
+    neighborhood: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
   }),
   contact: z.object({
     phone: z.string().optional(),
-    email: z.string().email('E-mail inválido.').optional(),
+    email: z.string().email('E-mail inválido.').or(z.literal('')).optional(),
   }),
   responsible: z.string().optional(),
-}).refine(data => {
-    if (data.type === 'pessoa_juridica' && !data.responsible) return false;
-    return true;
-}, {
-    message: 'O nome do responsável é obrigatório para pessoas jurídicas.',
-    path: ['responsible'],
+}).superRefine((data, ctx) => {
+    if (data.type === 'pessoa_juridica') {
+        if (!data.fantasyName || data.fantasyName.trim() === '') {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Nome fantasia é obrigatório.",
+                path: ['fantasyName'],
+            });
+        }
+    }
+
+    if (data.type === 'pessoa_fisica') {
+        if(!data.address.zipCode || data.address.zipCode.length < 8) {
+            ctx.addIssue({ code: 'custom', message: 'CEP inválido.', path: ['address.zipCode'] });
+        }
+        if(!data.address.street) {
+             ctx.addIssue({ code: 'custom', message: 'A rua é obrigatória.', path: ['address.street'] });
+        }
+         if(!data.address.number) {
+             ctx.addIssue({ code: 'custom', message: 'O número é obrigatório.', path: ['address.number'] });
+        }
+         if(!data.address.neighborhood) {
+             ctx.addIssue({ code: 'custom', message: 'O bairro é obrigatório.', path: ['address.neighborhood'] });
+        }
+         if(!data.address.city) {
+             ctx.addIssue({ code: 'custom', message: 'A cidade é obrigatória.', path: ['address.city'] });
+        }
+        if(!data.address.state || data.address.state.length !== 2) {
+             ctx.addIssue({ code: 'custom', message: 'UF inválido.', path: ['address.state'] });
+        }
+    }
 });
 
 type EntityFormValues = z.infer<typeof entitySchema>;
@@ -53,12 +78,18 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
 
     const form = useForm<EntityFormValues>({
         resolver: zodResolver(entitySchema),
-        defaultValues: entityToEdit || {
+        defaultValues: entityToEdit ? {
+            ...entityToEdit,
+            contact: {
+                phone: entityToEdit.contact?.phone || '',
+                email: entityToEdit.contact?.email || '',
+            },
+        } : {
             type: 'pessoa_fisica',
             name: '',
             fantasyName: '',
             document: '',
-            address: { zipCode: '', street: '', number: '', neighborhood: '', city: '', state: '' },
+            address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
             contact: { phone: '', email: '' },
             responsible: '',
         }
@@ -125,28 +156,28 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                 {entityType === 'pessoa_juridica' && (
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável (opcional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                     </div>
                                 )}
 
-                                <h3 className="text-md font-medium border-t pt-4">Endereço</h3>
+                                <h3 className="text-md font-medium border-t pt-4">Endereço (opcional para empresas)</h3>
                                 <div className="grid grid-cols-3 gap-4">
-                                     <FormField control={form.control} name="address.zipCode" render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><Input {...field} onBlur={e => handleZipCodeBlur(e.target.value)} /></FormControl><FormMessage /></FormItem>)}/>
+                                     <FormField control={form.control} name="address.zipCode" render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><Input {...field} value={field.value ?? ''} onBlur={e => handleZipCodeBlur(e.target.value)} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 <div className="grid grid-cols-[2fr_1fr] gap-4">
-                                     <FormField control={form.control} name="address.street" render={({ field }) => (<FormItem><FormLabel>Rua</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                     <FormField control={form.control} name="address.number" render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                     <FormField control={form.control} name="address.street" render={({ field }) => (<FormItem><FormLabel>Rua</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                     <FormField control={form.control} name="address.number" render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField control={form.control} name="address.complement" render={({ field }) => (<FormItem><FormLabel>Complemento</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="address.neighborhood" render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="address.neighborhood" render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                  <div className="grid grid-cols-[2fr_1fr] gap-4">
-                                    <FormField control={form.control} name="address.city" render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="address.state" render={({ field }) => (<FormItem><FormLabel>Estado (UF)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="address.city" render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="address.state" render={({ field }) => (<FormItem><FormLabel>Estado (UF)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
 
-                                <h3 className="text-md font-medium border-t pt-4">Contato</h3>
+                                <h3 className="text-md font-medium border-t pt-4">Contato (opcional)</h3>
                                  <div className="grid grid-cols-2 gap-4">
                                     <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
