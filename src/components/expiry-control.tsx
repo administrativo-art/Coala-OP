@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -49,10 +50,13 @@ export type GroupedByBaseProduct = {
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, zeroOutLotsByIds } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, zeroOutLotsByIds, moveMultipleLots } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { locations, loading: locationsLoading } = useLocations();
+
+  const searchParams = useSearchParams();
+  const scannedLotId = searchParams.get('lotId');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -93,6 +97,16 @@ export function ExpiryControl() {
         setInitialKioskSelectionMade(true);
     }
   }, [sortedKiosks, initialKioskSelectionMade]);
+  
+  useEffect(() => {
+    if (scannedLotId) {
+      const element = document.getElementById(`lot-instance-${scannedLotId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('animate-pulse-once');
+      }
+    }
+  }, [scannedLotId, loading]);
 
 
  const groupedData = useMemo(() => {
@@ -528,5 +542,3 @@ export function ExpiryControl() {
     </>
   );
 }
-
-    

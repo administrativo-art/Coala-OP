@@ -5,11 +5,12 @@ import Image from 'next/image';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, Eraser, Package, Barcode, Warehouse, MapPin, Calendar, Hash, Tag } from 'lucide-react';
+import { Pencil, Trash2, Truck, History, Eraser, Package, Barcode, Warehouse, MapPin, Calendar, Hash, Tag, QrCode } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
 import { useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
@@ -101,7 +102,7 @@ export function LotCard({
 
   const { product } = productGroup;
 
-  const handlePrintLabel = (lot: LotEntry, product: Product) => {
+  const handlePrintLabel = async (lot: LotEntry, product: Product) => {
     const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes[0];
 
     const doc = new jsPDF({
@@ -109,13 +110,25 @@ export function LotCard({
       unit: 'mm',
       format: [selectedSize.width, selectedSize.height]
     });
+    
+    const qrCodeSize = 20;
+    const qrCodeX = selectedSize.width - qrCodeSize - 3;
+    const qrCodeY = (selectedSize.height - qrCodeSize) / 2;
+
+    try {
+        const url = `${window.location.origin}/dashboard/stock/inventory-control?lotId=${lot.id}`;
+        const qrCodeDataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'H', margin: 1 });
+        doc.addImage(qrCodeDataUrl, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
+    } catch (err) {
+        console.error("Failed to generate QR Code", err);
+    }
 
     let currentY = 3;
 
     if (logoUrl) {
         const logoWidth = 15;
         const logoHeight = 7.5;
-        const logoX = (selectedSize.width - logoWidth) / 2;
+        const logoX = 3;
         doc.addImage(logoUrl, 'JPEG', logoX, 2, logoWidth, logoHeight);
         currentY = 12;
     }
@@ -125,7 +138,7 @@ export function LotCard({
     const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
 
     doc.setFontSize(8);
-    doc.text(productName, selectedSize.width / 2, currentY, { align: 'center', maxWidth: selectedSize.width - 4 });
+    doc.text(productName, 3, currentY, { maxWidth: selectedSize.width - qrCodeSize - 8 });
     
     currentY += 8;
     doc.setFontSize(10);
@@ -187,7 +200,7 @@ export function LotCard({
                                     {sortedLotGroup.map(lotInstance => {
                                         const locationName = getLocationName(lotInstance.locationId);
                                         return (
-                                            <div key={lotInstance.id} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-background">
+                                            <div key={lotInstance.id} id={`lot-instance-${lotInstance.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-background">
                                                 <div className="grid grid-cols-2 gap-x-4 text-sm">
                                                     <div className="flex items-center gap-2"><Warehouse className="h-4 w-4 text-primary"/> {getKioskName(lotInstance.kioskId)}</div>
                                                     <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary"/> {locationName || 'N/A'}</div>
@@ -204,8 +217,8 @@ export function LotCard({
                                                             </TooltipTrigger><TooltipContent><p>Histórico</p></TooltipContent></Tooltip></TooltipProvider>
                                                         )}
                                                          <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handlePrintLabel(lotInstance, product)}><Tag className="h-4 w-4" /></Button>
-                                                        </TooltipTrigger><TooltipContent><p>Imprimir Etiqueta</p></TooltipContent></Tooltip></TooltipProvider>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handlePrintLabel(lotInstance, product)}><QrCode className="h-4 w-4" /></Button>
+                                                        </TooltipTrigger><TooltipContent><p>Imprimir Etiqueta com QR Code</p></TooltipContent></Tooltip></TooltipProvider>
                                                         {canMove && lotInstance.quantity > 0 && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onMove(lotInstance.id)}><Truck className="h-4 w-4" /></Button>
