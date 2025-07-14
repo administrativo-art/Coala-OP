@@ -13,7 +13,7 @@ import { ItemManagement } from './item-management';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function RegistrationManagement() {
-    const { analysisProducts, addAnalysisProduct, deleteAnalysisProduct } = useStockAnalysisProducts();
+    const { analysisProducts, addAnalysisProduct, deleteAnalysisProduct, loading } = useStockAnalysisProducts();
     const { products } = useProducts();
     const [newCategoryName, setNewCategoryName] = useState('');
     
@@ -51,7 +51,7 @@ export function RegistrationManagement() {
                 <TabsContent value="categories" className="mt-4">
                     <StockAnalysisConfigurator 
                         analysisProducts={analysisProducts}
-                        loading={false}
+                        loading={loading}
                         newCategoryName={newCategoryName}
                         setNewCategoryName={setNewCategoryName}
                         onAddCategory={handleAddCategory}
