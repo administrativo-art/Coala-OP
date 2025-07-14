@@ -65,7 +65,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const handleZipCodeBlur = async (zipCode: string) => {
         if(zipCode.length < 8) return;
         try {
-            const res = await fetch(`https://viacep.com.br/ws/${zipCode}/json/`);
+            const res = await fetch(`https://cors-anywhere.herokuapp.com/https://viacep.com.br/ws/${zipCode}/json/`);
             const data = await res.json();
             if(!data.erro) {
                 form.setValue('address.street', data.logradouro);
