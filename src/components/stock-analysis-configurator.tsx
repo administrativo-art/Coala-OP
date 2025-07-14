@@ -40,27 +40,27 @@ export function StockAnalysisConfigurator({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cadastro de Categorias (Produtos Macro)</CardTitle>
+        <CardTitle>Gerenciar produto base (Produto Macro)</CardTitle>
         <CardDescription>
-          Categorias servem para agrupar diferentes embalagens de um mesmo insumo. Por exemplo, a categoria "Ovomaltine" pode agrupar os insumos "Ovomaltine 250g" e "Ovomaltine 500g".
+          Produtos base servem para agrupar diferentes embalagens de um mesmo insumo. Por exemplo, o produto base "Ovomaltine" pode agrupar os insumos "Ovomaltine 250g" e "Ovomaltine 500g".
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 p-1">
             <Input 
-                placeholder="Nome da nova categoria (ex: Leite Ninho)"
+                placeholder="Nome do novo produto base (ex: Leite Ninho)"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onAddCategory(); }}
             />
-            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar Categoria</Button>
+            <Button onClick={onAddCategory}><PlusCircle className="mr-2"/> Adicionar Produto Base</Button>
         </div>
 
          <div className="rounded-md border">
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>Nome da Categoria</TableHead>
+                        <TableHead>Nome do Produto Base</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -77,7 +77,7 @@ export function StockAnalysisConfigurator({
                     )) : (
                         <TableRow>
                             <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
-                                Nenhuma categoria cadastrada.
+                                Nenhum produto base cadastrado.
                             </TableCell>
                         </TableRow>
                      )}

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -42,7 +43,7 @@ export function RegistrationManagement() {
             <Tabs defaultValue="items" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="items">Cadastro de Insumos</TabsTrigger>
-                    <TabsTrigger value="categories">Cadastro de Categorias</TabsTrigger>
+                    <TabsTrigger value="categories">Gerenciar produto base</TabsTrigger>
                 </TabsList>
                 <TabsContent value="items" className="mt-4">
                      <ItemManagement />
