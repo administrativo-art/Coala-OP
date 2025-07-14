@@ -67,16 +67,19 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const entityType = form.watch('type');
 
     const handleZipCodeBlur = async (zipCode: string) => {
-        if(zipCode.length < 8) return;
+        const numericZipCode = zipCode.replace(/\D/g, '');
+        if(numericZipCode.length !== 8) return;
         try {
-            const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://viacep.com.br/ws/${zipCode}/json/`)}`);
-            const responseData = await res.json();
-            const data = JSON.parse(responseData.contents);
+            const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${numericZipCode}`);
+            if (!res.ok) {
+                throw new Error('Falha ao buscar CEP');
+            }
+            const data = await res.json();
             if(!data.erro) {
-                form.setValue('address.street', data.logradouro);
-                form.setValue('address.neighborhood', data.bairro);
-                form.setValue('address.city', data.localidade);
-                form.setValue('address.state', data.uf);
+                form.setValue('address.street', data.street);
+                form.setValue('address.neighborhood', data.neighborhood);
+                form.setValue('address.city', data.city);
+                form.setValue('address.state', data.state);
             }
         } catch (error) {
             console.error("Failed to fetch address from CEP", error);
@@ -114,7 +117,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome Completo / Razão Social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                     {entityType === 'pessoa_juridica' ? (
-                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     ) : (
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CPF</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                     )}
@@ -122,7 +125,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                 {entityType === 'pessoa_juridica' && (
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                     </div>
                                 )}
 
@@ -135,7 +138,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                      <FormField control={form.control} name="address.number" render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="address.complement" render={({ field }) => (<FormItem><FormLabel>Complemento</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="address.complement" render={({ field }) => (<FormItem><FormLabel>Complemento</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="address.neighborhood" render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                  <div className="grid grid-cols-[2fr_1fr] gap-4">
@@ -145,8 +148,8 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
 
                                 <h3 className="text-md font-medium border-t pt-4">Contato</h3>
                                  <div className="grid grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                             </div>
                         </ScrollArea>
