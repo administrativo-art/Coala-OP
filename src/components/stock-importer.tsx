@@ -30,9 +30,7 @@ import { type StockAnalysisReport, type StockAnalysisResultItem, type Distributi
 import { type MoveLotParams } from './expiry-products-provider';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ItemManagement } from './item-management';
 import { convertValue } from '@/lib/conversion';
-import { ProductManagement } from './product-management';
 
 const importSchema = z.object({
   kioskId: z.string().min(1, { message: "Por favor, selecione um quiosque." }),
@@ -51,7 +49,6 @@ export function StockAnalyzer() {
     const [stockReportToDelete, setStockReportToDelete] = useState<StockAnalysisReport | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isProductManagementOpen, setIsProductManagementOpen] = useState(false);
 
     const form = useForm<ImportFormValues>({
         resolver: zodResolver(importSchema),
@@ -531,18 +528,8 @@ export function StockAnalyzer() {
         <>
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-start gap-4">
-                        <div>
-                            <CardTitle>Análise de Reposição por Planilha</CardTitle>
-                            <CardDescription>Importe sua planilha de estoque para calcular as necessidades e gerar sugestões de distribuição.</CardDescription>
-                        </div>
-                         {canManageAnalysisProducts && (
-                            <Button variant="outline" className="shrink-0" onClick={() => setIsProductManagementOpen(true)}>
-                                <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar Insumos
-                            </Button>
-                        )}
-                    </div>
+                    <CardTitle>Análise de Reposição por Planilha</CardTitle>
+                    <CardDescription>Importe sua planilha de estoque para calcular as necessidades e gerar sugestões de distribuição.</CardDescription>
                 </CardHeader>
                 {canUploadStock ? (
                     <CardContent className="space-y-4 text-center p-6">
@@ -598,9 +585,7 @@ export function StockAnalyzer() {
                     {renderStockHistory()}
                 </div>
             )}
-            
-            <ProductManagement open={isProductManagementOpen} onOpenChange={setIsProductManagementOpen} />
-            
+                        
             {stockReportToDelete && canDeleteStockHistory && <DeleteConfirmationDialog open={!!stockReportToDelete} onOpenChange={() => setStockReportToDelete(null)} onConfirm={handleDeleteStockReportConfirm} itemName={`a análise "${stockReportToDelete.reportName}"`} />}
         </>
     );
