@@ -22,27 +22,21 @@ type EditableStockLevels = {
     [kioskId: string]: { min: string };
 };
 
-export function BaseProductManagement() {
-  const { baseProducts, loading, addBaseProduct, updateMultipleBaseProducts, deleteBaseProduct } = useBaseProducts();
+interface BaseProductManagementProps {
+    newBaseProductName: string;
+    setNewBaseProductName: (name: string) => void;
+    onAddBaseProduct: () => void;
+}
+
+export function BaseProductManagement({ newBaseProductName, setNewBaseProductName, onAddBaseProduct }: BaseProductManagementProps) {
+  const { baseProducts, loading, updateMultipleBaseProducts, deleteBaseProduct } = useBaseProducts();
   const { products } = useProducts();
   const { kiosks } = useKiosks();
-  const [newBaseProductName, setNewBaseProductName] = useState('');
-  const [editingBaseProduct, setEditingBaseProduct] = useState<BaseProduct | null>(null);
+
   const [productToDelete, setProductToDelete] = useState<BaseProduct | null>(null);
   const [editableStockLevels, setEditableStockLevels] = useState<Record<string, EditableStockLevels>>({});
   const [editableUnits, setEditableUnits] = useState<Record<string, string>>({});
 
-
-  const handleAddClick = () => {
-    if (newBaseProductName.trim()) {
-      addBaseProduct({ 
-        name: newBaseProductName.trim(),
-        unit: 'g', // Default unit
-        stockLevels: {}
-      });
-      setNewBaseProductName('');
-    }
-  };
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -120,16 +114,16 @@ export function BaseProductManagement() {
         </CardHeader>
         <CardContent className="space-y-4">
            <div className="flex gap-2">
-            <Input
-              placeholder="Nome do novo produto base"
-              value={newBaseProductName}
-              onChange={(e) => setNewBaseProductName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddClick()}
-            />
-            <Button onClick={handleAddClick}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
-            </Button>
-          </div>
+                <Input
+                placeholder="Nome do novo produto base"
+                value={newBaseProductName}
+                onChange={(e) => setNewBaseProductName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onAddBaseProduct()}
+                />
+                <Button onClick={onAddBaseProduct}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
+                </Button>
+            </div>
            <Accordion type="multiple" className="w-full space-y-2 pt-4 border-t">
             {loading ? (
               <div className="space-y-2">
