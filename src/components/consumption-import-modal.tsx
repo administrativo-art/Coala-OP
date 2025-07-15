@@ -9,8 +9,8 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type BaseProduct, type ConsumptionReport, type Kiosk, type Product } from '@/types';
-import { convertValue } from '@/lib/conversion';
+import { type BaseProduct, type ConsumptionReport, type Kiosk } from '@/types';
+import { convertValue, units } from '@/lib/conversion';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
-import { useProducts } from '@/hooks/use-products';
 
 
 const consumptionUploadSchema = z.object({
@@ -71,6 +70,17 @@ const parseQuantity = (qtyString: string | number): number => {
     return isNaN(parsed) ? 0 : parsed;
 };
 
+const getCategoryForUnit = (unit: string) => {
+    const lowerUnit = unit.toLowerCase();
+    for (const category in units) {
+        const categoryUnits = units[category as keyof typeof units];
+        if (Object.keys(categoryUnits).some(u => u.toLowerCase() === lowerUnit)) {
+            return category as keyof typeof units;
+        }
+    }
+    return null;
+}
+
 interface ConsumptionImportModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -82,12 +92,8 @@ interface ConsumptionImportModalProps {
 export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const { products, getProductFullName } = useProducts();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    
-    const baseProductsMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
-    const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
 
     const uploadForm = useForm<ConsumptionUploadFormValues>({
         resolver: zodResolver(consumptionUploadSchema),
@@ -99,10 +105,10 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
         }
     });
 
-    const findProductByName = (baseName: string): Product | undefined => {
-        const normalizedName = normalizeString(baseName);
+    const findBaseProductByName = (name: string): BaseProduct | undefined => {
+        const normalizedName = normalizeString(name);
         if (!normalizedName) return undefined;
-        return activeProducts.find(p => normalizeString(p.baseName) === normalizedName);
+        return baseProducts.find(p => normalizeString(p.name) === normalizedName);
     }
 
     const onUploadSubmit = async (values: ConsumptionUploadFormValues) => {
@@ -135,26 +141,26 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         
                         if (!itemName || !quantityStr) continue;
 
-                        const productConfig = findProductByName(itemName);
-                        if (!productConfig || !productConfig.baseProductId) {
+                        const baseProductConfig = findBaseProductByName(itemName);
+                        if (!baseProductConfig) {
                             unmatchedItems.add(itemName);
                             continue;
                         }
                         
-                        const baseProductConfig = baseProductsMap.get(productConfig.baseProductId);
-                        if (!baseProductConfig) {
+                        const quantityValue = parseQuantity(quantityStr);
+                        const category = getCategoryForUnit(baseProductConfig.unit);
+
+                        if (!category) {
                              unmatchedItems.add(itemName);
+                             console.warn(`Could not determine category for unit "${baseProductConfig.unit}" on base product "${baseProductConfig.name}"`);
                              continue;
                         }
-
-                        const quantityValue = parseQuantity(quantityStr);
-                        const unitToUse = unitFromCsv || productConfig.pdfUnit || productConfig.unit;
                         
-                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, baseProductConfig.unit, productConfig.category);
+                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitFromCsv || baseProductConfig.unit, baseProductConfig.unit, category);
                         
                         if (!analysisResults[baseProductConfig.id]) {
                             analysisResults[baseProductConfig.id] = { 
-                                productName: getProductFullName(productConfig),
+                                productName: baseProductConfig.name,
                                 consumedQuantity: 0,
                                 count: 0
                             };
