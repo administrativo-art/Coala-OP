@@ -99,21 +99,25 @@ export default function DashboardPage() {
     if (loading || !user || consumptionHistory.length === 0 || baseProducts.length === 0) {
         return [];
     }
-
+    
     const consumptionByKioskAndBaseProduct: { [kioskId: string]: { [baseProductName: string]: { total: number; count: number } } } = {};
+    const baseProductMap = new Map(baseProducts.map(bp => [bp.name, bp]));
 
     consumptionHistory.forEach(report => {
         if (!consumptionByKioskAndBaseProduct[report.kioskId]) {
             consumptionByKioskAndBaseProduct[report.kioskId] = {};
         }
-        report.results.forEach(item => {
-            const baseProductName = item.productName.split(' - ')[0].trim();
 
-            if (!consumptionByKioskAndBaseProduct[report.kioskId][baseProductName]) {
-                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName] = { total: 0, count: 0 };
+        report.results.forEach(item => {
+            const baseProduct = baseProductMap.get(item.productName);
+            if (baseProduct) {
+                const baseProductName = baseProduct.name;
+                if (!consumptionByKioskAndBaseProduct[report.kioskId][baseProductName]) {
+                    consumptionByKioskAndBaseProduct[report.kioskId][baseProductName] = { total: 0, count: 0 };
+                }
+                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].total += item.consumedQuantity;
+                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].count++;
             }
-            consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].total += item.consumedQuantity;
-            consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].count++;
         });
     });
     
@@ -576,5 +580,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-    
