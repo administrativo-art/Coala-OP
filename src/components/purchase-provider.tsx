@@ -24,7 +24,7 @@ export const PurchaseContext = createContext<PurchaseContextType | undefined>(un
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const { baseProducts } = useBaseProducts();
+    const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
 
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
@@ -38,9 +38,10 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
         baseProducts.forEach(bp => {
             if (bp.effectivePrice && bp.effectivePrice.productId && bp.effectivePrice.updatedAt) {
-                const existing = priceMap.get(bp.effectivePrice.productId);
-                if (!existing || new Date(bp.effectivePrice.updatedAt) > new Date(existing.updatedAt)) {
-                    priceMap.set(bp.effectivePrice.productId, {
+                const { productId, updatedAt } = bp.effectivePrice;
+                const existing = priceMap.get(productId);
+                if (!existing || new Date(updatedAt) > new Date(existing.updatedAt)) {
+                    priceMap.set(productId, {
                         pricePerUnit: bp.effectivePrice.pricePerUnit,
                         productId: bp.effectivePrice.productId,
                         entityId: bp.effectivePrice.entityId,
@@ -192,14 +193,14 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const value: PurchaseContextType = useMemo(() => ({
         sessions,
         items,
-        loading,
+        loading: loading || loadingBaseProducts,
         lastEffectivePrices,
         startNewSession,
         savePrice,
         closeSession,
         deleteSession,
         confirmPurchase,
-    }), [sessions, items, loading, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
+    }), [sessions, items, loading, loadingBaseProducts, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
