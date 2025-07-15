@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { unitCategories } from "@/lib/conversion";
 
 interface StartPurchaseSessionModalProps {
   open: boolean;
@@ -26,7 +25,7 @@ interface StartPurchaseSessionModalProps {
 const startSessionSchema = z.object({
   entityId: z.string().min(1, "Selecione um fornecedor."),
   description: z.string().min(3, "A descrição é obrigatória."),
-  baseProductCategories: z.array(z.string()).min(1, "Selecione ao menos uma categoria de insumo."),
+  baseProductIds: z.array(z.string()).min(1, "Selecione ao menos um insumo base."),
 });
 
 type StartSessionFormValues = z.infer<typeof startSessionSchema>;
@@ -41,23 +40,14 @@ export function StartPurchaseSessionModal({ open, onOpenChange }: StartPurchaseS
     defaultValues: {
       entityId: "",
       description: "",
-      baseProductCategories: [],
+      baseProductIds: [],
     },
   });
 
   const onSubmit = async (values: StartSessionFormValues) => {
-    const baseProductIds = baseProducts
-      .filter(bp => values.baseProductCategories.includes(bp.category))
-      .map(bp => bp.id);
-
-    if (baseProductIds.length === 0) {
-        form.setError("baseProductCategories", { message: "Nenhum insumo base encontrado para as categorias selecionadas." });
-        return;
-    }
-
     await startNewSession({
       ...values,
-      baseProductIds,
+      baseProductIds: values.baseProductIds,
     });
     form.reset();
     onOpenChange(false);
@@ -111,38 +101,38 @@ export function StartPurchaseSessionModal({ open, onOpenChange }: StartPurchaseS
             />
             <FormField
               control={form.control}
-              name="baseProductCategories"
+              name="baseProductIds"
               render={() => (
                 <FormItem>
-                  <FormLabel>Categorias de Insumos</FormLabel>
+                  <FormLabel>Insumos Base</FormLabel>
                    <ScrollArea className="h-40 w-full rounded-md border p-4">
-                     {unitCategories.map((category) => (
+                     {baseProducts.map((bp) => (
                         <FormField
-                            key={category}
+                            key={bp.id}
                             control={form.control}
-                            name="baseProductCategories"
+                            name="baseProductIds"
                             render={({ field }) => {
                             return (
                                 <FormItem
-                                key={category}
+                                key={bp.id}
                                 className="flex flex-row items-start space-x-3 space-y-0 mb-2"
                                 >
                                 <FormControl>
                                     <Checkbox
-                                    checked={field.value?.includes(category)}
+                                    checked={field.value?.includes(bp.id)}
                                     onCheckedChange={(checked) => {
                                         return checked
-                                        ? field.onChange([...field.value, category])
+                                        ? field.onChange([...field.value, bp.id])
                                         : field.onChange(
                                             field.value?.filter(
-                                            (value) => value !== category
+                                            (value) => value !== bp.id
                                             )
                                         )
                                     }}
                                     />
                                 </FormControl>
                                 <Label className="font-normal">
-                                    {category}
+                                    {bp.name}
                                 </Label>
                                 </FormItem>
                             )
