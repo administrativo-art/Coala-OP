@@ -1,32 +1,19 @@
-
-
 // src/hooks/useValidatedConsumptionData.ts
 import { useMemo } from 'react';
 import { useConsumptionAnalysis } from './use-consumption-analysis';
 import { useBaseProducts } from './use-base-products';
-import { 
-  validateConsumptionReports, 
-  validateBaseProducts, 
-  generateDataIntegrityReport,
-} from '@/utils/dataValidation';
 
 export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport, deleteReport } = useConsumptionAnalysis();
   const { baseProducts: rawBaseProducts, loading: loadingBases } = useBaseProducts();
 
-  // Validar e normalizar dados
+  // A validação agora é feita no momento da importação.
+  // Este hook agora serve para combinar as fontes de dados.
   const validatedData = useMemo(() => {
-    const reports = rawReports ? validateConsumptionReports(rawReports) : [];
-    const baseProducts = rawBaseProducts ? validateBaseProducts(rawBaseProducts) : [];
-    
-    const integrityReport = reports.length > 0 && baseProducts.length > 0 
-      ? generateDataIntegrityReport(reports, baseProducts)
-      : null;
-
     return {
-      reports,
-      baseProducts,
-      integrityReport
+      reports: rawReports || [],
+      baseProducts: rawBaseProducts || [],
+      integrityReport: null // A validação de integridade foi movida para a importação.
     };
   }, [rawReports, rawBaseProducts]);
 
