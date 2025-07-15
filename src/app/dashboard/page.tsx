@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useProducts } from "@/hooks/use-products"
+import { useBaseProducts } from "@/hooks/use-base-products"
 import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useReturnRequests } from "@/hooks/use-return-requests"
@@ -33,16 +34,15 @@ export default function DashboardPage() {
   const { user, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { products, loading: productsLoading } = useProducts()
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { history: consumptionHistory, loading: consumptionLoading } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
-
-  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
   
   const CHART_COLORS = [
     'hsl(var(--chart-1))',
@@ -53,12 +53,11 @@ export default function DashboardPage() {
   ];
 
   useEffect(() => {
-    // Set initial selection only once when active products are loaded.
-    if (!initialSelectionMade && activeProducts.length > 0) {
-      setSelectedProducts(activeProducts.map(p => p.id));
+    if (!initialSelectionMade && baseProducts.length > 0) {
+      setSelectedBaseProducts(baseProducts.map(bp => bp.id));
       setInitialSelectionMade(true);
     }
-  }, [activeProducts, initialSelectionMade]);
+  }, [baseProducts, initialSelectionMade]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -96,64 +95,74 @@ export default function DashboardPage() {
   }, [returnRequests, returnRequestsLoading, user, permissions]);
 
   const chartData = useMemo(() => {
-    const loading = consumptionLoading || productsLoading || kiosksLoading;
-    if (loading || !user || consumptionHistory.length === 0 || products.length === 0) {
+    const loading = consumptionLoading || productsLoading || kiosksLoading || baseProductsLoading;
+    if (loading || !user || consumptionHistory.length === 0 || products.length === 0 || baseProducts.length === 0) {
       return [];
     }
 
-    const kioskConsumption: { [kioskId: string]: { [productId: string]: { total: number; count: number } } } = {};
+    const productToBaseProductMap = new Map<string, string>();
+    products.forEach(p => {
+        if(p.baseProductId) {
+            productToBaseProductMap.set(p.id, p.baseProductId);
+        }
+    });
+
+    const kioskConsumption: { [kioskId: string]: { [baseProductId: string]: { total: number; count: number } } } = {};
 
     consumptionHistory.forEach(report => {
       if (!kioskConsumption[report.kioskId]) {
         kioskConsumption[report.kioskId] = {};
       }
       report.results.forEach(item => {
-        if (!kioskConsumption[report.kioskId][item.productId]) {
-          kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0 };
+        const baseProductId = productToBaseProductMap.get(item.productId);
+        if (!baseProductId) return;
+
+        if (!kioskConsumption[report.kioskId][baseProductId]) {
+          kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
         }
-        kioskConsumption[report.kioskId][item.productId].total += item.consumedQuantity;
-        kioskConsumption[report.kioskId][item.productId].count += 1;
+        kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
+        kioskConsumption[report.kioskId][baseProductId].count += 1;
       });
     });
 
     const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
-    let relevantConsumptionData: { [productId: string]: number } = {};
+    let relevantConsumptionData: { [baseProductId: string]: number } = {};
 
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
-        const masterAverages: { [productId: string]: { totalAvg: number } } = {};
+        const masterAverages: { [baseProductId: string]: { totalAvg: number } } = {};
         
         Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
             if (kioskId === 'matriz') return;
 
-            Object.entries(productMap).forEach(([productId, data]) => {
+            Object.entries(productMap).forEach(([baseProductId, data]) => {
                 const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
-                if (!masterAverages[productId]) {
-                    masterAverages[productId] = { totalAvg: 0 };
+                if (!masterAverages[baseProductId]) {
+                    masterAverages[baseProductId] = { totalAvg: 0 };
                 }
-                masterAverages[productId].totalAvg += avgForKiosk;
+                masterAverages[baseProductId].totalAvg += avgForKiosk;
             });
         });
 
-        Object.entries(masterAverages).forEach(([productId, data]) => {
-            relevantConsumptionData[productId] = data.totalAvg;
+        Object.entries(masterAverages).forEach(([baseProductId, data]) => {
+            relevantConsumptionData[baseProductId] = data.totalAvg;
         });
 
     } else {
         const singleKioskData = kioskConsumption[kioskIdForChart];
         if (singleKioskData) {
-            Object.entries(singleKioskData).forEach(([productId, data]) => {
-                relevantConsumptionData[productId] = data.count > 0 ? data.total / data.count : 0;
+            Object.entries(singleKioskData).forEach(([baseProductId, data]) => {
+                relevantConsumptionData[baseProductId] = data.count > 0 ? data.total / data.count : 0;
             });
         }
     }
 
-    const dataForChart = activeProducts
-      .filter(p => selectedProducts.includes(p.id))
-      .map(product => {
-        const avgQuantity = relevantConsumptionData[product.id] || 0;
+    const dataForChart = baseProducts
+      .filter(bp => selectedBaseProducts.includes(bp.id))
+      .map(baseProduct => {
+        const avgQuantity = relevantConsumptionData[baseProduct.id] || 0;
         return {
-          productId: product.id,
-          name: `${product.baseName} (${product.unit})`,
+          baseProductId: baseProduct.id,
+          name: `${baseProduct.name} (${baseProduct.unit})`,
           "Consumo": parseFloat(avgQuantity.toFixed(2)),
         };
       })
@@ -161,13 +170,13 @@ export default function DashboardPage() {
 
     return dataForChart;
 
-  }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
+  }, [user, consumptionHistory, products, baseProducts, consumptionLoading, productsLoading, baseProductsLoading, kiosks, kiosksLoading, selectedKiosk, selectedBaseProducts]);
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
 
-  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading;
+  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || baseProductsLoading;
   const chartHeight = Math.max(350, chartData.length * 40);
 
   const handleExportPdf = () => {
@@ -178,13 +187,13 @@ export default function DashboardPage() {
     const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
     doc.setFontSize(18);
-    doc.text(`Relatório de consumo médio mensal`, 14, 22);
+    doc.text(`Relatório de consumo médio mensal por produto base`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
     doc.text(`Gerado em: ${monthYear}`, 14, 35);
 
-    const tableHead = [['Produto (unidade)', 'Consumo Médio']];
+    const tableHead = [['Produto Base (unidade)', 'Consumo Médio']];
     const tableBody = chartData.map(item => [
         item.name,
         item.Consumo.toLocaleString(undefined, { maximumFractionDigits: 2 }),
@@ -198,7 +207,7 @@ export default function DashboardPage() {
         headStyles: { fillColor: '#3F51B5' },
     });
     
-    doc.save(`consumo_medio_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
+    doc.save(`consumo_medio_base_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
   };
 
   const handleExportCsv = () => {
@@ -208,7 +217,7 @@ export default function DashboardPage() {
     const monthYear = format(new Date(), 'MM-yyyy');
     
     const csvData = chartData.map(item => ({
-        "Produto (unidade)": item.name,
+        "Produto Base (unidade)": item.name,
         "Consumo Medio": item.Consumo,
     }));
     
@@ -217,7 +226,7 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `consumo_medio_${kioskName}_${monthYear}.csv`);
+    link.setAttribute("download", `consumo_medio_base_${kioskName}_${monthYear}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -234,9 +243,9 @@ export default function DashboardPage() {
       month: monthYear,
       generated_at: new Date().toISOString(),
       data: chartData.map(item => ({
-        product_name: item.name,
+        base_product_name: item.name,
         average_consumption: item.Consumo,
-        product_id: item.productId,
+        base_product_id: item.baseProductId,
       }))
     };
 
@@ -246,7 +255,7 @@ export default function DashboardPage() {
     const filenameKiosk = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `consumo_medio_${filenameKiosk}_${monthYear}.json`);
+    link.setAttribute("download", `consumo_medio_base_${filenameKiosk}_${monthYear}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -268,12 +277,12 @@ export default function DashboardPage() {
     )
   }
 
-  const handleProductSelection = (productId: string, checked: boolean) => {
-    setSelectedProducts(current => {
+  const handleBaseProductSelection = (baseProductId: string, checked: boolean) => {
+    setSelectedBaseProducts(current => {
         if (checked) {
-            return [...current, productId];
+            return [...current, baseProductId];
         } else {
-            return current.filter(id => id !== productId);
+            return current.filter(id => id !== baseProductId);
         }
     });
   }
@@ -452,7 +461,7 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-col gap-4">
                 <div>
                     <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal
+                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal por produto base
                     </CardTitle>
                     <CardDescription>
                         {user?.username === 'Tiago Brasil' 
@@ -465,24 +474,24 @@ export default function DashboardPage() {
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
                                 <ListFilter className="mr-2 h-4 w-4" />
-                                Filtrar produtos ({selectedProducts.length})
+                                Filtrar produtos ({selectedBaseProducts.length})
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-64">
-                            <DropdownMenuLabel>Exibir produtos</DropdownMenuLabel>
+                            <DropdownMenuLabel>Exibir produtos base</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar seleção</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedBaseProducts(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedBaseProducts([])}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
-                            {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
                                 <DropdownMenuCheckboxItem
                                     key={product.id}
-                                    checked={selectedProducts.includes(product.id)}
-                                    onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
+                                    checked={selectedBaseProducts.includes(product.id)}
+                                    onCheckedChange={(checked) => handleBaseProductSelection(product.id, !!checked)}
                                     onSelect={(e) => e.preventDefault()}
                                 >
-                                    {product.baseName}
+                                    {product.name}
                                 </DropdownMenuCheckboxItem>
                             ))}
                             </ScrollArea>
@@ -502,7 +511,7 @@ export default function DashboardPage() {
                 </div>
             </CardHeader>
             <CardContent className="pr-2 pl-0">
-                 { (consumptionLoading || productsLoading || kiosksLoading) ? (
+                 { (consumptionLoading || productsLoading || kiosksLoading || baseProductsLoading) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={chartHeight}>
@@ -545,11 +554,11 @@ export default function DashboardPage() {
                     <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
                             <TrendingUp className="h-12 w-12 mb-4" />
                             <p className="font-semibold">
-                                {selectedProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
+                                {selectedBaseProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
                             </p>
                             <p className="text-sm">
-                                {selectedProducts.length === 0
-                                ? "Selecione produtos no filtro para exibi-los no gráfico."
+                                {selectedBaseProducts.length === 0
+                                ? "Selecione produtos base no filtro para exibi-los no gráfico."
                                 : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
                                     ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
