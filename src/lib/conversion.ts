@@ -26,6 +26,10 @@ export const getUnitsForCategory = (category: UnitCategory): string[] => {
 
 export function convertValue(value: number, fromUnit: string, toUnit: string, category: UnitCategory): number {
   if (!value || !fromUnit || !toUnit || !category) return 0;
+  
+  if (fromUnit.toLowerCase() === toUnit.toLowerCase()) {
+    return value;
+  }
 
   const categoryUnits = units[category];
   if (!categoryUnits) {

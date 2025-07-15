@@ -45,11 +45,11 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-    // Simple parser: remove anything that's not a digit, comma or dot, then replace comma with dot.
-    const cleanedString = qtyString.replace(/[^0-9,.]/g, '').replace(',', '.');
+    const cleanedString = qtyString.replace(',', '.');
     const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
 };
+
 
 const getCategoryForUnit = (unit: string) => {
     const lowerUnit = unit.toLowerCase();
@@ -129,15 +129,16 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         }
                         
                         const quantityValue = parseQuantity(quantityStr);
-                        const category = getCategoryForUnit(baseProductConfig.unit);
+                        const targetUnit = baseProductConfig.unit;
+                        const category = getCategoryForUnit(targetUnit);
 
                         if (!category) {
                              unmatchedItems.add(itemName);
-                             console.warn(`Could not determine category for unit "${baseProductConfig.unit}" on base product "${baseProductConfig.name}"`);
+                             console.warn(`Could not determine category for unit "${targetUnit}" on base product "${baseProductConfig.name}"`);
                              continue;
                         }
                         
-                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitFromCsv || baseProductConfig.unit, baseProductConfig.unit, category);
+                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitFromCsv || targetUnit, targetUnit, category);
                         
                         if (!analysisResults[baseProductConfig.id]) {
                             analysisResults[baseProductConfig.id] = { 
@@ -160,7 +161,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     }
                     
                     const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: baseProductId,
+                        productId: baseProductId, // Ensure productId is populated
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
