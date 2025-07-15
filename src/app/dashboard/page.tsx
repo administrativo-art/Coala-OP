@@ -100,28 +100,24 @@ export default function DashboardPage() {
       return [];
     }
 
-    const productToBaseProductMap = new Map<string, string>();
-    products.forEach(p => {
-        if(p.baseProductId) {
-            productToBaseProductMap.set(p.id, p.baseProductId);
-        }
-    });
-
     const kioskConsumption: { [kioskId: string]: { [baseProductId: string]: { total: number; count: number } } } = {};
+    const baseProductNames = new Map(baseProducts.map(bp => [bp.id, bp.name.toLowerCase()]));
 
     consumptionHistory.forEach(report => {
       if (!kioskConsumption[report.kioskId]) {
         kioskConsumption[report.kioskId] = {};
       }
       report.results.forEach(item => {
-        const baseProductId = productToBaseProductMap.get(item.productId);
-        if (!baseProductId) return;
-
-        if (!kioskConsumption[report.kioskId][baseProductId]) {
-          kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
+        for (const [baseProductId, baseProductName] of baseProductNames.entries()) {
+          if (item.productName.toLowerCase().startsWith(baseProductName)) {
+              if (!kioskConsumption[report.kioskId][baseProductId]) {
+                kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
+              }
+              kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
+              kioskConsumption[report.kioskId][baseProductId].count += 1;
+              break; 
+          }
         }
-        kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
-        kioskConsumption[report.kioskId][baseProductId].count += 1;
       });
     });
 
@@ -587,3 +583,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
