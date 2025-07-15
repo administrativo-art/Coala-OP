@@ -9,7 +9,7 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type Product, type ConsumptionReport, type Kiosk } from '@/types';
+import { type BaseProduct, type ConsumptionReport, type Kiosk } from '@/types';
 import { convertValue } from '@/lib/conversion';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -19,7 +19,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
 import { useProducts } from '@/hooks/use-products';
-import { useBaseProducts } from '@/hooks/use-base-products';
 
 
 const consumptionUploadSchema = z.object({
@@ -76,20 +75,19 @@ interface ConsumptionImportModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     kiosks: Kiosk[];
-    products: Product[];
+    baseProducts: BaseProduct[];
     addReport: (report: Omit<ConsumptionReport, 'id'>) => Promise<string | null>;
 }
 
-export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, addReport }: ConsumptionImportModalProps) {
+export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const { getProductFullName } = useProducts();
-    const { baseProducts } = useBaseProducts();
+    const { products, getProductFullName } = useProducts();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     
-    const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
     const baseProductsMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
+    const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
 
     const uploadForm = useForm<ConsumptionUploadFormValues>({
         resolver: zodResolver(consumptionUploadSchema),
@@ -101,7 +99,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
         }
     });
 
-    const findProductByName = (baseName: string): Product | undefined => {
+    const findProductByName = (baseName: string) => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
         return activeProducts.find(p => normalizeString(p.baseName) === normalizedName);
@@ -127,7 +125,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                     const kiosk = kiosks.find(k => k.id === values.kioskId);
                     if (!kiosk) throw new Error("Quiosque selecionado inválido.");
 
-                    const analysisResults: { [productId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
+                    const analysisResults: { [baseProductId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
                     const unmatchedItems = new Set<string>();
 
                     for (const row of rows) {
@@ -152,18 +150,17 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         const quantityValue = parseQuantity(quantityStr);
                         const unitToUse = productConfig.pdfUnit || unitFromCsv || productConfig.unit;
                         
-                        // Garante a conversão para a unidade do PRODUTO BASE.
                         const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, baseProductConfig.unit, productConfig.category);
                         
-                        if (!analysisResults[productConfig.id]) {
-                            analysisResults[productConfig.id] = { 
+                        if (!analysisResults[baseProductConfig.id]) {
+                            analysisResults[baseProductConfig.id] = { 
                                 productName: getProductFullName(productConfig),
                                 consumedQuantity: 0,
                                 count: 0
                             };
                         }
-                        analysisResults[productConfig.id].consumedQuantity += consumedQuantityInBaseUnit;
-                        analysisResults[productConfig.id].count += 1;
+                        analysisResults[baseProductConfig.id].consumedQuantity += consumedQuantityInBaseUnit;
+                        analysisResults[baseProductConfig.id].count += 1;
                     }
 
                     if (unmatchedItems.size > 0) {
@@ -175,11 +172,11 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         });
                     }
                     
-                    const finalResults = Object.entries(analysisResults).map(([productId, data]) => ({
-                        productId,
+                    const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
+                        productId: '', 
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
-                        baseProductId: products.find(p => p.id === productId)?.baseProductId || null,
+                        baseProductId: baseProductId,
                     }));
 
                     await addReport({

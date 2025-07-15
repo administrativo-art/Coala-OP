@@ -1,4 +1,5 @@
 
+
 // src/hooks/useValidatedConsumptionData.ts
 import { useMemo } from 'react';
 import { useConsumptionAnalysis } from './use-consumption-analysis';
@@ -7,12 +8,10 @@ import {
   validateConsumptionReports, 
   validateBaseProducts, 
   generateDataIntegrityReport,
-  type ConsumptionReport,
-  type BaseProduct
 } from '@/utils/dataValidation';
 
 export function useValidatedConsumptionData() {
-  const { history: rawReports, loading: loadingReports } = useConsumptionAnalysis();
+  const { history: rawReports, loading: loadingReports, addReport, deleteReport } = useConsumptionAnalysis();
   const { baseProducts: rawBaseProducts, loading: loadingBases } = useBaseProducts();
 
   // Validar e normalizar dados
@@ -34,7 +33,9 @@ export function useValidatedConsumptionData() {
   return {
     ...validatedData,
     isLoading: loadingReports || loadingBases,
-    error: null,
-    hasValidData: validatedData.reports.length > 0 && validatedData.baseProducts.length > 0
+    error: null, // Placeholder for future error handling
+    hasValidData: validatedData.reports.length > 0 && validatedData.baseProducts.length > 0,
+    addReport,
+    deleteReport,
   };
 }

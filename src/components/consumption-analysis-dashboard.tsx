@@ -372,7 +372,7 @@ export function ConsumptionAnalysisDashboard() {
             open={isImportModalOpen}
             onOpenChange={setIsImportModalOpen}
             kiosks={kiosks}
-            products={baseProducts}
+            baseProducts={baseProducts}
             addReport={addReport}
         />
 
