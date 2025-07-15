@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -45,8 +46,8 @@ const countFormSchema = z.object({
 type CountFormValues = z.infer<typeof countFormSchema>;
 
 function PendingApprovals() {
-  const { counts, updateStockCount, loading: loadingCounts } = useStockCount();
-  const { updateLot } = useExpiryProducts();
+  const { counts, updateStockCount, loading: loadingCounts } from useStockCount();
+  const { adjustLotQuantity } = useExpiryProducts();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -60,10 +61,7 @@ function PendingApprovals() {
     
     for (const item of count.items) {
         if (item.difference !== 0) {
-            await updateLot({
-                id: item.lotId,
-                quantity: item.countedQuantity
-            });
+            await adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy);
         }
     }
 

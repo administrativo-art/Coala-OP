@@ -85,7 +85,7 @@ export type LotEntry = {
   locationCode?: string | null;
 };
 
-export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA';
+export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'ENTRADA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA';
 
 export type MovementRecord = {
   id: string;
