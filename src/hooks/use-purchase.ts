@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useContext } from 'react';
+import { createContext, useContext } from 'react';
 import { PurchaseContext, type PurchaseContextType } from '@/components/purchase-provider';
 
 export const usePurchase = (): PurchaseContextType => {
