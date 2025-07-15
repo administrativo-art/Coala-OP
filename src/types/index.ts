@@ -167,6 +167,7 @@ export type PermissionSet = {
     team: { manage: boolean, view: boolean };
     purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
     stockCount: { perform: boolean; approve: boolean; viewHistory: boolean; };
+    itemRequests: { manage: boolean; };
 };
 
 export type Profile = {
@@ -417,6 +418,7 @@ export const defaultGuestPermissions: PermissionSet = {
     team: { manage: false, view: false },
     purchasing: { suggest: false, approve: false, viewHistory: false },
     stockCount: { perform: false, approve: false, viewHistory: false },
+    itemRequests: { manage: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -432,6 +434,7 @@ export const defaultUserPermissions: PermissionSet = {
     team: { manage: false, view: true },
     purchasing: { suggest: true, approve: false, viewHistory: true },
     stockCount: { perform: true, approve: false, viewHistory: true },
+    itemRequests: { manage: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -447,4 +450,5 @@ export const defaultAdminPermissions: PermissionSet = {
     team: { manage: true, view: true },
     purchasing: { suggest: true, approve: true, viewHistory: true },
     stockCount: { perform: true, approve: true, viewHistory: true },
+    itemRequests: { manage: true },
 };

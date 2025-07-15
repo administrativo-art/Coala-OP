@@ -4,13 +4,14 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 export function StockManagement() {
     const { permissions } = useAuth();
     const canPurchase = permissions.purchasing.suggest || permissions.purchasing.approve;
     const canCountStock = permissions.stockCount.perform || permissions.stockCount.approve;
+    const canManageItemRequests = permissions.itemRequests.manage;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -18,7 +19,7 @@ export function StockManagement() {
                 <h1 className="text-4xl font-bold tracking-tight">Gestão de estoque</h1>
                 <p className="text-lg text-muted-foreground mt-2">Gerencie lotes, vencimentos, reposição e consumo do seu estoque em um só lugar.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
@@ -105,6 +106,24 @@ export function StockManagement() {
                         </Link>
                     </CardContent>
                 </Card>
+                 {canManageItemRequests && (
+                    <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                        <CardHeader className="p-0 items-center">
+                            <div className="p-4 bg-primary/10 rounded-full mb-4">
+                                <Inbox className="h-10 w-10 text-primary" />
+                            </div>
+                            <CardTitle className="text-2xl mb-2">Solicitações de Cadastro</CardTitle>
+                            <CardDescription>Revise e gerencie as solicitações de novos insumos enviadas pelos colaboradores.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                            <Link href="/dashboard/stock/item-requests" className="w-full">
+                                <Button className="w-full text-lg py-6">
+                                    Ver solicitações <ArrowRight className="ml-2" />
+                                </Button>
+                            </Link>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
     );
