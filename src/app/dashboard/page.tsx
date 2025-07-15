@@ -107,15 +107,17 @@ export default function DashboardPage() {
             consumptionByKioskAndBaseProduct[report.kioskId] = {};
         }
         report.results.forEach(item => {
-            const baseProductName = item.productName.split(' - ')[0].trim();
-            const product = baseProducts.find(bp => bp.name === baseProductName);
-            if (product) {
-                if (!consumptionByKioskAndBaseProduct[report.kioskId][baseProductName]) {
-                    consumptionByKioskAndBaseProduct[report.kioskId][baseProductName] = { total: 0, count: 0 };
-                }
-                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].total += item.consumedQuantity;
-                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].count++;
+            const baseProduct = products.find(p => p.id === item.productId)?.baseProductId 
+                ? baseProducts.find(bp => bp.id === products.find(p => p.id === item.productId)?.baseProductId)
+                : null;
+            
+            const baseProductName = baseProduct ? baseProduct.name : item.productName.split(' - ')[0].trim();
+
+            if (!consumptionByKioskAndBaseProduct[report.kioskId][baseProductName]) {
+                consumptionByKioskAndBaseProduct[report.kioskId][baseProductName] = { total: 0, count: 0 };
             }
+            consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].total += item.consumedQuantity;
+            consumptionByKioskAndBaseProduct[report.kioskId][baseProductName].count++;
         });
     });
     
@@ -123,14 +125,15 @@ export default function DashboardPage() {
     const relevantConsumptionData: { [baseProductName: string]: number } = {};
     
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
-        const masterAverages: { [baseProductName: string]: { totalAvg: number } } = {};
+        const masterAverages: { [baseProductName: string]: { totalAvg: number, count: number } } = {};
         Object.values(consumptionByKioskAndBaseProduct).forEach(productMap => {
             Object.entries(productMap).forEach(([baseProductName, data]) => {
                 const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
                 if (!masterAverages[baseProductName]) {
-                    masterAverages[baseProductName] = { totalAvg: 0 };
+                    masterAverages[baseProductName] = { totalAvg: 0, count: 0 };
                 }
                 masterAverages[baseProductName].totalAvg += avgForKiosk;
+                masterAverages[baseProductName].count++;
             });
         });
         Object.entries(masterAverages).forEach(([baseProductName, data]) => {
@@ -159,7 +162,7 @@ export default function DashboardPage() {
 
     return dataForChart;
 
-  }, [user, consumptionHistory, baseProducts, consumptionLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
+  }, [user, consumptionHistory, products, baseProducts, consumptionLoading, productsLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
