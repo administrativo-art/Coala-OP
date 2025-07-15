@@ -56,7 +56,7 @@ export function StockManagement() {
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
                                 <ShoppingCart className="h-10 w-10 text-primary" />
                             </div>
-                            <CardTitle className="text-2xl mb-2">Gestão de Compras</CardTitle>
+                            <CardTitle className="text-2xl mb-2">Gestão de compras</CardTitle>
                             <CardDescription>Pesquise preços, compare custos e efetive suas compras de insumos.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
@@ -73,8 +73,8 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Truck className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Devoluções e bonificações</CardTitle>
-                        <CardDescription>Gerencie o processo de devolução e bonificação de insumos com fornecedores.</CardDescription>
+                        <CardTitle className="text-2xl mb-2">Gestão de avarias</CardTitle>
+                        <CardDescription>Gerencie o processo de devolução, bonificação e outras avarias de insumos com fornecedores.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/returns" className="w-full">

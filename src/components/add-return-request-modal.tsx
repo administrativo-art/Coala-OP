@@ -108,9 +108,9 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Abrir chamado de devolução/bonificação</DialogTitle>
+          <DialogTitle>Abrir chamado de avaria</DialogTitle>
           <DialogDescription>
-            Preencha os detalhes abaixo para iniciar um novo processo.
+            Preencha os detalhes abaixo para iniciar um novo processo de devolução ou bonificação.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -214,7 +214,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
                   <FormLabel>Motivo</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Descreva o motivo da devolução ou bonificação (ex: produto vencido, avariado, etc.)"
+                      placeholder="Descreva o motivo da avaria (ex: produto vencido, embalagem danificada, etc.)"
                       {...field}
                     />
                   </FormControl>

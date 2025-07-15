@@ -152,8 +152,8 @@ export function ReturnRequestManagement() {
             <Card>
                 <CardHeader>
                     <div>
-                        <CardTitle className="flex items-center gap-2"><Truck />Controle de Devoluções e Bonificações</CardTitle>
-                        <CardDescription>Gerencie o ciclo de vida dos chamados com fornecedores.</CardDescription>
+                        <CardTitle className="flex items-center gap-2"><Truck />Gestão de Avarias</CardTitle>
+                        <CardDescription>Gerencie o ciclo de vida dos chamados de devolução, bonificação e outras avarias com fornecedores.</CardDescription>
                     </div>
                 </CardHeader>
                 <CardContent>

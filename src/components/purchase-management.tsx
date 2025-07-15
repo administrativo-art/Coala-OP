@@ -54,7 +54,7 @@ export function PurchaseManagement() {
         <div className="w-full max-w-7xl mx-auto">
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Gestão de Compras</CardTitle>
+                    <CardTitle className="font-headline">Gestão de compras</CardTitle>
                     <CardDescription>Pesquise preços, compare custos por unidade e efetive suas compras.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">

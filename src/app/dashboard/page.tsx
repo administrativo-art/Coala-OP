@@ -225,7 +225,7 @@ export default function DashboardPage() {
             <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Truck className="h-6 w-6" /> Chamados de devolução/bonificação abertos
+                        <Truck className="h-6 w-6" /> Chamados de avarias abertos
                     </CardTitle>
                     <CardDescription>
                         Estes são os seus chamados que precisam de atenção. Clique em um chamado para ver os detalhes.
