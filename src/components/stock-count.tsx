@@ -130,7 +130,7 @@ export function StockCount() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
-        <CardDescription>Realize a contagem dos lotes em estoque. Apenas os itens com divergência ou observações serão salvos para aprovação.</CardDescription>
+        <CardDescription>Realize a contagem do estoque. Itens com quantidade alterada ou com observações serão salvos para aprovação.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
@@ -161,7 +161,6 @@ export function StockCount() {
                         <TableHead>Produto</TableHead>
                         <TableHead>Lote</TableHead>
                         <TableHead>Validade</TableHead>
-                        <TableHead className="text-center">Qtd. Sistema</TableHead>
                         <TableHead className="w-24">Qtd. Contada</TableHead>
                         <TableHead className="w-40">Observações</TableHead>
                       </TableRow>
@@ -169,7 +168,7 @@ export function StockCount() {
                     <TableBody>
                       {fields.map((field, index) => {
                         const lot = kioskLots[index];
-                        if (!lot) return null; // FIX: Add a guard clause here
+                        if (!lot) return null;
                         
                         const systemQty = lot.quantity;
                         const countedQty = form.watch(`items.${index}.countedQuantity`);
@@ -180,7 +179,6 @@ export function StockCount() {
                             <TableCell>{lot.productName}</TableCell>
                             <TableCell>{lot.lotNumber}</TableCell>
                             <TableCell>{format(parseISO(lot.expiryDate), 'dd/MM/yy')}</TableCell>
-                            <TableCell className="text-center font-semibold">{systemQty}</TableCell>
                             <TableCell>
                               <Input
                                 type="number"
