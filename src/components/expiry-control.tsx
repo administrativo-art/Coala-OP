@@ -315,40 +315,34 @@ export function ExpiryControl() {
                 const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
                 
                 let totalGroupQuantity = 0;
-                let displayUnit = 'pacotes';
+                let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
 
-                if (baseProductConfig) {
+                if (baseGroup.isBaseProduct && baseProductConfig) {
                     displayUnit = baseProductConfig.unit;
                     
-                    const allProductsInGroup = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
-                    const canConvert = allProductsInGroup.every(p => 
-                        (p.category === baseProductConfig.category) ||
-                        (p.secondaryUnit && p.secondaryUnitValue)
-                    );
-
-                    if (canConvert) {
-                        totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
-                            return brandTotal + brand.products.reduce((prodTotal, prodGroup) => {
-                                const productConfig = prodGroup.product;
-                                return prodTotal + prodGroup.lots.reduce((lotTotal, lot) => {
-                                    if (productConfig.secondaryUnit && productConfig.secondaryUnitValue) {
-                                        return lotTotal + convertValue(lot.quantity * productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category);
-                                    }
-                                    const valueInProductUnits = lot.quantity * productConfig.packageSize;
-                                    return lotTotal + convertValue(valueInProductUnits, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                }, 0);
+                    totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
+                        return brandTotal + brand.products.reduce((prodTotal, prodGroup) => {
+                            const productConfig = prodGroup.product;
+                            const valueInBaseUnits = prodGroup.lots.reduce((lotTotal, lot) => {
+                                let singleItemValue = 0;
+                                // Scenario 1: Direct conversion (e.g., Massa to Massa)
+                                if (productConfig.category === baseProductConfig.category) {
+                                    singleItemValue = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
+                                } 
+                                // Scenario 2: Secondary Unit conversion (e.g., Unidade to Massa, Embalagem to Unidade)
+                                else if (productConfig.secondaryUnit && productConfig.secondaryUnitValue) {
+                                     // Determine the category for the secondary conversion (e.g., if product is 'Unidade', its secondary value is likely 'Massa')
+                                    const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
+                                    singleItemValue = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                }
+                                return lotTotal + (lot.quantity * singleItemValue);
                             }, 0);
+                            return prodTotal + valueInBaseUnits;
                         }, 0);
-                    } else {
-                         totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
-                            brandAcc + brand.products.reduce((prodAcc, prod) => 
-                                prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
-                            , 0)
-                        , 0);
-                    }
+                    }, 0);
 
                 } else {
-                    totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                     totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
                         brandAcc + brand.products.reduce((prodAcc, prod) => 
                             prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
                         , 0)
