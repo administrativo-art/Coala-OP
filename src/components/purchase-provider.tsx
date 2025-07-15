@@ -14,6 +14,7 @@ export interface PurchaseContextType {
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
   lastEffectivePrices: Map<string, LastEffectivePrice>;
+  lastSavedPrices: Map<string, number>; // New map for last saved prices
   startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
@@ -42,19 +43,37 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             if (bp.lastEffectivePrice && bp.lastEffectivePrice.productId && bp.lastEffectivePrice.updatedAt) {
                 const currentPriceInfo = bp.lastEffectivePrice;
                 const existingPriceInfo = priceMap.get(currentPriceInfo.productId);
-
+                 
                 if (!existingPriceInfo || new Date(currentPriceInfo.updatedAt) > new Date(existingPriceInfo.updatedAt)) {
-                    priceMap.set(currentPriceInfo.productId, {
-                        pricePerUnit: currentPriceInfo.pricePerUnit,
-                        productId: currentPriceInfo.productId,
-                        entityId: currentPriceInfo.entityId || '',
-                        updatedAt: currentPriceInfo.updatedAt,
-                    });
+                    priceMap.set(currentPriceInfo.productId, currentPriceInfo);
                 }
             }
         });
         return priceMap;
     }, [baseProducts, loadingBaseProducts]);
+
+    const lastSavedPrices = useMemo((): Map<string, number> => {
+        const priceMap = new Map<string, { price: number; date: string }>();
+        const closedSessionsMap = new Map(sessions.filter(s => s.status === 'closed').map(s => [s.id, s]));
+
+        items.forEach(item => {
+            const session = closedSessionsMap.get(item.sessionId);
+            if (session && item.price > 0 && session.closedAt) {
+                const existing = priceMap.get(item.productId);
+                if (!existing || new Date(session.closedAt) > new Date(existing.date)) {
+                    priceMap.set(item.productId, { price: item.price, date: session.closedAt });
+                }
+            }
+        });
+        
+        const finalMap = new Map<string, number>();
+        priceMap.forEach((value, key) => {
+            finalMap.set(key, value.price);
+        });
+
+        return finalMap;
+
+    }, [items, sessions]);
 
     useEffect(() => {
         const qSessions = query(collection(db, "purchaseSessions"));
@@ -221,12 +240,13 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         priceHistory,
         loading: loading || loadingBaseProducts,
         lastEffectivePrices,
+        lastSavedPrices,
         startNewSession,
         savePrice,
         closeSession,
         deleteSession,
         confirmPurchase,
-    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
+    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

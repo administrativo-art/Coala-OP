@@ -38,7 +38,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
     const { getProductFullName, products } = useProducts();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { savePrice, confirmPurchase, lastEffectivePrices } = usePurchase();
+    const { savePrice, confirmPurchase, lastSavedPrices } = usePurchase();
     const { permissions } = useAuth();
     
     const [prices, setPrices] = useState<Record<string, string>>({});
@@ -156,39 +156,18 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 </TableHeader>
                 <TableBody>
                     {tableData.map(row => {
-                        const lastPriceInfo = lastEffectivePrices.get(row.product.id);
-                        const lastSupplier = lastPriceInfo ? entities.find(e => e.id === lastPriceInfo.entityId) : null;
+                        const lastSavedPrice = lastSavedPrices.get(row.product.id);
                         
-                        let lastTotalPrice: number | null = null;
-                        if (lastPriceInfo) {
-                            const packageSizeInBaseUnit = convertValue(row.product.packageSize, row.product.unit, baseProduct.unit, row.product.category);
-                            if (packageSizeInBaseUnit > 0) {
-                                lastTotalPrice = lastPriceInfo.pricePerUnit * packageSizeInBaseUnit;
-                            }
-                        }
-
                         return (
                         <TableRow key={row.product.id}>
                             <TableCell className="font-medium">
                                 {getProductFullName(row.product)}
                             </TableCell>
                             <TableCell>
-                                {lastPriceInfo ? (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <div className="text-sm text-muted-foreground flex items-center gap-1 cursor-default">
-                                                    <Info className="h-3 w-3" />
-                                                    {lastTotalPrice !== null ? lastTotalPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : "-"}
-                                                </div>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
-                                                <p>Preço unitário: {lastPriceInfo.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}</p>
-                                                <p>Data: {format(new Date(lastPriceInfo.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                                {lastSavedPrice !== undefined ? (
+                                    <div className="text-sm text-muted-foreground">
+                                        {lastSavedPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </div>
                                 ) : (
                                     <span className="text-sm text-muted-foreground">-</span>
                                 )}
