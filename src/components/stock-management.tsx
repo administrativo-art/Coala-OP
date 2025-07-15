@@ -11,7 +11,6 @@ export function StockManagement() {
     const { permissions } = useAuth();
     const canPurchase = permissions.purchasing.suggest || permissions.purchasing.approve;
     const canCountStock = permissions.stockCount.perform || permissions.stockCount.approve;
-    const canManageItemRequests = permissions.itemRequests.manage;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -44,7 +43,7 @@ export function StockManagement() {
                                 <ListOrdered className="h-10 w-10 text-primary" />
                             </div>
                             <CardTitle className="text-2xl mb-2">Contagem de Estoque</CardTitle>
-                            <CardDescription>Realize contagens parciais do estoque e envie para aprovação de ajuste.</CardDescription>
+                            <CardDescription>Realize contagens parciais do estoque e gerencie solicitações de novos insumos.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                             <Link href="/dashboard/stock/count" className="w-full">
@@ -106,24 +105,6 @@ export function StockManagement() {
                         </Link>
                     </CardContent>
                 </Card>
-                 {canManageItemRequests && (
-                    <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
-                        <CardHeader className="p-0 items-center">
-                            <div className="p-4 bg-primary/10 rounded-full mb-4">
-                                <Inbox className="h-10 w-10 text-primary" />
-                            </div>
-                            <CardTitle className="text-2xl mb-2">Solicitações de Cadastro</CardTitle>
-                            <CardDescription>Revise e gerencie as solicitações de novos insumos enviadas pelos colaboradores.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                            <Link href="/dashboard/stock/item-requests" className="w-full">
-                                <Button className="w-full text-lg py-6">
-                                    Ver solicitações <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </div>
     );

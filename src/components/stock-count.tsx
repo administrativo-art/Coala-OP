@@ -25,6 +25,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Save, ListOrdered, Inbox, PlusCircle } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
+import { ItemAdditionRequestManagement } from './item-addition-request-management';
+import { Separator } from './ui/separator';
 
 const countItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -38,7 +40,7 @@ const countFormSchema = z.object({
 type CountFormValues = z.infer<typeof countFormSchema>;
 
 export function StockCount() {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
@@ -128,9 +130,10 @@ export function StockCount() {
   };
 
   const loading = kiosksLoading || lotsLoading || productsLoading;
+  const canManageRequests = permissions.itemRequests.manage;
 
   return (
-    <>
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
@@ -176,7 +179,7 @@ export function StockCount() {
 
                       return (
                         <Card key={field.id} className="p-4 flex gap-4 items-center">
-                          <div className="w-20 h-20 shrink-0">
+                           <div className="w-20 h-20 shrink-0">
                                 {product?.imageUrl ? (
                                     <Image
                                         src={product.imageUrl}
@@ -203,7 +206,7 @@ export function StockCount() {
                                     name={`items.${index}.countedQuantity`}
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="text-xs">Qtd. Final</FormLabel>
+                                        <FormLabel className="text-xs">Qtd. Contada</FormLabel>
                                         <FormControl>
                                             <Input
                                             type="number"
@@ -255,6 +258,15 @@ export function StockCount() {
       onOpenChange={setIsRequestModalOpen}
       kioskId={selectedKioskId}
     />
-    </>
+
+    {canManageRequests && (
+        <div className="mt-6">
+            <Separator />
+            <div className="mt-6">
+                 <ItemAdditionRequestManagement />
+            </div>
+        </div>
+    )}
+    </div>
   );
 }

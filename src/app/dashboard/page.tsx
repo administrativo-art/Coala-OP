@@ -9,11 +9,12 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { useReturnRequests } from "@/hooks/use-return-requests"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
+import { useItemAddition } from "@/hooks/use-item-addition"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
+  const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
   
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
@@ -68,11 +70,16 @@ export default function DashboardPage() {
     return activeRequests.filter(r => r.createdBy.userId === user.id);
   }, [returnRequests, returnRequestsLoading, user, permissions]);
 
+  const pendingItemAdditionRequests = useMemo(() => {
+      if (itemAdditionLoading || !permissions.itemRequests.manage) return [];
+      return itemAdditionRequests.filter(r => r.status === 'pending');
+  }, [itemAdditionRequests, itemAdditionLoading, permissions]);
+
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
 
-  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading;
+  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading || itemAdditionLoading;
 
   if (initialLoading) {
     return (
@@ -103,7 +110,7 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Aqui está um resumo da sua operação.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
@@ -122,6 +129,20 @@ export default function DashboardPage() {
             <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
           </CardContent>
         </Card>
+        {pendingItemAdditionRequests.length > 0 && (
+             <Card className="border-primary bg-primary/5">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Cadastros Pendentes</CardTitle>
+                    <Inbox className="h-6 w-6 text-primary" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-4xl font-bold text-primary">{pendingItemAdditionRequests.length}</div>
+                    <p className="text-xs text-muted-foreground">
+                        <Link href="/dashboard/stock/count" className="hover:underline">Ver solicitações de cadastro</Link>
+                    </p>
+                </CardContent>
+            </Card>
+        )}
       </div>
 
         {expiringSoonLots.length > 0 && (
