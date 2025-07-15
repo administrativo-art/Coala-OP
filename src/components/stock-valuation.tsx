@@ -16,12 +16,21 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ScrollArea } from './ui/scroll-area';
 import { useProducts } from '@/hooks/use-products';
+import { convertValue } from '@/lib/conversion';
+
+const CHART_COLORS = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+  ];
 
 interface LotWithValue {
     lotNumber: string;
     productName: string;
     quantity: number;
-    pricePerUnit: number;
+    pricePerPackage: number;
     totalValue: number;
     baseProductId: string;
 }
@@ -34,7 +43,7 @@ export function StockValuation() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-    const { getProductFullName } = useProducts();
+    const { products, loading: productsLoading } = useProducts();
     
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
 
@@ -48,32 +57,39 @@ export function StockValuation() {
         return map;
     }, [baseProducts]);
     
-    const baseProductUnitMap = useMemo(() => {
-        const map = new Map<string, string>();
-        baseProducts.forEach(bp => map.set(bp.id, bp.unit));
-        return map;
-    }, [baseProducts]);
-
     const valuedLots = useMemo((): LotWithValue[] => {
-        if (!selectedKioskId || lotsLoading || baseProductsLoading) return [];
+        if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading) return [];
         
         return lots
             .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0 && lot.baseProductId)
             .map(lot => {
-                const pricePerUnit = baseProductPriceMap.get(lot.baseProductId!) || 0;
+                const pricePerBaseUnit = baseProductPriceMap.get(lot.baseProductId!) || 0;
+                const productDetails = products.find(p => p.id === lot.productId);
+
+                if (!productDetails || pricePerBaseUnit === 0) {
+                    return null;
+                }
+
+                const baseProduct = baseProducts.find(bp => bp.id === productDetails.baseProductId);
+                if (!baseProduct) return null;
+
+                const packageSizeInBaseUnits = convertValue(productDetails.packageSize, productDetails.unit, baseProduct.unit, baseProduct.category);
+                
+                const pricePerPackage = packageSizeInBaseUnits * pricePerBaseUnit;
+
                 return {
                     lotNumber: lot.lotNumber,
                     productName: lot.productName,
                     quantity: lot.quantity,
-                    pricePerUnit: pricePerUnit,
-                    totalValue: lot.quantity * pricePerUnit,
+                    pricePerPackage: pricePerPackage,
+                    totalValue: lot.quantity * pricePerPackage,
                     baseProductId: lot.baseProductId!
                 };
             })
-            .filter(item => item.totalValue > 0)
+            .filter((item): item is LotWithValue => item !== null && item.totalValue > 0)
             .sort((a, b) => a.productName.localeCompare(b.productName));
 
-    }, [selectedKioskId, lots, baseProductsLoading, lotsLoading, baseProductPriceMap]);
+    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, baseProductPriceMap]);
     
     const summaryByBaseProduct = useMemo(() => {
         const summary: { [key: string]: { name: string; quantity: number; value: number; unit: string; } } = {};
@@ -118,10 +134,10 @@ export function StockValuation() {
         doc.text("Resumo por Insumo Base", 14, 45);
         autoTable(doc, {
             startY: 50,
-            head: [['Insumo Base', 'Quantidade Total', 'Valor Total (R$)']],
+            head: [['Insumo Base', 'Quantidade Total (Pacotes)', 'Valor Total (R$)']],
             body: summaryByBaseProduct.map(item => [
                 item.name,
-                `${item.quantity.toLocaleString()} ${item.unit}`,
+                `${item.quantity.toLocaleString()} pct`,
                 formatCurrency(item.value)
             ]),
         });
@@ -131,12 +147,12 @@ export function StockValuation() {
         doc.text("Detalhes por Lote", 14, 20);
         autoTable(doc, {
              startY: 25,
-            head: [['Lote', 'Insumo', 'Quantidade', 'R$/unid.', 'Valor do Lote (R$)']],
+            head: [['Lote', 'Insumo', 'Quantidade (Pct)', 'R$/Pct.', 'Valor do Lote (R$)']],
             body: valuedLots.map(item => [
                 item.lotNumber,
                 item.productName,
                 item.quantity,
-                formatCurrency(item.pricePerUnit),
+                formatCurrency(item.pricePerPackage),
                 formatCurrency(item.totalValue)
             ]),
         });
@@ -150,7 +166,7 @@ export function StockValuation() {
         return a.name.localeCompare(b.name);
     }), [kiosks]);
     
-    const loading = kiosksLoading || lotsLoading || baseProductsLoading;
+    const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
 
     if (loading) {
         return (
@@ -243,7 +259,7 @@ export function StockValuation() {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Insumo</TableHead>
-                                                <TableHead className="text-right">Quantidade</TableHead>
+                                                <TableHead className="text-right">Quantidade (Pct)</TableHead>
                                                 <TableHead className="text-right">Valor Total</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -251,7 +267,7 @@ export function StockValuation() {
                                             {summaryByBaseProduct.map(item => (
                                                 <TableRow key={item.name}>
                                                     <TableCell className="font-medium">{item.name}</TableCell>
-                                                    <TableCell className="text-right">{item.quantity.toLocaleString()} {item.unit}</TableCell>
+                                                    <TableCell className="text-right">{item.quantity.toLocaleString()} pct</TableCell>
                                                     <TableCell className="text-right font-semibold">{formatCurrency(item.value)}</TableCell>
                                                 </TableRow>
                                             ))}
@@ -274,8 +290,8 @@ export function StockValuation() {
                                         <TableRow>
                                             <TableHead>Lote</TableHead>
                                             <TableHead>Insumo Vinculado</TableHead>
-                                            <TableHead className="text-right">Quantidade</TableHead>
-                                            <TableHead className="text-right">R$/unid.</TableHead>
+                                            <TableHead className="text-right">Quantidade (Pct)</TableHead>
+                                            <TableHead className="text-right">R$/Pct.</TableHead>
                                             <TableHead className="text-right">Valor do Lote</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -285,7 +301,7 @@ export function StockValuation() {
                                                 <TableCell className="font-medium">{item.lotNumber}</TableCell>
                                                 <TableCell>{item.productName}</TableCell>
                                                 <TableCell className="text-right">{item.quantity}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.pricePerUnit)}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.pricePerPackage)}</TableCell>
                                                 <TableCell className="text-right font-semibold">{formatCurrency(item.totalValue)}</TableCell>
                                             </TableRow>
                                         ))}
