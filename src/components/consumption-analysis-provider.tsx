@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -35,16 +36,7 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
   
   const addReport = useCallback(async (report: Omit<ConsumptionReport, 'id'>) => {
     try {
-      // The `productId` from the import modal is actually the `baseProductId`.
-      // We ensure it's correctly mapped here before saving.
-      const reportWithCorrectBaseIds = {
-        ...report,
-        results: report.results.map(item => ({
-          ...item,
-          baseProductId: item.productId, // Correctly assign baseProductId
-        })),
-      };
-      const docRef = await addDoc(collection(db, "consumptionReports"), reportWithCorrectBaseIds);
+      const docRef = await addDoc(collection(db, "consumptionReports"), report);
       return docRef.id;
     } catch (error) {
       console.error("Error adding consumption report:", error);
