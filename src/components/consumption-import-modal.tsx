@@ -42,31 +42,12 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString === 'number') {
         return isNaN(qtyString) ? 0 : qtyString;
     }
-
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-
-    let numStr = qtyString.trim();
-
-    if (numStr.startsWith('(') && numStr.endsWith(')')) {
-        numStr = '-' + numStr.substring(1, numStr.length - 1);
-    }
-
-    const lastComma = numStr.lastIndexOf(',');
-    const lastDot = numStr.lastIndexOf('.');
-
-    if (lastComma > lastDot) {
-        numStr = numStr.replace(/\./g, '').replace(',', '.');
-    } else if (lastDot > lastComma) {
-        numStr = numStr.replace(/,/g, '');
-    } else if (lastComma !== -1) {
-        numStr = numStr.replace(',', '.');
-    }
-
-    numStr = numStr.replace(/[^0-9.-]/g, '');
-
-    const parsed = parseFloat(numStr);
+    // Simple parser: remove anything that's not a digit, comma or dot, then replace comma with dot.
+    const cleanedString = qtyString.replace(/[^0-9,.]/g, '').replace(',', '.');
+    const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
 };
 
@@ -172,8 +153,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     if (unmatchedItems.size > 0) {
                         toast({
                             variant: 'destructive',
-                            title: 'Alguns itens não foram encontrados ou não tem Produto Base',
-                            description: `Os seguintes itens do CSV foram ignorados: ${Array.from(unmatchedItems).join(', ')}`,
+                            title: 'Alguns itens não foram encontrados',
+                            description: `Os seguintes itens do CSV foram ignorados: ${Array.from(unmatchedItems).join(', ')}. Verifique se eles existem no cadastro de 'Produtos Base'.`,
                             duration: 10000,
                         });
                     }
@@ -184,6 +165,10 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
                     }));
+
+                    if (finalResults.length === 0) {
+                        throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
+                    }
 
                     await addReport({
                         reportName: file.name,
