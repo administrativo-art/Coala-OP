@@ -319,21 +319,34 @@ export function ExpiryControl() {
 
                 if (baseProductConfig) {
                     const allProductsInGroup = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
-                    
-                    const isConvertible = allProductsInGroup.every(p => {
-                        return (p.category === 'Massa' || p.category === 'Volume') && p.category === baseProductConfig.category;
-                    });
-                    
-                    if (isConvertible) {
+                    const canConvert = allProductsInGroup.every(p => 
+                        (p.category === 'Massa' || p.category === 'Volume' || p.category === 'Embalagem')
+                    );
+
+                    if (canConvert) {
                         displayUnit = baseProductConfig.unit;
                         totalGroupQuantity = allProductsInGroup.reduce((total, p) => {
-                           const lotsForProduct = baseGroup.brands.flatMap(b => b.products.find(pg => pg.product.id === p.id)?.lots || []);
-                           const productTotal = lotsForProduct.reduce((sum, lot) => sum + (lot.quantity * p.packageSize), 0);
-                           return total + convertValue(productTotal, p.unit, baseProductConfig.unit, p.category);
+                            const lotsForProduct = baseGroup.brands.flatMap(b => b.products.find(pg => pg.product.id === p.id)?.lots || []);
+                            let productTotalInBaseUnit = 0;
+                            
+                            lotsForProduct.forEach(lot => {
+                                const lotQuantity = lot.quantity;
+                                if(p.secondaryUnit && p.secondaryUnitValue) {
+                                     productTotalInBaseUnit += lotQuantity * p.secondaryUnitValue;
+                                } else if (p.category === baseProductConfig.category) {
+                                     const lotTotalInProductUnit = lotQuantity * p.packageSize;
+                                     productTotalInBaseUnit += convertValue(lotTotalInProductUnit, p.unit, baseProductConfig.unit, p.category);
+                                } else {
+                                     // This case should ideally not be hit if canConvert is true, but as a safe fallback.
+                                     productTotalInBaseUnit += lotQuantity;
+                                }
+                            });
+                            
+                            return total + productTotalInBaseUnit;
                         }, 0);
                     } else {
                         // Fallback: if not all products are convertible, sum up packages
-                        totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                         totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
                             brandAcc + brand.products.reduce((prodAcc, prod) => 
                                 prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
                             , 0)
