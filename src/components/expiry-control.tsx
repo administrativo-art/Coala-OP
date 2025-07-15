@@ -320,37 +320,39 @@ export function ExpiryControl() {
                 if (baseGroup.isBaseProduct && baseProductConfig) {
                     displayUnit = baseProductConfig.unit;
                     
-                    totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
-                        return brandTotal + brand.products.reduce((prodTotal, prodGroup) => {
+                    const lotTotalValues = baseGroup.brands.flatMap(brand => 
+                        brand.products.flatMap(prodGroup => {
                             const productConfig = prodGroup.product;
-                            const lotTotalValue = prodGroup.lots.reduce((lotTotal, lot) => {
+                            return prodGroup.lots.map(lot => {
                                 let singleItemValue = 0;
-
-                                // Scenario 1: Same category conversion (e.g., Massa to Massa)
-                                if (productConfig.category === baseProductConfig.category) {
-                                    singleItemValue = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                } 
-                                // Scenario 2: Different category, using secondary unit fields
-                                else if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number') {
+                                // Scenario 1: Use secondary unit fields if available (e.g., Unidade -> Massa)
+                                if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
                                     const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
                                     singleItemValue = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                } 
+                                // Scenario 2: Standard conversion for same category (e.g., Massa to Massa)
+                                else if (productConfig.category === baseProductConfig.category) {
+                                     singleItemValue = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
                                 } else {
                                     conversionPossible = false;
                                 }
-                                
-                                return lotTotal + (lot.quantity * singleItemValue);
-                            }, 0);
-                            return prodTotal + lotTotalValue;
-                        }, 0);
-                    }, 0);
+                                return lot.quantity * singleItemValue;
+                            });
+                        })
+                    );
                     
-                    if (!conversionPossible) {
+                    if (lotTotalValues.some(v => v === 0) && conversionPossible) {
+                        conversionPossible = false;
+                    }
+
+                    if(conversionPossible) {
+                        totalGroupQuantity = lotTotalValues.reduce((sum, val) => sum + val, 0);
+                    } else {
                         displayUnit = "pacotes";
                         totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
                             total + brand.products.reduce((prodTotal, prod) => 
                                 prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
                     }
-
                 } else {
                      totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
                         brandAcc + brand.products.reduce((prodAcc, prod) => 
