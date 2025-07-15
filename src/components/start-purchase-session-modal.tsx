@@ -24,7 +24,7 @@ interface StartPurchaseSessionModalProps {
 
 const startSessionSchema = z.object({
   entityId: z.string().min(1, "Selecione um fornecedor."),
-  description: z.string().min(3, "A descrição é obrigatória."),
+  description: z.string().min(3, "O título é obrigatório."),
   baseProductIds: z.array(z.string()).min(1, "Selecione ao menos um insumo base."),
 });
 
@@ -91,7 +91,7 @@ export function StartPurchaseSessionModal({ open, onOpenChange }: StartPurchaseS
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descrição da pesquisa</FormLabel>
+                  <FormLabel>Título da pesquisa</FormLabel>
                   <FormControl>
                     <Textarea placeholder="Ex: Pesquisa de preços semanal - Açaí" {...field} />
                   </FormControl>
