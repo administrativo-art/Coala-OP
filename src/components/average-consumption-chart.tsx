@@ -31,8 +31,9 @@ export function AverageConsumptionChart() {
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   
   useEffect(() => {
-    if(user && !selectedKiosk) {
-       setSelectedKiosk(user.username === 'Tiago Brasil' ? 'matriz' : (user.assignedKioskIds[0] || ''));
+    if (user && !selectedKiosk) {
+       const defaultKiosk = user.username === 'Tiago Brasil' ? 'matriz' : (user.assignedKioskIds?.[0] || '');
+       setSelectedKiosk(defaultKiosk);
     }
   }, [user, selectedKiosk]);
 
@@ -92,7 +93,8 @@ export function AverageConsumptionChart() {
 
   const handleExportPdf = () => {
     if (chartData.length === 0) return;
-
+    
+    const doc = new jsPDF();
     const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
     const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
@@ -326,3 +328,5 @@ export function AverageConsumptionChart() {
   </Card>
   )
 }
+
+    
