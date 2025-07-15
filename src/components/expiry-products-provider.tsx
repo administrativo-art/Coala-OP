@@ -32,7 +32,7 @@ export interface ExpiryProductsContextType {
   lots: LotEntry[];
   loading: boolean;
   addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
-  updateLot: (lot: LotEntry) => Promise<void>;
+  updateLot: (lot: Partial<LotEntry> & { id: string }) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
@@ -105,7 +105,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
   
-  const updateLot = useCallback(async (updatedLot: LotEntry) => {
+  const updateLot = useCallback(async (updatedLot: Partial<LotEntry> & { id: string }) => {
     const lotRef = doc(db, "lots", updatedLot.id);
     const { id, ...dataToUpdate } = updatedLot;
     try {

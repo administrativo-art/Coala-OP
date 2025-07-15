@@ -13,7 +13,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useStockCount } from '@/hooks/use-stock-count';
 import { useToast } from '@/hooks/use-toast';
-import { type LotEntry, type StockCountItem } from '@/types';
+import { type LotEntry, type StockCountItem, type StockCount as StockCountType } from '@/types';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,11 +22,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, PlusCircle, UserCheck } from 'lucide-react';
+import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { ItemAdditionRequestManagement } from './item-addition-request-management';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Badge } from './ui/badge';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 
 const countItemSchema = z.object({
@@ -40,10 +44,125 @@ const countFormSchema = z.object({
 
 type CountFormValues = z.infer<typeof countFormSchema>;
 
+function PendingApprovals() {
+  const { counts, updateStockCount, loading: loadingCounts } = useStockCount();
+  const { updateLot } = useExpiryProducts();
+  const { user } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const pendingCounts = useMemo(() => {
+    return counts.filter(c => c.status === 'pending');
+  }, [counts]);
+
+  const handleApprove = async (count: StockCountType) => {
+    if (!user) return;
+    setIsProcessing(true);
+    
+    for (const item of count.items) {
+        if (item.difference !== 0) {
+            await updateLot({
+                id: item.lotId,
+                quantity: item.countedQuantity
+            } as LotEntry);
+        }
+    }
+
+    await updateStockCount(count.id, {
+        status: 'approved',
+        reviewedBy: { userId: user.id, username: user.username },
+        reviewedAt: new Date().toISOString(),
+    });
+    setIsProcessing(false);
+  };
+  
+  const handleReject = async (count: StockCountType) => {
+      if (!user) return;
+      setIsProcessing(true);
+      await updateStockCount(count.id, {
+          status: 'rejected',
+          reviewedBy: { userId: user.id, username: user.username },
+          reviewedAt: new Date().toISOString(),
+      });
+      setIsProcessing(false);
+  };
+
+
+  if (loadingCounts) {
+    return <Skeleton className="h-64 w-full" />;
+  }
+
+  if (pendingCounts.length === 0) {
+    return (
+      <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+        <Inbox className="h-12 w-12 mx-auto mb-4" />
+        <p className="font-semibold">Nenhuma contagem pendente</p>
+        <p className="text-sm">Não há contagens de estoque aguardando sua aprovação.</p>
+      </div>
+    );
+  }
+
+  return (
+    <Accordion type="multiple" className="w-full space-y-3">
+      {pendingCounts.map(count => (
+        <AccordionItem key={count.id} value={count.id} className="border rounded-lg">
+          <AccordionTrigger className="p-4 hover:no-underline">
+            <div className="flex justify-between items-center w-full">
+              <div>
+                <p className="font-semibold">Contagem de {count.kioskName}</p>
+                <p className="text-sm text-muted-foreground">
+                  Por {count.countedBy.username} em {format(new Date(count.countedAt), 'dd/MM/yyyy HH:mm')}
+                </p>
+              </div>
+              <Badge variant="secondary">{count.items.length} itens com divergência</Badge>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="p-4 pt-0">
+            <div className="rounded-md border mb-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Lote</TableHead>
+                    <TableHead className="text-center">Qtd. Sistema</TableHead>
+                    <TableHead className="text-center">Qtd. Contada</TableHead>
+                    <TableHead className="text-center">Diferença</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {count.items.map(item => (
+                    <TableRow key={item.lotId}>
+                      <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableCell>{item.lotNumber}</TableCell>
+                      <TableCell className="text-center">{item.systemQuantity}</TableCell>
+                      <TableCell className="text-center">{item.countedQuantity}</TableCell>
+                      <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.difference > 0 ? `+${item.difference}` : item.difference}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="destructive" onClick={() => handleReject(count)} disabled={isProcessing}>
+                <X className="mr-2 h-4 w-4" /> Rejeitar
+              </Button>
+              <Button size="sm" onClick={() => handleApprove(count)} disabled={isProcessing}>
+                <Check className="mr-2 h-4 w-4" /> Aprovar e ajustar estoque
+              </Button>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
+  );
+}
+
+
 export function StockCount() {
   const { user, permissions } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { lots, loading: lotsLoading, updateLot } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { addStockCount, loading: submitting } = useStockCount();
   const { toast } = useToast();
@@ -132,21 +251,24 @@ export function StockCount() {
 
   const loading = kiosksLoading || lotsLoading || productsLoading;
   const canManageRequests = permissions.itemRequests.manage;
+  const canApproveCounts = permissions.stockCount.approve;
+
+  const showManagementTab = canManageRequests || canApproveCounts;
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque e Solicitações</CardTitle>
+          <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
           <CardDescription>
-            Realize a contagem de estoque e gerencie solicitações de cadastro de novos insumos.
+            Realize a contagem de estoque e gerencie solicitações de cadastro e aprovações de ajuste.
           </CardDescription>
         </CardHeader>
         <CardContent>
            <Tabs defaultValue="count" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="count"><ListOrdered className="mr-2 h-4 w-4" /> Contagem de Estoque</TabsTrigger>
-                    {canManageRequests && <TabsTrigger value="requests"><UserCheck className="mr-2 h-4 w-4" /> Gerenciar Solicitações</TabsTrigger>}
+                    <TabsTrigger value="count"><ListOrdered className="mr-2 h-4 w-4" /> Realizar Contagem</TabsTrigger>
+                    {showManagementTab && <TabsTrigger value="management"><ShieldCheck className="mr-2 h-4 w-4" /> Gerenciamento</TabsTrigger>}
                 </TabsList>
                 <TabsContent value="count" className="mt-4">
                      <div className="space-y-4">
@@ -180,70 +302,70 @@ export function StockCount() {
                                     <ScrollArea className="h-[50vh] pr-4">
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                         {fields.map((field, index) => {
-                                        const lot = kioskLots[index];
-                                        if (!lot) return null;
-                                        const product = products.find(p => p.id === lot.productId);
+                                            const lot = kioskLots[index];
+                                            if (!lot) return null;
+                                            const product = products.find(p => p.id === lot.productId);
 
-                                        return (
-                                            <Card key={field.id} className="p-4 flex gap-4 items-center">
-                                            <div className="w-20 h-20 shrink-0">
-                                                {product?.imageUrl ? (
-                                                    <Image
-                                                        src={product.imageUrl}
-                                                        alt={lot.productName}
-                                                        width={80}
-                                                        height={80}
-                                                        className="w-20 h-20 rounded-md object-cover"
-                                                    />
-                                                ) : (
-                                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
-                                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                            return (
+                                                <Card key={field.id} className="p-4 flex gap-4 items-center">
+                                                <div className="w-20 h-20 shrink-0">
+                                                    {product?.imageUrl ? (
+                                                        <Image
+                                                            src={product.imageUrl}
+                                                            alt={lot.productName}
+                                                            width={80}
+                                                            height={80}
+                                                            className="w-20 h-20 rounded-md object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
+                                                        <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex-1 space-y-3">
+                                                    <div className="space-y-1">
+                                                        <p className="font-semibold leading-tight">{lot.productName}</p>
+                                                        <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
                                                     </div>
-                                                )}
-                                            </div>
-
-                                            <div className="flex-1 space-y-3">
-                                                <div className="space-y-1">
-                                                    <p className="font-semibold leading-tight">{lot.productName}</p>
-                                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <FormField
-                                                    control={form.control}
-                                                    name={`items.${index}.countedQuantity`}
-                                                    render={({ field }) => (
-                                                        <FormItem>
-                                                        <FormLabel className="text-xs">Qtd. Contada</FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                            type="number"
-                                                            {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                        </FormItem>
-                                                    )}
-                                                    />
-                                                    <FormField
-                                                    control={form.control}
-                                                    name={`items.${index}.notes`}
-                                                    render={({ field }) => (
-                                                        <FormItem>
-                                                        <FormLabel className="text-xs">Observações</FormLabel>
-                                                        <FormControl>
-                                                            <Input 
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.countedQuantity`}
+                                                        render={({ field }) => (
+                                                            <FormItem>
+                                                            <FormLabel className="text-xs">Qtd. Contada</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                type="number"
                                                                 {...field}
-                                                                placeholder="Opcional..."
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                        </FormItem>
-                                                    )}
-                                                    />
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                        />
+                                                        <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.notes`}
+                                                        render={({ field }) => (
+                                                            <FormItem>
+                                                            <FormLabel className="text-xs">Observações</FormLabel>
+                                                            <FormControl>
+                                                                <Input 
+                                                                    {...field}
+                                                                    placeholder="Opcional..."
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            </Card>
-                                        );
+                                                </Card>
+                                            );
                                         })}
                                     </div>
                                     </ScrollArea>
@@ -259,9 +381,20 @@ export function StockCount() {
                         )}
                     </div>
                 </TabsContent>
-                {canManageRequests && (
-                    <TabsContent value="requests" className="mt-4">
-                        <ItemAdditionRequestManagement />
+                {showManagementTab && (
+                    <TabsContent value="management" className="mt-4 space-y-6">
+                        {canApproveCounts && (
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Aprovações de Contagem Pendentes</h3>
+                                <PendingApprovals />
+                            </div>
+                        )}
+                         {canManageRequests && (
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Solicitações de Cadastro de Insumos</h3>
+                                <ItemAdditionRequestManagement />
+                            </div>
+                        )}
                     </TabsContent>
                 )}
            </Tabs>
@@ -276,4 +409,3 @@ export function StockCount() {
     </div>
   );
 }
-
