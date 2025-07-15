@@ -204,7 +204,7 @@ export function AverageConsumptionChart() {
     <CardHeader className="flex flex-col gap-4">
         <div>
             <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-6 w-6" /> Consumo médio mensal por produto base
+                <TrendingUp className="h-6 w-6" /> Consumo médio mensal
             </CardTitle>
             <CardDescription>
                 {user?.username === 'Tiago Brasil' 
