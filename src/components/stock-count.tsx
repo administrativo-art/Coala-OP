@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -17,8 +18,7 @@ import { type LotEntry, type StockCountItem } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form } from '@/components/ui/form';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,7 +40,7 @@ export function StockCount() {
   const { user } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
-  const { products, getProductFullName } = useProducts();
+  const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { addStockCount, loading: submitting } = useStockCount();
   const { toast } = useToast();
 
@@ -124,14 +124,14 @@ export function StockCount() {
     setSelectedKioskId('');
   };
 
-  const loading = kiosksLoading || lotsLoading;
+  const loading = kiosksLoading || lotsLoading || productsLoading;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
         <CardDescription>
-          Informe a quantidade final de cada lote. O sistema registrará apenas os itens com quantidades alteradas ou com observações.
+          Ajuste a quantidade final de cada lote. O sistema registrará apenas os itens com quantidades alteradas para aprovação.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -157,49 +157,79 @@ export function StockCount() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)}>
                 <ScrollArea className="h-[50vh] pr-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Lote</TableHead>
-                        <TableHead>Validade</TableHead>
-                        <TableHead className="w-32">Qtd. Final</TableHead>
-                        <TableHead className="w-40">Observações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {fields.map((field, index) => {
-                        const lot = kioskLots[index];
-                        if (!lot) return null;
-                        
-                        const systemQty = lot.quantity;
-                        const countedQty = form.watch(`items.${index}.countedQuantity`);
-                        const difference = countedQty - systemQty;
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {fields.map((field, index) => {
+                      const lot = kioskLots[index];
+                      if (!lot) return null;
+                      const product = products.find(p => p.id === lot.productId);
 
-                        return (
-                          <TableRow key={field.id}>
-                            <TableCell>{lot.productName}</TableCell>
-                            <TableCell>{lot.lotNumber}</TableCell>
-                            <TableCell>{format(parseISO(lot.expiryDate), 'dd/MM/yy')}</TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                {...form.register(`items.${index}.countedQuantity`)}
-                                className={difference !== 0 ? 'border-orange-500' : ''}
-                              />
-                            </TableCell>
-                            <TableCell>
-                                <Textarea 
-                                    {...form.register(`items.${index}.notes`)}
-                                    placeholder="Motivo da diferença..."
-                                    rows={1}
+                      return (
+                        <Card key={field.id} className="flex flex-col">
+                          <CardHeader className="p-4">
+                            <div className="flex items-start gap-4">
+                              {product?.imageUrl ? (
+                                <Image
+                                  src={product.imageUrl}
+                                  alt={lot.productName}
+                                  width={64}
+                                  height={64}
+                                  className="w-16 h-16 rounded-md object-cover"
                                 />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                              ) : (
+                                <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center">
+                                  <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-semibold leading-tight">{lot.productName}</p>
+                                <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
+                                <p className="text-xs text-muted-foreground">Validade: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-4 pt-0 flex-grow flex flex-col justify-end">
+                            <div className="space-y-2">
+                               <FormField
+                                control={form.control}
+                                name={`items.${index}.countedQuantity`}
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel className="text-xs">Qtd. Final</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                        type="number"
+                                        {...field}
+                                        className={field.value !== lot.quantity ? 'border-orange-500' : ''}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                                />
+                               <FormField
+                                control={form.control}
+                                name={`items.${index}.notes`}
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel className="text-xs">Observações</FormLabel>
+                                    <FormControl>
+                                       <Textarea 
+                                            {...field}
+                                            placeholder="Opcional..."
+                                            rows={1}
+                                            className="resize-none"
+                                        />
+                                    </FormControl>
+                                     <FormMessage />
+                                    </FormItem>
+                                )}
+                                />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
                 </ScrollArea>
                 <div className="flex justify-end pt-4 mt-4 border-t">
                   <Button type="submit" disabled={submitting}>
