@@ -31,11 +31,11 @@ export function AverageConsumptionChart() {
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   
   useEffect(() => {
-    if (user && !selectedKiosk) {
+    if (user && !selectedKiosk && !kiosksLoading && kiosks.length > 0) {
        const defaultKiosk = user.username === 'Tiago Brasil' ? 'matriz' : (user.assignedKioskIds?.[0] || '');
        setSelectedKiosk(defaultKiosk);
     }
-  }, [user, selectedKiosk]);
+  }, [user, selectedKiosk, kiosks, kiosksLoading]);
 
   useEffect(() => {
     if (!initialSelectionMade && baseProducts.length > 0) {
@@ -328,5 +328,3 @@ export function AverageConsumptionChart() {
   </Card>
   )
 }
-
-    
