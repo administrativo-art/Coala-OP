@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DollarSign, Download, Package, Warehouse, Inbox } from 'lucide-react';
+import { DollarSign, Download, Package, Warehouse, Inbox, Scale } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { Button } from './ui/button';
 import jsPDF from 'jspdf';
@@ -17,6 +17,7 @@ import autoTable from 'jspdf-autotable';
 import { ScrollArea } from './ui/scroll-area';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue } from '@/lib/conversion';
+import { FinancialPeriodAnalysisModal } from './financial-period-analysis-modal';
 
 const CHART_COLORS = [
     'hsl(var(--chart-1))',
@@ -46,6 +47,7 @@ export function StockValuation() {
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
     const valuedLots = useMemo((): LotWithValue[] => {
         if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading) return [];
@@ -189,10 +191,16 @@ export function StockValuation() {
                         {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                 <Button onClick={handleExportPdf} disabled={!selectedKioskId || valuedLots.length === 0}>
-                    <Download className="mr-2" />
-                    Exportar PDF
-                </Button>
+                 <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsAnalysisModalOpen(true)}>
+                        <Scale className="mr-2" />
+                        Análise por Período
+                    </Button>
+                    <Button onClick={handleExportPdf} disabled={!selectedKioskId || valuedLots.length === 0}>
+                        <Download className="mr-2" />
+                        Exportar PDF
+                    </Button>
+                </div>
             </div>
 
             {!selectedKioskId ? (
@@ -217,7 +225,7 @@ export function StockValuation() {
                         </Card>
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">SKUs em Estoque</CardTitle>
+                                <CardTitle className="text-sm font-medium">Insumos Base em Estoque</CardTitle>
                                 <Package className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent><div className="text-2xl font-bold">{totalSkuCount}</div></CardContent>
@@ -308,6 +316,11 @@ export function StockValuation() {
                     </Card>
                 </>
             )}
+
+            <FinancialPeriodAnalysisModal 
+                open={isAnalysisModalOpen}
+                onOpenChange={setIsAnalysisModalOpen}
+            />
         </div>
     );
 }
