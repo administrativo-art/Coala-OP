@@ -318,26 +318,19 @@ export function ExpiryControl() {
                 let displayUnit = 'pacotes';
 
                 if (baseProductConfig) {
-                    const allProducts = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
-                    const isConvertible = allProducts.every(p => {
-                        return (p.category === baseProductConfig.category && (p.category === 'Massa' || p.category === 'Volume')) ||
-                               (p.category === 'Embalagem' && baseProductConfig.category === 'Unidade');
+                    const allProductsInGroup = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
+                    
+                    const isConvertible = allProductsInGroup.every(p => {
+                        return (p.category === 'Massa' || p.category === 'Volume') && p.category === baseProductConfig.category;
                     });
-    
+                    
                     if (isConvertible) {
                         displayUnit = baseProductConfig.unit;
-                        baseGroup.brands.forEach(brand => {
-                            brand.products.forEach(productGroup => {
-                                const productConfig = productGroup.product;
-                                productGroup.lots.forEach(lot => {
-                                    if (productConfig.category === 'Embalagem' && baseProductConfig.category === 'Unidade' && productConfig.secondaryUnitValue) {
-                                        totalGroupQuantity += lot.quantity * productConfig.secondaryUnitValue;
-                                    } else if (productConfig.category === baseProductConfig.category) {
-                                        totalGroupQuantity += convertValue(lot.quantity * productConfig.packageSize, productConfig.unit, displayUnit, productConfig.category);
-                                    }
-                                });
-                            });
-                        });
+                        totalGroupQuantity = allProductsInGroup.reduce((total, p) => {
+                           const lotsForProduct = baseGroup.brands.flatMap(b => b.products.find(pg => pg.product.id === p.id)?.lots || []);
+                           const productTotal = lotsForProduct.reduce((sum, lot) => sum + (lot.quantity * p.packageSize), 0);
+                           return total + convertValue(productTotal, p.unit, baseProductConfig.unit, p.category);
+                        }, 0);
                     } else {
                         // Fallback: if not all products are convertible, sum up packages
                         totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
