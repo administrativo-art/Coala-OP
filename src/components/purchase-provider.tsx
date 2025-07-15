@@ -2,11 +2,11 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { type PurchaseSession, type PurchaseItem, type BaseProduct } from '@/types';
+import { type PurchaseSession, type PurchaseItem } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { BaseProductsContext } from './base-products-provider';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 type LastEffectivePrice = {
   pricePerUnit: number;
@@ -31,11 +31,7 @@ export const PurchaseContext = createContext<PurchaseContextType | undefined>(un
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const baseProductsContext = useContext(BaseProductsContext);
-    if (!baseProductsContext) {
-        throw new Error("PurchaseProvider must be used within a BaseProductsProvider");
-    }
-    const { baseProducts, updateBaseProduct } = baseProductsContext;
+    const { baseProducts } = useBaseProducts();
 
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
@@ -48,10 +44,15 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
 
         baseProducts.forEach(bp => {
-            if (bp.effectivePrice && bp.effectivePrice.productId) {
+            if (bp.effectivePrice && bp.effectivePrice.productId && bp.effectivePrice.updatedAt) {
                 const existing = priceMap.get(bp.effectivePrice.productId);
                 if (!existing || new Date(bp.effectivePrice.updatedAt) > new Date(existing.updatedAt)) {
-                    priceMap.set(bp.effectivePrice.productId, bp.effectivePrice);
+                    priceMap.set(bp.effectivePrice.productId, {
+                        pricePerUnit: bp.effectivePrice.pricePerUnit,
+                        productId: bp.effectivePrice.productId,
+                        entityId: bp.effectivePrice.entityId,
+                        updatedAt: bp.effectivePrice.updatedAt,
+                    });
                 }
             }
         });
@@ -179,7 +180,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             });
 
             const baseProductRef = doc(db, "baseProducts", baseProductId);
-            const sessionRef = doc(db, "purchaseSessions", itemToConfirm.sessionId);
             const session = sessions.find(s => s.id === itemToConfirm.sessionId);
 
             batch.update(baseProductRef, {
