@@ -1,19 +1,12 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { type PurchaseSession, type PurchaseItem } from '@/types';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { type PurchaseSession, type PurchaseItem, type BaseProduct, type LastEffectivePrice } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
-
-type LastEffectivePrice = {
-  pricePerUnit: number;
-  productId: string;
-  entityId: string;
-  updatedAt: string;
-};
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];

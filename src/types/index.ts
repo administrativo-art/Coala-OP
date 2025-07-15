@@ -5,18 +5,20 @@ export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
 
+export type LastEffectivePrice = {
+  pricePerUnit: number;
+  productId: string;
+  entityId: string;
+  updatedAt: string;
+};
+
 export type BaseProduct = {
   id: string;
   name: string;
   unit: string;
   stockLevels: { [kioskId: string]: { min: number } };
   category: UnitCategory;
-  effectivePrice?: {
-    pricePerUnit: number;
-    productId: string;
-    entityId: string;
-    updatedAt: string;
-  }
+  effectivePrice?: LastEffectivePrice
 }
 
 export type Location = {
