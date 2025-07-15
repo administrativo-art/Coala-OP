@@ -44,8 +44,11 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-    // Simple parser for numbers like "1,00" or "25"
-    const cleanedString = String(qtyString).replace(',', '.');
+    // Handles numbers like "1.234,56"
+    const cleanedString = String(qtyString)
+        .replace(/\./g, '')  // Remove thousands separators
+        .replace(',', '.'); // Replace decimal comma with dot
+        
     const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
 };
