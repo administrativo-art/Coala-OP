@@ -20,6 +20,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
+const formatNumberForDisplay = (value: number) => {
+    return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+};
+
 export function AverageConsumptionChart() {
   const { user } = useAuth()
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -99,7 +103,7 @@ export function AverageConsumptionChart() {
     const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
     doc.setFontSize(18);
-    doc.text(`Relatório de consumo médio mensal por produto base`, 14, 22);
+    doc.text(`Relatório de consumo médio mensal`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
@@ -108,7 +112,7 @@ export function AverageConsumptionChart() {
     const tableHead = [['Produto Base (unidade)', 'Consumo Médio']];
     const tableBody = chartData.map(item => [
         item.name,
-        item.Consumo.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+        formatNumberForDisplay(item.Consumo),
     ]);
 
     autoTable(doc, {
@@ -130,11 +134,11 @@ export function AverageConsumptionChart() {
     
     const csvData = chartData.map(item => ({
         "Produto Base (unidade)": item.name,
-        "Consumo Medio": item.Consumo,
+        "Consumo Medio": formatNumberForDisplay(item.Consumo),
     }));
     
     const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -269,7 +273,7 @@ export function AverageConsumptionChart() {
                     }}
                 >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" allowDecimals={false} />
+                    <XAxis type="number" tickFormatter={formatNumberForDisplay} />
                     <YAxis
                         type="category"
                         dataKey="name"
@@ -279,6 +283,7 @@ export function AverageConsumptionChart() {
                     />
                     <Tooltip 
                         cursor={{fill: 'hsl(var(--muted))'}}
+                        formatter={formatNumberForDisplay}
                         contentStyle={{ 
                             backgroundColor: "hsl(var(--background))", 
                             border: "1px solid hsl(var(--border))",
@@ -289,7 +294,7 @@ export function AverageConsumptionChart() {
                         {chartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                         ))}
-                        <LabelList dataKey="Consumo" position="right" offset={10} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                        <LabelList dataKey="Consumo" position="right" offset={10} formatter={formatNumberForDisplay} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
                     </Bar>
                 </BarChart>
             </ResponsiveContainer>
