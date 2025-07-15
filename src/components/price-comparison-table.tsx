@@ -159,6 +159,14 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                         const lastPriceInfo = lastEffectivePrices.get(row.product.id);
                         const lastSupplier = lastPriceInfo ? entities.find(e => e.id === lastPriceInfo.entityId) : null;
                         
+                        let lastTotalPrice: number | null = null;
+                        if (lastPriceInfo) {
+                            const packageSizeInBaseUnit = convertValue(row.product.packageSize, row.product.unit, baseProduct.unit, row.product.category);
+                            if (packageSizeInBaseUnit > 0) {
+                                lastTotalPrice = lastPriceInfo.pricePerUnit * packageSizeInBaseUnit;
+                            }
+                        }
+
                         return (
                         <TableRow key={row.product.id}>
                             <TableCell className="font-medium">
@@ -171,11 +179,12 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm text-muted-foreground flex items-center gap-1 cursor-default">
                                                     <Info className="h-3 w-3" />
-                                                    {lastPriceInfo.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
+                                                    {lastTotalPrice !== null ? lastTotalPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : "-"}
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
+                                                <p>Preço unitário: {lastPriceInfo.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}</p>
                                                 <p>Data: {format(new Date(lastPriceInfo.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
                                             </TooltipContent>
                                         </Tooltip>
