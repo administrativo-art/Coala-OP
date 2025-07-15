@@ -74,7 +74,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 </Accordion>
             </CardContent>
             <CardFooter className="border-t pt-4">
-                <Button onClick={handleCloseSession}>Concluir e Salvar Pesquisa</Button>
+                <Button onClick={handleCloseSession}>Concluir e salvar pesquisa</Button>
             </CardFooter>
         </Card>
     );
