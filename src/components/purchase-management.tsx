@@ -4,6 +4,7 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePurchase } from "@/hooks/use-purchase";
+import { useEntities } from "@/hooks/use-entities";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,23 +12,42 @@ import { PlusCircle, Search, History, Inbox } from "lucide-react";
 import { StartPurchaseSessionModal } from "./start-purchase-session-modal";
 import { PurchaseSessionCard } from "./purchase-session-card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
+import { Input } from "./ui/input";
 
 export function PurchaseManagement() {
-    const { user, permissions } = useAuth();
+    const { user, users, permissions } = useAuth();
     const { sessions, loading: loadingPurchase } = usePurchase();
+    const { entities, loading: loadingEntities } = useEntities();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
     const { openSessions, closedSessions } = useMemo(() => {
+        const lowerCaseSearch = searchTerm.toLowerCase();
+
+        const filterSession = (session: typeof sessions[0]) => {
+            if (!lowerCaseSearch) return true;
+            const entity = entities.find(e => e.id === session.entityId);
+            const createdByUser = users.find(u => u.id === session.userId);
+
+            return (
+                session.description.toLowerCase().includes(lowerCaseSearch) ||
+                (entity && entity.name.toLowerCase().includes(lowerCaseSearch)) ||
+                (createdByUser && createdByUser.username.toLowerCase().includes(lowerCaseSearch))
+            );
+        };
+
         const open: typeof sessions = [];
         const closed: typeof sessions = [];
         sessions.forEach(s => {
-            (s.status === 'open' ? open : closed).push(s);
+            if (filterSession(s)) {
+                (s.status === 'open' ? open : closed).push(s);
+            }
         });
         return { openSessions: open, closedSessions: closed };
-    }, [sessions]);
+    }, [sessions, searchTerm, entities, users]);
 
-    const isLoading = loadingPurchase;
+    const isLoading = loadingPurchase || loadingEntities;
 
     const renderSessionList = (list: typeof sessions, emptyMessage: string) => {
         if (isLoading) {
@@ -41,7 +61,8 @@ export function PurchaseManagement() {
             return (
                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
                     <Inbox className="h-12 w-12 mb-4" />
-                    <p className="font-semibold">{emptyMessage}</p>
+                    <p className="font-semibold">{searchTerm ? "Nenhum resultado encontrado" : emptyMessage}</p>
+                    {searchTerm && <p className="text-sm">Tente ajustar sua busca.</p>}
                 </div>
             )
         }
@@ -72,15 +93,24 @@ export function PurchaseManagement() {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                    <div className="relative w-full max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar pesquisa por título, fornecedor..."
+                            className="pl-10"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                     <h3 className="text-lg font-semibold text-muted-foreground border-b pb-2">Pesquisas em aberto</h3>
                     {renderSessionList(openSessions, "Nenhuma pesquisa de preços em andamento.")}
 
-                    {permissions.purchasing.viewHistory && closedSessions.length > 0 && (
+                    {permissions.purchasing.viewHistory && (
                          <Accordion type="single" collapsible className="w-full pt-6">
                             <AccordionItem value="history">
                                 <AccordionTrigger className="text-lg font-semibold text-muted-foreground">
                                     <div className="flex items-center gap-2">
-                                        <History /> Histórico de Pesquisas ({closedSessions.length})
+                                        <History /> Histórico de Pesquisas
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="pt-4">
