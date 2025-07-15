@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseSession, type PurchaseItem, type BaseProduct, type LastEffectivePrice } from '@/types';
+import { type PurchaseSession, type PurchaseItem, type BaseProduct, type LastEffectivePrice, type PriceHistoryEntry } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -11,6 +11,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
   items: PurchaseItem[];
+  priceHistory: PriceHistoryEntry[];
   loading: boolean;
   lastEffectivePrices: Map<string, LastEffectivePrice>;
   startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
@@ -28,6 +29,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
+    const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     const lastEffectivePrices = useMemo((): Map<string, LastEffectivePrice> => {
@@ -72,10 +74,19 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }, (error) => {
             console.error("Error fetching purchase items:", error);
         });
+        
+        const qHistory = query(collection(db, "priceHistory"));
+        const unsubscribeHistory = onSnapshot(qHistory, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PriceHistoryEntry));
+            setPriceHistory(data.sort((a, b) => new Date(b.confirmedAt).getTime() - new Date(a.confirmedAt).getTime()));
+        }, (error) => {
+            console.error("Error fetching price history:", error);
+        });
 
         return () => {
             unsubscribeSessions();
             unsubscribeItems();
+            unsubscribeHistory();
         };
     }, []);
 
@@ -165,24 +176,37 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
         try {
             const batch = writeBatch(db);
-
+            const now = new Date().toISOString();
+            const session = sessions.find(s => s.id === itemToConfirm.sessionId);
+            
+            // 1. Update the purchase item
             const itemRef = doc(db, "purchaseItems", itemId);
             batch.update(itemRef, {
                 isConfirmed: true,
                 confirmedBy: user.id,
-                confirmedAt: new Date().toISOString(),
-                confirmationComment: "",
+                confirmedAt: now,
             });
 
+            // 2. Update the base product with the last effective price
             const baseProductRef = doc(db, "baseProducts", baseProductId);
-            const session = sessions.find(s => s.id === itemToConfirm.sessionId);
-
             batch.update(baseProductRef, {
                 'lastEffectivePrice.pricePerUnit': pricePerUnit,
                 'lastEffectivePrice.productId': itemToConfirm.productId,
                 'lastEffectivePrice.entityId': session?.entityId || '',
-                'lastEffectivePrice.updatedAt': new Date().toISOString()
+                'lastEffectivePrice.updatedAt': now
             });
+            
+            // 3. Log the price to the history collection
+            const historyRef = doc(collection(db, "priceHistory"));
+            const historyEntry: Omit<PriceHistoryEntry, 'id'> = {
+                baseProductId: baseProductId,
+                productId: itemToConfirm.productId,
+                pricePerUnit: pricePerUnit,
+                entityId: session?.entityId || '',
+                confirmedBy: user.id,
+                confirmedAt: now,
+            };
+            batch.set(historyRef, historyEntry);
             
             await batch.commit();
 
@@ -194,6 +218,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const value: PurchaseContextType = useMemo(() => ({
         sessions,
         items,
+        priceHistory,
         loading: loading || loadingBaseProducts,
         lastEffectivePrices,
         startNewSession,
@@ -201,7 +226,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         closeSession,
         deleteSession,
         confirmPurchase,
-    }), [sessions, items, loading, loadingBaseProducts, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
+    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

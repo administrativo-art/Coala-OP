@@ -14,6 +14,7 @@ import { StartPurchaseSessionModal } from "./start-purchase-session-modal";
 import { PurchaseSessionCard } from "./purchase-session-card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { Input } from "./ui/input";
+import { PriceHistoryLog } from "./price-history-log";
 
 export function PurchaseManagement() {
     const { user, users, permissions } = useAuth();
@@ -113,23 +114,43 @@ export function PurchaseManagement() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <h3 className="text-lg font-semibold text-muted-foreground border-b pb-2">Pesquisas em aberto</h3>
-                    {renderSessionList(openSessions, "Nenhuma pesquisa de preços em andamento.")}
+                    
+                    <Accordion type="multiple" defaultValue={['open-sessions']} className="w-full space-y-4">
+                        <AccordionItem value="open-sessions" className="border-none">
+                            <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
+                                <h3>Pesquisas em aberto</h3>
+                            </AccordionTrigger>
+                            <AccordionContent className="pt-4">
+                                {renderSessionList(openSessions, "Nenhuma pesquisa de preços em andamento.")}
+                            </AccordionContent>
+                        </AccordionItem>
+                        
+                        {permissions.purchasing.viewHistory && (
+                            <>
+                                <AccordionItem value="price-history" className="border-none">
+                                    <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
+                                        <div className="flex items-center gap-2">
+                                            <History /> Histórico de Preços Efetivados
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-4">
+                                        <PriceHistoryLog />
+                                    </AccordionContent>
+                                </AccordionItem>
 
-                    {permissions.purchasing.viewHistory && (
-                         <Accordion type="single" collapsible className="w-full pt-6">
-                            <AccordionItem value="history">
-                                <AccordionTrigger className="text-lg font-semibold text-muted-foreground">
-                                    <div className="flex items-center gap-2">
-                                        <History /> Histórico de Pesquisas
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="pt-4">
-                                     {renderSessionList(closedSessions, "Nenhuma pesquisa no histórico.")}
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    )}
+                                <AccordionItem value="session-history" className="border-none">
+                                    <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
+                                        <div className="flex items-center gap-2">
+                                            <History /> Histórico de Pesquisas
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-4">
+                                        {renderSessionList(closedSessions, "Nenhuma pesquisa no histórico.")}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </>
+                        )}
+                    </Accordion>
                 </CardContent>
             </Card>
 

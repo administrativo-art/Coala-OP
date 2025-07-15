@@ -12,6 +12,16 @@ export type LastEffectivePrice = {
   updatedAt: string;
 };
 
+export type PriceHistoryEntry = {
+  id: string;
+  baseProductId: string;
+  productId: string;
+  pricePerUnit: number;
+  entityId: string;
+  confirmedBy: string; // userId
+  confirmedAt: string; // ISO String
+}
+
 export type BaseProduct = {
   id: string;
   name: string;
