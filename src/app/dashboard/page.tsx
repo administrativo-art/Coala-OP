@@ -99,59 +99,56 @@ export default function DashboardPage() {
     if (loading || !user || consumptionHistory.length === 0 || baseProducts.length === 0) {
       return [];
     }
-  
-    const kioskConsumption: { [kioskId: string]: { [baseProductId: string]: { total: number; count: number } } } = {};
-    const baseProductNamesMap = new Map(baseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
+
+    const kioskConsumption: { [kioskId: string]: { [baseProductName: string]: { total: number; count: number } } } = {};
+    const baseProductNamesSet = new Set(baseProducts.map(bp => bp.name));
 
     consumptionHistory.forEach(report => {
       if (!kioskConsumption[report.kioskId]) {
         kioskConsumption[report.kioskId] = {};
       }
       report.results.forEach(item => {
-        const consumedItemNameLower = item.productName.toLowerCase();
-        const baseProductId = baseProductNamesMap.get(consumedItemNameLower);
-        
-        if (baseProductId) {
-          if (!kioskConsumption[report.kioskId][baseProductId]) {
-            kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
+        if (baseProductNamesSet.has(item.productName)) {
+          if (!kioskConsumption[report.kioskId][item.productName]) {
+            kioskConsumption[report.kioskId][item.productName] = { total: 0, count: 0 };
           }
-          kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
-          kioskConsumption[report.kioskId][baseProductId].count += 1;
+          kioskConsumption[report.kioskId][item.productName].total += item.consumedQuantity;
+          kioskConsumption[report.kioskId][item.productName].count += 1;
         }
       });
     });
-  
+
     const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
-    let relevantConsumptionData: { [baseProductId: string]: number } = {};
-  
+    let relevantConsumptionData: { [baseProductName: string]: number } = {};
+
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
-      const masterAverages: { [baseProductId: string]: { totalAvg: number } } = {};
+      const masterAverages: { [baseProductName: string]: { totalAvg: number } } = {};
       Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
         if (kioskId === 'matriz') return;
-        Object.entries(productMap).forEach(([baseProductId, data]) => {
+        Object.entries(productMap).forEach(([baseProductName, data]) => {
           const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
-          if (!masterAverages[baseProductId]) {
-            masterAverages[baseProductId] = { totalAvg: 0 };
+          if (!masterAverages[baseProductName]) {
+            masterAverages[baseProductName] = { totalAvg: 0 };
           }
-          masterAverages[baseProductId].totalAvg += avgForKiosk;
+          masterAverages[baseProductName].totalAvg += avgForKiosk;
         });
       });
-      Object.entries(masterAverages).forEach(([baseProductId, data]) => {
-        relevantConsumptionData[baseProductId] = data.totalAvg;
+      Object.entries(masterAverages).forEach(([baseProductName, data]) => {
+        relevantConsumptionData[baseProductName] = data.totalAvg;
       });
     } else {
       const singleKioskData = kioskConsumption[kioskIdForChart];
       if (singleKioskData) {
-        Object.entries(singleKioskData).forEach(([baseProductId, data]) => {
-          relevantConsumptionData[baseProductId] = data.count > 0 ? data.total / data.count : 0;
+        Object.entries(singleKioskData).forEach(([baseProductName, data]) => {
+          relevantConsumptionData[baseProductName] = data.count > 0 ? data.total / data.count : 0;
         });
       }
     }
-  
+
     const dataForChart = baseProducts
       .filter(bp => selectedBaseProducts.includes(bp.id))
       .map(baseProduct => {
-        const avgQuantity = relevantConsumptionData[baseProduct.id] || 0;
+        const avgQuantity = relevantConsumptionData[baseProduct.name] || 0;
         return {
           baseProductId: baseProduct.id,
           name: `${baseProduct.name} (${baseProduct.unit})`,
@@ -159,7 +156,7 @@ export default function DashboardPage() {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  
+
     return dataForChart;
 
   }, [user, consumptionHistory, baseProducts, consumptionLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
@@ -579,3 +576,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
