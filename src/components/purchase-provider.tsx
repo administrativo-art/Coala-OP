@@ -38,15 +38,16 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
         baseProducts.forEach(bp => {
             if (bp.effectivePrice && bp.effectivePrice.productId && bp.effectivePrice.updatedAt) {
-                const { productId, updatedAt, entityId, pricePerUnit } = bp.effectivePrice;
-                
-                const existing = priceMap.get(productId);
-                if (!existing || new Date(updatedAt) > new Date(existing.updatedAt)) {
-                    priceMap.set(productId, {
-                        pricePerUnit,
-                        productId,
-                        entityId: entityId || '',
-                        updatedAt,
+                const currentPriceInfo = bp.effectivePrice;
+                const existingPriceInfo = priceMap.get(currentPriceInfo.productId);
+
+                // If there's no price for this product yet, or if the current one is newer, update the map.
+                if (!existingPriceInfo || new Date(currentPriceInfo.updatedAt) > new Date(existingPriceInfo.updatedAt)) {
+                    priceMap.set(currentPriceInfo.productId, {
+                        pricePerUnit: currentPriceInfo.pricePerUnit,
+                        productId: currentPriceInfo.productId,
+                        entityId: currentPriceInfo.entityId || '',
+                        updatedAt: currentPriceInfo.updatedAt,
                     });
                 }
             }
