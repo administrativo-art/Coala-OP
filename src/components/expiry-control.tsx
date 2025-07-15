@@ -316,31 +316,44 @@ export function ExpiryControl() {
                 
                 let totalGroupQuantity = 0;
                 let displayUnit = 'pacotes';
-                let isConvertible = false;
 
-                if (baseProductConfig && (baseProductConfig.category === 'Massa' || baseProductConfig.category === 'Volume')) {
-                    isConvertible = true;
-                    displayUnit = baseProductConfig.unit;
-                }
-                
-                baseGroup.brands.forEach(brand => {
-                    brand.products.forEach(productGroup => {
-                        const productConfig = productGroup.product;
-                        productGroup.lots.forEach(lot => {
-                            if (isConvertible && productConfig.category === baseProductConfig?.category) {
-                                totalGroupQuantity += lot.quantity * convertValue(productConfig.packageSize, productConfig.unit, displayUnit, productConfig.category);
-                            } else if (productConfig.category === 'Unidade' && productConfig.secondaryUnitValue && productConfig.secondaryUnit && baseProductConfig?.category === 'Massa') {
-                                // Special case for Paçoca (Unidade to Massa)
-                                const weightInBaseUnit = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, displayUnit, 'Massa');
-                                totalGroupQuantity += lot.quantity * weightInBaseUnit;
-                            } else {
-                                // Fallback for non-convertible or mismatched categories
-                                totalGroupQuantity += lot.quantity;
-                                displayUnit = 'pacotes';
-                            }
-                        });
+                if (baseProductConfig) {
+                    const allProducts = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
+                    const isConvertible = allProducts.every(p => {
+                        return (p.category === baseProductConfig.category && (p.category === 'Massa' || p.category === 'Volume')) ||
+                               (p.category === 'Embalagem' && baseProductConfig.category === 'Unidade');
                     });
-                });
+    
+                    if (isConvertible) {
+                        displayUnit = baseProductConfig.unit;
+                        baseGroup.brands.forEach(brand => {
+                            brand.products.forEach(productGroup => {
+                                const productConfig = productGroup.product;
+                                productGroup.lots.forEach(lot => {
+                                    if (productConfig.category === 'Embalagem' && baseProductConfig.category === 'Unidade' && productConfig.secondaryUnitValue) {
+                                        totalGroupQuantity += lot.quantity * productConfig.secondaryUnitValue;
+                                    } else if (productConfig.category === baseProductConfig.category) {
+                                        totalGroupQuantity += convertValue(lot.quantity * productConfig.packageSize, productConfig.unit, displayUnit, productConfig.category);
+                                    }
+                                });
+                            });
+                        });
+                    } else {
+                        // Fallback: if not all products are convertible, sum up packages
+                        totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                            brandAcc + brand.products.reduce((prodAcc, prod) => 
+                                prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
+                            , 0)
+                        , 0);
+                    }
+                } else {
+                    // Avulso products: sum packages
+                    totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                        brandAcc + brand.products.reduce((prodAcc, prod) => 
+                            prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
+                        , 0)
+                    , 0);
+                }
                 
                 const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
 

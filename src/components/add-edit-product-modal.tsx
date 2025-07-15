@@ -148,7 +148,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         if (form.formState.isDirty || !productToEdit) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
         }
-         if (categoryWatch !== 'Unidade') {
+         if (categoryWatch !== 'Unidade' && categoryWatch !== 'Embalagem') {
             form.setValue('secondaryUnitValue', undefined);
             form.setValue('secondaryUnit', undefined);
         }
@@ -259,15 +259,25 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
                                 
-                                {categoryWatch === 'Unidade' && (
+                                {(categoryWatch === 'Unidade' || categoryWatch === 'Embalagem') && (
                                     <>
                                         <Separator/>
                                         <div className="p-4 border rounded-lg bg-muted/30">
-                                            <h4 className="text-md font-medium mb-2">Peso por Unidade (Opcional)</h4>
-                                            <p className="text-sm text-muted-foreground mb-4">Se este item for controlado por peso no estoque geral (produto base), informe o peso de uma única unidade aqui.</p>
+                                            <h4 className="text-md font-medium mb-2">Unidade de medida do insumo base (Opcional)</h4>
+                                            <p className="text-sm text-muted-foreground mb-4">
+                                                {categoryWatch === 'Unidade' 
+                                                    ? 'Se este item for controlado por peso no estoque geral (produto base), informe o peso de uma única unidade aqui.'
+                                                    : 'Se este item for controlado por unidades no estoque geral (produto base), informe quantas unidades vêm na embalagem.'
+                                                }
+                                            </p>
                                             <div className="grid grid-cols-2 gap-4">
-                                                 <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Peso por unidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 20" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                 <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory('Massa').map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                                 <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Fator da unidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                 <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}>
+                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                    <SelectContent>
+                                                        {getUnitsForCategory(categoryWatch === 'Unidade' ? 'Massa' : 'Unidade').map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                                    </SelectContent>
+                                                 </Select><FormMessage /></FormItem>)}/>
                                             </div>
                                         </div>
                                     </>

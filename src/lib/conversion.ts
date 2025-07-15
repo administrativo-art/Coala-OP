@@ -13,6 +13,9 @@ export const units: ConversionUnits = {
   },
   Unidade: {
     'un': 1,
+  },
+  Embalagem: {
+    'pacote': 1,
   }
 };
 
