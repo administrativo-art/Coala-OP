@@ -14,6 +14,7 @@ export interface PurchaseContextType {
   startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   confirmPurchase: (itemId: string, comment?: string) => Promise<void>;
 }
 
@@ -107,6 +108,27 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    const deleteSession = useCallback(async (sessionId: string) => {
+        try {
+            const batch = writeBatch(db);
+            
+            // Delete the session itself
+            const sessionRef = doc(db, "purchaseSessions", sessionId);
+            batch.delete(sessionRef);
+
+            // Find and delete all associated items
+            const itemsQuery = query(collection(db, "purchaseItems"), where("sessionId", "==", sessionId));
+            const itemsSnapshot = await getDocs(itemsQuery);
+            itemsSnapshot.forEach(itemDoc => {
+                batch.delete(doc(db, "purchaseItems", itemDoc.id));
+            });
+            
+            await batch.commit();
+        } catch (error) {
+            console.error("Error deleting session and its items:", error);
+        }
+    }, []);
+
     const confirmPurchase = useCallback(async (itemId: string, comment?: string) => {
         if (!user) return;
         try {
@@ -128,8 +150,9 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         startNewSession,
         savePrice,
         closeSession,
+        deleteSession,
         confirmPurchase,
-    }), [sessions, items, loading, startNewSession, savePrice, closeSession, confirmPurchase]);
+    }), [sessions, items, loading, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
