@@ -99,10 +99,13 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 }
             }
             
-            const lastEffectivePrice = baseProducts
+            const allEffectivePricesForProduct = baseProducts
                 .filter(bp => bp.effectivePrice?.productId === p.id)
-                .map(bp => bp.effectivePrice)
-                .sort((a, b) => new Date(b!.updatedAt).getTime() - new Date(a!.updatedAt).getTime())[0];
+                .map(bp => bp.effectivePrice!);
+
+            const lastEffectivePrice = allEffectivePricesForProduct.length > 0
+                ? allEffectivePricesForProduct.sort((a, b) => new Date(b!.updatedAt).getTime() - new Date(a!.updatedAt).getTime())[0]
+                : undefined;
 
             return {
                 product: p,
