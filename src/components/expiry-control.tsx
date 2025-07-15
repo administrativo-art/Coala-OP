@@ -29,6 +29,7 @@ import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Badge } from './ui/badge';
+import { convertValue } from '@/lib/conversion';
 
 
 const BarcodeScannerModal = dynamic(
@@ -311,11 +312,27 @@ export function ExpiryControl() {
       <div className="space-y-4">
          <Accordion type="multiple" className="w-full space-y-4">
             {groupedData.map(baseGroup => {
+                const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
+                
                 const totalGroupQuantity = baseGroup.brands.reduce((total, brand) => {
-                    return total + brand.products.reduce((subTotal, product) => {
-                        return subTotal + product.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0);
+                    return total + brand.products.reduce((subTotal, productGroup) => {
+                        const productConfig = productGroup.product;
+                        if (!baseProductConfig) {
+                             // Fallback for non-base products: just sum quantities
+                            return subTotal + productGroup.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0);
+                        }
+                        
+                        const lotQuantityInBaseUnits = productGroup.lots.reduce((lotTotal, lot) => {
+                            const packageSizeInBaseUnits = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
+                            return lotTotal + (lot.quantity * packageSizeInBaseUnits);
+                        }, 0);
+                        return subTotal + lotQuantityInBaseUnits;
                     }, 0);
                 }, 0);
+
+                const displayUnit = baseProductConfig ? baseProductConfig.unit : 'un.';
+                const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
 
                 return (
                     <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">
@@ -323,7 +340,7 @@ export function ExpiryControl() {
                             <AccordionTrigger className="p-4 hover:no-underline rounded-lg text-xl font-semibold [&[data-state=open]]:bg-muted [&[data-state=open]]:rounded-b-none">
                                 <div className="flex justify-between items-center w-full">
                                     <span>{baseGroup.name}</span>
-                                    <Badge variant="secondary" className="ml-4">{totalGroupQuantity} un.</Badge>
+                                    <Badge variant="secondary" className="ml-4">{displayQuantity} {displayUnit}</Badge>
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 space-y-3">
