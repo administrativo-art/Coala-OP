@@ -28,6 +28,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { Badge } from './ui/badge';
 
 
 const BarcodeScannerModal = dynamic(
@@ -194,7 +195,7 @@ export function ExpiryControl() {
             });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
-        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
+        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.name));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
@@ -309,41 +310,52 @@ export function ExpiryControl() {
     return (
       <div className="space-y-4">
          <Accordion type="multiple" className="w-full space-y-4">
-            {groupedData.map(baseGroup => (
-                <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">
-                    <Card className="bg-muted/30">
-                        <AccordionTrigger className="p-4 hover:no-underline rounded-lg text-xl font-semibold [&[data-state=open]]:bg-muted [&[data-state=open]]:rounded-b-none">
-                            {baseGroup.name}
-                        </AccordionTrigger>
-                        <AccordionContent className="p-4 space-y-3">
-                           {baseGroup.brands.map(brandGroup => (
-                               <div key={brandGroup.brandName}>
-                                 <h3 className="font-semibold text-lg text-muted-foreground mb-2 pl-1">{brandGroup.brandName}</h3>
-                                  <div className="space-y-4">
-                                      {brandGroup.products.map(productGroup => (
-                                          <LotCard
-                                            key={productGroup.product.id}
-                                            productGroup={productGroup}
-                                            getProductFullName={getProductFullName}
-                                            kiosks={kiosks}
-                                            locations={locations}
-                                            onEdit={handleEditClick}
-                                            onMove={handleMoveClick}
-                                            onDelete={handleDeleteClick}
-                                            onViewHistory={handleViewHistoryClick}
-                                            canEdit={permissions.lots.edit}
-                                            canMove={permissions.lots.move}
-                                            canDelete={permissions.lots.delete}
-                                            canViewHistory={permissions.lots.viewMovementHistory}
-                                          />
-                                      ))}
-                                  </div>
-                               </div>
-                           ))}
-                        </AccordionContent>
-                    </Card>
-                </AccordionItem>
-            ))}
+            {groupedData.map(baseGroup => {
+                const totalGroupQuantity = baseGroup.brands.reduce((total, brand) => {
+                    return total + brand.products.reduce((subTotal, product) => {
+                        return subTotal + product.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0);
+                    }, 0);
+                }, 0);
+
+                return (
+                    <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">
+                        <Card className="bg-muted/30">
+                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg text-xl font-semibold [&[data-state=open]]:bg-muted [&[data-state=open]]:rounded-b-none">
+                                <div className="flex justify-between items-center w-full">
+                                    <span>{baseGroup.name}</span>
+                                    <Badge variant="secondary" className="ml-4">{totalGroupQuantity} un.</Badge>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 space-y-3">
+                            {baseGroup.brands.map(brandGroup => (
+                                <div key={brandGroup.brandName}>
+                                    <h3 className="font-semibold text-lg text-muted-foreground mb-2 pl-1">{brandGroup.brandName}</h3>
+                                    <div className="space-y-4">
+                                        {brandGroup.products.map(productGroup => (
+                                            <LotCard
+                                                key={productGroup.product.id}
+                                                productGroup={productGroup}
+                                                getProductFullName={getProductFullName}
+                                                kiosks={kiosks}
+                                                locations={locations}
+                                                onEdit={handleEditClick}
+                                                onMove={handleMoveClick}
+                                                onDelete={handleDeleteClick}
+                                                onViewHistory={handleViewHistoryClick}
+                                                canEdit={permissions.lots.edit}
+                                                canMove={permissions.lots.move}
+                                                canDelete={permissions.lots.delete}
+                                                canViewHistory={permissions.lots.viewMovementHistory}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                            </AccordionContent>
+                        </Card>
+                    </AccordionItem>
+                )
+            })}
         </Accordion>
       </div>
     );
