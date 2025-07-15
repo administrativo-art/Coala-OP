@@ -88,7 +88,7 @@ export function PurchaseManagement() {
     }
 
     return (
-        <div className="w-full max-w-7xl mx-auto">
+        <div className="w-full max-w-7xl mx-auto space-y-6">
             <Card>
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -126,33 +126,36 @@ export function PurchaseManagement() {
                         </AccordionItem>
                         
                         {permissions.purchasing.viewHistory && (
-                            <>
-                                <AccordionItem value="price-history" className="border-none">
-                                    <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
-                                        <div className="flex items-center gap-2">
-                                            <History /> Histórico de Preços Efetivados
-                                        </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="pt-4">
-                                        <PriceHistoryLog />
-                                    </AccordionContent>
-                                </AccordionItem>
-
-                                <AccordionItem value="session-history" className="border-none">
-                                    <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
-                                        <div className="flex items-center gap-2">
-                                            <History /> Histórico de Pesquisas
-                                        </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="pt-4">
-                                        {renderSessionList(closedSessions, "Nenhuma pesquisa no histórico.")}
-                                    </AccordionContent>
-                                </AccordionItem>
-                            </>
+                            <AccordionItem value="session-history" className="border-none">
+                                <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
+                                    <div className="flex items-center gap-2">
+                                        <History /> Histórico de Pesquisas
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-4">
+                                    {renderSessionList(closedSessions, "Nenhuma pesquisa no histórico.")}
+                                </AccordionContent>
+                            </AccordionItem>
                         )}
                     </Accordion>
                 </CardContent>
             </Card>
+
+            {permissions.purchasing.viewHistory && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                           <History /> Histórico de Preços Efetivados
+                        </CardTitle>
+                         <CardDescription>
+                            Um registro de todos os preços de compra que foram confirmados no sistema.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <PriceHistoryLog />
+                    </CardContent>
+                </Card>
+            )}
 
             <StartPurchaseSessionModal
                 open={isCreateModalOpen}
