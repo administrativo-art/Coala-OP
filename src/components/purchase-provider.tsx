@@ -32,26 +32,27 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
     const lastEffectivePrices = useMemo((): Map<string, LastEffectivePrice> => {
         const priceMap = new Map<string, LastEffectivePrice>();
-        if (!baseProducts || baseProducts.length === 0) {
+        if (loadingBaseProducts || !baseProducts || baseProducts.length === 0) {
             return priceMap;
         }
 
         baseProducts.forEach(bp => {
             if (bp.effectivePrice && bp.effectivePrice.productId && bp.effectivePrice.updatedAt) {
                 const { productId, updatedAt, entityId, pricePerUnit } = bp.effectivePrice;
+                
                 const existing = priceMap.get(productId);
                 if (!existing || new Date(updatedAt) > new Date(existing.updatedAt)) {
                     priceMap.set(productId, {
                         pricePerUnit,
                         productId,
-                        entityId,
+                        entityId: entityId || '',
                         updatedAt,
                     });
                 }
             }
         });
         return priceMap;
-    }, [baseProducts]);
+    }, [baseProducts, loadingBaseProducts]);
 
     useEffect(() => {
         const qSessions = query(collection(db, "purchaseSessions"));
