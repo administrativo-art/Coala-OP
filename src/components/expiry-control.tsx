@@ -319,25 +319,35 @@ export function ExpiryControl() {
 
                 if (baseProductConfig) {
                     displayUnit = baseProductConfig.unit;
-                    totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
-                        const brandValue = brand.products.reduce((prodTotal, prodGroup) => {
-                            const productConfig = prodGroup.product;
-                            const lotValue = prodGroup.lots.reduce((lotTotal, lot) => {
-                                if (productConfig.secondaryUnit && productConfig.secondaryUnitValue && productConfig.secondaryUnit === baseProductConfig.unit) {
-                                    return lotTotal + (lot.quantity * productConfig.secondaryUnitValue);
-                                }
-                                if (productConfig.category === baseProductConfig.category) {
+                    
+                    const allProductsInGroup = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
+                    const canConvert = allProductsInGroup.every(p => 
+                        (p.category === baseProductConfig.category) ||
+                        (p.secondaryUnit && p.secondaryUnitValue)
+                    );
+
+                    if (canConvert) {
+                        totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
+                            return brandTotal + brand.products.reduce((prodTotal, prodGroup) => {
+                                const productConfig = prodGroup.product;
+                                return prodTotal + prodGroup.lots.reduce((lotTotal, lot) => {
+                                    if (productConfig.secondaryUnit && productConfig.secondaryUnitValue) {
+                                        return lotTotal + convertValue(lot.quantity * productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category);
+                                    }
                                     const valueInProductUnits = lot.quantity * productConfig.packageSize;
                                     return lotTotal + convertValue(valueInProductUnits, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                }
-                                return lotTotal; // Incompatible units, don't add to total
+                                }, 0);
                             }, 0);
-                            return prodTotal + lotValue;
                         }, 0);
-                        return brandTotal + brandValue;
-                    }, 0);
+                    } else {
+                         totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                            brandAcc + brand.products.reduce((prodAcc, prod) => 
+                                prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
+                            , 0)
+                        , 0);
+                    }
 
-                } else { // "Avulso" products
+                } else {
                     totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
                         brandAcc + brand.products.reduce((prodAcc, prod) => 
                             prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
