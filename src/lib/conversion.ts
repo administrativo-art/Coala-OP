@@ -1,4 +1,5 @@
-import { type ConversionUnits, type UnitCategory } from "@/types";
+
+import { type ConversionUnits, type UnitCategory, unitCategories } from "@/types";
 
 export const units: ConversionUnits = {
   Volume: {
@@ -16,8 +17,10 @@ export const units: ConversionUnits = {
 };
 
 export const getUnitsForCategory = (category: UnitCategory): string[] => {
-  return Object.keys(units[category]);
+  return Object.keys(units[category] || {});
 };
+
+export { unitCategories };
 
 export function convertValue(value: number, fromUnit: string, toUnit: string, category: UnitCategory): number {
   if (!value || !fromUnit || !toUnit || !category) return 0;

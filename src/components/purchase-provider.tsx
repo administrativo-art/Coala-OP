@@ -4,14 +4,14 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type PurchaseSession, type PurchaseItem } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
   items: PurchaseItem[];
   loading: boolean;
-  startOrGetOpenSession: (baseProductId: string, userId: string) => Promise<string | null>;
+  startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   confirmPurchase: (itemId: string, comment?: string) => Promise<void>;
@@ -29,7 +29,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         const qSessions = query(collection(db, "purchaseSessions"));
         const unsubscribeSessions = onSnapshot(qSessions, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseSession));
-            setSessions(data);
+            setSessions(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
             setLoading(false);
         }, (error) => {
             console.error("Error fetching purchase sessions:", error);
@@ -50,32 +50,23 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    const startOrGetOpenSession = useCallback(async (baseProductId: string, userId: string): Promise<string | null> => {
-        const q = query(
-            collection(db, "purchaseSessions"),
-            where("baseProductId", "==", baseProductId),
-            where("status", "==", "open")
-        );
+    const startNewSession = useCallback(async (data: { baseProductIds: string[], entityId: string, description: string }): Promise<string | null> => {
+        if (!user) return null;
 
         try {
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                return querySnapshot.docs[0].id;
-            } else {
-                const newSession: Omit<PurchaseSession, 'id'> = {
-                    baseProductId,
-                    userId,
-                    status: 'open',
-                    createdAt: new Date().toISOString(),
-                };
-                const docRef = await addDoc(collection(db, "purchaseSessions"), newSession);
-                return docRef.id;
-            }
+            const newSession: Omit<PurchaseSession, 'id'> = {
+                ...data,
+                userId: user.id,
+                status: 'open',
+                createdAt: new Date().toISOString(),
+            };
+            const docRef = await addDoc(collection(db, "purchaseSessions"), newSession);
+            return docRef.id;
         } catch (error) {
-            console.error("Error starting or getting session:", error);
+            console.error("Error starting new session:", error);
             return null;
         }
-    }, []);
+    }, [user]);
 
     const savePrice = useCallback(async (sessionId: string, productId: string, price: number) => {
         const q = query(
@@ -134,11 +125,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         sessions,
         items,
         loading,
-        startOrGetOpenSession,
+        startNewSession,
         savePrice,
         closeSession,
         confirmPurchase,
-    }), [sessions, items, loading, startOrGetOpenSession, savePrice, closeSession, confirmPurchase]);
+    }), [sessions, items, loading, startNewSession, savePrice, closeSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

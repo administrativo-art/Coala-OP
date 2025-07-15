@@ -10,6 +10,7 @@ export type BaseProduct = {
   name: string;
   unit: string;
   stockLevels: { [kioskId: string]: { min: number } };
+  category: UnitCategory;
 }
 
 export type Location = {
@@ -326,8 +327,10 @@ export type Entity = {
 // Purchase Module Types
 export type PurchaseSession = {
   id: string;
-  baseProductId: string;
+  baseProductIds: string[];
   userId: string;
+  entityId: string;
+  description: string;
   status: 'open' | 'closed';
   createdAt: string; // ISO String
   closedAt?: string; // ISO String

@@ -10,16 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { type Product, type PurchaseItem } from "@/types";
-import { Star, CheckCircle, HelpCircle } from "lucide-react";
+import { type Product, type PurchaseItem, type BaseProduct } from "@/types";
+import { Star, CheckCircle } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
+import { useBaseProducts } from "@/hooks/use-base-products";
 
 interface PriceComparisonTableProps {
-    products: Product[];
+    baseProductId: string;
     items: PurchaseItem[];
-    baseUnit: string;
-    sessionId: string | null;
+    sessionId: string;
 }
 
 interface PriceRow {
@@ -30,17 +30,21 @@ interface PriceRow {
     purchaseItem?: PurchaseItem;
 }
 
-export function PriceComparisonTable({ products, items, baseUnit, sessionId }: PriceComparisonTableProps) {
-    const { getProductFullName } = useProducts();
+export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceComparisonTableProps) {
+    const { getProductFullName, products } = useProducts();
+    const { baseProducts } = useBaseProducts();
     const { savePrice, confirmPurchase } = usePurchase();
     const { permissions } = useAuth();
     
     const [prices, setPrices] = useState<Record<string, string>>({});
     const [debouncedPrices] = useDebounce(prices, 500);
 
+    const baseProduct = useMemo(() => baseProducts.find(bp => bp.id === baseProductId), [baseProductId, baseProducts]);
+    const linkedProducts = useMemo(() => products.filter(p => p.baseProductId === baseProductId), [products, baseProductId]);
+
     useEffect(() => {
         const initialPrices: Record<string, string> = {};
-        products.forEach(p => {
+        linkedProducts.forEach(p => {
             const item = items.find(i => i.productId === p.id);
             if (item) {
                 initialPrices[p.id] = item.price.toString();
@@ -49,7 +53,7 @@ export function PriceComparisonTable({ products, items, baseUnit, sessionId }: P
             }
         });
         setPrices(initialPrices);
-    }, [products, items]);
+    }, [linkedProducts, items]);
 
     useEffect(() => {
         if (!sessionId) return;
@@ -77,12 +81,13 @@ export function PriceComparisonTable({ products, items, baseUnit, sessionId }: P
     };
 
     const tableData = useMemo((): PriceRow[] => {
-        const rows = products.map(p => {
+        if (!baseProduct) return [];
+        const rows = linkedProducts.map(p => {
             const priceStr = prices[p.id] || "0";
             const price = parseFloat(priceStr);
             let pricePerUnit: number | null = null;
             if (!isNaN(price) && price > 0) {
-                const convertedQty = convertValue(p.packageSize, p.unit, baseUnit, p.category);
+                const convertedQty = convertValue(p.packageSize, p.unit, baseProduct.unit, p.category);
                 if (convertedQty > 0) {
                     pricePerUnit = price / convertedQty;
                 }
@@ -111,9 +116,13 @@ export function PriceComparisonTable({ products, items, baseUnit, sessionId }: P
 
         return rows.sort((a,b) => (a.pricePerUnit ?? Infinity) - (b.pricePerUnit ?? Infinity));
 
-    }, [products, prices, baseUnit, items]);
+    }, [linkedProducts, prices, baseProduct, items]);
 
-    if (products.length === 0) {
+    if (!baseProduct) {
+        return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
+    }
+    
+    if (linkedProducts.length === 0) {
         return (
             <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
                 Nenhum insumo vinculado a este produto base. Adicione insumos na tela de "Cadastros".
@@ -130,7 +139,7 @@ export function PriceComparisonTable({ products, items, baseUnit, sessionId }: P
                     <TableRow>
                         <TableHead>Variação do Insumo</TableHead>
                         <TableHead className="w-[150px]">Preço (R$)</TableHead>
-                        <TableHead className="w-[150px]">R$ / {baseUnit}</TableHead>
+                        <TableHead className="w-[150px]">R$ / {baseProduct.unit}</TableHead>
                         <TableHead className="w-[150px] text-center">Status</TableHead>
                         <TableHead className="w-[120px] text-right">Ação</TableHead>
                     </TableRow>
@@ -147,6 +156,7 @@ export function PriceComparisonTable({ products, items, baseUnit, sessionId }: P
                                     placeholder="0,00"
                                     value={row.price}
                                     onChange={e => handlePriceChange(row.product.id, e.target.value)}
+                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
                                 />
                             </TableCell>
                             <TableCell>
