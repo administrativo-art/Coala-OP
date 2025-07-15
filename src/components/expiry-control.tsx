@@ -313,9 +313,9 @@ export function ExpiryControl() {
          <Accordion type="multiple" className="w-full space-y-4">
             {groupedData.map(baseGroup => {
                 const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
-                
                 let totalGroupQuantity = 0;
                 let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
+                let conversionPossible = true;
 
                 if (baseGroup.isBaseProduct && baseProductConfig) {
                     displayUnit = baseProductConfig.unit;
@@ -323,23 +323,33 @@ export function ExpiryControl() {
                     totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
                         return brandTotal + brand.products.reduce((prodTotal, prodGroup) => {
                             const productConfig = prodGroup.product;
-                            const valueInBaseUnits = prodGroup.lots.reduce((lotTotal, lot) => {
+                            const lotTotalValue = prodGroup.lots.reduce((lotTotal, lot) => {
                                 let singleItemValue = 0;
-                                // Scenario 1: Direct conversion (e.g., Massa to Massa)
+
+                                // Scenario 1: Same category conversion (e.g., Massa to Massa)
                                 if (productConfig.category === baseProductConfig.category) {
                                     singleItemValue = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
                                 } 
-                                // Scenario 2: Secondary Unit conversion (e.g., Unidade to Massa, Embalagem to Unidade)
-                                else if (productConfig.secondaryUnit && productConfig.secondaryUnitValue) {
-                                     // Determine the category for the secondary conversion (e.g., if product is 'Unidade', its secondary value is likely 'Massa')
+                                // Scenario 2: Different category, using secondary unit fields
+                                else if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number') {
                                     const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
                                     singleItemValue = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                } else {
+                                    conversionPossible = false;
                                 }
+                                
                                 return lotTotal + (lot.quantity * singleItemValue);
                             }, 0);
-                            return prodTotal + valueInBaseUnits;
+                            return prodTotal + lotTotalValue;
                         }, 0);
                     }, 0);
+                    
+                    if (!conversionPossible) {
+                        displayUnit = "pacotes";
+                        totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
+                            total + brand.products.reduce((prodTotal, prod) => 
+                                prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
+                    }
 
                 } else {
                      totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
@@ -563,3 +573,5 @@ export function ExpiryControl() {
     </>
   );
 }
+
+    
