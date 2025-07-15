@@ -147,7 +147,8 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 <TableHeader>
                     <TableRow>
                         <TableHead>Variação do Insumo</TableHead>
-                        <TableHead className="w-[150px]">Preço (R$)</TableHead>
+                        <TableHead className="w-[150px]">Preço Atual (R$)</TableHead>
+                        <TableHead className="w-[150px]">Último Preço (R$)</TableHead>
                         <TableHead className="w-[150px]">R$ / {baseProduct.unit}</TableHead>
                         <TableHead className="w-[150px] text-center">Status</TableHead>
                         <TableHead className="w-[120px] text-right">Ação</TableHead>
@@ -164,31 +165,33 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 {getProductFullName(row.product)}
                             </TableCell>
                             <TableCell>
-                                <div className="space-y-1">
-                                    <Input
-                                        type="number"
-                                        placeholder="0,00"
-                                        value={row.price}
-                                        onChange={e => handlePriceChange(row.product.id, e.target.value)}
-                                        disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
-                                    />
-                                    {lastPriceInfo && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-default">
-                                                        <Info className="h-3 w-3" />
-                                                        Último: {lastPriceInfo.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
-                                                    </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
-                                                    <p>Data: {format(new Date(lastPriceInfo.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
-                                </div>
+                                <Input
+                                    type="number"
+                                    placeholder="0,00"
+                                    value={row.price}
+                                    onChange={e => handlePriceChange(row.product.id, e.target.value)}
+                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
+                                />
+                            </TableCell>
+                            <TableCell>
+                                {lastPriceInfo ? (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="text-sm text-muted-foreground flex items-center gap-1 cursor-default">
+                                                    <Info className="h-3 w-3" />
+                                                    {lastPriceInfo.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
+                                                <p>Data: {format(new Date(lastPriceInfo.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                ) : (
+                                    <span className="text-sm text-muted-foreground">-</span>
+                                )}
                             </TableCell>
                             <TableCell>
                                 {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
