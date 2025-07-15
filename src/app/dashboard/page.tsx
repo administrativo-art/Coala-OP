@@ -5,7 +5,6 @@ import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
-import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useReturnRequests } from "@/hooks/use-return-requests"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
@@ -33,7 +32,6 @@ import Papa from 'papaparse';
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
-  const { products, loading: productsLoading } = useProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
@@ -95,71 +93,35 @@ export default function DashboardPage() {
   }, [returnRequests, returnRequestsLoading, user, permissions]);
 
   const chartData = useMemo(() => {
-    if (!hasValidData || !user) {
-        return [];
-    }
-    
-    const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
-    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
+    if (!hasValidData || !user) return [];
 
+    const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
+
+    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
     baseProducts.forEach(bp => {
         consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0 };
     });
 
     const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
-    
-    consumptionHistory.forEach(report => {
-        // Ignorar relatórios de outros quiosques, a menos que seja a visão 'matriz'
-        if (kioskIdForChart !== 'matriz' && report.kioskId !== kioskIdForChart) {
-            return;
-        }
+    const relevantReports = kioskIdForChart === 'matriz'
+        ? consumptionHistory
+        : consumptionHistory.filter(report => report.kioskId === kioskIdForChart);
 
-        const monthlyConsumption = new Map<string, number>();
-
+    relevantReports.forEach(report => {
+        const monthlyConsumptionForReport = new Set<string>();
         report.results.forEach(item => {
-            if (baseProductMap.has(item.baseProductId)) {
-                 monthlyConsumption.set(
-                    item.baseProductId, 
-                    (monthlyConsumption.get(item.baseProductId) || 0) + item.consumedQuantity
-                );
+            const baseProductId = item.baseProductId;
+            if (baseProductMap.has(baseProductId) && consumptionByBaseId[baseProductId]) {
+                consumptionByBaseId[baseProductId].total += item.consumedQuantity;
+                monthlyConsumptionForReport.add(baseProductId);
             }
         });
-        
-        monthlyConsumption.forEach((quantity, baseProductId) => {
-             if (consumptionByBaseId[baseProductId]) {
-                consumptionByBaseId[baseProductId].total += quantity;
-                consumptionByBaseId[baseProductId].monthsCount += 1;
-            }
+
+        monthlyConsumptionForReport.forEach(baseProductId => {
+            consumptionByBaseId[baseProductId].monthsCount += 1;
         });
     });
 
-    // Se for 'matriz', precisamos recalcular as médias
-    if (kioskIdForChart === 'matriz') {
-        const matrixTotals: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
-         baseProducts.forEach(bp => {
-            matrixTotals[bp.id] = { total: 0, monthsCount: 0 };
-        });
-
-        consumptionHistory.forEach(report => {
-            const monthlyConsumption = new Map<string, number>();
-            report.results.forEach(item => {
-                if (baseProductMap.has(item.baseProductId)) {
-                    monthlyConsumption.set(
-                        item.baseProductId, 
-                        (monthlyConsumption.get(item.baseProductId) || 0) + item.consumedQuantity
-                    );
-                }
-            });
-            monthlyConsumption.forEach((quantity, baseProductId) => {
-                if (matrixTotals[baseProductId]) {
-                    matrixTotals[baseProductId].total += quantity;
-                    matrixTotals[baseProductId].monthsCount += 1;
-                }
-            });
-        });
-        Object.assign(consumptionByBaseId, matrixTotals);
-    }
-    
     return baseProducts
         .filter(bp => selectedBaseProducts.includes(bp.id))
         .map(baseProduct => {
@@ -180,7 +142,7 @@ export default function DashboardPage() {
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
 
-  const initialLoading = productsLoading || lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading;
+  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading;
   const chartHeight = Math.max(350, chartData.length * 40);
 
   const handleExportPdf = () => {
