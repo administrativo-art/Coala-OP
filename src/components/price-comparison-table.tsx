@@ -147,8 +147,8 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 <TableHeader>
                     <TableRow>
                         <TableHead>Variação do Insumo</TableHead>
-                        <TableHead className="w-[150px]">Preço Atual (R$)</TableHead>
                         <TableHead className="w-[150px]">Último Preço (R$)</TableHead>
+                        <TableHead className="w-[150px]">Preço Atual (R$)</TableHead>
                         <TableHead className="w-[150px]">R$ / {baseProduct.unit}</TableHead>
                         <TableHead className="w-[150px] text-center">Status</TableHead>
                         <TableHead className="w-[120px] text-right">Ação</TableHead>
@@ -163,15 +163,6 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                         <TableRow key={row.product.id}>
                             <TableCell className="font-medium">
                                 {getProductFullName(row.product)}
-                            </TableCell>
-                            <TableCell>
-                                <Input
-                                    type="number"
-                                    placeholder="0,00"
-                                    value={row.price}
-                                    onChange={e => handlePriceChange(row.product.id, e.target.value)}
-                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
-                                />
                             </TableCell>
                             <TableCell>
                                 {lastPriceInfo ? (
@@ -192,6 +183,15 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 ) : (
                                     <span className="text-sm text-muted-foreground">-</span>
                                 )}
+                            </TableCell>
+                            <TableCell>
+                                <Input
+                                    type="number"
+                                    placeholder="0,00"
+                                    value={row.price}
+                                    onChange={e => handlePriceChange(row.product.id, e.target.value)}
+                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
+                                />
                             </TableCell>
                             <TableCell>
                                 {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
