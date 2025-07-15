@@ -110,10 +110,12 @@ export default function DashboardPage() {
     relevantReports.forEach(report => {
         const monthlyConsumptionForReport = new Set<string>();
         report.results.forEach(item => {
-            const baseProductId = item.baseProductId;
-            if (baseProductMap.has(baseProductId) && consumptionByBaseId[baseProductId]) {
-                consumptionByBaseId[baseProductId].total += item.consumedQuantity;
-                monthlyConsumptionForReport.add(baseProductId);
+            if(item.baseProductId) {
+                const baseProductId = item.baseProductId;
+                if (baseProductMap.has(baseProductId) && consumptionByBaseId[baseProductId]) {
+                    consumptionByBaseId[baseProductId].total += item.consumedQuantity;
+                    monthlyConsumptionForReport.add(baseProductId);
+                }
             }
         });
 

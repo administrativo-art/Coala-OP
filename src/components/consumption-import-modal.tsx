@@ -141,7 +141,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         }
 
                         const quantityValue = parseQuantity(quantityStr);
-                        const unitToUse = unitFromCsv || productConfig.pdfUnit || productConfig.unit;
+                        // CORRECTED: Prioritize the product's configured unit to ensure category consistency.
+                        const unitToUse = productConfig.pdfUnit || unitFromCsv || productConfig.unit;
                         
                         const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, productConfig.unit, productConfig.category);
                         
@@ -168,7 +169,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                     const finalResults = Object.entries(analysisResults).map(([productId, data]) => ({
                         productId,
                         productName: data.productName,
-                        consumedQuantity: data.consumedQuantity
+                        consumedQuantity: data.consumedQuantity,
+                        baseProductId: products.find(p => p.id === productId)?.baseProductId || null,
                     }));
 
                     await addReport({

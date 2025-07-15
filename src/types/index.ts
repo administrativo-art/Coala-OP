@@ -84,6 +84,7 @@ export type ConsumptionAnalysisItem = {
   productId: string;
   productName: string;
   consumedQuantity: number;
+  baseProductId: string | null;
 };
 
 export type ConsumptionReport = {
