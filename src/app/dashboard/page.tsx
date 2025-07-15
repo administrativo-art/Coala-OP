@@ -95,63 +95,59 @@ export default function DashboardPage() {
   }, [returnRequests, returnRequestsLoading, user, permissions]);
 
   const chartData = useMemo(() => {
-    const loading = consumptionLoading || productsLoading || kiosksLoading || baseProductsLoading;
-    if (loading || !user || consumptionHistory.length === 0 || products.length === 0 || baseProducts.length === 0) {
+    const loading = consumptionLoading || baseProductsLoading || kiosksLoading;
+    if (loading || !user || consumptionHistory.length === 0 || baseProducts.length === 0) {
       return [];
     }
-
+  
     const kioskConsumption: { [kioskId: string]: { [baseProductId: string]: { total: number; count: number } } } = {};
-    const baseProductNames = new Map(baseProducts.map(bp => [bp.id, bp.name.toLowerCase()]));
+    const baseProductNamesMap = new Map(baseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
 
     consumptionHistory.forEach(report => {
       if (!kioskConsumption[report.kioskId]) {
         kioskConsumption[report.kioskId] = {};
       }
       report.results.forEach(item => {
-        for (const [baseProductId, baseProductName] of baseProductNames.entries()) {
-          if (item.productName.toLowerCase().startsWith(baseProductName)) {
-              if (!kioskConsumption[report.kioskId][baseProductId]) {
-                kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
-              }
-              kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
-              kioskConsumption[report.kioskId][baseProductId].count += 1;
-              break; 
+        const consumedItemNameLower = item.productName.toLowerCase();
+        const baseProductId = baseProductNamesMap.get(consumedItemNameLower);
+        
+        if (baseProductId) {
+          if (!kioskConsumption[report.kioskId][baseProductId]) {
+            kioskConsumption[report.kioskId][baseProductId] = { total: 0, count: 0 };
           }
+          kioskConsumption[report.kioskId][baseProductId].total += item.consumedQuantity;
+          kioskConsumption[report.kioskId][baseProductId].count += 1;
         }
       });
     });
-
+  
     const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
     let relevantConsumptionData: { [baseProductId: string]: number } = {};
-
+  
     if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
-        const masterAverages: { [baseProductId: string]: { totalAvg: number } } = {};
-        
-        Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
-            if (kioskId === 'matriz') return;
-
-            Object.entries(productMap).forEach(([baseProductId, data]) => {
-                const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
-                if (!masterAverages[baseProductId]) {
-                    masterAverages[baseProductId] = { totalAvg: 0 };
-                }
-                masterAverages[baseProductId].totalAvg += avgForKiosk;
-            });
+      const masterAverages: { [baseProductId: string]: { totalAvg: number } } = {};
+      Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
+        if (kioskId === 'matriz') return;
+        Object.entries(productMap).forEach(([baseProductId, data]) => {
+          const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
+          if (!masterAverages[baseProductId]) {
+            masterAverages[baseProductId] = { totalAvg: 0 };
+          }
+          masterAverages[baseProductId].totalAvg += avgForKiosk;
         });
-
-        Object.entries(masterAverages).forEach(([baseProductId, data]) => {
-            relevantConsumptionData[baseProductId] = data.totalAvg;
-        });
-
+      });
+      Object.entries(masterAverages).forEach(([baseProductId, data]) => {
+        relevantConsumptionData[baseProductId] = data.totalAvg;
+      });
     } else {
-        const singleKioskData = kioskConsumption[kioskIdForChart];
-        if (singleKioskData) {
-            Object.entries(singleKioskData).forEach(([baseProductId, data]) => {
-                relevantConsumptionData[baseProductId] = data.count > 0 ? data.total / data.count : 0;
-            });
-        }
+      const singleKioskData = kioskConsumption[kioskIdForChart];
+      if (singleKioskData) {
+        Object.entries(singleKioskData).forEach(([baseProductId, data]) => {
+          relevantConsumptionData[baseProductId] = data.count > 0 ? data.total / data.count : 0;
+        });
+      }
     }
-
+  
     const dataForChart = baseProducts
       .filter(bp => selectedBaseProducts.includes(bp.id))
       .map(baseProduct => {
@@ -163,10 +159,10 @@ export default function DashboardPage() {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-
+  
     return dataForChart;
 
-  }, [user, consumptionHistory, products, baseProducts, consumptionLoading, productsLoading, baseProductsLoading, kiosks, kiosksLoading, selectedKiosk, selectedBaseProducts]);
+  }, [user, consumptionHistory, baseProducts, consumptionLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
@@ -507,7 +503,7 @@ export default function DashboardPage() {
                 </div>
             </CardHeader>
             <CardContent className="pr-2 pl-0">
-                 { (consumptionLoading || productsLoading || kiosksLoading || baseProductsLoading) ? (
+                 { (consumptionLoading || baseProductsLoading || kiosksLoading) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={chartHeight}>
@@ -583,5 +579,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-    
