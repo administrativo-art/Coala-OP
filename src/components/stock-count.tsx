@@ -63,7 +63,7 @@ function PendingApprovals() {
             await updateLot({
                 id: item.lotId,
                 quantity: item.countedQuantity
-            } as LotEntry);
+            });
         }
     }
 
@@ -162,7 +162,7 @@ function PendingApprovals() {
 export function StockCount() {
   const { user, permissions } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { lots, loading: lotsLoading, updateLot } = useExpiryProducts();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { addStockCount, loading: submitting } = useStockCount();
   const { toast } = useToast();
@@ -382,19 +382,23 @@ export function StockCount() {
                     </div>
                 </TabsContent>
                 {showManagementTab && (
-                    <TabsContent value="management" className="mt-4 space-y-6">
-                        {canApproveCounts && (
-                            <div>
-                                <h3 className="text-xl font-semibold mb-2">Aprovações de Contagem Pendentes</h3>
-                                <PendingApprovals />
-                            </div>
-                        )}
-                         {canManageRequests && (
-                            <div>
-                                <h3 className="text-xl font-semibold mb-2">Solicitações de Cadastro de Insumos</h3>
-                                <ItemAdditionRequestManagement />
-                            </div>
-                        )}
+                     <TabsContent value="management" className="mt-4">
+                        <Tabs defaultValue="approvals" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                                {canApproveCounts && <TabsTrigger value="approvals">Aprovações de Contagem</TabsTrigger>}
+                                {canManageRequests && <TabsTrigger value="requests">Solicitações de Cadastro</TabsTrigger>}
+                            </TabsList>
+                            {canApproveCounts && (
+                                <TabsContent value="approvals" className="mt-4">
+                                    <PendingApprovals />
+                                </TabsContent>
+                            )}
+                            {canManageRequests && (
+                                <TabsContent value="requests" className="mt-4">
+                                    <ItemAdditionRequestManagement />
+                                </TabsContent>
+                            )}
+                        </Tabs>
                     </TabsContent>
                 )}
            </Tabs>
