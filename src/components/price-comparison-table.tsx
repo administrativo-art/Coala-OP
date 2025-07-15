@@ -47,7 +47,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
         const initialPrices: Record<string, string> = {};
         linkedProducts.forEach(p => {
             const item = items.find(i => i.productId === p.id);
-            if (item) {
+            if (item && item.price > 0) {
                 initialPrices[p.id] = item.price.toString();
             } else {
                 initialPrices[p.id] = "";
@@ -177,12 +177,12 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 ) : row.isBestPrice ? (
                                     <Badge className="bg-amber-100 text-amber-800">
                                         <Star className="mr-1 h-3 w-3" />
-                                        Melhor Preço
+                                        Melhor preço
                                     </Badge>
                                 ) : row.isWorstPrice ? (
                                      <Badge variant="destructive" className="bg-red-100 text-red-800">
                                         <AlertTriangle className="mr-1 h-3 w-3" />
-                                        Pior Preço
+                                        Pior preço
                                     </Badge>
                                 ) : (
                                     <Badge variant="outline">Pendente</Badge>
