@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { type Product, type PurchaseItem, type BaseProduct } from "@/types";
-import { Star, CheckCircle } from "lucide-react";
+import { Star, CheckCircle, AlertTriangle } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
@@ -27,6 +27,7 @@ interface PriceRow {
     price: string;
     pricePerUnit: number | null;
     isBestPrice: boolean;
+    isWorstPrice: boolean;
     purchaseItem?: PurchaseItem;
 }
 
@@ -97,6 +98,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 price: priceStr,
                 pricePerUnit,
                 isBestPrice: false,
+                isWorstPrice: false,
                 purchaseItem: items.find(i => i.productId === p.id)
             };
         });
@@ -105,11 +107,15 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
             .map(r => r.pricePerUnit)
             .filter((p): p is number => p !== null && p > 0);
 
-        if (validPrices.length > 0) {
+        if (validPrices.length > 1) {
             const minPrice = Math.min(...validPrices);
+            const maxPrice = Math.max(...validPrices);
             rows.forEach(row => {
                 if (row.pricePerUnit === minPrice) {
                     row.isBestPrice = true;
+                }
+                if (row.pricePerUnit === maxPrice) {
+                    row.isWorstPrice = true;
                 }
             });
         }
@@ -168,10 +174,15 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                         <CheckCircle className="mr-1 h-3 w-3" />
                                         Confirmado
                                     </Badge>
-                                ) : row.isBestPrice && row.pricePerUnit !== null ? (
+                                ) : row.isBestPrice ? (
                                     <Badge className="bg-amber-100 text-amber-800">
                                         <Star className="mr-1 h-3 w-3" />
                                         Melhor Preço
+                                    </Badge>
+                                ) : row.isWorstPrice ? (
+                                     <Badge variant="destructive" className="bg-red-100 text-red-800">
+                                        <AlertTriangle className="mr-1 h-3 w-3" />
+                                        Pior Preço
                                     </Badge>
                                 ) : (
                                     <Badge variant="outline">Pendente</Badge>
