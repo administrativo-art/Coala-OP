@@ -44,7 +44,8 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-    const cleanedString = String(qtyString).replace(/[^\d,.]/g, '').replace(',', '.');
+    // Simple parser for numbers like "1,00" or "25"
+    const cleanedString = String(qtyString).replace(',', '.');
     const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
 };
@@ -103,8 +104,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     const unmatchedItems = new Set<string>();
 
                     for (const row of rows) {
-                        const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
-                        const quantityStr = (row['Qted.'] || row['Qtde.'] || row['Quantidade'] || row['Qtd']);
+                        const itemName = (row['Item'])?.trim();
+                        const quantityStr = (row['Qtde.']);
                         
                         if (!itemName || quantityStr === undefined || quantityStr === null) continue;
 
@@ -116,7 +117,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         
                         const quantityValue = parseQuantity(quantityStr);
                         
-                        if (quantityValue <= 0) continue;
+                        if (quantityValue < 0) continue;
 
                         if (!analysisResults[baseProductConfig.id]) {
                             analysisResults[baseProductConfig.id] = { 
@@ -139,15 +140,19 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     }
                     
                     const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: baseProductId, // Using baseProductId for both
+                        productId: baseProductId, 
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
                     }));
 
-                    if (finalResults.length === 0) {
+                    if (finalResults.length === 0 && unmatchedItems.size === 0) {
+                        throw new Error("Nenhum item do relatório foi processado. Verifique os nomes das colunas (devem ser 'Item' e 'Qtde.') e os dados do arquivo.");
+                    }
+                     if (finalResults.length === 0 && unmatchedItems.size > 0) {
                         throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
                     }
+
 
                     await addReport({
                         reportName: file.name,
