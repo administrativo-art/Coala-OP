@@ -318,42 +318,26 @@ export function ExpiryControl() {
                 let displayUnit = 'pacotes';
 
                 if (baseProductConfig) {
-                    const allProductsInGroup = baseGroup.brands.flatMap(b => b.products.map(p => p.product));
-                    const canConvert = allProductsInGroup.every(p => 
-                        (p.category === 'Massa' || p.category === 'Volume' || p.category === 'Embalagem')
-                    );
-
-                    if (canConvert) {
-                        displayUnit = baseProductConfig.unit;
-                        totalGroupQuantity = allProductsInGroup.reduce((total, p) => {
-                            const lotsForProduct = baseGroup.brands.flatMap(b => b.products.find(pg => pg.product.id === p.id)?.lots || []);
-                            let productTotalInBaseUnit = 0;
-                            
-                            lotsForProduct.forEach(lot => {
-                                const lotQuantity = lot.quantity;
-                                if(p.secondaryUnit && p.secondaryUnitValue) {
-                                     productTotalInBaseUnit += lotQuantity * p.secondaryUnitValue;
-                                } else if (p.category === baseProductConfig.category) {
-                                     const lotTotalInProductUnit = lotQuantity * p.packageSize;
-                                     productTotalInBaseUnit += convertValue(lotTotalInProductUnit, p.unit, baseProductConfig.unit, p.category);
-                                } else {
-                                     // This case should ideally not be hit if canConvert is true, but as a safe fallback.
-                                     productTotalInBaseUnit += lotQuantity;
+                    displayUnit = baseProductConfig.unit;
+                    totalGroupQuantity = baseGroup.brands.reduce((brandTotal, brand) => {
+                        const brandValue = brand.products.reduce((prodTotal, prodGroup) => {
+                            const productConfig = prodGroup.product;
+                            const lotValue = prodGroup.lots.reduce((lotTotal, lot) => {
+                                if (productConfig.secondaryUnit && productConfig.secondaryUnitValue && productConfig.secondaryUnit === baseProductConfig.unit) {
+                                    return lotTotal + (lot.quantity * productConfig.secondaryUnitValue);
                                 }
-                            });
-                            
-                            return total + productTotalInBaseUnit;
+                                if (productConfig.category === baseProductConfig.category) {
+                                    const valueInProductUnits = lot.quantity * productConfig.packageSize;
+                                    return lotTotal + convertValue(valueInProductUnits, productConfig.unit, baseProductConfig.unit, productConfig.category);
+                                }
+                                return lotTotal; // Incompatible units, don't add to total
+                            }, 0);
+                            return prodTotal + lotValue;
                         }, 0);
-                    } else {
-                        // Fallback: if not all products are convertible, sum up packages
-                         totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
-                            brandAcc + brand.products.reduce((prodAcc, prod) => 
-                                prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
-                            , 0)
-                        , 0);
-                    }
-                } else {
-                    // Avulso products: sum packages
+                        return brandTotal + brandValue;
+                    }, 0);
+
+                } else { // "Avulso" products
                     totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
                         brandAcc + brand.products.reduce((prodAcc, prod) => 
                             prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
