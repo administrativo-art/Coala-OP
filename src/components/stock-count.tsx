@@ -130,7 +130,9 @@ export function StockCount() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
-        <CardDescription>Realize a contagem do estoque. Itens com quantidade alterada ou com observações serão salvos para aprovação.</CardDescription>
+        <CardDescription>
+          Informe a quantidade final de cada lote. O sistema registrará apenas os itens com quantidades alteradas ou com observações.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
@@ -161,7 +163,7 @@ export function StockCount() {
                         <TableHead>Produto</TableHead>
                         <TableHead>Lote</TableHead>
                         <TableHead>Validade</TableHead>
-                        <TableHead className="w-24">Qtd. Contada</TableHead>
+                        <TableHead className="w-32">Qtd. Final</TableHead>
                         <TableHead className="w-40">Observações</TableHead>
                       </TableRow>
                     </TableHeader>
