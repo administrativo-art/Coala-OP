@@ -70,7 +70,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                           {historyWithProducts.map((item) => (
                               <TableRow key={item.id}>
                                   <TableCell className="text-sm">
-                                      {format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                      {item.timestamp ? format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
                                   </TableCell>
                                   <TableCell className="font-medium">{item.displayName}</TableCell>
                                   <TableCell>{item.lotNumber}</TableCell>
