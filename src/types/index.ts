@@ -166,6 +166,7 @@ export type PermissionSet = {
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
     team: { manage: boolean, view: boolean };
     purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
+    stockCount: { perform: boolean; approve: boolean; viewHistory: boolean; };
 };
 
 export type Profile = {
@@ -205,20 +206,30 @@ export type PredefinedList = {
 export type StockCountItem = {
     productId: string;
     productName: string;
-    fromUnit: string;
-    toUnit: string;
-    value: string;
-    result: string;
+    lotId: string;
+    lotNumber: string;
+    expiryDate: string; // ISO String
+    systemQuantity: number;
+    countedQuantity: number;
+    difference: number;
+    notes?: string;
 };
 
 export type StockCount = {
     id: string;
-    listId: string;
-    listName: string;
-    userId: string;
-    username: string;
     kioskId: string;
-    createdAt: string; // ISO String
+    kioskName: string;
+    status: 'pending' | 'approved' | 'rejected';
+    countedBy: {
+        userId: string;
+        username: string;
+    };
+    countedAt: string; // ISO String
+    reviewedBy?: {
+        userId: string;
+        username: string;
+    };
+    reviewedAt?: string; // ISO String
     items: StockCountItem[];
 };
 
@@ -385,6 +396,7 @@ export const defaultGuestPermissions: PermissionSet = {
     returns: { add: false, updateStatus: false, delete: false },
     team: { manage: false, view: false },
     purchasing: { suggest: false, approve: false, viewHistory: false },
+    stockCount: { perform: false, approve: false, viewHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -399,6 +411,7 @@ export const defaultUserPermissions: PermissionSet = {
     returns: { add: true, updateStatus: true, delete: false },
     team: { manage: false, view: true },
     purchasing: { suggest: true, approve: false, viewHistory: true },
+    stockCount: { perform: true, approve: false, viewHistory: true },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -413,4 +426,5 @@ export const defaultAdminPermissions: PermissionSet = {
     returns: { add: true, updateStatus: true, delete: true },
     team: { manage: true, view: true },
     purchasing: { suggest: true, approve: true, viewHistory: true },
+    stockCount: { perform: true, approve: true, viewHistory: true },
 };

@@ -23,7 +23,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   const canManageLots = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory);
   const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
-  const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve);
+  const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve) || (permissions.stockCount.perform || permissions.stockCount.approve);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const isMasterUser = user?.username === 'Tiago Brasil';
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
