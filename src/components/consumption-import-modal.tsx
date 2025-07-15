@@ -179,7 +179,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     }
                     
                     const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: '', 
+                        productId: baseProductId,
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
