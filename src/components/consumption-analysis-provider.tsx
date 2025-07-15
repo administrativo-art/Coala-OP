@@ -5,7 +5,6 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type ConsumptionReport } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
-import { useProducts } from '@/hooks/use-products'; // Import useProducts
 
 export interface ConsumptionAnalysisContextType {
   history: ConsumptionReport[];
@@ -19,7 +18,6 @@ export const ConsumptionAnalysisContext = createContext<ConsumptionAnalysisConte
 export function ConsumptionAnalysisProvider({ children }: { children: React.ReactNode }) {
   const [history, setHistory] = useState<ConsumptionReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const { products } = useProducts(); // Get products
 
   useEffect(() => {
     const q = query(collection(db, "consumptionReports"));
@@ -37,23 +35,22 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
   
   const addReport = useCallback(async (report: Omit<ConsumptionReport, 'id'>) => {
     try {
-      const reportWithBaseIds = {
+      // The `productId` from the import modal is actually the `baseProductId`.
+      // We ensure it's correctly mapped here before saving.
+      const reportWithCorrectBaseIds = {
         ...report,
-        results: report.results.map(item => {
-          const product = products.find(p => p.id === item.productId);
-          return {
-            ...item,
-            baseProductId: product?.baseProductId || null,
-          };
-        }),
+        results: report.results.map(item => ({
+          ...item,
+          baseProductId: item.productId, // Correctly assign baseProductId
+        })),
       };
-      const docRef = await addDoc(collection(db, "consumptionReports"), reportWithBaseIds);
+      const docRef = await addDoc(collection(db, "consumptionReports"), reportWithCorrectBaseIds);
       return docRef.id;
     } catch (error) {
       console.error("Error adding consumption report:", error);
       return null;
     }
-  }, [products]);
+  }, []);
 
   const deleteReport = useCallback(async (reportId: string) => {
     try {
