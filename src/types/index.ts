@@ -47,6 +47,8 @@ export type Product = {
   category: UnitCategory;
   packageSize: number;
   unit: string;
+  secondaryUnitValue?: number;
+  secondaryUnit?: string;
   notes?: string;
   pdfUnit?: string;
   alertThreshold?: number; // e.g., 30 days

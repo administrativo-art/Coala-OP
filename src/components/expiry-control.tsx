@@ -314,25 +314,35 @@ export function ExpiryControl() {
             {groupedData.map(baseGroup => {
                 const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
                 
-                const totalGroupQuantity = baseGroup.brands.reduce((total, brand) => {
-                    return total + brand.products.reduce((subTotal, productGroup) => {
+                let totalGroupQuantity = 0;
+                let displayUnit = 'pacotes';
+                let isConvertible = false;
+
+                if (baseProductConfig && (baseProductConfig.category === 'Massa' || baseProductConfig.category === 'Volume')) {
+                    isConvertible = true;
+                    displayUnit = baseProductConfig.unit;
+                }
+                
+                baseGroup.brands.forEach(brand => {
+                    brand.products.forEach(productGroup => {
                         const productConfig = productGroup.product;
-                        if (!baseProductConfig) {
-                             // Fallback for non-base products: just sum quantities
-                            return subTotal + productGroup.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0);
-                        }
-                        
-                        const lotQuantityInBaseUnits = productGroup.lots.reduce((lotTotal, lot) => {
-                            const packageSizeInBaseUnits = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                            return lotTotal + (lot.quantity * packageSizeInBaseUnits);
-                        }, 0);
-                        return subTotal + lotQuantityInBaseUnits;
-                    }, 0);
-                }, 0);
-
-                const displayUnit = baseProductConfig ? baseProductConfig.unit : 'un.';
+                        productGroup.lots.forEach(lot => {
+                            if (isConvertible && productConfig.category === baseProductConfig?.category) {
+                                totalGroupQuantity += lot.quantity * convertValue(productConfig.packageSize, productConfig.unit, displayUnit, productConfig.category);
+                            } else if (productConfig.category === 'Unidade' && productConfig.secondaryUnitValue && productConfig.secondaryUnit && baseProductConfig?.category === 'Massa') {
+                                // Special case for Paçoca (Unidade to Massa)
+                                const weightInBaseUnit = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, displayUnit, 'Massa');
+                                totalGroupQuantity += lot.quantity * weightInBaseUnit;
+                            } else {
+                                // Fallback for non-convertible or mismatched categories
+                                totalGroupQuantity += lot.quantity;
+                                displayUnit = 'pacotes';
+                            }
+                        });
+                    });
+                });
+                
                 const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
-
 
                 return (
                     <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">

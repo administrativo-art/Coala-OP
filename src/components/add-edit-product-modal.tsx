@@ -22,7 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Camera, Trash2, Upload, Info, Settings } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from './ui/separator';
 
 
 const BarcodeScannerModal = dynamic(
@@ -43,6 +44,8 @@ const productFormSchema = z.object({
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
+  secondaryUnitValue: z.coerce.number().optional(),
+  secondaryUnit: z.string().optional(),
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
 });
@@ -107,6 +110,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
+            secondaryUnitValue: undefined, secondaryUnit: 'g',
             notes: '', baseProductId: ''
         }
     });
@@ -124,6 +128,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     category: productToEdit.category,
                     packageSize: productToEdit.packageSize,
                     unit: productToEdit.unit,
+                    secondaryUnitValue: productToEdit.secondaryUnitValue,
+                    secondaryUnit: productToEdit.secondaryUnit || 'g',
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
                 });
@@ -131,6 +137,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
+                    secondaryUnitValue: undefined, secondaryUnit: 'g',
                     notes: '', baseProductId: ''
                 });
             }
@@ -140,6 +147,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     useEffect(() => {
         if (form.formState.isDirty || !productToEdit) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
+        }
+         if (categoryWatch !== 'Unidade') {
+            form.setValue('secondaryUnitValue', undefined);
+            form.setValue('secondaryUnit', undefined);
         }
     }, [categoryWatch, form, productToEdit]);
 
@@ -247,6 +258,20 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
+                                
+                                {categoryWatch === 'Unidade' && (
+                                    <>
+                                        <Separator/>
+                                        <div className="p-4 border rounded-lg bg-muted/30">
+                                            <h4 className="text-md font-medium mb-2">Peso por Unidade (Opcional)</h4>
+                                            <p className="text-sm text-muted-foreground mb-4">Se este item for controlado por peso no estoque geral (produto base), informe o peso de uma única unidade aqui.</p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                 <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Peso por unidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 20" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                 <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory('Massa').map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                                 
                                  <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                     <FormItem>
