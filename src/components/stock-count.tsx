@@ -22,11 +22,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, PlusCircle } from 'lucide-react';
+import { Save, ListOrdered, Inbox, PlusCircle, UserCheck } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { ItemAdditionRequestManagement } from './item-addition-request-management';
-import { Separator } from './ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const countItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -134,139 +135,145 @@ export function StockCount() {
 
   return (
     <div className="space-y-6">
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
-        <CardDescription>
-          Ajuste a quantidade final de cada lote. O sistema registrará apenas os itens com quantidades alteradas para aprovação.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-            <SelectTrigger className="flex-grow"><SelectValue placeholder="Selecione um quiosque para iniciar..." /></SelectTrigger>
-            <SelectContent>
-              {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button 
-            variant="outline" 
-            onClick={() => setIsRequestModalOpen(true)}
-            disabled={!selectedKioskId}
-          >
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Solicitar Cadastro de Insumo
-          </Button>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque e Solicitações</CardTitle>
+          <CardDescription>
+            Realize a contagem de estoque e gerencie solicitações de cadastro de novos insumos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+           <Tabs defaultValue="count" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="count"><ListOrdered className="mr-2 h-4 w-4" /> Contagem de Estoque</TabsTrigger>
+                    {canManageRequests && <TabsTrigger value="requests"><UserCheck className="mr-2 h-4 w-4" /> Gerenciar Solicitações</TabsTrigger>}
+                </TabsList>
+                <TabsContent value="count" className="mt-4">
+                     <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                                <SelectTrigger className="flex-grow"><SelectValue placeholder="Selecione um quiosque para iniciar..." /></SelectTrigger>
+                                <SelectContent>
+                                {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setIsRequestModalOpen(true)}
+                                disabled={!selectedKioskId}
+                            >
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Solicitar Cadastro de Insumo
+                            </Button>
+                        </div>
+                        {selectedKioskId && (
+                            loading ? (
+                                <Skeleton className="h-64 w-full" />
+                            ) : kioskLots.length === 0 ? (
+                                <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                                    <Inbox className="h-12 w-12 mx-auto mb-4" />
+                                    <p className="font-semibold">Nenhum lote em estoque para este quiosque.</p>
+                                </div>
+                            ) : (
+                                <Form {...form}>
+                                <form onSubmit={form.handleSubmit(onSubmit)}>
+                                    <ScrollArea className="h-[50vh] pr-4">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        {fields.map((field, index) => {
+                                        const lot = kioskLots[index];
+                                        if (!lot) return null;
+                                        const product = products.find(p => p.id === lot.productId);
 
-        {selectedKioskId && (
-          loading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : kioskLots.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                <Inbox className="h-12 w-12 mx-auto mb-4" />
-                <p className="font-semibold">Nenhum lote em estoque para este quiosque.</p>
-            </div>
-          ) : (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)}>
-                <ScrollArea className="h-[50vh] pr-4">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {fields.map((field, index) => {
-                      const lot = kioskLots[index];
-                      if (!lot) return null;
-                      const product = products.find(p => p.id === lot.productId);
+                                        return (
+                                            <Card key={field.id} className="p-4 flex gap-4 items-center">
+                                            <div className="w-20 h-20 shrink-0">
+                                                {product?.imageUrl ? (
+                                                    <Image
+                                                        src={product.imageUrl}
+                                                        alt={lot.productName}
+                                                        width={80}
+                                                        height={80}
+                                                        className="w-20 h-20 rounded-md object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
+                                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                                    </div>
+                                                )}
+                                            </div>
 
-                      return (
-                        <Card key={field.id} className="p-4 flex gap-4 items-center">
-                           <div className="w-20 h-20 shrink-0">
-                                {product?.imageUrl ? (
-                                    <Image
-                                        src={product.imageUrl}
-                                        alt={lot.productName}
-                                        width={80}
-                                        height={80}
-                                        className="w-20 h-20 rounded-md object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
-                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                            <div className="flex-1 space-y-3">
+                                                <div className="space-y-1">
+                                                    <p className="font-semibold leading-tight">{lot.productName}</p>
+                                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <FormField
+                                                    control={form.control}
+                                                    name={`items.${index}.countedQuantity`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                        <FormLabel className="text-xs">Qtd. Contada</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                            type="number"
+                                                            {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                    />
+                                                    <FormField
+                                                    control={form.control}
+                                                    name={`items.${index}.notes`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                        <FormLabel className="text-xs">Observações</FormLabel>
+                                                        <FormControl>
+                                                            <Input 
+                                                                {...field}
+                                                                placeholder="Opcional..."
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                    />
+                                                </div>
+                                            </div>
+                                            </Card>
+                                        );
+                                        })}
                                     </div>
-                                )}
-                            </div>
+                                    </ScrollArea>
+                                    <div className="flex justify-end pt-4 mt-4 border-t">
+                                    <Button type="submit" disabled={submitting}>
+                                        <Save className="mr-2 h-4 w-4" />
+                                        {submitting ? 'Salvando...' : 'Salvar Contagem para Aprovação'}
+                                    </Button>
+                                    </div>
+                                </form>
+                                </Form>
+                            )
+                        )}
+                    </div>
+                </TabsContent>
+                {canManageRequests && (
+                    <TabsContent value="requests" className="mt-4">
+                        <ItemAdditionRequestManagement />
+                    </TabsContent>
+                )}
+           </Tabs>
+        </CardContent>
+      </Card>
 
-                            <div className="flex-1 space-y-3">
-                                <div className="space-y-1">
-                                    <p className="font-semibold leading-tight">{lot.productName}</p>
-                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <FormField
-                                    control={form.control}
-                                    name={`items.${index}.countedQuantity`}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="text-xs">Qtd. Contada</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                            type="number"
-                                            {...field}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                    />
-                                    <FormField
-                                    control={form.control}
-                                    name={`items.${index}.notes`}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="text-xs">Observações</FormLabel>
-                                        <FormControl>
-                                            <Input 
-                                                {...field}
-                                                placeholder="Opcional..."
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                    />
-                                </div>
-                            </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-                <div className="flex justify-end pt-4 mt-4 border-t">
-                  <Button type="submit" disabled={submitting}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {submitting ? 'Salvando...' : 'Salvar Contagem para Aprovação'}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          )
-        )}
-      </CardContent>
-    </Card>
-
-    <RequestItemAdditionModal 
-      open={isRequestModalOpen}
-      onOpenChange={setIsRequestModalOpen}
-      kioskId={selectedKioskId}
-    />
-
-    {canManageRequests && (
-        <div className="mt-6">
-            <Separator />
-            <div className="mt-6">
-                 <ItemAdditionRequestManagement />
-            </div>
-        </div>
-    )}
+      <RequestItemAdditionModal 
+        open={isRequestModalOpen}
+        onOpenChange={setIsRequestModalOpen}
+        kioskId={selectedKioskId}
+      />
     </div>
   );
 }
+
