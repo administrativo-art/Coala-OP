@@ -107,11 +107,7 @@ export default function DashboardPage() {
             consumptionByKioskAndBaseProduct[report.kioskId] = {};
         }
         report.results.forEach(item => {
-            const baseProduct = products.find(p => p.id === item.productId)?.baseProductId 
-                ? baseProducts.find(bp => bp.id === products.find(p => p.id === item.productId)?.baseProductId)
-                : null;
-            
-            const baseProductName = baseProduct ? baseProduct.name : item.productName.split(' - ')[0].trim();
+            const baseProductName = item.productName.split(' - ')[0].trim();
 
             if (!consumptionByKioskAndBaseProduct[report.kioskId][baseProductName]) {
                 consumptionByKioskAndBaseProduct[report.kioskId][baseProductName] = { total: 0, count: 0 };
@@ -162,7 +158,8 @@ export default function DashboardPage() {
 
     return dataForChart;
 
-  }, [user, consumptionHistory, products, baseProducts, consumptionLoading, productsLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
+  }, [user, consumptionHistory, baseProducts, consumptionLoading, baseProductsLoading, kiosksLoading, selectedKiosk, selectedBaseProducts]);
+
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
@@ -579,3 +576,5 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+    
