@@ -10,7 +10,6 @@ import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { type BaseProduct, type ConsumptionReport, type Kiosk } from '@/types';
-import { convertValue, units } from '@/lib/conversion';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -45,23 +44,10 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-    const cleanedString = qtyString.replace(',', '.');
+    const cleanedString = String(qtyString).replace(/[^\d,.]/g, '').replace(',', '.');
     const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
 };
-
-
-const getCategoryForUnit = (unit: string) => {
-    if (!unit) return null;
-    const lowerUnit = unit.toLowerCase();
-    for (const category in units) {
-        const categoryUnits = units[category as keyof typeof units];
-        if (Object.keys(categoryUnits).some(u => u.toLowerCase() === lowerUnit)) {
-            return category as keyof typeof units;
-        }
-    }
-    return null;
-}
 
 interface ConsumptionImportModalProps {
     open: boolean;
@@ -118,10 +104,9 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
 
                     for (const row of rows) {
                         const itemName = (row['Item'] || row['Produto'] || row['Descrição'])?.trim();
-                        const unitFromCsv = (row['Unidade'] || row['unidade'])?.trim();
-                        const quantityStr = (row['Qted.'] || row['Qtde.'] || row['Quantidade'] || row['Qtd'])?.trim();
+                        const quantityStr = (row['Qted.'] || row['Qtde.'] || row['Quantidade'] || row['Qtd']);
                         
-                        if (!itemName || !quantityStr) continue;
+                        if (!itemName || quantityStr === undefined || quantityStr === null) continue;
 
                         const baseProductConfig = findBaseProductByName(itemName);
                         if (!baseProductConfig) {
@@ -130,17 +115,9 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         }
                         
                         const quantityValue = parseQuantity(quantityStr);
-                        const targetUnit = baseProductConfig.unit;
-                        const category = getCategoryForUnit(targetUnit);
+                        
+                        if (quantityValue <= 0) continue;
 
-                        if (!category) {
-                             unmatchedItems.add(itemName);
-                             console.warn(`Could not determine category for unit "${targetUnit}" on base product "${baseProductConfig.name}"`);
-                             continue;
-                        }
-                        
-                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitFromCsv || targetUnit, targetUnit, category);
-                        
                         if (!analysisResults[baseProductConfig.id]) {
                             analysisResults[baseProductConfig.id] = { 
                                 productName: baseProductConfig.name,
@@ -148,7 +125,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                                 count: 0
                             };
                         }
-                        analysisResults[baseProductConfig.id].consumedQuantity += consumedQuantityInBaseUnit;
+                        analysisResults[baseProductConfig.id].consumedQuantity += quantityValue;
                         analysisResults[baseProductConfig.id].count += 1;
                     }
 
@@ -162,7 +139,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     }
                     
                     const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: baseProductId,
+                        productId: baseProductId, // Using baseProductId for both
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
