@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -52,6 +52,7 @@ const parseQuantity = (qtyString: string | number): number => {
 
 
 const getCategoryForUnit = (unit: string) => {
+    if (!unit) return null;
     const lowerUnit = unit.toLowerCase();
     for (const category in units) {
         const categoryUnits = units[category as keyof typeof units];
@@ -161,7 +162,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     }
                     
                     const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: baseProductId, // Ensure productId is populated
+                        productId: baseProductId,
                         productName: data.productName,
                         consumedQuantity: data.consumedQuantity,
                         baseProductId: baseProductId,
