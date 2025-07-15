@@ -16,10 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera, Search, Settings, AlertCircle } from 'lucide-react';
-import { type LotEntry, type Kiosk, type Product } from '@/types';
+import { Calendar as CalendarIcon, Camera, Settings, AlertCircle } from 'lucide-react';
+import { type LotEntry, type Kiosk, type Product, type BaseProduct } from '@/types';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,9 +59,11 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const { products, getProductFullName, updateProduct } = useProducts();
   const { locations } = useLocations();
+  const { baseProducts } = useBaseProducts();
   const isEditing = !!lotToEdit;
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productSearchTerm, setProductSearchTerm] = useState('');
+  
+  const [selectedBaseProductId, setSelectedBaseProductId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   const form = useForm<LotFormValues>({
     resolver: zodResolver(lotFormSchema),
@@ -74,7 +77,10 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     }
   });
   
-  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+  const selectedProduct = useMemo(() => {
+    return products.find(p => p.id === selectedProductId) || null;
+  }, [products, selectedProductId]);
+
   const selectedKioskId = form.watch('kioskId');
   
   const availableLocations = useMemo(() => {
@@ -82,18 +88,36 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
     return locations.filter(loc => loc.kioskId === selectedKioskId);
   }, [locations, selectedKioskId]);
 
+  const linkedProducts = useMemo(() => {
+    if (!selectedBaseProductId) return [];
+    return products.filter(p => p.baseProductId === selectedBaseProductId && !p.isArchived);
+  }, [products, selectedBaseProductId]);
+
+  const handleBaseProductChange = (baseId: string) => {
+    setSelectedBaseProductId(baseId);
+    setSelectedProductId(null); // Reset product selection
+  };
+
+  const handleProductChange = (productId: string) => {
+    setSelectedProductId(productId);
+    const product = products.find(p => p.id === productId);
+    if (product) {
+        form.setValue('imageUrl', product.imageUrl || '');
+    }
+  };
+
   useEffect(() => {
     if (open) {
       if (lotToEdit) {
         const product = products.find(p => p.id === lotToEdit.productId);
-        setSelectedProduct(product || null);
+        setSelectedBaseProductId(product?.baseProductId || null);
+        setSelectedProductId(lotToEdit.productId);
         form.reset({
           ...lotToEdit,
           expiryDate: new Date(lotToEdit.expiryDate),
           locationId: lotToEdit.locationId || '',
           imageUrl: lotToEdit.imageUrl || product?.imageUrl || '',
         });
-        setProductSearchTerm('');
       } else {
         form.reset({
             lotNumber: '',
@@ -103,8 +127,8 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             quantity: 1,
             imageUrl: '',
         });
-        setSelectedProduct(null);
-        setProductSearchTerm('');
+        setSelectedBaseProductId(null);
+        setSelectedProductId(null);
       }
     }
   }, [lotToEdit, open, form, products]);
@@ -155,29 +179,20 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         console.error("Failed to save lot:", error);
     }
   };
-  
-  const handleProductSearch = (term: string) => {
-    if (!term.trim()) return;
-    const normalizedTerm = term.trim().toLowerCase();
-    
-    let product = activeProducts.find(p => p.barcode?.toLowerCase() === normalizedTerm);
-    
-    if (!product) {
-      product = activeProducts.find(p => p.baseName.toLowerCase().includes(normalizedTerm));
-    }
-
-    if (product) {
-        setSelectedProduct(product);
-        form.setValue('imageUrl', product.imageUrl || '');
-    } else {
-        setSelectedProduct(null);
-    }
-  };
 
   const handleScanSuccess = (decodedText: string) => {
-    setProductSearchTerm(decodedText);
-    handleProductSearch(decodedText);
     setIsScannerOpen(false);
+    const product = products.find(p => p.barcode === decodedText && !p.isArchived);
+    if (product) {
+        setSelectedBaseProductId(product.baseProductId || null);
+        // Timeout to allow linkedProducts to update
+        setTimeout(() => {
+            setSelectedProductId(product.id);
+            form.setValue('imageUrl', product.imageUrl || '');
+        }, 100);
+    } else {
+        alert("Nenhum insumo encontrado para este código de barras.");
+    }
   };
 
   const currentImageUrl = form.watch('imageUrl');
@@ -189,7 +204,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar lote de insumo' : 'Adicionar novo lote ao estoque'}</DialogTitle>
             <DialogDescription>
-              {isEditing ? 'Atualize as informações do lote em estoque.' : 'Primeiro, encontre o insumo e depois adicione os detalhes do lote.'}
+              {isEditing ? 'Atualize as informações do lote em estoque.' : 'Selecione o insumo e adicione os detalhes do lote.'}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -197,49 +212,31 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 <ScrollArea className="h-[60vh] pr-4">
                     <div className="space-y-4 py-4">
                         <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
-                            <Label className="text-sm font-medium">{isEditing ? 'Insumo vinculado' : '1. Encontre o insumo'}</Label>
-                            <FormDescription>{isEditing ? 'Para alterar o insumo, use a busca abaixo.' : 'Use a busca para encontrar o insumo pelo nome ou código de barras.'}</FormDescription>
-                            <div className="flex gap-2">
-                                <div className="relative flex-grow">
-                                    <Input
-                                        placeholder="Digite o nome ou código de barras"
-                                        value={productSearchTerm}
-                                        onChange={(e) => setProductSearchTerm(e.target.value)}
-                                        onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleProductSearch(productSearchTerm) }}}
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                                        onClick={() => handleProductSearch(productSearchTerm)}
-                                    >
-                                        <Search className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                                <Button type="button" variant="outline" onClick={() => setIsScannerOpen(true)}>
+                             <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium">1. Selecione o insumo</Label>
+                                <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsScannerOpen(true)}>
                                     <Camera className="h-4 w-4" />
                                 </Button>
-                            </div>
+                             </div>
+                             <FormDescription>Selecione primeiro o insumo base e depois a variação.</FormDescription>
+                            
+                            <Select onValueChange={handleBaseProductChange} value={selectedBaseProductId || ''}>
+                                <SelectTrigger><SelectValue placeholder="Selecione o insumo base..."/></SelectTrigger>
+                                <SelectContent>
+                                    {baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+
+                             <Select onValueChange={handleProductChange} value={selectedProductId || ''} disabled={!selectedBaseProductId || linkedProducts.length === 0}>
+                                <SelectTrigger><SelectValue placeholder="Selecione a variação..."/></SelectTrigger>
+                                <SelectContent>
+                                    {linkedProducts.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {selectedProduct ? (
                             <>
-                                <div className="p-4 border rounded-lg space-y-4">
-                                    <h4 className="text-sm font-medium text-muted-foreground">Detalhes do insumo</h4>
-                                     <div className="flex items-start gap-4">
-                                          {(currentImageUrl || selectedProduct.imageUrl) && (
-                                            <Image src={currentImageUrl || selectedProduct.imageUrl || ''} alt="Foto do insumo" width={64} height={64} className="rounded-md object-cover aspect-square" />
-                                          )}
-                                          <div className="flex-grow">
-                                            <p className="font-semibold text-lg">{getProductFullName(selectedProduct)}</p>
-                                            <p className="text-sm text-muted-foreground">Código: {selectedProduct.barcode || 'N/A'}</p>
-                                            {isEditing && lotToEdit.productId !== selectedProduct.id && (
-                                                <p className="text-sm text-primary mt-1">O insumo deste lote será alterado ao salvar.</p>
-                                            )}
-                                          </div>
-                                      </div>
-                                </div>
                                 <div className="p-4 border rounded-lg space-y-4">
                                     <h4 className="text-sm font-medium text-muted-foreground">{isEditing ? 'Editar detalhes do lote' : '2. Detalhes do lote'}</h4>
                                     <FormField
@@ -325,7 +322,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <FormMessage />
                                             </FormItem>
                                         )}
-                                        />
+                                    />
                                     </div>
                                     <FormField
                                         control={form.control}
@@ -363,10 +360,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                 </AlertDescription>
                             </Alert>
                         ) : (
-                            <div className="text-center text-muted-foreground py-8">
-                                <Search className="h-10 w-10 mx-auto mb-2" />
-                                <p>Use a busca acima para encontrar um insumo.</p>
-                            </div>
+                           null
                         )}
                     </div>
                 </ScrollArea>
