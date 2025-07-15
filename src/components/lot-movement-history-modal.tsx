@@ -1,8 +1,9 @@
 
+
 "use client"
 
 import { useMemo } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -22,10 +23,8 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
 
   const lotHistory = useMemo(() => {
     if (!lot || loading) return [];
-    // Filtering by productName and lotNumber as a composite key.
     return history.filter(
-      (record) =>
-        record.productName === lot.productName && record.lotNumber === lot.lotNumber
+      (record) => record.lotId === lot.id
     );
   }, [lot, history, loading]);
 
@@ -48,9 +47,9 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                         <TableHeader>
                         <TableRow>
                             <TableHead>Data</TableHead>
-                            <TableHead>De</TableHead>
-                            <TableHead>Para</TableHead>
-                            <TableHead className="text-right">Quantidade</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Quiosque</TableHead>
+                            <TableHead className="text-right">Qtd.</TableHead>
                             <TableHead>Usuário</TableHead>
                         </TableRow>
                         </TableHeader>
@@ -58,12 +57,12 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                         {lotHistory.map((item) => (
                             <TableRow key={item.id}>
                             <TableCell>
-                                {format(new Date(item.movedAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                {format(new Date(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
                             </TableCell>
-                            <TableCell>{item.fromKioskName}</TableCell>
-                            <TableCell>{item.toKioskName}</TableCell>
-                            <TableCell className="text-right font-semibold">{item.quantityMoved}</TableCell>
-                            <TableCell>{item.movedByUsername}</TableCell>
+                            <TableCell>{item.type}</TableCell>
+                            <TableCell>{item.kioskName}</TableCell>
+                            <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
+                            <TableCell>{item.username}</TableCell>
                             </TableRow>
                         ))}
                         </TableBody>
@@ -73,7 +72,7 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
               <div className="flex h-60 flex-col items-center justify-center text-center text-muted-foreground">
                 <History className="h-12 w-12 mb-4" />
                 <p className="font-semibold">Nenhuma movimentação encontrada</p>
-                <p className="text-sm">Este lote ainda não foi transferido entre quiosques.</p>
+                <p className="text-sm">Este lote ainda não foi movimentado.</p>
               </div>
             )}
           </div>

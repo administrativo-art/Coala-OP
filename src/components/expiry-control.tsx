@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -50,7 +51,7 @@ export type GroupedByBaseProduct = {
 export function ExpiryControl() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, zeroOutLotsByIds, moveMultipleLots } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { locations, loading: locationsLoading } = useLocations();
@@ -69,7 +70,6 @@ export function ExpiryControl() {
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [lotForHistory, setLotForHistory] = useState<LotEntry | null>(null);
-  const [lotToZeroOut, setLotToZeroOut] = useState<LotEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
@@ -229,18 +229,6 @@ export function ExpiryControl() {
     setLotForHistory(lot);
   };
 
-  const handleZeroOutClick = (lot: LotEntry) => {
-    setLotToZeroOut(lot);
-  };
-
-  const handleZeroOutConfirm = async () => {
-    if (!lotToZeroOut) return;
-    setIsProcessing(true);
-    await zeroOutLotsByIds([lotToZeroOut.id]);
-    setLotToZeroOut(null);
-    setIsProcessing(false);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
 
@@ -343,7 +331,6 @@ export function ExpiryControl() {
                                             onMove={handleMoveClick}
                                             onDelete={handleDeleteClick}
                                             onViewHistory={handleViewHistoryClick}
-                                            onZeroOut={handleZeroOutClick}
                                             canEdit={permissions.lots.edit}
                                             canMove={permissions.lots.move}
                                             canDelete={permissions.lots.delete}
@@ -522,18 +509,6 @@ export function ExpiryControl() {
         />
       )}
       
-      {lotToZeroOut && (
-        <DeleteConfirmationDialog
-            open={!!lotToZeroOut}
-            isDeleting={isProcessing}
-            onOpenChange={() => setLotToZeroOut(null)}
-            onConfirm={handleZeroOutConfirm}
-            title="Zerar estoque do lote?"
-            description={`Isso definirá a quantidade do lote ${lotToZeroOut.lotNumber} como 0. O lote será movido para a auditoria de lotes arquivados. Esta ação não pode ser desfeita.`}
-            confirmButtonText="Zerar estoque"
-            confirmButtonVariant="destructive"
-        />
-      )}
       
       <ZeroedLotsAuditModal
         open={isAuditModalOpen}

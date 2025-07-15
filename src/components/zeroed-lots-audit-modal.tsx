@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo } from 'react';
@@ -25,12 +26,9 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
   const historyWithProducts = useMemo(() => {
     if (loading || !products.length) return [];
     return history.map(record => {
-      // The productName in the record is the full name, we need to find the base product
-      const product = products.find(p => record.productName.startsWith(p.baseName));
+      const product = products.find(p => record.productId === p.id);
       return {
         ...record,
-        // The record's productName is already formatted, we can use it directly
-        // but it might be stale. Let's re-format if we find the product.
         displayName: product ? getProductFullName(product) : record.productName,
       };
     });
@@ -62,8 +60,8 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                               <TableHead>Data</TableHead>
                               <TableHead>Produto</TableHead>
                               <TableHead>Lote</TableHead>
-                              <TableHead>Origem</TableHead>
-                              <TableHead>Destino</TableHead>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Quiosque</TableHead>
                               <TableHead className="text-right">Qtd.</TableHead>
                               <TableHead>Usuário</TableHead>
                           </TableRow>
@@ -72,14 +70,14 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                           {historyWithProducts.map((item) => (
                               <TableRow key={item.id}>
                                   <TableCell className="text-sm">
-                                      {format(parseISO(item.movedAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                      {format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
                                   </TableCell>
                                   <TableCell className="font-medium">{item.displayName}</TableCell>
                                   <TableCell>{item.lotNumber}</TableCell>
-                                  <TableCell>{item.fromKioskName}</TableCell>
-                                  <TableCell>{item.toKioskName}</TableCell>
-                                  <TableCell className="text-right font-semibold">{item.quantityMoved}</TableCell>
-                                  <TableCell>{item.movedByUsername}</TableCell>
+                                  <TableCell>{item.type}</TableCell>
+                                  <TableCell>{item.kioskName}</TableCell>
+                                  <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
+                                  <TableCell>{item.username}</TableCell>
                               </TableRow>
                           ))}
                           </TableBody>
@@ -89,7 +87,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                 <div className="flex h-60 flex-col items-center justify-center text-center text-muted-foreground">
                   <Truck className="h-12 w-12 mb-4" />
                   <p className="font-semibold">Nenhuma movimentação encontrada</p>
-                  <p className="text-sm">O histórico de transferências de estoque aparecerá aqui.</p>
+                  <p className="text-sm">O histórico de movimentações de estoque aparecerá aqui.</p>
                 </div>
               )}
             </div>

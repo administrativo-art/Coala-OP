@@ -11,12 +11,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, Eraser, Package, Barcode, Warehouse, MapPin, Calendar, Hash, Tag, QrCode } from 'lucide-react';
+import { Pencil, Trash2, Truck, History, Eraser, Package, Barcode, Warehouse, MapPin, Calendar, Hash, Tag, QrCode, MinusCircle } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { labelSizes } from '@/lib/label-sizes';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useAuth } from '@/hooks/use-auth';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -50,6 +58,61 @@ const getStatus = (lot: LotEntry, product?: Product) => {
     return { color: 'bg-green-600 hover:bg-green-700', text: `Vence em ${daysUntilExpiry} dias` };
 };
 
+type ConsumeLotModalProps = {
+  lot: LotEntry;
+  onClose: () => void;
+  onConfirm: (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => void;
+};
+
+function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
+  const formSchema = z.object({
+    quantity: z.coerce.number().min(0.01, "A quantidade deve ser positiva.").max(lot.quantity, `Máximo: ${lot.quantity}`),
+    type: z.enum(['SAIDA_CONSUMO', 'SAIDA_DESCARTE', 'SAIDA_CORRECAO']),
+    notes: z.string().optional(),
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: { quantity: 1, type: 'SAIDA_CONSUMO', notes: '' },
+  });
+
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
+    onConfirm({ lotId: lot.id, quantityToConsume: values.quantity, type: values.type, notes: values.notes });
+    onClose();
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Registrar Baixa do Lote</DialogTitle>
+          <DialogDescription>
+            Registrando baixa para {lot.productName} (lote: {lot.lotNumber}). Disponível: {lot.quantity}.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="quantity" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quantidade a ser baixada</FormLabel>
+                  <FormControl><Input type="number" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {/* Add more fields for type and notes here */}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit">Confirmar Baixa</Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 type LotCardProps = {
   productGroup: GroupedProduct;
   getProductFullName: (product: Product) => string;
@@ -59,7 +122,6 @@ type LotCardProps = {
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
   onViewHistory: (lot: LotEntry) => void;
-  onZeroOut: (lot: LotEntry) => void;
   canEdit: boolean;
   canMove: boolean;
   canDelete: boolean;
@@ -75,13 +137,24 @@ export function LotCard({
     onMove,
     onDelete,
     onViewHistory,
-    onZeroOut,
     canEdit,
     canMove,
     canDelete,
     canViewHistory,
 }: LotCardProps) {
+  const { user } = useAuth();
   const { labelSizeId } = useCompanySettings();
+  const { consumeFromLot } = useExpiryProducts();
+  const [lotToConsume, setLotToConsume] = useState<LotEntry | null>(null);
+
+  const handleConsumeClick = (lot: LotEntry) => {
+    setLotToConsume(lot);
+  };
+
+  const handleConfirmConsumption = (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => {
+    consumeFromLot(params);
+    setLotToConsume(null);
+  };
   
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name || 'Quiosque desconhecido';
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
@@ -161,6 +234,7 @@ export function LotCard({
   };
 
   return (
+    <>
     <Card className="w-full">
       <CardHeader className="p-4 flex flex-row items-center gap-4">
         {product.imageUrl && (
@@ -218,6 +292,11 @@ export function LotCard({
                                                         <div className="text-muted-foreground text-xs">unidades</div>
                                                     </div>
                                                     <div className="flex flex-col gap-1">
+                                                        {canEdit && (
+                                                            <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleConsumeClick(lotInstance)}><MinusCircle className="h-4 w-4" /></Button>
+                                                            </TooltipTrigger><TooltipContent><p>Registrar Baixa / Consumo</p></TooltipContent></Tooltip></TooltipProvider>
+                                                        )}
                                                         {canViewHistory && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => onViewHistory(lotInstance)}><History className="h-4 w-4" /></Button>
@@ -257,5 +336,13 @@ export function LotCard({
         }
       </CardContent>
     </Card>
+    {lotToConsume && (
+      <ConsumeLotModal
+        lot={lotToConsume}
+        onClose={() => setLotToConsume(null)}
+        onConfirm={handleConfirmConsumption}
+      />
+    )}
+    </>
   );
 }

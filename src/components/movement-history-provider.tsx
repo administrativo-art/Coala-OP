@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useMemo } from 'react';
@@ -21,7 +22,7 @@ export function MovementHistoryProvider({ children }: { children: React.ReactNod
     const q = query(collection(db, "movementHistory"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const historyData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MovementRecord));
-      setHistory(historyData.sort((a, b) => new Date(b.movedAt).getTime() - new Date(a.movedAt).getTime()));
+      setHistory(historyData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       setLoading(false);
     }, (error) => {
         console.error("Error fetching movement history from Firestore: ", error);

@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState } from 'react';
@@ -20,7 +21,7 @@ type MoveStockModalProps = {
   onOpenChange: (open: boolean) => void;
   lotToMove: LotEntry;
   kiosks: Kiosk[];
-  onMoveConfirm: (params: MoveLotParams) => void;
+  onMoveConfirm: (params: MoveLotParams[]) => void;
 };
 
 export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveConfirm }: MoveStockModalProps) {
@@ -53,6 +54,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
 
     const params: MoveLotParams = {
         lotId: lotToMove.id,
+        productId: lotToMove.productId,
         toKioskId: values.destinationId,
         quantityToMove: values.quantity,
         fromKioskId: lotToMove.kioskId,
@@ -63,7 +65,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         productName: product ? getProductFullName(product) : lotToMove.productName,
         lotNumber: lotToMove.lotNumber,
     };
-    onMoveConfirm(params);
+    onMoveConfirm([params]);
     onOpenChange(false);
   };
   

@@ -85,19 +85,26 @@ export type LotEntry = {
   locationCode?: string | null;
 };
 
+export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA';
+
 export type MovementRecord = {
   id: string;
-  productName: string;
+  lotId: string;
+  productId: string;
+  productName: string; // Full name for easy display
   lotNumber: string;
-  quantityMoved: number;
-  fromKioskId: string;
-  fromKioskName: string;
-  toKioskId: string;
-  toKioskName: string;
-  movedByUserId: string;
-  movedByUsername: string;
-  movedAt: string; // ISO String
+  type: MovementType;
+  quantityChange: number; // Positive for entry, negative for exit
+  kioskId: string;
+  kioskName: string;
+  relatedKioskId?: string; // For transfers
+  relatedKioskName?: string; // For transfers
+  userId: string;
+  username: string;
+  timestamp: string; // ISO String
+  notes?: string;
 };
+
 
 export type ConsumptionAnalysisItem = {
   productId: string;

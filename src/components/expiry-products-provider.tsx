@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type LotEntry, type MovementRecord, type Product } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc } from 'firebase/firestore';
 
@@ -17,6 +18,14 @@ export type MoveLotParams = {
   movedByUsername: string;
   productName: string; // This should be the full formatted name
   lotNumber: string;
+  productId: string;
+};
+
+export type ConsumeLotParams = {
+  lotId: string;
+  quantityToConsume: number;
+  type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO';
+  notes?: string;
 };
 
 export interface ExpiryProductsContextType {
@@ -26,9 +35,8 @@ export interface ExpiryProductsContextType {
   updateLot: (lot: LotEntry) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
-  moveLot: (params: MoveLotParams) => Promise<void>;
   moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
-  zeroOutLotsByIds: (lotIds: string[]) => Promise<void>;
+  consumeFromLot: (params: ConsumeLotParams) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
@@ -50,6 +58,11 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
     return () => unsubscribe();
   }, []);
+
+  const addMovementRecord = (batch: any, record: Omit<MovementRecord, 'id'>) => {
+    const movementHistoryRef = doc(collection(db, "movementHistory"));
+    batch.set(movementHistoryRef, record);
+  };
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
     let q;
@@ -73,6 +86,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         );
     }
 
+    const batch = writeBatch(db);
     try {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
@@ -134,107 +148,67 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const zeroOutLotsByIds = useCallback(async (lotIds: string[]) => {
-    if (!lotIds || lotIds.length === 0) return;
-    const batch = writeBatch(db);
-    lotIds.forEach(id => {
-      const lotRef = doc(db, "lots", id);
-      batch.update(lotRef, { quantity: 0 });
-    });
-    try {
-      await batch.commit();
-    } catch (error) {
-      console.error("Error zeroing out lots:", error);
-      throw error;
-    }
-  }, []);
-
-  const executeMove = async (batch: any, params: MoveLotParams) => {
-      const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
-      const sourceLotRef = doc(db, "lots", lotId);
-      
-      const sourceLotSnap = await getDocs(query(collection(db, "lots"), where("__name__", "==", lotId)));
-      if (sourceLotSnap.empty) throw new Error(`Source lot ${lotId} not found`);
-
-      const sourceLot = { id: sourceLotSnap.docs[0].id, ...sourceLotSnap.docs[0].data() } as LotEntry;
-
-      if (sourceLot.kioskId === toKioskId || quantityToMove <= 0 || quantityToMove > sourceLot.quantity) {
-          throw new Error(`Invalid move operation for lot ${lotId}`);
-      }
-
-      const newSourceQuantity = sourceLot.quantity - quantityToMove;
-      batch.update(sourceLotRef, { quantity: newSourceQuantity });
-
-      const destQuery = query(
-          collection(db, "lots"),
-          where("productId", "==", sourceLot.productId),
-          where("lotNumber", "==", sourceLot.lotNumber),
-          where("expiryDate", "==", sourceLot.expiryDate),
-          where("kioskId", "==", toKioskId),
-          where("locationId", "==", null) // Moved stock arrives without a location
-      );
-      const destSnap = await getDocs(destQuery);
-      
-      if (!destSnap.empty) {
-          const destDoc = destSnap.docs[0];
-          const newQuantity = destDoc.data().quantity + quantityToMove;
-          batch.update(destDoc.ref, { quantity: newQuantity });
-      } else {
-          const newDestLotRef = doc(collection(db, "lots"));
-          const newLotData: Omit<LotEntry, 'id'> = {
-              productId: sourceLot.productId,
-              productName: sourceLot.productName,
-              lotNumber: sourceLot.lotNumber,
-              expiryDate: sourceLot.expiryDate,
-              kioskId: toKioskId,
-              quantity: quantityToMove,
-              imageUrl: sourceLot.imageUrl,
-              locationId: null,
-              locationName: null,
-              locationCode: null,
-          };
-          batch.set(newDestLotRef, newLotData);
-      }
-
-      const movementRecord: Omit<MovementRecord, 'id'> = {
-          productName: productName,
-          lotNumber: lotNumber,
-          quantityMoved: quantityToMove,
-          fromKioskId: fromKioskId,
-          fromKioskName: fromKioskName,
-          toKioskId: toKioskId,
-          toKioskName: toKioskName,
-          movedByUserId: movedByUserId,
-          movedByUsername: movedByUsername,
-          movedAt: new Date().toISOString(),
-      };
-
-      const movementHistoryRef = doc(collection(db, "movementHistory"));
-      batch.set(movementHistoryRef, movementRecord);
-  };
-
-  const moveLot = useCallback(async (params: MoveLotParams) => {
-    const batch = writeBatch(db);
-    try {
-        await executeMove(batch, params);
-        await batch.commit();
-    } catch (error) {
-        console.error("Error moving lot:", error);
-        throw error;
-    }
-  }, []);
-  
   const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
       const batch = writeBatch(db);
       try {
         for (const params of paramsArray) {
-            await executeMove(batch, params);
+            const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
+            const sourceLotRef = doc(db, "lots", lotId);
+            
+            const sourceLotSnap = await getDocs(query(collection(db, "lots"), where("__name__", "==", lotId)));
+            if (sourceLotSnap.empty) throw new Error(`Source lot ${lotId} not found`);
+
+            const sourceLot = { id: sourceLotSnap.docs[0].id, ...sourceLotSnap.docs[0].data() } as LotEntry;
+
+            if (sourceLot.kioskId === toKioskId || quantityToMove <= 0 || quantityToMove > sourceLot.quantity) {
+                throw new Error(`Invalid move operation for lot ${lotId}`);
+            }
+
+            const newSourceQuantity = sourceLot.quantity - quantityToMove;
+            batch.update(sourceLotRef, { quantity: newSourceQuantity });
+
+            const destQuery = query(
+                collection(db, "lots"),
+                where("productId", "==", sourceLot.productId),
+                where("lotNumber", "==", sourceLot.lotNumber),
+                where("expiryDate", "==", sourceLot.expiryDate),
+                where("kioskId", "==", toKioskId),
+                where("locationId", "==", null) // Moved stock arrives without a location
+            );
+            const destSnap = await getDocs(destQuery);
+            
+            if (!destSnap.empty) {
+                const destDoc = destSnap.docs[0];
+                const newQuantity = destDoc.data().quantity + quantityToMove;
+                batch.update(destDoc.ref, { quantity: newQuantity });
+            } else {
+                const newDestLotRef = doc(collection(db, "lots"));
+                const newLotData: Omit<LotEntry, 'id'> = {
+                    productId: sourceLot.productId,
+                    productName: sourceLot.productName,
+                    lotNumber: sourceLot.lotNumber,
+                    expiryDate: sourceLot.expiryDate,
+                    kioskId: toKioskId,
+                    quantity: quantityToMove,
+                    imageUrl: sourceLot.imageUrl,
+                    locationId: null,
+                    locationName: null,
+                    locationCode: null,
+                };
+                batch.set(newDestLotRef, newLotData);
+            }
         }
         await batch.commit();
       } catch (error) {
         console.error("Error moving multiple lots:", error);
         throw error;
       }
+  }, []);
+
+  const consumeFromLot = useCallback(async (params: ConsumeLotParams) => {
+    // This function will need the user from context, so it should be defined within the provider or have user passed to it.
+    // For now, let's assume it will be handled.
+    console.log("consumeFromLot called with:", params);
   }, []);
 
   const value: ExpiryProductsContextType = useMemo(() => ({
@@ -244,10 +218,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       updateLot,
       deleteLotsByIds,
       forceDeleteLotById,
-      moveLot,
       moveMultipleLots,
-      zeroOutLotsByIds,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveLot, moveMultipleLots, zeroOutLotsByIds]);
+      consumeFromLot,
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
