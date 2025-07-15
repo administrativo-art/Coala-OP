@@ -10,11 +10,6 @@ export const units: ConversionUnits = {
     'g': 0.001,
     'mg': 0.000001,
   },
-  Comprimento: {
-    'm': 1,
-    'cm': 0.01,
-    'mm': 0.001,
-  },
   Unidade: {
     'un': 1,
   }
