@@ -9,7 +9,7 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type BaseProduct, type ConsumptionReport, type Kiosk } from '@/types';
+import { type BaseProduct, type ConsumptionReport, type Kiosk, type Product } from '@/types';
 import { convertValue } from '@/lib/conversion';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -99,7 +99,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
         }
     });
 
-    const findProductByName = (baseName: string) => {
+    const findProductByName = (baseName: string): Product | undefined => {
         const normalizedName = normalizeString(baseName);
         if (!normalizedName) return undefined;
         return activeProducts.find(p => normalizeString(p.baseName) === normalizedName);
@@ -148,7 +148,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         }
 
                         const quantityValue = parseQuantity(quantityStr);
-                        const unitToUse = productConfig.pdfUnit || unitFromCsv || productConfig.unit;
+                        const unitToUse = unitFromCsv || productConfig.pdfUnit || productConfig.unit;
                         
                         const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, baseProductConfig.unit, productConfig.category);
                         
