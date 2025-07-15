@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -36,6 +36,7 @@ const permissionsSchema = z.object({
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     team: z.object({ manage: z.boolean(), view: z.boolean() }),
+    purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -94,6 +95,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profile.permissions?.consumptionAnalysis },
       returns: { ...defaultGuestPermissions.returns, ...profile.permissions?.returns },
       team: { ...defaultGuestPermissions.team, ...profile.permissions?.team },
+      purchasing: { ...defaultGuestPermissions.purchasing, ...profile.permissions?.purchasing },
     };
 
     form.reset({
@@ -166,7 +168,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                   )}
                 />
                 <ScrollArea className="h-[55vh] pr-6">
-                    <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team']} className="w-full">
+                    <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'purchasing']} className="w-full">
+                    <AccordionItem value="purchasing">
+                        <AccordionTrigger className="text-lg font-semibold"><ShoppingCart className="mr-2 h-5 w-5" /> Gestão de Compras</AccordionTrigger>
+                        <AccordionContent className="space-y-2 pt-4 p-1">
+                            {renderPermissionSwitch("permissions.purchasing.suggest", "Sugerir/Pesquisar Preços", "Permite que o usuário insira preços durante uma sessão de pesquisa.")}
+                            {renderPermissionSwitch("permissions.purchasing.approve", "Aprovar Compras", "Permite efetivar uma compra, atualizando o preço médio do insumo.")}
+                            {renderPermissionSwitch("permissions.purchasing.viewHistory", "Visualizar Histórico", "Permite ver o histórico de pesquisas de preço e compras efetivadas.")}
+                        </AccordionContent>
+                    </AccordionItem>
                     <AccordionItem value="team">
                         <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Gestão de equipe</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">

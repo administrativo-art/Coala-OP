@@ -49,7 +49,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const adminProfile = profilesData.find(p => p.isDefaultAdmin);
       let adminProfileData = adminProfile;
       if (adminProfile) {
-        const adminPerms = adminProfile.permissions;
+        const adminPerms = adminProfile.permissions || {};
         const defaultAdminPerms = defaultAdminPermissions;
         let needsUpdate = false;
 
@@ -57,10 +57,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         for (const key in defaultAdminPerms) {
           const typedKey = key as keyof typeof defaultAdminPerms;
           if (!adminPerms[typedKey]) {
-            adminPerms[typedKey] = defaultAdminPerms[typedKey];
+            (adminPerms as any)[typedKey] = defaultAdminPerms[typedKey];
             needsUpdate = true;
-          } else {
-            for (const subKey in defaultAdminPerms[typedKey]) {
+          } else if (typeof (defaultAdminPerms as any)[typedKey] === 'object') {
+            for (const subKey in (defaultAdminPerms as any)[typedKey]) {
               const typedSubKey = subKey as keyof typeof defaultAdminPerms[typedKey];
               if ((adminPerms[typedKey] as any)[typedSubKey] === undefined) {
                  (adminPerms[typedKey] as any)[typedSubKey] = (defaultAdminPerms[typedKey] as any)[typedSubKey];

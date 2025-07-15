@@ -139,6 +139,7 @@ export type PermissionSet = {
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
     team: { manage: boolean, view: boolean };
+    purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
 };
 
 export type Profile = {
@@ -322,6 +323,28 @@ export type Entity = {
   responsible?: string; // Only for pessoa_juridica
 };
 
+// Purchase Module Types
+export type PurchaseSession = {
+  id: string;
+  baseProductId: string;
+  userId: string;
+  status: 'open' | 'closed';
+  createdAt: string; // ISO String
+  closedAt?: string; // ISO String
+};
+
+export type PurchaseItem = {
+  id: string;
+  sessionId: string;
+  productId: string; // Insumo Vinculado ID
+  price: number;
+  isConfirmed: boolean;
+  confirmedBy?: string; // userId
+  confirmedAt?: string; // ISO String
+  confirmationComment?: string;
+};
+
+
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
@@ -333,6 +356,7 @@ export const defaultGuestPermissions: PermissionSet = {
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     returns: { add: false, updateStatus: false, delete: false },
     team: { manage: false, view: false },
+    purchasing: { suggest: false, approve: false, viewHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -346,6 +370,7 @@ export const defaultUserPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
     team: { manage: false, view: true },
+    purchasing: { suggest: true, approve: false, viewHistory: true },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -359,4 +384,5 @@ export const defaultAdminPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     returns: { add: true, updateStatus: true, delete: true },
     team: { manage: true, view: true },
+    purchasing: { suggest: true, approve: true, viewHistory: true },
 };

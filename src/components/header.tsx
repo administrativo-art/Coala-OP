@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -27,9 +27,12 @@ export function Header() {
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
+    const canPurchase = !loading && permissions.purchasing && (permissions.purchasing.suggest || permissions.purchasing.approve);
+
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+        { href: '/dashboard/purchasing', label: 'Gestão de Compras', icon: ShoppingCart, show: canPurchase },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
