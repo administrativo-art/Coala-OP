@@ -20,6 +20,7 @@ import { StockCountProvider } from '@/components/stock-count-provider';
 import { CompanySettingsProvider } from '@/components/company-settings-provider';
 import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
+import { ItemAdditionProvider } from '@/components/item-addition-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -57,8 +58,10 @@ export default function RootLayout({
                                           <MonthlyScheduleProvider>
                                             <StockCountProvider>
                                               <PurchaseProvider>
-                                                {children}
-                                                <Toaster />
+                                                <ItemAdditionProvider>
+                                                  {children}
+                                                  <Toaster />
+                                                </ItemAdditionProvider>
                                               </PurchaseProvider>
                                             </StockCountProvider>
                                           </MonthlyScheduleProvider>

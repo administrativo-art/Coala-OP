@@ -22,8 +22,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox } from 'lucide-react';
+import { Save, ListOrdered, Inbox, PlusCircle } from 'lucide-react';
 import { Textarea } from './ui/textarea';
+import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 const countItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -45,6 +46,8 @@ export function StockCount() {
   const { toast } = useToast();
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+
 
   const kioskLots = useMemo(() => {
     if (!selectedKioskId) return [];
@@ -127,6 +130,7 @@ export function StockCount() {
   const loading = kiosksLoading || lotsLoading || productsLoading;
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
@@ -135,14 +139,21 @@ export function StockCount() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="mb-4">
-          <label className="text-sm font-medium">Quiosque</label>
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-            <SelectTrigger><SelectValue placeholder="Selecione um quiosque para iniciar..." /></SelectTrigger>
+            <SelectTrigger className="flex-grow"><SelectValue placeholder="Selecione um quiosque para iniciar..." /></SelectTrigger>
             <SelectContent>
               {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Button 
+            variant="outline" 
+            onClick={() => setIsRequestModalOpen(true)}
+            disabled={!selectedKioskId}
+          >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Solicitar Cadastro de Insumo
+          </Button>
         </div>
 
         {selectedKioskId && (
@@ -164,9 +175,8 @@ export function StockCount() {
                       const product = products.find(p => p.id === lot.productId);
 
                       return (
-                        <Card key={field.id} className="p-4">
-                          <div className="flex gap-4">
-                            <div className="w-20 h-20 shrink-0">
+                        <Card key={field.id} className="p-4 flex gap-4 items-center">
+                          <div className="w-20 h-20 shrink-0">
                                 {product?.imageUrl ? (
                                     <Image
                                         src={product.imageUrl}
@@ -185,8 +195,7 @@ export function StockCount() {
                             <div className="flex-1 space-y-3">
                                 <div className="space-y-1">
                                     <p className="font-semibold leading-tight">{lot.productName}</p>
-                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
-                                    <p className="text-xs text-muted-foreground">Validade: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
+                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <FormField
@@ -199,7 +208,6 @@ export function StockCount() {
                                             <Input
                                             type="number"
                                             {...field}
-                                            className={field.value !== lot.quantity ? 'border-orange-500' : ''}
                                             />
                                         </FormControl>
                                         <FormMessage />
@@ -224,7 +232,6 @@ export function StockCount() {
                                     />
                                 </div>
                             </div>
-                          </div>
                         </Card>
                       );
                     })}
@@ -242,5 +249,12 @@ export function StockCount() {
         )}
       </CardContent>
     </Card>
+
+    <RequestItemAdditionModal 
+      open={isRequestModalOpen}
+      onOpenChange={setIsRequestModalOpen}
+      kioskId={selectedKioskId}
+    />
+    </>
   );
 }

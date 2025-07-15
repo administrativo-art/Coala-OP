@@ -383,6 +383,26 @@ export type PurchaseItem = {
   confirmationComment?: string;
 };
 
+export type ItemAdditionRequest = {
+  id: string;
+  kioskId: string;
+  kioskName: string;
+  requestedBy: {
+    userId: string;
+    username: string;
+  };
+  productName: string;
+  brand?: string;
+  notes?: string;
+  status: 'pending' | 'completed' | 'rejected';
+  createdAt: string; // ISO String
+  reviewedBy?: {
+    userId: string;
+    username: string;
+  };
+  reviewedAt?: string; // ISO String
+};
+
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
