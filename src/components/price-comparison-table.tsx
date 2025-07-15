@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useAuth } from "@/hooks/use-auth";
 import { usePurchase } from "@/hooks/use-purchase";
 import { convertValue } from "@/lib/conversion";
@@ -10,11 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { type Product, type PurchaseItem, type BaseProduct } from "@/types";
-import { Star, CheckCircle, AlertTriangle } from "lucide-react";
+import { type Product, type PurchaseItem, type BaseProduct, type Entity } from "@/types";
+import { Star, CheckCircle, AlertTriangle, Info } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
+import { useEntities } from "@/hooks/use-entities";
 
 interface PriceComparisonTableProps {
     baseProductId: string;
@@ -33,6 +36,7 @@ interface PriceRow {
 
 export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceComparisonTableProps) {
     const { getProductFullName, products } = useProducts();
+    const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
     const { savePrice, confirmPurchase } = usePurchase();
     const { permissions } = useAuth();
@@ -74,10 +78,10 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
         setPrices(prev => ({ ...prev, [productId]: value }));
     };
 
-    const handleConfirm = (productId: string) => {
+    const handleConfirm = (productId: string, pricePerUnit: number | null) => {
         const item = items.find(i => i.productId === productId);
-        if (item) {
-            confirmPurchase(item.id, ""); // Add comment logic if needed
+        if (item && baseProduct && pricePerUnit) {
+            confirmPurchase(item.id, baseProduct.id, pricePerUnit);
         }
     };
 
@@ -119,10 +123,11 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 }
             });
         }
-
         return rows.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
-
     }, [linkedProducts, prices, baseProduct, items, getProductFullName]);
+    
+    const lastEffectivePrice = baseProduct?.effectivePrice;
+    const lastSupplier = lastEffectivePrice ? entities.find(e => e.id === lastEffectivePrice.entityId) : null;
 
     if (!baseProduct) {
         return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
@@ -157,13 +162,31 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 {getProductFullName(row.product)}
                             </TableCell>
                             <TableCell>
-                                <Input
-                                    type="number"
-                                    placeholder="0,00"
-                                    value={row.price}
-                                    onChange={e => handlePriceChange(row.product.id, e.target.value)}
-                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
-                                />
+                                <div className="space-y-1">
+                                    <Input
+                                        type="number"
+                                        placeholder="0,00"
+                                        value={row.price}
+                                        onChange={e => handlePriceChange(row.product.id, e.target.value)}
+                                        disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
+                                    />
+                                    {lastEffectivePrice && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-default">
+                                                        <Info className="h-3 w-3" />
+                                                        Último: {lastEffectivePrice.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
+                                                    <p>Data: {format(new Date(lastEffectivePrice.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
+                                </div>
                             </TableCell>
                             <TableCell>
                                 {row.pricePerUnit !== null ? `R$ ${row.pricePerUnit.toFixed(3)}` : '-'}
@@ -195,8 +218,8 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                             <div>
                                                 <Button 
                                                     size="sm" 
-                                                    onClick={() => handleConfirm(row.product.id)}
-                                                    disabled={!canApprove || !row.purchaseItem || row.purchaseItem.isConfirmed}
+                                                    onClick={() => handleConfirm(row.product.id, row.pricePerUnit)}
+                                                    disabled={!canApprove || !row.purchaseItem || row.purchaseItem.isConfirmed || !row.pricePerUnit}
                                                 >
                                                     Efetivar
                                                 </Button>

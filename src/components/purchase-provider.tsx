@@ -1,11 +1,13 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseSession, type PurchaseItem } from '@/types';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
+import { type PurchaseSession, type PurchaseItem, type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { useProducts } from '@/hooks/use-products';
+import { BaseProductsContext } from './base-products-provider';
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
@@ -15,13 +17,19 @@ export interface PurchaseContextType {
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  confirmPurchase: (itemId: string, comment?: string) => Promise<void>;
+  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
 }
 
 export const PurchaseContext = createContext<PurchaseContextType | undefined>(undefined);
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
+    const baseProductsContext = useContext(BaseProductsContext);
+    if (!baseProductsContext) {
+        throw new Error("PurchaseProvider must be used within a BaseProductsProvider");
+    }
+    const { baseProducts, updateBaseProduct } = baseProductsContext;
+
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -129,19 +137,42 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    const confirmPurchase = useCallback(async (itemId: string, comment?: string) => {
+    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number) => {
         if (!user) return;
+        const itemToConfirm = items.find(i => i.id === itemId);
+        if (!itemToConfirm) return;
+        
+        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
+        if(!baseProduct) return;
+
         try {
-            await updateDoc(doc(db, "purchaseItems", itemId), {
+            const batch = writeBatch(db);
+
+            const itemRef = doc(db, "purchaseItems", itemId);
+            batch.update(itemRef, {
                 isConfirmed: true,
                 confirmedBy: user.id,
                 confirmedAt: new Date().toISOString(),
-                confirmationComment: comment || "",
+                confirmationComment: "",
             });
+
+            const baseProductRef = doc(db, "baseProducts", baseProductId);
+            const sessionRef = doc(db, "purchaseSessions", itemToConfirm.sessionId);
+            const session = sessions.find(s => s.id === itemToConfirm.sessionId);
+
+            batch.update(baseProductRef, {
+                'effectivePrice.pricePerUnit': pricePerUnit,
+                'effectivePrice.productId': itemToConfirm.productId,
+                'effectivePrice.entityId': session?.entityId || '',
+                'effectivePrice.updatedAt': new Date().toISOString()
+            });
+            
+            await batch.commit();
+
         } catch (error) {
             console.error("Error confirming purchase:", error);
         }
-    }, [user]);
+    }, [user, items, baseProducts, sessions]);
 
     const value: PurchaseContextType = useMemo(() => ({
         sessions,

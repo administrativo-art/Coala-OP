@@ -46,9 +46,11 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         setIsDeleteConfirmOpen(false);
     };
 
+    const isSessionClosed = session.status === 'closed';
+
     return (
         <>
-            <Card>
+            <Card className={isSessionClosed ? 'bg-muted/50' : ''}>
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                         <div>
@@ -57,6 +59,9 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                 <p className="flex items-center gap-1.5"><Building className="h-3 w-3" /> Fornecedor: <strong>{entity?.name || 'Não encontrado'}</strong></p>
                                 <p className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /> Criado em: {format(new Date(session.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
                                 <p className="flex items-center gap-1.5"><User className="h-3 w-3" /> Por: {user?.username || 'Desconhecido'}</p>
+                                 {isSessionClosed && session.closedAt && (
+                                    <p className="flex items-center gap-1.5 text-primary">Concluído em: {format(new Date(session.closedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
+                                 )}
                             </CardDescription>
                         </div>
                          <Button 
@@ -73,7 +78,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     <Accordion type="multiple" className="w-full space-y-3">
                         {sessionBaseProducts.map(bp => (
                             <AccordionItem value={bp.id} key={bp.id} className="border-none">
-                                <Card className="bg-muted/40">
+                                <Card className="bg-card/40">
                                     <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
                                         {bp.name}
                                     </AccordionTrigger>
@@ -89,9 +94,11 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         ))}
                     </Accordion>
                 </CardContent>
-                <CardFooter className="border-t pt-4">
-                    <Button onClick={handleCloseSession}>Concluir e salvar pesquisa</Button>
-                </CardFooter>
+                {!isSessionClosed && (
+                    <CardFooter className="border-t pt-4">
+                        <Button onClick={handleCloseSession}>Concluir e salvar pesquisa</Button>
+                    </CardFooter>
+                )}
             </Card>
 
             <DeleteConfirmationDialog 

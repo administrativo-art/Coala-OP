@@ -11,6 +11,12 @@ export type BaseProduct = {
   unit: string;
   stockLevels: { [kioskId: string]: { min: number } };
   category: UnitCategory;
+  effectivePrice?: {
+    pricePerUnit: number;
+    productId: string;
+    entityId: string;
+    updatedAt: string;
+  }
 }
 
 export type Location = {
