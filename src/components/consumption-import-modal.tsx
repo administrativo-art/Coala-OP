@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
 import { useProducts } from '@/hooks/use-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 
 const consumptionUploadSchema = z.object({
@@ -83,10 +84,12 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
     const { user } = useAuth();
     const { toast } = useToast();
     const { getProductFullName } = useProducts();
+    const { baseProducts } = useBaseProducts();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     
     const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+    const baseProductsMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
     const uploadForm = useForm<ConsumptionUploadFormValues>({
         resolver: zodResolver(consumptionUploadSchema),
@@ -135,16 +138,22 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                         if (!itemName || !quantityStr) continue;
 
                         const productConfig = findProductByName(itemName);
-                        if (!productConfig) {
+                        if (!productConfig || !productConfig.baseProductId) {
                             unmatchedItems.add(itemName);
                             continue;
                         }
+                        
+                        const baseProductConfig = baseProductsMap.get(productConfig.baseProductId);
+                        if (!baseProductConfig) {
+                             unmatchedItems.add(itemName);
+                             continue;
+                        }
 
                         const quantityValue = parseQuantity(quantityStr);
-                        // CORRECTED: Prioritize the product's configured unit to ensure category consistency.
                         const unitToUse = productConfig.pdfUnit || unitFromCsv || productConfig.unit;
                         
-                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, productConfig.unit, productConfig.category);
+                        // Garante a conversão para a unidade do PRODUTO BASE.
+                        const consumedQuantityInBaseUnit = convertValue(quantityValue, unitToUse, baseProductConfig.unit, productConfig.category);
                         
                         if (!analysisResults[productConfig.id]) {
                             analysisResults[productConfig.id] = { 
@@ -160,8 +169,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                     if (unmatchedItems.size > 0) {
                         toast({
                             variant: 'destructive',
-                            title: 'Alguns itens não foram encontrados',
-                            description: `Os seguintes itens do CSV não foram localizados: ${Array.from(unmatchedItems).join(', ')}`,
+                            title: 'Alguns itens não foram encontrados ou não tem Produto Base',
+                            description: `Os seguintes itens do CSV foram ignorados: ${Array.from(unmatchedItems).join(', ')}`,
                             duration: 10000,
                         });
                     }
