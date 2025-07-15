@@ -98,9 +98,12 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                     pricePerUnit = price / convertedQty;
                 }
             }
-            // Find the effective price for this specific product, if it exists in another BaseProduct
-            const allBaseProductsWithPrice = baseProducts.filter(bp => bp.effectivePrice && bp.effectivePrice.productId === p.id);
-            const lastEffectivePrice = allBaseProductsWithPrice.sort((a, b) => new Date(b.effectivePrice!.updatedAt).getTime() - new Date(a.effectivePrice!.updatedAt).getTime())[0]?.effectivePrice;
+            
+            const allBaseProductsWithPriceForThisProduct = baseProducts.filter(bp => bp.effectivePrice && bp.effectivePrice.productId === p.id);
+            const lastEffectivePrice = allBaseProductsWithPriceForThisProduct.sort((a, b) => {
+                if (!a.effectivePrice || !b.effectivePrice) return 0;
+                return new Date(b.effectivePrice.updatedAt).getTime() - new Date(a.effectivePrice.updatedAt).getTime();
+            })[0]?.effectivePrice;
             
             return {
                 product: p,
@@ -194,7 +197,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 </div>
                             </TableCell>
                             <TableCell>
-                                {row.pricePerUnit !== null ? `R$ ${row.pricePerUnit.toFixed(3)}` : '-'}
+                                {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
                             </TableCell>
                             <TableCell className="text-center">
                                 {row.purchaseItem?.isConfirmed ? (
