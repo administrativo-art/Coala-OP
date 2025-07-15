@@ -1,0 +1,301 @@
+
+"use client";
+
+import { useState, useMemo } from 'react';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { DollarSign, Download, Package, Warehouse, Inbox } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import { Button } from './ui/button';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { ScrollArea } from './ui/scroll-area';
+import { useProducts } from '@/hooks/use-products';
+
+interface LotWithValue {
+    lotNumber: string;
+    productName: string;
+    quantity: number;
+    pricePerUnit: number;
+    totalValue: number;
+    baseProductId: string;
+}
+
+const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+export function StockValuation() {
+    const { kiosks, loading: kiosksLoading } = useKiosks();
+    const { lots, loading: lotsLoading } = useExpiryProducts();
+    const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+    const { getProductFullName } = useProducts();
+    
+    const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+
+    const baseProductPriceMap = useMemo(() => {
+        const map = new Map<string, number>();
+        baseProducts.forEach(bp => {
+            if (bp.lastEffectivePrice?.pricePerUnit) {
+                map.set(bp.id, bp.lastEffectivePrice.pricePerUnit);
+            }
+        });
+        return map;
+    }, [baseProducts]);
+    
+    const baseProductUnitMap = useMemo(() => {
+        const map = new Map<string, string>();
+        baseProducts.forEach(bp => map.set(bp.id, bp.unit));
+        return map;
+    }, [baseProducts]);
+
+    const valuedLots = useMemo((): LotWithValue[] => {
+        if (!selectedKioskId || lotsLoading || baseProductsLoading) return [];
+        
+        return lots
+            .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0 && lot.baseProductId)
+            .map(lot => {
+                const pricePerUnit = baseProductPriceMap.get(lot.baseProductId!) || 0;
+                return {
+                    lotNumber: lot.lotNumber,
+                    productName: lot.productName,
+                    quantity: lot.quantity,
+                    pricePerUnit: pricePerUnit,
+                    totalValue: lot.quantity * pricePerUnit,
+                    baseProductId: lot.baseProductId!
+                };
+            })
+            .filter(item => item.totalValue > 0)
+            .sort((a, b) => a.productName.localeCompare(b.productName));
+
+    }, [selectedKioskId, lots, baseProductsLoading, lotsLoading, baseProductPriceMap]);
+    
+    const summaryByBaseProduct = useMemo(() => {
+        const summary: { [key: string]: { name: string; quantity: number; value: number; unit: string; } } = {};
+        valuedLots.forEach(lot => {
+            const baseProduct = baseProducts.find(bp => bp.id === lot.baseProductId);
+            if (!baseProduct) return;
+
+            if (!summary[lot.baseProductId]) {
+                summary[lot.baseProductId] = {
+                    name: baseProduct.name,
+                    quantity: 0,
+                    value: 0,
+                    unit: baseProduct.unit,
+                };
+            }
+            summary[lot.baseProductId].quantity += lot.quantity;
+            summary[lot.baseProductId].value += lot.totalValue;
+        });
+
+        return Object.values(summary).sort((a,b) => a.name.localeCompare(b.name));
+    }, [valuedLots, baseProducts]);
+
+    const totalStockValue = useMemo(() => {
+        return valuedLots.reduce((acc, lot) => acc + lot.totalValue, 0);
+    }, [valuedLots]);
+    
+    const totalSkuCount = useMemo(() => {
+        return new Set(valuedLots.map(lot => lot.baseProductId)).size;
+    }, [valuedLots]);
+
+    const handleExportPdf = () => {
+        if (!selectedKioskId) return;
+        const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Avaliação Financeira do Estoque - ${kioskName}`, 14, 22);
+        doc.setFontSize(12);
+        doc.text(`Valor Total do Estoque: ${formatCurrency(totalStockValue)}`, 14, 30);
+        
+        doc.setFontSize(14);
+        doc.text("Resumo por Insumo Base", 14, 45);
+        autoTable(doc, {
+            startY: 50,
+            head: [['Insumo Base', 'Quantidade Total', 'Valor Total (R$)']],
+            body: summaryByBaseProduct.map(item => [
+                item.name,
+                `${item.quantity.toLocaleString()} ${item.unit}`,
+                formatCurrency(item.value)
+            ]),
+        });
+        
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text("Detalhes por Lote", 14, 20);
+        autoTable(doc, {
+             startY: 25,
+            head: [['Lote', 'Insumo', 'Quantidade', 'R$/unid.', 'Valor do Lote (R$)']],
+            body: valuedLots.map(item => [
+                item.lotNumber,
+                item.productName,
+                item.quantity,
+                formatCurrency(item.pricePerUnit),
+                formatCurrency(item.totalValue)
+            ]),
+        });
+
+        doc.save(`avaliacao_estoque_${kioskName.replace(/\s/g, '_')}.pdf`);
+    };
+    
+    const sortedKiosks = useMemo(() => kiosks.sort((a,b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    }), [kiosks]);
+    
+    const loading = kiosksLoading || lotsLoading || baseProductsLoading;
+
+    if (loading) {
+        return (
+            <div className="space-y-4">
+                <Skeleton className="h-10 w-full max-w-sm" />
+                <div className="grid gap-4 md:grid-cols-2">
+                    <Skeleton className="h-32" />
+                    <Skeleton className="h-32" />
+                </div>
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                    <SelectTrigger className="w-full sm:w-[300px]">
+                        <SelectValue placeholder="Selecione um quiosque para avaliar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                 <Button onClick={handleExportPdf} disabled={!selectedKioskId || valuedLots.length === 0}>
+                    <Download className="mr-2" />
+                    Exportar PDF
+                </Button>
+            </div>
+
+            {!selectedKioskId ? (
+                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                    <p>Selecione um quiosque para começar.</p>
+                </div>
+            ) : valuedLots.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                    <Inbox className="h-12 w-12 mx-auto mb-4" />
+                    <p className="font-semibold">Nenhum lote valorizado encontrado.</p>
+                    <p className="text-sm max-w-md mx-auto">Isso pode ocorrer se não houver lotes em estoque para este quiosque, ou se os preços dos insumos base correspondentes ainda não foram efetivados no módulo de compras.</p>
+                </div>
+            ) : (
+                <>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Valor Total do Estoque</CardTitle>
+                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent><div className="text-2xl font-bold">{formatCurrency(totalStockValue)}</div></CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">SKUs em Estoque</CardTitle>
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent><div className="text-2xl font-bold">{totalSkuCount}</div></CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle>Composição do Valor do Estoque</CardTitle>
+                                <CardDescription>Participação de cada insumo base no valor total.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie data={summaryByBaseProduct} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                                            {summaryByBaseProduct.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                         <Card>
+                            <CardHeader>
+                                <CardTitle>Resumo por Insumo Base</CardTitle>
+                                <CardDescription>Totalização por tipo de insumo.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ScrollArea className="h-80">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Insumo</TableHead>
+                                                <TableHead className="text-right">Quantidade</TableHead>
+                                                <TableHead className="text-right">Valor Total</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {summaryByBaseProduct.map(item => (
+                                                <TableRow key={item.name}>
+                                                    <TableCell className="font-medium">{item.name}</TableCell>
+                                                    <TableCell className="text-right">{item.quantity.toLocaleString()} {item.unit}</TableCell>
+                                                    <TableCell className="text-right font-semibold">{formatCurrency(item.value)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Detalhes por Lote</CardTitle>
+                            <CardDescription>Valor individual de cada lote em estoque.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ScrollArea className="h-96">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Lote</TableHead>
+                                            <TableHead>Insumo Vinculado</TableHead>
+                                            <TableHead className="text-right">Quantidade</TableHead>
+                                            <TableHead className="text-right">R$/unid.</TableHead>
+                                            <TableHead className="text-right">Valor do Lote</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {valuedLots.map((item, index) => (
+                                            <TableRow key={`${item.lotNumber}-${index}`}>
+                                                <TableCell className="font-medium">{item.lotNumber}</TableCell>
+                                                <TableCell>{item.productName}</TableCell>
+                                                <TableCell className="text-right">{item.quantity}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.pricePerUnit)}</TableCell>
+                                                <TableCell className="text-right font-semibold">{formatCurrency(item.totalValue)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </ScrollArea>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
+        </div>
+    );
+}
