@@ -169,6 +169,8 @@ export function StockCount() {
                     <TableBody>
                       {fields.map((field, index) => {
                         const lot = kioskLots[index];
+                        if (!lot) return null; // FIX: Add a guard clause here
+                        
                         const systemQty = lot.quantity;
                         const countedQty = form.watch(`items.${index}.countedQuantity`);
                         const difference = countedQty - systemQty;
