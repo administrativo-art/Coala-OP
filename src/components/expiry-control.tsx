@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -30,6 +30,7 @@ import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Badge } from './ui/badge';
 import { convertValue } from '@/lib/conversion';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 const BarcodeScannerModal = dynamic(
@@ -315,7 +316,6 @@ export function ExpiryControl() {
                 const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
                 let totalGroupQuantity = 0;
                 let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
-                let conversionPossible = true;
 
                 if (baseGroup.isBaseProduct && baseProductConfig) {
                     displayUnit = baseProductConfig.unit;
@@ -324,34 +324,31 @@ export function ExpiryControl() {
                         brand.products.flatMap(prodGroup => {
                             const productConfig = prodGroup.product;
                             return prodGroup.lots.map(lot => {
-                                let singleItemValue = 0;
-                                // Scenario 1: Use secondary unit fields if available (e.g., Unidade -> Massa)
+                                // Cenário 1: Conversão avançada com unidade secundária
                                 if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
                                     const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
-                                    singleItemValue = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                    const valueInBase = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                    return lot.quantity * valueInBase;
                                 } 
-                                // Scenario 2: Standard conversion for same category (e.g., Massa to Massa)
+                                // Cenário 2: Conversão padrão para categorias iguais
                                 else if (productConfig.category === baseProductConfig.category) {
-                                     singleItemValue = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                } else {
-                                    conversionPossible = false;
+                                     const valueInBase = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
+                                     return lot.quantity * valueInBase;
                                 }
-                                return lot.quantity * singleItemValue;
+                                return -1; // Flag for non-convertible
                             });
                         })
                     );
                     
-                    if (lotTotalValues.some(v => v === 0) && conversionPossible) {
-                        conversionPossible = false;
-                    }
+                    const totalConverted = lotTotalValues.reduce((sum, val) => sum + val, 0);
 
-                    if(conversionPossible) {
-                        totalGroupQuantity = lotTotalValues.reduce((sum, val) => sum + val, 0);
-                    } else {
+                    if (lotTotalValues.includes(-1)) {
                         displayUnit = "pacotes";
                         totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
                             total + brand.products.reduce((prodTotal, prod) => 
                                 prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
+                    } else {
+                        totalGroupQuantity = totalConverted;
                     }
                 } else {
                      totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
@@ -412,111 +409,124 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            <ClipboardCheck /> Controle de insumos
+            Controle de Estoque
           </CardTitle>
-          <CardDescription>Gerencie os lotes em estoque, seus vencimentos e transferências.</CardDescription>
+          <CardDescription>Gerencie os lotes, vencimentos, transferências e reposições do seu estoque.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-            <div className="mb-4">
-                <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por insumo base, produto, lote, código..."
-                        className="pl-10 pr-12"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="icon" 
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                        onClick={() => setIsSearchScannerOpen(true)}
-                        aria-label="Escanear código de barras para busca"
-                    >
-                        <Camera className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                    <Plus className="mr-2" /> Adicionar lote
-                </Button>
-                {permissions.lots.viewMovementHistory && (
-                    <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
-                        <History className="mr-2" /> Histórico de movimentações
-                    </Button>
-                )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
-                            <Filter className="mr-2 h-4 w-4" />
-                            Status {statusFilters.length > 0 && `(${statusFilters.length})`}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilters.includes('expiring')}
-                            onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            Vencendo em breve
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilters.includes('expired')}
-                            onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            Vencidos
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                            Limpar filtros
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                {user?.username === 'Tiago Brasil' && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                <Filter className="mr-2 h-4 w-4" />
-                                Quiosques ({selectedKiosks.length})
+            <Tabs defaultValue="control" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="control"><ClipboardCheck className="mr-2" />Controle de Insumos</TabsTrigger>
+                    <TabsTrigger value="restock"><RefreshCw className="mr-2" />Reposição</TabsTrigger>
+                </TabsList>
+                <TabsContent value="control" className="mt-6">
+                    <div className="mb-4">
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Buscar por insumo base, produto, lote, código..."
+                                className="pl-10 pr-12"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="icon" 
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                                onClick={() => setIsSearchScannerOpen(true)}
+                                aria-label="Escanear código de barras para busca"
+                            >
+                                <Camera className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64" align="start">
-                            <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
-                                Selecionar todos
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                Limpar seleção
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <ScrollArea className="h-48">
-                            {sortedKiosks.map(kiosk => (
+                        </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                        <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
+                            <Plus className="mr-2" /> Adicionar lote
+                        </Button>
+                        {permissions.lots.viewMovementHistory && (
+                            <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
+                                <History className="mr-2" /> Histórico de movimentações
+                            </Button>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline">
+                                    <Filter className="mr-2 h-4 w-4" />
+                                    Status {statusFilters.length > 0 && `(${statusFilters.length})`}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuCheckboxItem
-                                    key={kiosk.id}
-                                    checked={selectedKiosks.includes(kiosk.id)}
-                                    onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                    checked={statusFilters.includes('expiring')}
+                                    onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
                                     onSelect={(e) => e.preventDefault()}
                                 >
-                                    {kiosk.name}
+                                    Vencendo em breve
                                 </DropdownMenuCheckboxItem>
-                            ))}
-                            </ScrollArea>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
-            </div>
-            <div className="mt-6">
-                {renderContent()}
-            </div>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilters.includes('expired')}
+                                    onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    Vencidos
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                    Limpar filtros
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {user?.username === 'Tiago Brasil' && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline">
+                                        <Filter className="mr-2 h-4 w-4" />
+                                        Quiosques ({selectedKiosks.length})
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-64" align="start">
+                                    <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
+                                        Selecionar todos
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                        Limpar seleção
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <ScrollArea className="h-48">
+                                    {sortedKiosks.map(kiosk => (
+                                        <DropdownMenuCheckboxItem
+                                            key={kiosk.id}
+                                            checked={selectedKiosks.includes(kiosk.id)}
+                                            onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {kiosk.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                    </ScrollArea>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                    </div>
+                    <div className="mt-6">
+                        {renderContent()}
+                    </div>
+                </TabsContent>
+                <TabsContent value="restock" className="mt-6">
+                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                        <p>A funcionalidade de reposição será configurada aqui.</p>
+                    </div>
+                </TabsContent>
+            </Tabs>
         </CardContent>
       </Card>
       

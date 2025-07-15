@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from 'next/link';
@@ -24,7 +25,7 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <ClipboardCheck className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Controle de insumos</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Controle de Estoque</CardTitle>
                         <CardDescription>Acompanhe a validade dos lotes, adicione novos insumos e faça transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
