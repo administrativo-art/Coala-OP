@@ -37,11 +37,10 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
 
         baseProducts.forEach(bp => {
-            if (bp.effectivePrice && bp.effectivePrice.productId && bp.effectivePrice.updatedAt) {
-                const currentPriceInfo = bp.effectivePrice;
+            if (bp.lastEffectivePrice && bp.lastEffectivePrice.productId && bp.lastEffectivePrice.updatedAt) {
+                const currentPriceInfo = bp.lastEffectivePrice;
                 const existingPriceInfo = priceMap.get(currentPriceInfo.productId);
 
-                // If there's no price for this product yet, or if the current one is newer, update the map.
                 if (!existingPriceInfo || new Date(currentPriceInfo.updatedAt) > new Date(existingPriceInfo.updatedAt)) {
                     priceMap.set(currentPriceInfo.productId, {
                         pricePerUnit: currentPriceInfo.pricePerUnit,
@@ -179,10 +178,10 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             const session = sessions.find(s => s.id === itemToConfirm.sessionId);
 
             batch.update(baseProductRef, {
-                'effectivePrice.pricePerUnit': pricePerUnit,
-                'effectivePrice.productId': itemToConfirm.productId,
-                'effectivePrice.entityId': session?.entityId || '',
-                'effectivePrice.updatedAt': new Date().toISOString()
+                'lastEffectivePrice.pricePerUnit': pricePerUnit,
+                'lastEffectivePrice.productId': itemToConfirm.productId,
+                'lastEffectivePrice.entityId': session?.entityId || '',
+                'lastEffectivePrice.updatedAt': new Date().toISOString()
             });
             
             await batch.commit();
