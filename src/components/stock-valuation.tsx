@@ -43,56 +43,52 @@ export function StockValuation() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-    const { products, loading: productsLoading } = useProducts();
+    const { products, getProductFullName, loading: productsLoading } = useProducts();
     
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
 
-    const baseProductPriceMap = useMemo(() => {
-        const map = new Map<string, number>();
-        baseProducts.forEach(bp => {
-            if (bp.lastEffectivePrice?.pricePerUnit) {
-                map.set(bp.id, bp.lastEffectivePrice.pricePerUnit);
-            }
-        });
-        return map;
-    }, [baseProducts]);
-    
     const valuedLots = useMemo((): LotWithValue[] => {
         if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading) return [];
         
+        const productMap = new Map(products.map(p => [p.id, p]));
+        const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
+
         return lots
-            .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0 && lot.baseProductId)
+            .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0)
             .map(lot => {
-                const pricePerBaseUnit = baseProductPriceMap.get(lot.baseProductId!) || 0;
-                const productDetails = products.find(p => p.id === lot.productId);
+                const product = productMap.get(lot.productId);
+                if (!product || !product.baseProductId) return null;
 
-                if (!productDetails || pricePerBaseUnit === 0) {
-                    return null;
-                }
+                const baseProduct = baseProductMap.get(product.baseProductId);
+                if (!baseProduct || !baseProduct.lastEffectivePrice?.pricePerUnit) return null;
 
-                const baseProduct = baseProducts.find(bp => bp.id === productDetails.baseProductId);
-                if (!baseProduct) return null;
-
-                const packageSizeInBaseUnits = convertValue(productDetails.packageSize, productDetails.unit, baseProduct.unit, baseProduct.category);
+                const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit;
+                const packageSizeInBaseUnits = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                 
+                if(packageSizeInBaseUnits === 0) return null;
+
                 const pricePerPackage = packageSizeInBaseUnits * pricePerBaseUnit;
+                const totalValue = lot.quantity * pricePerPackage;
+                
+                if (totalValue <= 0) return null;
 
                 return {
                     lotNumber: lot.lotNumber,
-                    productName: lot.productName,
+                    productName: getProductFullName(product),
                     quantity: lot.quantity,
-                    pricePerPackage: pricePerPackage,
-                    totalValue: lot.quantity * pricePerPackage,
-                    baseProductId: lot.baseProductId!
+                    pricePerPackage,
+                    totalValue,
+                    baseProductId: product.baseProductId,
                 };
             })
-            .filter((item): item is LotWithValue => item !== null && item.totalValue > 0)
+            .filter((item): item is LotWithValue => item !== null)
             .sort((a, b) => a.productName.localeCompare(b.productName));
 
-    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, baseProductPriceMap]);
+    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, getProductFullName]);
     
     const summaryByBaseProduct = useMemo(() => {
         const summary: { [key: string]: { name: string; quantity: number; value: number; unit: string; } } = {};
+        
         valuedLots.forEach(lot => {
             const baseProduct = baseProducts.find(bp => bp.id === lot.baseProductId);
             if (!baseProduct) return;
