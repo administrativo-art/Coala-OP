@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useRef, useMemo } from 'react';
@@ -251,5 +252,5 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, products, a
                 </Form>
             </DialogContent>
         </Dialog>
-    )
+    );
 }
