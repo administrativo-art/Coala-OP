@@ -157,75 +157,74 @@ export function StockCount() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)}>
                 <ScrollArea className="h-[50vh] pr-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {fields.map((field, index) => {
                       const lot = kioskLots[index];
                       if (!lot) return null;
                       const product = products.find(p => p.id === lot.productId);
 
                       return (
-                        <Card key={field.id} className="flex flex-col">
-                          <CardHeader className="p-4">
-                            <div className="flex items-start gap-4">
-                              {product?.imageUrl ? (
-                                <Image
-                                  src={product.imageUrl}
-                                  alt={lot.productName}
-                                  width={64}
-                                  height={64}
-                                  className="w-16 h-16 rounded-md object-cover"
-                                />
-                              ) : (
-                                <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center">
-                                  <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                        <Card key={field.id} className="p-4">
+                          <div className="flex gap-4">
+                            <div className="w-20 h-20 shrink-0">
+                                {product?.imageUrl ? (
+                                    <Image
+                                        src={product.imageUrl}
+                                        alt={lot.productName}
+                                        width={80}
+                                        height={80}
+                                        className="w-20 h-20 rounded-md object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
+                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex-1 space-y-3">
+                                <div className="space-y-1">
+                                    <p className="font-semibold leading-tight">{lot.productName}</p>
+                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
+                                    <p className="text-xs text-muted-foreground">Validade: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
                                 </div>
-                              )}
-                              <div className="flex-1">
-                                <p className="font-semibold leading-tight">{lot.productName}</p>
-                                <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
-                                <p className="text-xs text-muted-foreground">Validade: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="p-4 pt-0 flex-grow flex flex-col justify-end">
-                            <div className="space-y-2">
-                               <FormField
-                                control={form.control}
-                                name={`items.${index}.countedQuantity`}
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel className="text-xs">Qtd. Final</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                        type="number"
-                                        {...field}
-                                        className={field.value !== lot.quantity ? 'border-orange-500' : ''}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                                />
-                               <FormField
-                                control={form.control}
-                                name={`items.${index}.notes`}
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel className="text-xs">Observações</FormLabel>
-                                    <FormControl>
-                                       <Textarea 
+                                <div className="grid grid-cols-2 gap-2">
+                                    <FormField
+                                    control={form.control}
+                                    name={`items.${index}.countedQuantity`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel className="text-xs">Qtd. Final</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                            type="number"
                                             {...field}
-                                            placeholder="Opcional..."
-                                            rows={1}
-                                            className="resize-none"
-                                        />
-                                    </FormControl>
-                                     <FormMessage />
-                                    </FormItem>
-                                )}
-                                />
+                                            className={field.value !== lot.quantity ? 'border-orange-500' : ''}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                    />
+                                    <FormField
+                                    control={form.control}
+                                    name={`items.${index}.notes`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel className="text-xs">Observações</FormLabel>
+                                        <FormControl>
+                                            <Input 
+                                                {...field}
+                                                placeholder="Opcional..."
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                    />
+                                </div>
                             </div>
-                          </CardContent>
+                          </div>
                         </Card>
                       );
                     })}
