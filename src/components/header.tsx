@@ -23,16 +23,14 @@ export function Header() {
     
     const canManageLots = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory);
     const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
-    const canManageStock = canManageLots || canAnalyzeStock;
+    const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve);
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
-    const canPurchase = !loading && permissions.purchasing && (permissions.purchasing.suggest || permissions.purchasing.approve);
 
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
-        { href: '/dashboard/purchasing', label: 'Gestão de Compras', icon: ShoppingCart, show: canPurchase },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },

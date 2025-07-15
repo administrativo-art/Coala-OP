@@ -1,8 +1,7 @@
 
 "use client";
 
-import { PurchaseManagement } from "@/components/purchase-management";
-
+// This page's content has been moved to /dashboard/stock/purchasing
 export default function PurchasingPage() {
-    return <PurchaseManagement />;
+    return null;
 }
