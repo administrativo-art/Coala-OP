@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useEntities } from "@/hooks/use-entities";
+import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,9 +19,14 @@ export function PurchaseManagement() {
     const { user, users, permissions } = useAuth();
     const { sessions, loading: loadingPurchase } = usePurchase();
     const { entities, loading: loadingEntities } = useEntities();
+    const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    
+    const baseProductMap = useMemo(() => {
+        return new Map(baseProducts.map(bp => [bp.id, bp.name]));
+    }, [baseProducts]);
 
     const { openSessions, closedSessions } = useMemo(() => {
         const lowerCaseSearch = searchTerm.toLowerCase();
@@ -29,11 +35,16 @@ export function PurchaseManagement() {
             if (!lowerCaseSearch) return true;
             const entity = entities.find(e => e.id === session.entityId);
             const createdByUser = users.find(u => u.id === session.userId);
+            const hasMatchingBaseProduct = session.baseProductIds.some(bpId => {
+                const bpName = baseProductMap.get(bpId);
+                return bpName && bpName.toLowerCase().includes(lowerCaseSearch);
+            });
 
             return (
                 session.description.toLowerCase().includes(lowerCaseSearch) ||
                 (entity && entity.name.toLowerCase().includes(lowerCaseSearch)) ||
-                (createdByUser && createdByUser.username.toLowerCase().includes(lowerCaseSearch))
+                (createdByUser && createdByUser.username.toLowerCase().includes(lowerCaseSearch)) ||
+                hasMatchingBaseProduct
             );
         };
 
@@ -45,9 +56,9 @@ export function PurchaseManagement() {
             }
         });
         return { openSessions: open, closedSessions: closed };
-    }, [sessions, searchTerm, entities, users]);
+    }, [sessions, searchTerm, entities, users, baseProductMap]);
 
-    const isLoading = loadingPurchase || loadingEntities;
+    const isLoading = loadingPurchase || loadingEntities || loadingBaseProducts;
 
     const renderSessionList = (list: typeof sessions, emptyMessage: string) => {
         if (isLoading) {
@@ -96,7 +107,7 @@ export function PurchaseManagement() {
                     <div className="relative w-full max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Buscar pesquisa por título, fornecedor..."
+                            placeholder="Buscar por título, fornecedor ou insumo..."
                             className="pl-10"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
