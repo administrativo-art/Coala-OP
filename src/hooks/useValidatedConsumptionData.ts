@@ -7,13 +7,12 @@ export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport, deleteReport } = useConsumptionAnalysis();
   const { baseProducts: rawBaseProducts, loading: loadingBases } = useBaseProducts();
 
-  // A validação agora é feita no momento da importação.
-  // Este hook agora serve para combinar as fontes de dados.
   const validatedData = useMemo(() => {
+    // The validation logic is now handled at import time.
+    // This hook just combines the data sources.
     return {
       reports: rawReports || [],
       baseProducts: rawBaseProducts || [],
-      integrityReport: null // A validação de integridade foi movida para a importação.
     };
   }, [rawReports, rawBaseProducts]);
 
