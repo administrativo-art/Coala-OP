@@ -84,7 +84,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
     const tableData = useMemo((): PriceRow[] => {
         if (!baseProduct) return [];
         const rows = linkedProducts.map(p => {
-            const priceStr = prices[p.id] || "0";
+            const priceStr = prices[p.id] || "";
             const price = parseFloat(priceStr);
             let pricePerUnit: number | null = null;
             if (!isNaN(price) && price > 0) {
