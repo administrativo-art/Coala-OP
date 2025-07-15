@@ -6,13 +6,20 @@ import { type PurchaseSession, type PurchaseItem, type BaseProduct } from '@/typ
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { useProducts } from '@/hooks/use-products';
 import { BaseProductsContext } from './base-products-provider';
+
+type LastEffectivePrice = {
+  pricePerUnit: number;
+  productId: string;
+  entityId: string;
+  updatedAt: string;
+};
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
   items: PurchaseItem[];
   loading: boolean;
+  lastEffectivePrices: Map<string, LastEffectivePrice>;
   startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
@@ -33,6 +40,23 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const lastEffectivePrices = useMemo((): Map<string, LastEffectivePrice> => {
+        const priceMap = new Map<string, LastEffectivePrice>();
+        if (!baseProducts || baseProducts.length === 0) {
+            return priceMap;
+        }
+
+        baseProducts.forEach(bp => {
+            if (bp.effectivePrice && bp.effectivePrice.productId) {
+                const existing = priceMap.get(bp.effectivePrice.productId);
+                if (!existing || new Date(bp.effectivePrice.updatedAt) > new Date(existing.updatedAt)) {
+                    priceMap.set(bp.effectivePrice.productId, bp.effectivePrice);
+                }
+            }
+        });
+        return priceMap;
+    }, [baseProducts]);
 
     useEffect(() => {
         const qSessions = query(collection(db, "purchaseSessions"));
@@ -120,11 +144,9 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         try {
             const batch = writeBatch(db);
             
-            // Delete the session itself
             const sessionRef = doc(db, "purchaseSessions", sessionId);
             batch.delete(sessionRef);
 
-            // Find and delete all associated items
             const itemsQuery = query(collection(db, "purchaseItems"), where("sessionId", "==", sessionId));
             const itemsSnapshot = await getDocs(itemsQuery);
             itemsSnapshot.forEach(itemDoc => {
@@ -178,12 +200,13 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         sessions,
         items,
         loading,
+        lastEffectivePrices,
         startNewSession,
         savePrice,
         closeSession,
         deleteSession,
         confirmPurchase,
-    }), [sessions, items, loading, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
+    }), [sessions, items, loading, lastEffectivePrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
