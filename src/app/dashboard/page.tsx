@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
   
-  const { reports: consumptionHistory, baseProducts, isLoading: consumptionLoading, hasValidData } = useValidatedConsumptionData();
+  const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];

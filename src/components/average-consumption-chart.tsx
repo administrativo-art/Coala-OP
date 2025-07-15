@@ -26,9 +26,15 @@ export function AverageConsumptionChart() {
   
   const { reports: consumptionHistory, baseProducts, isLoading: consumptionLoading, hasValidData } = useValidatedConsumptionData();
 
-  const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
+  const [selectedKiosk, setSelectedKiosk] = useState<string>('');
   const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
+  
+  useEffect(() => {
+    if(user && !selectedKiosk) {
+       setSelectedKiosk(user.username === 'Tiago Brasil' ? 'matriz' : (user.assignedKioskIds[0] || ''));
+    }
+  }, [user, selectedKiosk]);
 
   useEffect(() => {
     if (!initialSelectionMade && baseProducts.length > 0) {
@@ -38,7 +44,7 @@ export function AverageConsumptionChart() {
   }, [baseProducts, initialSelectionMade]);
 
   const chartData = useMemo(() => {
-    if (!hasValidData || !user) return [];
+    if (!hasValidData || !user || !selectedKiosk) return [];
 
     const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
 
@@ -47,7 +53,7 @@ export function AverageConsumptionChart() {
         consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0 };
     });
 
-    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
+    const kioskIdForChart = selectedKiosk;
     const relevantReports = kioskIdForChart === 'matriz'
         ? consumptionHistory
         : consumptionHistory.filter(report => report.kioskId === kioskIdForChart);
