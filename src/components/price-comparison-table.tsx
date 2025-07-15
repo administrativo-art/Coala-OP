@@ -120,9 +120,9 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
             });
         }
 
-        return rows.sort((a,b) => (a.pricePerUnit ?? Infinity) - (b.pricePerUnit ?? Infinity));
+        return rows.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
 
-    }, [linkedProducts, prices, baseProduct, items]);
+    }, [linkedProducts, prices, baseProduct, items, getProductFullName]);
 
     if (!baseProduct) {
         return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
