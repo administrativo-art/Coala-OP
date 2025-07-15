@@ -3,8 +3,7 @@
 
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
-import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
-import { useProducts } from "@/hooks/use-products"
+import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -28,86 +27,71 @@ import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 
 export function ConsumptionAnalysisDashboard() {
   const { user } = useAuth()
-  const { products, loading: productsLoading } = useProducts()
-  const { history: consumptionHistory, loading: consumptionLoading, addReport, deleteReport } = useConsumptionAnalysis()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
+  
+  const { reports: consumptionHistory, baseProducts, isLoading: consumptionLoading, hasValidData, addReport, deleteReport } = useValidatedConsumptionData();
 
   const [selectedKiosk, setSelectedKiosk] = useState<string>('matriz');
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
 
-  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
-
   useEffect(() => {
-    if (!initialSelectionMade && activeProducts.length > 0) {
-      setSelectedProducts(activeProducts.map(p => p.id));
+    if (!initialSelectionMade && baseProducts.length > 0) {
+      setSelectedBaseProducts(baseProducts.map(p => p.id));
       setInitialSelectionMade(true);
     }
-  }, [activeProducts, initialSelectionMade]);
+  }, [baseProducts, initialSelectionMade]);
 
   const chartData = useMemo(() => {
-    const loading = consumptionLoading || productsLoading || kiosksLoading;
-    if (loading || !user || consumptionHistory.length === 0 || products.length === 0) return [];
+    if (!hasValidData || !user) return [];
 
-    const kioskConsumption: { [kioskId: string]: { [productId: string]: { total: number; count: number } } } = {};
+    const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
 
-    consumptionHistory.forEach(report => {
-      if (!kioskConsumption[report.kioskId]) {
-        kioskConsumption[report.kioskId] = {};
-      }
-      report.results.forEach(item => {
-        if (!kioskConsumption[report.kioskId][item.productId]) {
-          kioskConsumption[report.kioskId][item.productId] = { total: 0, count: 0 };
-        }
-        kioskConsumption[report.kioskId][item.productId].total += item.consumedQuantity;
-        kioskConsumption[report.kioskId][item.productId].count += 1;
-      });
+    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
+    baseProducts.forEach(bp => {
+        consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0 };
     });
 
-    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : user.assignedKioskIds[0] || 'matriz';
-    let relevantConsumptionData: { [productId: string]: number } = {};
+    const kioskIdForChart = user.username === 'Tiago Brasil' ? selectedKiosk : (user.assignedKioskIds[0] || '');
+    const relevantReports = kioskIdForChart === 'matriz'
+        ? consumptionHistory
+        : consumptionHistory.filter(report => report.kioskId === kioskIdForChart);
 
-    if (kioskIdForChart === 'matriz' && user.username === 'Tiago Brasil') {
-        const masterAverages: { [productId: string]: { totalAvg: number } } = {};
-        Object.entries(kioskConsumption).forEach(([kioskId, productMap]) => {
-            if (kioskId === 'matriz') return;
-            Object.entries(productMap).forEach(([productId, data]) => {
-                const avgForKiosk = data.count > 0 ? data.total / data.count : 0;
-                if (!masterAverages[productId]) masterAverages[productId] = { totalAvg: 0 };
-                masterAverages[productId].totalAvg += avgForKiosk;
-            });
+    relevantReports.forEach(report => {
+        const monthlyConsumptionForReport = new Set<string>();
+        report.results.forEach(item => {
+            if(item.baseProductId) {
+                const baseProductId = item.baseProductId;
+                if (baseProductMap.has(baseProductId) && consumptionByBaseId[baseProductId]) {
+                    consumptionByBaseId[baseProductId].total += item.consumedQuantity;
+                    monthlyConsumptionForReport.add(baseProductId);
+                }
+            }
         });
-        Object.entries(masterAverages).forEach(([productId, data]) => {
-            relevantConsumptionData[productId] = data.totalAvg;
+
+        monthlyConsumptionForReport.forEach(baseProductId => {
+            consumptionByBaseId[baseProductId].monthsCount += 1;
         });
-    } else {
-        const singleKioskData = kioskConsumption[kioskIdForChart];
-        if (singleKioskData) {
-            Object.entries(singleKioskData).forEach(([productId, data]) => {
-                relevantConsumptionData[productId] = data.count > 0 ? data.total / data.count : 0;
-            });
-        }
-    }
+    });
 
-    const dataForChart = activeProducts
-      .filter(p => selectedProducts.includes(p.id))
-      .map(product => {
-        const avgQuantity = relevantConsumptionData[product.id] || 0;
-        return {
-          productId: product.id,
-          name: `${product.baseName} (${product.unit})`,
-          "Consumo": parseFloat(avgQuantity.toFixed(2)),
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return baseProducts
+        .filter(bp => selectedBaseProducts.includes(bp.id))
+        .map(baseProduct => {
+            const consumption = consumptionByBaseId[baseProduct.id];
+            const average = consumption.monthsCount > 0 ? consumption.total / consumption.monthsCount : 0;
+            return {
+                baseProductId: baseProduct.id,
+                name: `${baseProduct.name} (${baseProduct.unit})`,
+                "Consumo": parseFloat(average.toFixed(2)),
+            };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    return dataForChart;
-
-  }, [user, consumptionHistory, products, consumptionLoading, productsLoading, kiosks, kiosksLoading, selectedKiosk, selectedProducts, activeProducts]);
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts]);
 
   const handleExportPdf = () => {
     if (chartData.length === 0) {
@@ -130,7 +114,7 @@ export function ConsumptionAnalysisDashboard() {
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
     doc.text(`Gerado em: ${monthYear}`, 14, 35);
 
-    const tableHead = [['Produto (unidade)', 'Consumo Médio']];
+    const tableHead = [['Produto Base (unidade)', 'Consumo Médio']];
     const tableBody = chartData.map(item => [
         item.name,
         item.Consumo.toLocaleString(undefined, { maximumFractionDigits: 2 }),
@@ -161,7 +145,7 @@ export function ConsumptionAnalysisDashboard() {
     const monthYear = format(new Date(), 'MM-yyyy');
     
     const csvData = chartData.map(item => ({
-        "Produto (unidade)": item.name,
+        "Produto Base (unidade)": item.name,
         "Consumo Medio": item.Consumo,
     }));
 
@@ -194,9 +178,9 @@ export function ConsumptionAnalysisDashboard() {
       month: monthYear,
       generated_at: new Date().toISOString(),
       data: chartData.map(item => ({
-        product_name: item.name,
+        base_product_name: item.name,
         average_consumption: item.Consumo,
-        product_id: item.productId,
+        base_product_id: item.baseProductId,
       }))
     };
     
@@ -206,14 +190,14 @@ export function ConsumptionAnalysisDashboard() {
     const filenameKiosk = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `consumo_medio_${filenameKiosk}_${monthYear}.json`);
+    link.setAttribute("download", `consumo_medio_base_${filenameKiosk}_${monthYear}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const handleProductSelection = (productId: string, checked: boolean) => {
-    setSelectedProducts(current => checked ? [...current, productId] : current.filter(id => id !== productId));
+  const handleProductSelection = (baseProductId: string, checked: boolean) => {
+    setSelectedBaseProducts(current => checked ? [...current, baseProductId] : current.filter(id => id !== baseProductId));
   };
 
   const sortedKiosks = kiosks.sort((a,b) => {
@@ -222,7 +206,7 @@ export function ConsumptionAnalysisDashboard() {
     return a.name.localeCompare(b.name);
   });
   
-  const loadingData = consumptionLoading || productsLoading || kiosksLoading;
+  const loadingData = consumptionLoading || kiosksLoading;
   const CHART_COLORS = [
     'hsl(var(--chart-1))',
     'hsl(var(--chart-2))',
@@ -246,7 +230,7 @@ export function ConsumptionAnalysisDashboard() {
             <CardHeader className="flex flex-col gap-4">
                 <div>
                     <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal
+                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal por produto base
                     </CardTitle>
                     <CardDescription>
                         {user?.username === 'Tiago Brasil' 
@@ -265,24 +249,24 @@ export function ConsumptionAnalysisDashboard() {
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
                                 <ListFilter className="mr-2 h-4 w-4" />
-                                Filtrar produtos ({selectedProducts.length})
+                                Filtrar produtos ({selectedBaseProducts.length})
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-64">
-                            <DropdownMenuLabel>Exibir produtos</DropdownMenuLabel>
+                            <DropdownMenuLabel>Exibir produtos base</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setSelectedProducts(activeProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setSelectedProducts([])}>Limpar seleção</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedBaseProducts(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setSelectedBaseProducts([])}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
-                            {activeProducts.sort((a,b) => a.baseName.localeCompare(b.baseName)).map(product => (
+                            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
                                 <DropdownMenuCheckboxItem
                                     key={product.id}
-                                    checked={selectedProducts.includes(product.id)}
+                                    checked={selectedBaseProducts.includes(product.id)}
                                     onCheckedChange={(checked) => handleProductSelection(product.id, !!checked)}
                                     onSelect={(e) => e.preventDefault()}
                                 >
-                                    {product.baseName}
+                                    {product.name}
                                 </DropdownMenuCheckboxItem>
                             ))}
                             </ScrollArea>
@@ -345,11 +329,11 @@ export function ConsumptionAnalysisDashboard() {
                     <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
                             <TrendingUp className="h-12 w-12 mb-4" />
                             <p className="font-semibold">
-                                {selectedProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
+                                {selectedBaseProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
                             </p>
                             <p className="text-sm">
-                                {selectedProducts.length === 0
-                                ? "Selecione produtos no filtro para exibi-los no gráfico."
+                                {selectedBaseProducts.length === 0
+                                ? "Selecione produtos base no filtro para exibi-los no gráfico."
                                 : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
                                     ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
@@ -388,7 +372,7 @@ export function ConsumptionAnalysisDashboard() {
             open={isImportModalOpen}
             onOpenChange={setIsImportModalOpen}
             kiosks={kiosks}
-            products={products}
+            products={baseProducts}
             addReport={addReport}
         />
 
@@ -396,7 +380,7 @@ export function ConsumptionAnalysisDashboard() {
             open={isComparisonModalOpen}
             onOpenChange={setIsComparisonModalOpen}
             history={consumptionHistory}
-            products={activeProducts}
+            products={baseProducts}
             kiosks={kiosks}
         />
     </>

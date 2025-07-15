@@ -12,17 +12,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { type ConsumptionReport, type Product, type Kiosk } from "@/types";
+import { type ConsumptionReport, type Product, type Kiosk, type BaseProduct } from "@/types";
 import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Copy } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useProducts } from '@/hooks/use-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface ConsumptionComparisonModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     history: ConsumptionReport[];
-    products: Product[];
+    products: BaseProduct[];
     kiosks: Kiosk[];
 }
 
@@ -128,15 +129,19 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             return;
         }
 
-        const allProductIds = new Set([...reportA.results.map(r => r.productId), ...reportB.results.map(r => r.productId)]);
+        const allBaseProductIds = new Set([
+            ...reportA.results.map(r => r.baseProductId), 
+            ...reportB.results.map(r => r.baseProductId)
+        ].filter(id => id !== null));
+
         const results: ComparisonResult[] = [];
 
-        allProductIds.forEach(productId => {
-            const productInfo = products.find(p => p.id === productId);
+        allBaseProductIds.forEach(baseProductId => {
+            const productInfo = products.find(p => p.id === baseProductId);
             if (!productInfo) return;
 
-            const consumptionA = reportA.results.find(r => r.productId === productId)?.consumedQuantity || 0;
-            const consumptionB = reportB.results.find(r => r.productId === productId)?.consumedQuantity || 0;
+            const consumptionA = reportA.results.find(r => r.baseProductId === baseProductId)?.consumedQuantity || 0;
+            const consumptionB = reportB.results.find(r => r.baseProductId === baseProductId)?.consumedQuantity || 0;
             const variation = consumptionB - consumptionA;
             
             let percentageChange: number | null = null;
@@ -147,7 +152,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
             }
             
             results.push({
-                productName: getProductFullName(productInfo),
+                productName: productInfo.name,
                 unit: productInfo.unit,
                 consumptionA,
                 consumptionB,
@@ -179,7 +184,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         doc.text(`Período A: ${periodALabel}`, 14, 30);
         doc.text(`Período B: ${periodBLabel}`, 14, 36);
 
-        const tableHead = [['Insumo', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
+        const tableHead = [['Produto Base', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
         const tableBody = comparisonResults.map(item => {
             let percentageText: string;
             if (item.percentageChange === null) {
@@ -324,7 +329,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead>Insumo</TableHead>
+                                                    <TableHead>Produto Base</TableHead>
                                                     <TableHead className="text-right">Período A</TableHead>
                                                     <TableHead className="text-right">Período B</TableHead>
                                                     <TableHead className="text-right">Variação (absoluta e %)</TableHead>
