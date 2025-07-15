@@ -32,6 +32,7 @@ interface PriceRow {
     isBestPrice: boolean;
     isWorstPrice: boolean;
     purchaseItem?: PurchaseItem;
+    lastEffectivePrice?: BaseProduct['effectivePrice'];
 }
 
 export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceComparisonTableProps) {
@@ -97,13 +98,18 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                     pricePerUnit = price / convertedQty;
                 }
             }
+            // Find the effective price for this specific product, if it exists in another BaseProduct
+            const allBaseProductsWithPrice = baseProducts.filter(bp => bp.effectivePrice && bp.effectivePrice.productId === p.id);
+            const lastEffectivePrice = allBaseProductsWithPrice.sort((a, b) => new Date(b.effectivePrice!.updatedAt).getTime() - new Date(a.effectivePrice!.updatedAt).getTime())[0]?.effectivePrice;
+            
             return {
                 product: p,
                 price: priceStr,
                 pricePerUnit,
                 isBestPrice: false,
                 isWorstPrice: false,
-                purchaseItem: items.find(i => i.productId === p.id)
+                purchaseItem: items.find(i => i.productId === p.id),
+                lastEffectivePrice: lastEffectivePrice
             };
         });
 
@@ -124,11 +130,8 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
             });
         }
         return rows.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
-    }, [linkedProducts, prices, baseProduct, items, getProductFullName]);
+    }, [linkedProducts, prices, baseProduct, items, getProductFullName, baseProducts]);
     
-    const lastEffectivePrice = baseProduct?.effectivePrice;
-    const lastSupplier = lastEffectivePrice ? entities.find(e => e.id === lastEffectivePrice.entityId) : null;
-
     if (!baseProduct) {
         return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
     }
@@ -156,7 +159,9 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {tableData.map(row => (
+                    {tableData.map(row => {
+                        const lastSupplier = row.lastEffectivePrice ? entities.find(e => e.id === row.lastEffectivePrice?.entityId) : null;
+                        return (
                         <TableRow key={row.product.id}>
                             <TableCell className="font-medium">
                                 {getProductFullName(row.product)}
@@ -170,18 +175,18 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                         onChange={e => handlePriceChange(row.product.id, e.target.value)}
                                         disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
                                     />
-                                    {lastEffectivePrice && (
+                                    {row.lastEffectivePrice && (
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-default">
                                                         <Info className="h-3 w-3" />
-                                                        Último: {lastEffectivePrice.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
+                                                        Último: {row.lastEffectivePrice.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{baseProduct.unit}
                                                     </div>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
                                                     <p>Fornecedor: {lastSupplier?.name || 'Não encontrado'}</p>
-                                                    <p>Data: {format(new Date(lastEffectivePrice.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
+                                                    <p>Data: {format(new Date(row.lastEffectivePrice.updatedAt), 'dd/MM/yyyy', {locale: ptBR})}</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
@@ -234,7 +239,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                 </TooltipProvider>
                             </TableCell>
                         </TableRow>
-                    ))}
+                    )})}
                 </TableBody>
             </Table>
         </div>
