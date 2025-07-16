@@ -243,6 +243,11 @@ function AnalysisTab() {
     }
   };
 
+  const stagedItemMap = useMemo(() => {
+    return new Map(stagedItems.map(item => [item.baseProductId, item]));
+  }, [stagedItems]);
+
+
   return (
     <>
     <Card>
@@ -284,28 +289,38 @@ function AnalysisTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {analysisResults.length > 0 ? analysisResults.map(result => (
-                  <TableRow key={result.baseProduct.id}>
-                    <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
-                    <TableCell className="text-center">{result.minimumStock > 0 ? `${result.minimumStock} ${result.baseProduct.unit}` : '-'}</TableCell>
-                    <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
-                    <TableCell className="text-center">
-                        {result.stockPercentage !== null ? (
-                             <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
-                        ) : '-'}
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-primary">
-                      {result.suggestion ? (
-                        <Button variant="outline" size="sm" onClick={() => setSuggestionToView(result)}>
-                          <Wand2 className="mr-2 h-4 w-4"/> Ver Sugestão
-                        </Button>
-                      ) : result.restockNeeded > 0 ? (
-                        `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
-                  </TableRow>
-                )) : (
+                {analysisResults.length > 0 ? analysisResults.map(result => {
+                    const isStaged = stagedItemMap.has(result.baseProduct.id);
+                    return (
+                        <TableRow key={result.baseProduct.id} className={cn(isStaged && "bg-primary/5")}>
+                            <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
+                            <TableCell className="text-center">{result.minimumStock > 0 ? `${result.minimumStock} ${result.baseProduct.unit}` : '-'}</TableCell>
+                            <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
+                            <TableCell className="text-center">
+                                {result.stockPercentage !== null ? (
+                                    <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
+                                ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center font-bold text-primary">
+                            {isStaged ? (
+                                <div className="flex items-center justify-center gap-2">
+                                <Badge variant="secondary">Na reposição</Badge>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                </div>
+                            ) : result.suggestion ? (
+                                <Button variant="outline" size="sm" onClick={() => setSuggestionToView(result)}>
+                                <Wand2 className="mr-2 h-4 w-4"/> Ver Sugestão
+                                </Button>
+                            ) : result.restockNeeded > 0 ? (
+                                `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`
+                            ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
+                        </TableRow>
+                    )
+                }) : (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
                             Nenhum produto base encontrado para análise.
@@ -320,7 +335,7 @@ function AnalysisTab() {
     </Card>
     
     {stagedItems.length > 0 && (
-        <Card className="mt-6">
+        <Card className="mt-6 animate-in fade-in">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para Reposição</CardTitle>
                 <CardDescription>Revise os itens antes de criar a atividade de reposição para o quiosque {kiosks.find(k => k.id === selectedKioskId)?.name}.</CardDescription>
