@@ -30,12 +30,12 @@ import autoTable from 'jspdf-autotable';
 
 const MOVEMENT_TYPE_CONFIG: Record<MovementType, { label: string; color: string }> = {
     'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
-    'SAIDA_CONSUMO': { label: 'Consumo', color: 'bg-red-100 text-red-800' },
-    'SAIDA_DESCARTE': { label: 'Descarte', color: 'bg-red-100 text-red-800' },
-    'SAIDA_CORRECAO': { label: 'Correção (-)', color: 'bg-red-100 text-red-800' },
-    'ENTRADA_CORRECAO': { label: 'Correção (+)', color: 'bg-green-100 text-green-800' },
-    'TRANSFERENCIA_SAIDA': { label: 'Transferência (Saída)', color: 'bg-blue-100 text-blue-800' },
-    'TRANSFERENCIA_ENTRADA': { label: 'Transferência (Entrada)', color: 'bg-blue-100 text-blue-800' },
+    'SAIDA_CONSUMO': { label: 'Saída consumo', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE': { label: 'Saída descarte', color: 'bg-red-100 text-red-800' },
+    'SAIDA_CORRECAO': { label: 'Ajuste saída', color: 'bg-red-100 text-red-800' },
+    'ENTRADA_CORRECAO': { label: 'Ajuste entrada', color: 'bg-green-100 text-green-800' },
+    'TRANSFERENCIA_SAIDA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
+    'TRANSFERENCIA_ENTRADA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
 };
 
 const ITEMS_PER_PAGE = 20;
