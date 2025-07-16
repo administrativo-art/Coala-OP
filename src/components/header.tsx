@@ -14,9 +14,10 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { UserProfile } from "./user-profile"
 import { ThemeToggle } from "./theme-toggle"
+import { type Task, NotificationCenter } from "./notification-center"
 
 
-export function Header() {
+export function Header({ tasks }: { tasks: Task[] }) {
     const { permissions, loading, user } = useAuth()
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
@@ -79,6 +80,7 @@ export function Header() {
         <div className="w-full flex-1">
         </div>
         <div className="flex items-center gap-4">
+          <NotificationCenter tasks={tasks} />
           <ThemeToggle />
           <UserProfile />
         </div>

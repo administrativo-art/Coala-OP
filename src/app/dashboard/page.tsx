@@ -6,12 +6,8 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
-import { useReturnRequests } from "@/hooks/use-return-requests"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
-import { useItemAddition } from "@/hooks/use-item-addition"
-import { useStockCount } from "@/hooks/use-stock-count"
-import { useReposition } from "@/hooks/use-reposition"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -33,11 +29,7 @@ export default function DashboardPage() {
   const { user, users, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
-  const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
-  const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
-  const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   
   const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
   const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
@@ -67,99 +59,6 @@ export default function DashboardPage() {
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
 
-  const myTasks = useMemo(() => {
-    if (!user || !permissions) return [];
-
-    const tasks: { id: string, type: string; title: string; description: string; link: string, icon: React.FC<any> }[] = [];
-
-    // 1. Solicitações de Cadastro de Novo Insumo
-    if (permissions.itemRequests.manage) {
-      itemAdditionRequests.filter(req => req.status === 'pending').forEach(req => {
-        tasks.push({
-          id: `itemreq-${req.id}`,
-          type: 'Cadastro de Insumo',
-          title: `Solicitação: ${req.productName} ${req.brand ? `(${req.brand})` : ''}`,
-          description: `Por ${req.requestedBy.username} em ${req.kioskName}`,
-          link: '/dashboard/stock/count',
-          icon: PackagePlus,
-        });
-      });
-    }
-
-    // 2. Contagens de Estoque para Aprovação
-    if (permissions.stockCount.approve) {
-      stockCounts.filter(sc => sc.status === 'pending').forEach(sc => {
-        tasks.push({
-          id: `stockcount-${sc.id}`,
-          type: 'Aprovação de Contagem',
-          title: `Contagem de ${sc.kioskName}`,
-          description: `Enviada por ${sc.countedBy.username} em ${format(parseISO(sc.countedAt), 'dd/MM/yyyy HH:mm')}`,
-          link: '/dashboard/stock/count',
-          icon: ClipboardCheck,
-        });
-      });
-    }
-
-    // 3. Chamados de Avaria
-    const activeReturnRequests = returnRequests.filter(r => !r.isArchived);
-    const myReturnRequests = (permissions.returns.updateStatus || user.username === 'Tiago Brasil')
-      ? activeReturnRequests
-      : activeReturnRequests.filter(r => r.createdBy.userId === user.id);
-      
-    myReturnRequests.forEach(req => {
-      tasks.push({
-        id: `return-${req.id}`,
-        type: 'Chamado de Avaria',
-        title: `${req.numero}: ${req.insumoNome}`,
-        description: `Status: ${returnRequestStatuses[req.status]?.label || 'Desconhecido'}`,
-        link: '/dashboard/stock/returns',
-        icon: ShieldAlert,
-      });
-    });
-
-    // 4. Atividades de Reposição
-    const isMaster = user.username === 'Tiago Brasil';
-    repositionActivities.filter(act => act.status !== 'Concluído').forEach(act => {
-      let isVisible = false;
-      let taskTitle = '';
-      let taskDesc = `De ${act.kioskOriginName} para ${act.kioskDestinationName}`;
-      
-      switch (act.status) {
-        case 'Aguardando despacho':
-          if (isMaster || user.assignedKioskIds.includes(act.kioskOriginId)) {
-            isVisible = true;
-            taskTitle = 'Gerenciar Despacho';
-          }
-          break;
-        case 'Aguardando recebimento':
-          if (isMaster || user.assignedKioskIds.includes(act.kioskDestinationId)) {
-            isVisible = true;
-            taskTitle = 'Auditar Recebimento';
-          }
-          break;
-        case 'Recebido com divergência':
-        case 'Recebido sem divergência':
-          if (isMaster) {
-            isVisible = true;
-            taskTitle = 'Efetivar Movimentação';
-          }
-          break;
-      }
-
-      if(isVisible) {
-        tasks.push({
-          id: `reposition-${act.id}`,
-          type: 'Reposição de Estoque',
-          title: taskTitle,
-          description: taskDesc,
-          link: '/dashboard/stock/analysis/restock',
-          icon: Truck,
-        });
-      }
-    });
-
-    return tasks;
-  }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities]);
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
@@ -177,7 +76,7 @@ export default function DashboardPage() {
     }
   };
 
-  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading || itemAdditionLoading || stockCountsLoading || repositionLoading;
+  const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading;
 
   if (initialLoading) {
     return (
@@ -234,42 +133,6 @@ export default function DashboardPage() {
         </Link>
       </div>
       
-       {myTasks.length > 0 && (
-          <Card className="lg:col-span-2">
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                      <ListTodo className="h-6 w-6" /> Minhas Tarefas ({myTasks.length})
-                  </CardTitle>
-                  <CardDescription>
-                      Estas são as atividades pendentes que precisam da sua atenção.
-                  </CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <ScrollArea className="h-60">
-                    <div className="space-y-2 pr-4">
-                        {myTasks.map(task => {
-                            const Icon = task.icon;
-                            return (
-                                <Link href={task.link} key={task.id}>
-                                    <div className="flex items-center justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <Icon className="h-5 w-5 text-primary shrink-0" />
-                                            <div>
-                                                <p className="font-semibold">{task.title}</p>
-                                                <p className="text-sm text-muted-foreground">{task.description}</p>
-                                            </div>
-                                        </div>
-                                        <Badge variant="secondary" className="shrink-0">{task.type}</Badge>
-                                    </div>
-                                </Link>
-                            )
-                        })}
-                    </div>
-                  </ScrollArea>
-              </CardContent>
-          </Card>
-        )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {expiringSoonLots.length > 0 && (
             <Card className="lg:col-span-1">
