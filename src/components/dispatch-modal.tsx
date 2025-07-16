@@ -16,8 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { FileText, Loader2, Send, Signature, Eraser } from 'lucide-react';
+import { FileText, Loader2, Send, Signature, Eraser, Printer, Camera, ArrowRight, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Switch } from './ui/switch';
+import { PhotoCaptureModal } from './photo-capture-modal';
+import Image from 'next/image';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 
 interface DispatchModalProps {
@@ -28,11 +32,17 @@ interface DispatchModalProps {
 export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const { updateRepositionActivity } = useReposition();
     const { user } = useAuth();
+    
+    const [currentStep, setCurrentStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [transporterName, setTransporterName] = useState('');
+    const [useDigitalSignature, setUseDigitalSignature] = useState(true);
+    const [physicalCopyUrl, setPhysicalCopyUrl] = useState<string | null>(null);
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+
     const sigCanvas = useRef<SignatureCanvas>(null);
 
-    const generateAndPrintPDF = () => {
+    const generatePDF = () => {
         const doc = new jsPDF();
         
         doc.setFontSize(18);
@@ -77,109 +87,200 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         doc.line(110, finalY + 40, 196, finalY + 40);
         doc.text("Nome do Transportador", 110, finalY + 45);
 
-        doc.output('dataurlnewwindow');
+        return doc;
     };
     
+    const handlePrint = () => {
+        const doc = generatePDF();
+        doc.output('dataurlnewwindow');
+    };
+
     const handleConfirmDispatch = async () => {
-        if (!user || sigCanvas.current?.isEmpty() || !transporterName.trim()) {
-            alert("Por favor, preencha o nome do transportador e a assinatura.");
-            return;
+        if (!user) return;
+
+        let signatureData: SignatureData = { signedBy: transporterName, signedAt: new Date().toISOString() };
+        
+        if (useDigitalSignature) {
+            if (sigCanvas.current?.isEmpty()) {
+                 alert("A assinatura digital é obrigatória.");
+                 return;
+            }
+            signatureData.dataUrl = sigCanvas.current.toDataURL('image/png');
+        } else {
+             if (!physicalCopyUrl) {
+                alert("A foto do documento assinado é obrigatória.");
+                return;
+            }
+            signatureData.physicalCopyUrl = physicalCopyUrl;
         }
 
         setIsLoading(true);
 
-        const signature: SignatureData = {
-            dataUrl: sigCanvas.current.toDataURL('image/png'),
-            signedBy: transporterName.trim(),
-            signedAt: new Date().toISOString()
-        };
-
         await updateRepositionActivity(activity.id, {
             status: 'Aguardando recebimento',
-            transportSignature: signature,
+            transportSignature: signatureData,
         });
+
         setIsLoading(false);
         onOpenChange(false);
     }
     
-    const clearSignature = () => {
-        sigCanvas.current?.clear();
-    };
+    const clearSignature = () => sigCanvas.current?.clear();
+
+    const handleNextStep = () => setCurrentStep(prev => prev + 1);
+    const handlePrevStep = () => setCurrentStep(prev => prev - 1);
+
+    const renderStep1 = () => (
+        <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Conferência dos Itens</h3>
+            <p className="text-sm text-muted-foreground">Revise os itens e as quantidades que serão transportados.</p>
+            <div className="max-h-60 overflow-y-auto rounded-md border p-2 bg-muted/50">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Produto</TableHead>
+                            <TableHead>Lote</TableHead>
+                            <TableHead className="text-right">Qtd.</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                         {activity.items.flatMap(item => item.suggestedLots.map(lot => (
+                            <TableRow key={lot.lotId}>
+                                <TableCell className="font-medium">{lot.productName}</TableCell>
+                                <TableCell>{lot.lotId.slice(-8)}</TableCell>
+                                <TableCell className="text-right font-bold">{lot.quantityToMove}</TableCell>
+                            </TableRow>
+                         )))}
+                    </TableBody>
+                </Table>
+            </div>
+             <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                    <Label className="text-base">Assinatura Digital</Label>
+                    <p className="text-sm text-muted-foreground">Coletar a assinatura na tela?</p>
+                </div>
+                <Switch checked={useDigitalSignature} onCheckedChange={setUseDigitalSignature} />
+            </div>
+        </div>
+    );
+    
+    const renderStep2 = () => (
+        <div className="space-y-4">
+            <h3 className="text-lg font-semibold">{useDigitalSignature ? "Coleta de Assinatura Digital" : "Coleta de Assinatura Física"}</h3>
+            <p className="text-sm text-muted-foreground">Solicite que o transportador preencha o nome e assine.</p>
+
+             <div>
+                <Label htmlFor="transporter-name">Nome do Transportador</Label>
+                <Input 
+                    id="transporter-name" 
+                    value={transporterName} 
+                    onChange={(e) => setTransporterName(e.target.value)}
+                    placeholder="Digite o nome completo"
+                />
+            </div>
+            
+            {useDigitalSignature ? (
+                <div>
+                    <Label>Assinatura Digital</Label>
+                    <div className="rounded-md border bg-white">
+                        <SignatureCanvas 
+                            ref={sigCanvas}
+                            penColor='black'
+                            canvasProps={{ className: 'w-full h-[150px]' }} 
+                        />
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1 text-muted-foreground">
+                        <Eraser className="mr-1 h-3 w-3" /> Limpar Assinatura
+                    </Button>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    <Button variant="outline" className="w-full" onClick={handlePrint}>
+                        <Printer className="mr-2" />
+                        Imprimir Documento para Assinatura
+                    </Button>
+                     <div className="rounded-md border p-4 text-center">
+                        {physicalCopyUrl ? (
+                            <div className="relative mx-auto w-48 h-64">
+                                <Image src={physicalCopyUrl} alt="Documento assinado" layout="fill" objectFit="contain" />
+                            </div>
+                        ) : (
+                             <p className="text-sm text-muted-foreground mb-2">Após assinar, anexe uma foto do documento.</p>
+                        )}
+                        <Button variant="secondary" onClick={() => setIsPhotoModalOpen(true)}>
+                           <Camera className="mr-2" />
+                           {physicalCopyUrl ? "Tirar outra foto" : "Anexar Foto"}
+                       </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+     const renderStep3 = () => (
+        <div className="space-y-4 text-center">
+            <Alert>
+                <AlertTitle className="flex items-center gap-2"><Send /> Tudo pronto para o despacho!</AlertTitle>
+                <AlertDescription>
+                    Ao confirmar, a atividade de reposição será atualizada para "Aguardando recebimento" e não poderá mais ser editada nesta etapa.
+                </AlertDescription>
+            </Alert>
+             <div className="p-4 rounded-md border bg-muted/50">
+                <p><strong>Transportador:</strong> {transporterName || "Não informado"}</p>
+                <p><strong>Método de Assinatura:</strong> {useDigitalSignature ? "Digital" : "Física (Anexada)"}</p>
+            </div>
+        </div>
+    );
 
     return (
+        <>
         <Dialog open={true} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Gerenciar Despacho de Reposição</DialogTitle>
                     <DialogDescription>
-                        Gere o documento de transporte, colete a assinatura do transportador e confirme o envio da mercadoria.
+                        Siga os passos para confirmar o envio da mercadoria de {activity.kioskOriginName} para {activity.kioskDestinationName}.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="py-4 space-y-4">
-                    <Alert>
-                        <AlertTitle className="flex items-center gap-2">
-                           <FileText className="h-4 w-4" /> Passo 1: Gerar Documento
-                        </AlertTitle>
-                        <AlertDescription>
-                            Clique no botão abaixo para gerar o Documento de Transporte para impressão.
-                        </AlertDescription>
-                         <Button variant="secondary" className="w-full mt-2" onClick={generateAndPrintPDF}>
-                            Gerar e Imprimir Documento de Transporte
-                        </Button>
-                    </Alert>
-
-                     <Alert>
-                        <AlertTitle className="flex items-center gap-2">
-                           <Signature className="h-4 w-4" /> Passo 2: Coletar Assinatura
-                        </AlertTitle>
-                        <AlertDescription>
-                            Solicite que o transportador preencha o nome e assine no campo abaixo.
-                        </AlertDescription>
-                        <div className="mt-3 space-y-2">
-                            <div>
-                                <Label htmlFor="transporter-name">Nome do Transportador</Label>
-                                <Input 
-                                    id="transporter-name" 
-                                    value={transporterName} 
-                                    onChange={(e) => setTransporterName(e.target.value)}
-                                    placeholder="Digite o nome completo"
-                                />
-                            </div>
-                            <div>
-                                <Label>Assinatura</Label>
-                                <div className="rounded-md border bg-background">
-                                    <SignatureCanvas 
-                                        ref={sigCanvas}
-                                        penColor='black'
-                                        canvasProps={{ className: 'w-full h-[150px]' }} 
-                                    />
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
-                                    <Eraser className="mr-1 h-3 w-3" /> Limpar
-                                </Button>
-                            </div>
-                        </div>
-                    </Alert>
-
-                    <Alert>
-                        <AlertTitle className="flex items-center gap-2">
-                            <Send className="h-4 w-4" /> Passo 3: Confirmar Despacho
-                        </AlertTitle>
-                        <AlertDescription>
-                            Após a assinatura, clique para confirmar o despacho. O status da atividade será atualizado para "Aguardando recebimento".
-                        </AlertDescription>
-                    </Alert>
+                <div className="py-4">
+                    {currentStep === 1 && renderStep1()}
+                    {currentStep === 2 && renderStep2()}
+                    {currentStep === 3 && renderStep3()}
                 </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-                        Cancelar
-                    </Button>
-                    <Button onClick={handleConfirmDispatch} disabled={isLoading || !transporterName}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                        {isLoading ? "Confirmando..." : "Confirmar Despacho"}
-                    </Button>
+                <DialogFooter className="flex justify-between w-full">
+                    <div>
+                        {currentStep > 1 && (
+                            <Button variant="outline" onClick={handlePrevStep} disabled={isLoading}>
+                                <ArrowLeft className="mr-2" /> Voltar
+                            </Button>
+                        )}
+                    </div>
+                     <div className="flex gap-2">
+                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+                            Cancelar
+                        </Button>
+                        {currentStep < 3 ? (
+                             <Button onClick={handleNextStep} disabled={currentStep === 2 && (!transporterName || (!useDigitalSignature && !physicalCopyUrl))}>
+                                Próximo <ArrowRight className="ml-2" />
+                            </Button>
+                        ) : (
+                            <Button onClick={handleConfirmDispatch} disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
+                                {isLoading ? "Confirmando..." : "Confirmar Despacho"}
+                            </Button>
+                        )}
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        {isPhotoModalOpen && (
+             <PhotoCaptureModal
+                open={isPhotoModalOpen}
+                onOpenChange={setIsPhotoModalOpen}
+                onPhotoCaptured={setPhysicalCopyUrl}
+            />
+        )}
+        </>
     );
 }

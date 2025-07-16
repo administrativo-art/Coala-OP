@@ -425,8 +425,9 @@ export type RepositionItem = {
 export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído';
 
 export type SignatureData = {
-    dataUrl: string;
-    signedBy: string; // username
+    dataUrl?: string; // digital signature
+    physicalCopyUrl?: string; // uploaded photo of physical doc
+    signedBy: string; // username of transporter or receiver
     signedAt: string; // ISO date
 };
 
