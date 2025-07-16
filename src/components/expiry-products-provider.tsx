@@ -68,6 +68,12 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   };
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
+    if (!user) throw new Error("Usuário não autenticado");
+
+    const batch = writeBatch(db);
+    let lotRefToUpdate: import("firebase/firestore").DocumentReference | null = null;
+    let existingQuantity = 0;
+
     let q;
     if (lot.locationId) {
         q = query(
@@ -89,24 +95,46 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         );
     }
 
-    const batch = writeBatch(db);
     try {
         const querySnapshot = await getDocs(q);
+        let lotIdForHistory: string;
+        
         if (!querySnapshot.empty) {
             const existingDoc = querySnapshot.docs[0];
-            const existingLot = existingDoc.data() as LotEntry;
-            const lotRef = doc(db, "lots", existingDoc.id);
-            await updateDoc(lotRef, {
-                quantity: existingLot.quantity + lot.quantity,
-                imageUrl: lot.imageUrl || existingLot.imageUrl, 
+            lotRefToUpdate = existingDoc.ref;
+            existingQuantity = (existingDoc.data() as LotEntry).quantity;
+            lotIdForHistory = existingDoc.id;
+            batch.update(lotRefToUpdate, {
+                quantity: existingQuantity + lot.quantity,
+                imageUrl: lot.imageUrl || (existingDoc.data() as LotEntry).imageUrl,
             });
         } else {
-            await addDoc(collection(db, "lots"), lot);
+            const newLotRef = doc(collection(db, "lots"));
+            lotIdForHistory = newLotRef.id;
+            batch.set(newLotRef, lot);
         }
+
+        const movementRecord: Omit<MovementRecord, 'id'> = {
+            lotId: lotIdForHistory,
+            productId: lot.productId,
+            productName: lot.productName,
+            lotNumber: lot.lotNumber,
+            type: 'ENTRADA',
+            quantityChange: lot.quantity,
+            toKioskId: lot.kioskId,
+            userId: user.id,
+            username: user.username,
+            timestamp: new Date().toISOString(),
+            notes: 'Criação de novo lote no sistema.',
+        };
+        addMovementRecord(batch, movementRecord);
+
+        await batch.commit();
+
     } catch (error) {
         console.error("Error adding lot:", error);
     }
-  }, []);
+  }, [user]);
   
   const updateLot = useCallback(async (updatedLot: Partial<LotEntry> & { id: string }) => {
     const lotRef = doc(db, "lots", updatedLot.id);
@@ -179,13 +207,16 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 where("locationId", "==", null) // Moved stock arrives without a location
             );
             const destSnap = await getDocs(destQuery);
-            
+            let destLotId;
+
             if (!destSnap.empty) {
                 const destDoc = destSnap.docs[0];
+                destLotId = destDoc.id;
                 const newQuantity = destDoc.data().quantity + quantityToMove;
                 batch.update(destDoc.ref, { quantity: newQuantity });
             } else {
                 const newDestLotRef = doc(collection(db, "lots"));
+                destLotId = newDestLotRef.id;
                 const newLotData: Omit<LotEntry, 'id'> = {
                     productId: sourceLot.productId,
                     productName: sourceLot.productName,
@@ -200,6 +231,37 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 };
                 batch.set(newDestLotRef, newLotData);
             }
+            
+            const now = new Date().toISOString();
+            const commonData = {
+                productId: sourceLot.productId,
+                productName: productName,
+                lotNumber: lotNumber,
+                quantityChange: quantityToMove,
+                userId: movedByUserId,
+                username: movedByUsername,
+                timestamp: now
+            };
+
+            addMovementRecord(batch, {
+                ...commonData,
+                lotId: sourceLot.id,
+                type: 'TRANSFERENCIA_SAIDA',
+                fromKioskId,
+                fromKioskName,
+                toKioskId,
+                toKioskName
+            });
+
+             addMovementRecord(batch, {
+                ...commonData,
+                lotId: destLotId,
+                type: 'TRANSFERENCIA_ENTRADA',
+                fromKioskId,
+                fromKioskName,
+                toKioskId,
+                toKioskName
+            });
         }
         await batch.commit();
       } catch (error) {
@@ -209,10 +271,43 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams) => {
-    // This function will need the user from context, so it should be defined within the provider or have user passed to it.
-    // For now, let's assume it will be handled.
-    console.log("consumeFromLot called with:", params);
-  }, []);
+    if (!user) {
+        throw new Error("Usuário de baixa não autenticado.");
+    }
+    await runTransaction(db, async (transaction) => {
+        const lotRef = doc(db, "lots", params.lotId);
+        const lotDoc = await transaction.get(lotRef);
+
+        if (!lotDoc.exists()) {
+            throw new Error("Lote não encontrado para dar baixa.");
+        }
+        
+        const currentLot = lotDoc.data() as LotEntry;
+        if(params.quantityToConsume > currentLot.quantity) {
+            throw new Error("Quantidade a ser baixada é maior que o estoque.");
+        }
+
+        const newQuantity = currentLot.quantity - params.quantityToConsume;
+        
+        const movementRecord: Omit<MovementRecord, 'id'> = {
+            lotId: params.lotId,
+            productId: currentLot.productId,
+            productName: currentLot.productName,
+            lotNumber: currentLot.lotNumber,
+            type: params.type,
+            quantityChange: params.quantityToConsume,
+            fromKioskId: currentLot.kioskId,
+            userId: user.id,
+            username: user.username,
+            timestamp: new Date().toISOString(),
+            notes: params.notes,
+        };
+
+        const movementRef = doc(collection(db, 'movementHistory'));
+        transaction.set(movementRef, movementRecord);
+        transaction.update(lotRef, { quantity: newQuantity });
+    });
+  }, [user]);
 
   const adjustLotQuantity = useCallback(async (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }) => {
     if (!user) {
@@ -242,8 +337,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             lotNumber: currentLot.lotNumber,
             type: movementType,
             quantityChange: Math.abs(difference),
-            kioskId: currentLot.kioskId,
-            kioskName: 'N/A', // Kiosk name would ideally be passed in or looked up
+            fromKioskId: currentLot.kioskId,
             userId: user.id,
             username: user.username,
             timestamp: new Date().toISOString(),

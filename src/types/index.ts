@@ -96,11 +96,11 @@ export type MovementRecord = {
   productName: string; // Full name for easy display
   lotNumber: string;
   type: MovementType;
-  quantityChange: number; // Positive for entry, negative for exit
-  kioskId: string;
-  kioskName: string;
-  relatedKioskId?: string; // For transfers
-  relatedKioskName?: string; // For transfers
+  quantityChange: number;
+  fromKioskId?: string;
+  fromKioskName?: string;
+  toKioskId?: string;
+  toKioskName?: string;
   userId: string;
   username: string;
   timestamp: string; // ISO String

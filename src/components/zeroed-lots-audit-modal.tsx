@@ -2,17 +2,46 @@
 
 "use client"
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { DateRange } from 'react-day-picker';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { History, Truck } from 'lucide-react';
+import { History, ArrowRight, ArrowDownUp, Download, ChevronsUpDown, CalendarIcon, Search } from 'lucide-react';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
 import { useProducts } from '@/hooks/use-products';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { useAuth } from '@/hooks/use-auth';
+import { type MovementRecord, type MovementType } from '@/types';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
+import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Input } from './ui/input';
+import { Card } from './ui/card';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+const MOVEMENT_TYPE_CONFIG: Record<MovementType, { label: string; color: string }> = {
+    'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
+    'SAIDA_CONSUMO': { label: 'Consumo', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE': { label: 'Descarte', color: 'bg-red-100 text-red-800' },
+    'SAIDA_CORRECAO': { label: 'Correção (-)', color: 'bg-red-100 text-red-800' },
+    'ENTRADA_CORRECAO': { label: 'Correção (+)', color: 'bg-green-100 text-green-800' },
+    'TRANSFERENCIA_SAIDA': { label: 'Transferência (Saída)', color: 'bg-blue-100 text-blue-800' },
+    'TRANSFERENCIA_ENTRADA': { label: 'Transferência (Entrada)', color: 'bg-blue-100 text-blue-800' },
+};
+
+const ITEMS_PER_PAGE = 20;
+
+type SortKey = keyof MovementRecord | 'productName' | 'kioskName';
+type SortDirection = 'asc' | 'desc';
 
 interface ZeroedLotsAuditModalProps {
   open: boolean;
@@ -20,81 +49,256 @@ interface ZeroedLotsAuditModalProps {
 }
 
 export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModalProps) {
-  const { history, loading } = useMovementHistory();
-  const { products, getProductFullName } = useProducts();
+  const { history, loading: loadingHistory } = useMovementHistory();
+  const { products, getProductFullName, loading: loadingProducts } = useProducts();
+  const { kiosks, loading: loadingKiosks } = useKiosks();
+  const { users } = useAuth();
+  
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [kioskFilter, setKioskFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('timestamp');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  const loading = loadingHistory || loadingProducts || loadingKiosks;
 
-  const historyWithProducts = useMemo(() => {
-    if (loading || !products.length) return [];
-    return history.map(record => {
-      const product = products.find(p => record.productId === p.id);
-      return {
-        ...record,
-        displayName: product ? getProductFullName(product) : record.productName,
-      };
+  const enrichedHistory = useMemo(() => {
+    if (loading) return [];
+    const kioskMap = new Map(kiosks.map(k => [k.id, k.name]));
+    return history.map(record => ({
+      ...record,
+      productName: products.find(p => p.id === record.productId)?.baseName || record.productName,
+      kioskName: record.fromKioskId ? kioskMap.get(record.fromKioskId) : 'N/A'
+    }));
+  }, [history, products, kiosks, loading]);
+
+  const filteredAndSortedHistory = useMemo(() => {
+    let filtered = enrichedHistory;
+
+    if (dateRange?.from) {
+      filtered = filtered.filter(item => new Date(item.timestamp) >= dateRange.from!);
+    }
+    if (dateRange?.to) {
+      filtered = filtered.filter(item => {
+        const toDate = new Date(dateRange.to!);
+        toDate.setHours(23, 59, 59, 999);
+        return new Date(item.timestamp) <= toDate;
+      });
+    }
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(item => item.type === typeFilter);
+    }
+    if (kioskFilter !== 'all') {
+        filtered = filtered.filter(item => item.fromKioskId === kioskFilter || item.toKioskId === kioskFilter);
+    }
+    if (searchTerm) {
+        const lowerCaseSearch = searchTerm.toLowerCase();
+        filtered = filtered.filter(item => 
+            item.productName.toLowerCase().includes(lowerCaseSearch) ||
+            item.lotNumber.toLowerCase().includes(lowerCaseSearch) ||
+            item.username.toLowerCase().includes(lowerCaseSearch)
+        );
+    }
+
+    return filtered.sort((a, b) => {
+      const aVal = a[sortKey as keyof MovementRecord];
+      const bVal = b[sortKey as keyof MovementRecord];
+      
+      let compareResult = 0;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        compareResult = aVal.localeCompare(bVal);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        compareResult = aVal - bVal;
+      }
+
+      return sortDirection === 'asc' ? compareResult : -compareResult;
     });
-  }, [history, products, loading, getProductFullName]);
+  }, [enrichedHistory, dateRange, typeFilter, kioskFilter, searchTerm, sortKey, sortDirection]);
+
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredAndSortedHistory.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredAndSortedHistory, currentPage]);
+
+  const totalPages = Math.ceil(filteredAndSortedHistory.length / ITEMS_PER_PAGE);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+  
+  const handleExportPdf = () => {
+    const doc = new jsPDF('landscape');
+    doc.setFontSize(18);
+    doc.text(`Auditoria de Movimentações de Estoque`, 14, 22);
+
+    const head = [['Data', 'Produto', 'Lote', 'Tipo', 'Quiosque', 'Qtd.', 'Usuário', 'Notas']];
+    const body = filteredAndSortedHistory.map(item => {
+        let kioskDisplay = '';
+        if (item.type.includes('TRANSFERENCIA')) {
+            kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
+        } else {
+            kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
+        }
+        return [
+            format(parseISO(item.timestamp), 'dd/MM/yy HH:mm', { locale: ptBR }),
+            item.productName,
+            item.lotNumber,
+            MOVEMENT_TYPE_CONFIG[item.type]?.label || item.type,
+            kioskDisplay,
+            item.quantityChange,
+            item.username,
+            item.notes || ''
+        ];
+    });
+
+    autoTable(doc, {
+        startY: 30,
+        head: head,
+        body: body,
+        theme: 'grid',
+        headStyles: { fillColor: '#3F51B5' },
+        styles: { fontSize: 8 }
+    });
+    
+    doc.save('auditoria_movimentacoes.pdf');
+  };
+
+  const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
+    return filteredAndSortedHistory.reduce((acc, item) => {
+        if (item.type.includes('ENTRADA')) {
+            acc.totalEntradas += item.quantityChange;
+        } else if (item.type.includes('SAIDA')) {
+            acc.totalSaidas += item.quantityChange;
+        } else if (item.type.includes('TRANSFERENCIA')) {
+            acc.totalTransferencias += item.quantityChange;
+        }
+        return acc;
+    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0 });
+  }, [filteredAndSortedHistory]);
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+      <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Auditoria de movimentações</DialogTitle>
           <DialogDescription>
-            Consulte todo o histórico de transferências de estoque entre os quiosques.
+            Consulte o histórico completo de todas as entradas, saídas, ajustes e transferências de estoque.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-6">
-            <div className="py-4">
-              {loading ? (
-                  <div className="space-y-2">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                  </div>
-              ) : historyWithProducts.length > 0 ? (
-                  <div className="rounded-md border">
-                      <Table>
-                          <TableHeader>
-                          <TableRow>
-                              <TableHead>Data</TableHead>
-                              <TableHead>Produto</TableHead>
-                              <TableHead>Lote</TableHead>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Quiosque</TableHead>
-                              <TableHead className="text-right">Qtd.</TableHead>
-                              <TableHead>Usuário</TableHead>
-                          </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                          {historyWithProducts.map((item) => (
-                              <TableRow key={item.id}>
-                                  <TableCell className="text-sm">
-                                      {item.timestamp ? format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
-                                  </TableCell>
-                                  <TableCell className="font-medium">{item.displayName}</TableCell>
-                                  <TableCell>{item.lotNumber}</TableCell>
-                                  <TableCell>{item.type}</TableCell>
-                                  <TableCell>{item.kioskName}</TableCell>
-                                  <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
-                                  <TableCell>{item.username}</TableCell>
-                              </TableRow>
-                          ))}
-                          </TableBody>
-                      </Table>
-                  </div>
-              ) : (
-                <div className="flex h-60 flex-col items-center justify-center text-center text-muted-foreground">
-                  <Truck className="h-12 w-12 mb-4" />
-                  <p className="font-semibold">Nenhuma movimentação encontrada</p>
-                  <p className="text-sm">O histórico de movimentações de estoque aparecerá aqui.</p>
-                </div>
-              )}
+
+        <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Buscar produto, lote, usuário..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button id="date" variant="outline" className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Selecione uma data</span>}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+                </PopoverContent>
+            </Popover>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todos os Tipos</SelectItem>
+                    {Object.entries(MOVEMENT_TYPE_CONFIG).map(([key, {label}]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+                </SelectContent>
+            </Select>
+            <Select value={kioskFilter} onValueChange={setKioskFilter}>
+                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="Todos os quiosques" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todos os Quiosques</SelectItem>
+                    {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                </SelectContent>
+            </Select>
+             <Button variant="outline" onClick={handleExportPdf} disabled={filteredAndSortedHistory.length === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+            </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString()}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{totalSaidas.toLocaleString()}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString()}</p></CardContent></Card>
+        </div>
+        
+        <div className="flex-grow overflow-hidden border rounded-lg">
+          <ScrollArea className="h-full">
+            {loading ? (
+                <div className="p-4"><Skeleton className="h-64 w-full" /></div>
+            ) : (
+                <Table>
+                    <TableHeader className="sticky top-0 bg-muted z-10">
+                    <TableRow>
+                        {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username'].map(key => {
+                            const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário' };
+                            return (
+                                <TableHead key={key} className="cursor-pointer hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
+                                    <div className="flex items-center gap-2">
+                                        {labels[key]}
+                                        {sortKey === key && <ArrowDownUp className="h-3 w-3" />}
+                                    </div>
+                                </TableHead>
+                            )
+                        })}
+                    </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
+                        let kioskDisplay = '';
+                        if (item.type.includes('TRANSFERENCIA')) {
+                            kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
+                        } else {
+                            kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
+                        }
+                        
+                        return (
+                            <TableRow key={item.id}>
+                                <TableCell className="text-xs font-semibold">{format(parseISO(item.timestamp), "dd/MM/yy HH:mm", { locale: ptBR })}</TableCell>
+                                <TableCell>
+                                    <TooltipProvider><Tooltip><TooltipTrigger>
+                                        <p className="font-medium truncate max-w-xs">{item.productName}</p>
+                                    </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
+                                </TableCell>
+                                <TableCell>{item.lotNumber}</TableCell>
+                                <TableCell>
+                                    <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type]?.color)}>
+                                        {MOVEMENT_TYPE_CONFIG[item.type]?.label || item.type}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs">{kioskDisplay}</TableCell>
+                                <TableCell className="text-right font-bold">{item.quantityChange}</TableCell>
+                                <TableCell>{item.username}</TableCell>
+                            </TableRow>
+                        )
+                    }) : (
+                        <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
+                    )}
+                    </TableBody>
+                </Table>
+            )}
           </ScrollArea>
         </div>
-        <DialogFooter className="pt-4 border-t mt-auto">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+        <DialogFooter className="pt-4 border-t mt-auto flex-row justify-between w-full">
+            <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>
+            <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Anterior</Button>
+                <Button variant="outline" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages}>Próxima</Button>
+            </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
