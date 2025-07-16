@@ -79,9 +79,6 @@ export function Header() {
         <div className="w-full flex-1">
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right">
-              <p className="text-sm font-semibold">Bem-vindo, {user?.username}!</p>
-          </div>
           <ThemeToggle />
           <UserProfile />
         </div>
