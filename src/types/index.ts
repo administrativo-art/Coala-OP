@@ -406,16 +406,19 @@ export type ItemAdditionRequest = {
   reviewedAt?: string; // ISO String
 };
 
+export type RepositionSuggestedLot = {
+  lotId: string;
+  productId: string;
+  productName: string;
+  quantityToMove: number;
+};
+
 export type RepositionItem = {
   baseProductId: string;
   productName: string;
   quantityNeeded: number;
-  suggestedLots: {
-    lotId: string;
-    productId: string;
-    productName: string;
-    quantityToMove: number;
-  }[];
+  suggestedLots: RepositionSuggestedLot[];
+  receivedLots?: (RepositionSuggestedLot & { receivedQuantity: number })[];
 };
 
 export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído';

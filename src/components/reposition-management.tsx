@@ -6,7 +6,7 @@ import { useReposition } from "@/hooks/use-reposition";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2 } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format } from "date-fns";
@@ -15,7 +15,8 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
-import { ReceiptModal } from "./receipt-modal";
+import { AuditReceiptModal } from "./audit-receipt-modal";
+
 
 const getStatusBadge = (status: RepositionActivity['status']) => {
     switch (status) {
@@ -38,7 +39,7 @@ export function RepositionManagement() {
     const { activities, loading, deleteRepositionActivity } = useReposition();
     const { kiosks } = useKiosks();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
-    const [activityToReceive, setActivityToReceive] = useState<RepositionActivity | null>(null);
+    const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
 
     if (loading) {
@@ -116,9 +117,9 @@ export function RepositionManagement() {
                                         </Button>
                                     )}
                                     {activity.status === 'Aguardando recebimento' && (
-                                         <Button onClick={() => setActivityToReceive(activity)}>
-                                            <Truck className="mr-2 h-4 w-4" />
-                                            Confirmar Recebimento
+                                         <Button onClick={() => setActivityToAudit(activity)}>
+                                            <CheckSquare className="mr-2 h-4 w-4" />
+                                            Auditar Recebimento
                                         </Button>
                                     )}
                                 </div>
@@ -136,10 +137,10 @@ export function RepositionManagement() {
             />
         )}
         
-        {activityToReceive && (
-            <ReceiptModal
-                activity={activityToReceive}
-                onOpenChange={() => setActivityToReceive(null)}
+        {activityToAudit && (
+            <AuditReceiptModal
+                activity={activityToAudit}
+                onOpenChange={() => setActivityToAudit(null)}
             />
         )}
 
