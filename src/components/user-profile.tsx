@@ -24,43 +24,7 @@ import { Input } from '@/components/ui/input';
 import { LogOut, Warehouse, Camera, Upload, Users, Undo2 } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
-
-const resizeImage = (dataUrl: string, maxWidth: number, maxHeight: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-
-            if (width > height) {
-                if (width > maxWidth) {
-                    height = Math.round(height * (maxWidth / width));
-                    width = maxWidth;
-                }
-            } else {
-                if (height > maxHeight) {
-                    width = Math.round(width * (maxHeight / height));
-                    height = maxHeight;
-                }
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                return reject(new Error('Could not get canvas context'));
-            }
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
-        };
-        img.onerror = (err) => {
-            reject(new Error('Failed to load image'));
-        };
-        img.src = dataUrl;
-    });
-};
+import { resizeImage } from '@/lib/image-utils';
 
 export function UserProfile() {
   const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser, permissions } = useAuth();
@@ -129,12 +93,12 @@ export function UserProfile() {
     <>
       <DropdownMenu>
           <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="icon" className="rounded-full">
+              <Button variant="ghost" size="icon" className="rounded-full">
                   <Avatar className="h-8 w-8">
                     {user.avatarUrl ? (
                         <AvatarImage src={user.avatarUrl} alt={user.username} />
                     ) : (
-                        <AvatarFallback className="bg-secondary text-secondary-foreground">
+                        <AvatarFallback className="bg-primary text-primary-foreground">
                         {user.username?.charAt(0).toUpperCase()}
                         </AvatarFallback>
                     )}
@@ -142,7 +106,7 @@ export function UserProfile() {
                   <span className="sr-only">Toggle user menu</span>
               </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-64">
               {isImpersonating && (
                 <>
                   <DropdownMenuLabel className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { UserProfile } from "./user-profile"
+import { ThemeToggle } from "./theme-toggle"
 
 
 export function Header() {
@@ -76,11 +77,11 @@ export function Header() {
             </SheetContent>
         </Sheet>
         <div className="w-full flex-1">
-            <p className="hidden md:block font-logo text-2xl font-bold text-primary">
-              Oi, humano. Acredite em você!
-            </p>
         </div>
-        <UserProfile />
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <UserProfile />
+        </div>
     </header>
   )
 }

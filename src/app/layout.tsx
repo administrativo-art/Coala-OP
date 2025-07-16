@@ -22,6 +22,7 @@ import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
 import { RepositionProvider } from '@/components/reposition-provider';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -34,13 +35,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
         <ProfilesProvider>
           <AuthProvider>
             <KiosksProvider>
@@ -83,6 +90,7 @@ export default function RootLayout({
             </KiosksProvider>
           </AuthProvider>
         </ProfilesProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
