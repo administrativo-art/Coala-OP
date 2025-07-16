@@ -42,7 +42,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
 
     const sigCanvas = useRef<SignatureCanvas>(null);
 
-    const generatePDF = () => {
+    const generatePDF = (signatureUrl?: string, name?: string) => {
         const doc = new jsPDF();
         
         doc.setFontSize(18);
@@ -84,8 +84,16 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         doc.line(14, finalY + 40, 100, finalY + 40);
         doc.text("Assinatura do Transportador", 14, finalY + 45);
 
+        if (signatureUrl) {
+            doc.addImage(signatureUrl, 'PNG', 14, finalY + 20, 60, 20);
+        }
+
         doc.line(110, finalY + 40, 196, finalY + 40);
         doc.text("Nome do Transportador", 110, finalY + 45);
+        
+        if (name) {
+            doc.text(name, 110, finalY + 35);
+        }
 
         return doc;
     };
@@ -93,6 +101,12 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const handlePrint = () => {
         const doc = generatePDF();
         doc.output('dataurlnewwindow');
+    };
+    
+    const handleExportSignedPdf = () => {
+        const signatureUrl = sigCanvas.current?.toDataURL('image/png');
+        const doc = generatePDF(signatureUrl, transporterName);
+        doc.save(`despacho_${activity.id.slice(0, 8)}.pdf`);
     };
 
     const handleConfirmDispatch = async () => {
@@ -229,6 +243,11 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                 <p><strong>Transportador:</strong> {transporterName || "Não informado"}</p>
                 <p><strong>Método de Assinatura:</strong> {useDigitalSignature ? "Digital" : "Física (Anexada)"}</p>
             </div>
+            {useDigitalSignature && (
+                 <Button variant="outline" onClick={handleExportSignedPdf}>
+                    <FileText className="mr-2" /> Exportar Documento (PDF)
+                </Button>
+            )}
         </div>
     );
 
@@ -260,7 +279,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                             Cancelar
                         </Button>
                         {currentStep < 3 ? (
-                             <Button onClick={handleNextStep} disabled={currentStep === 2 && (!transporterName || (!useDigitalSignature && !physicalCopyUrl))}>
+                             <Button onClick={handleNextStep} disabled={currentStep === 2 && (!transporterName || (!useDigitalSignature && !physicalCopyUrl) || (useDigitalSignature && sigCanvas.current?.isEmpty()))}>
                                 Próximo <ArrowRight className="ml-2" />
                             </Button>
                         ) : (
