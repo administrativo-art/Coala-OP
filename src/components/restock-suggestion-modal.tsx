@@ -17,13 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Trash2, ArrowRight } from 'lucide-react';
 import { convertValue } from '@/lib/conversion';
 
-import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { useToast } from '@/hooks/use-toast';
-import { type LotEntry, type Kiosk, type BaseProduct } from '@/types';
-import { type MoveLotParams } from './expiry-products-provider';
-import { useReposition } from '@/hooks/use-reposition';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem } from '@/types';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -38,6 +34,7 @@ interface RestockSuggestionModalProps {
   suggestionResult: AnalysisResult;
   targetKiosk: Kiosk;
   onOpenChange: (open: boolean) => void;
+  onStage: (item: RepositionItem) => void;
 }
 
 const moveItemSchema = z.object({
@@ -50,12 +47,9 @@ const moveFormSchema = z.object({
 });
 type MoveFormValues = z.infer<typeof moveFormSchema>;
 
-export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenChange }: RestockSuggestionModalProps) {
-  const { user } = useAuth();
+export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenChange, onStage }: RestockSuggestionModalProps) {
   const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
-  const { createRepositionActivity, loading } = useReposition();
-  const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const form = useForm<MoveFormValues>({
@@ -114,11 +108,10 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     }, 0);
   }, [watchedItems, lots, products, suggestionResult.baseProduct]);
 
-  const onSubmit = async (values: MoveFormValues) => {
-    if (!user) return;
+  const onSubmit = (values: MoveFormValues) => {
     setIsProcessing(true);
 
-    const repositionItem = {
+    const repositionItem: RepositionItem = {
       baseProductId: suggestionResult.baseProduct.id,
       productName: suggestionResult.baseProduct.name,
       quantityNeeded: suggestionResult.restockNeeded,
@@ -134,17 +127,8 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
       })
     };
     
-    await createRepositionActivity({
-      kioskOriginId: 'matriz',
-      kioskOriginName: 'Centro de distribuição - Matriz',
-      kioskDestinationId: targetKiosk.id,
-      kioskDestinationName: targetKiosk.name,
-      items: [repositionItem]
-    });
-    
+    onStage(repositionItem);
     setIsProcessing(false);
-    onOpenChange(false);
-    toast({ title: "Atividade de Reposição Criada", description: "A solicitação foi salva e está aguardando despacho." });
   };
 
   return (
@@ -217,7 +201,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 </div>
                 <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isProcessing || loading}>{isProcessing || loading ? "Salvando..." : "Salvar Reposição"}</Button>
+                    <Button type="submit" disabled={isProcessing}>{isProcessing ? "Adicionando..." : "Adicionar à Reposição"}</Button>
                 </div>
             </DialogFooter>
           </form>

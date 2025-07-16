@@ -13,13 +13,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk } from '@/types';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2 } from 'lucide-react';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { RepositionManagement } from './reposition-management';
+import { useReposition } from '@/hooks/use-reposition';
+import { useToast } from '@/hooks/use-toast';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -42,8 +44,12 @@ function AnalysisTab() {
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { products, loading: productsLoading } = useProducts();
+  const { createRepositionActivity, loading: repositionLoading } = useReposition();
+  const { toast } = useToast();
+
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
+  const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
   
@@ -54,6 +60,45 @@ function AnalysisTab() {
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
+  
+  const handleStageItem = (item: RepositionItem) => {
+    setStagedItems(prev => {
+        const existingIndex = prev.findIndex(i => i.baseProductId === item.baseProductId);
+        if (existingIndex > -1) {
+            const newItems = [...prev];
+            newItems[existingIndex] = item;
+            return newItems;
+        }
+        return [...prev, item];
+    });
+    setSuggestionToView(null);
+    toast({
+        title: "Item adicionado à reposição",
+        description: `${item.productName} está pronto para ser enviado.`
+    });
+  };
+
+  const handleRemoveStagedItem = (baseProductId: string) => {
+    setStagedItems(prev => prev.filter(i => i.baseProductId !== baseProductId));
+  };
+  
+  const handleCreateRepositionActivity = async () => {
+    if (stagedItems.length === 0 || !selectedKioskId) return;
+
+    const destinationKiosk = kiosks.find(k => k.id === selectedKioskId);
+    if (!destinationKiosk) return;
+    
+    await createRepositionActivity({
+        kioskOriginId: 'matriz',
+        kioskOriginName: 'Centro de distribuição - Matriz',
+        kioskDestinationId: destinationKiosk.id,
+        kioskDestinationName: destinationKiosk.name,
+        items: stagedItems,
+    });
+    
+    toast({ title: 'Atividade de Reposição Criada', description: 'O pedido foi enviado para a tela de gerenciamento de reposição.' });
+    setStagedItems([]);
+  };
 
   const analysisResults = useMemo((): AnalysisResult[] => {
     if (!selectedKioskId || loading) return [];
@@ -273,12 +318,43 @@ function AnalysisTab() {
         )}
       </CardContent>
     </Card>
+    
+    {stagedItems.length > 0 && (
+        <Card className="mt-6">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para Reposição</CardTitle>
+                <CardDescription>Revise os itens antes de criar a atividade de reposição para o quiosque {kiosks.find(k => k.id === selectedKioskId)?.name}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    {stagedItems.map(item => (
+                        <div key={item.baseProductId} className="flex items-center justify-between p-3 border rounded-lg bg-muted/50">
+                            <div>
+                                <p className="font-semibold">{item.productName}</p>
+                                <p className="text-sm text-muted-foreground">{item.suggestedLots.length} lote(s) sugerido(s)</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(item.baseProductId)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+            <CardFooter className="justify-end border-t pt-4">
+                <Button onClick={handleCreateRepositionActivity} disabled={repositionLoading}>
+                    <Truck className="mr-2 h-4 w-4" />
+                    {repositionLoading ? 'Criando atividade...' : `Criar Atividade de Reposição (${stagedItems.length})`}
+                </Button>
+            </CardFooter>
+        </Card>
+    )}
 
     {suggestionToView && (
         <RestockSuggestionModal
             suggestionResult={suggestionToView}
             targetKiosk={kiosks.find(k => k.id === selectedKioskId)!}
             onOpenChange={() => setSuggestionToView(null)}
+            onStage={handleStageItem}
         />
     )}
     </>
