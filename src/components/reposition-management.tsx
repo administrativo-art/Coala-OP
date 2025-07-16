@@ -15,6 +15,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+import { ReceiptModal } from "./receipt-modal";
 
 const getStatusBadge = (status: RepositionActivity['status']) => {
     switch (status) {
@@ -37,6 +38,7 @@ export function RepositionManagement() {
     const { activities, loading, deleteRepositionActivity } = useReposition();
     const { kiosks } = useKiosks();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
+    const [activityToReceive, setActivityToReceive] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
 
     if (loading) {
@@ -106,14 +108,20 @@ export function RepositionManagement() {
                                     </div>
                                 ))}
 
-                                {activity.status === 'Aguardando despacho' && (
-                                     <div className="flex justify-end pt-4 border-t">
+                                <div className="flex justify-end pt-4 border-t">
+                                     {activity.status === 'Aguardando despacho' && (
                                         <Button onClick={() => setActivityToDispatch(activity)}>
                                             <Truck className="mr-2 h-4 w-4" />
                                             Gerenciar Despacho
                                         </Button>
-                                    </div>
-                                )}
+                                    )}
+                                    {activity.status === 'Aguardando recebimento' && (
+                                         <Button onClick={() => setActivityToReceive(activity)}>
+                                            <Truck className="mr-2 h-4 w-4" />
+                                            Confirmar Recebimento
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </AccordionContent>
                     </AccordionItem>
@@ -125,6 +133,13 @@ export function RepositionManagement() {
             <DispatchModal 
                 activity={activityToDispatch}
                 onOpenChange={() => setActivityToDispatch(null)}
+            />
+        )}
+        
+        {activityToReceive && (
+            <ReceiptModal
+                activity={activityToReceive}
+                onOpenChange={() => setActivityToReceive(null)}
             />
         )}
 
