@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useReposition } from '@/hooks/use-reposition';
 import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot } from '@/types';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -17,13 +17,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Loader2, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Textarea } from './ui/textarea';
 
 const auditLotSchema = z.object({
   lotId: z.string(),
@@ -31,6 +31,15 @@ const auditLotSchema = z.object({
   productName: z.string(),
   quantityToMove: z.number(),
   receivedQuantity: z.coerce.number().min(0, "A quantidade deve ser positiva."),
+  receiptNotes: z.string().optional(),
+}).refine((data) => {
+    if (data.receivedQuantity !== data.quantityToMove && (!data.receiptNotes || data.receiptNotes.trim() === '')) {
+        return false;
+    }
+    return true;
+}, {
+    message: "A nota é obrigatória se a quantidade for diferente.",
+    path: ["receiptNotes"],
 });
 
 const auditItemSchema = z.object({
@@ -41,7 +50,6 @@ const auditItemSchema = z.object({
 
 const auditFormSchema = z.object({
   items: z.array(auditItemSchema),
-  notes: z.string().optional(),
 });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
@@ -65,12 +73,12 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
         suggestedLots: item.suggestedLots.map(lot => ({
           ...lot,
           receivedQuantity: '' as any, // Start with an empty field
+          receiptNotes: '',
         })),
       })),
-      notes: '',
     },
   });
-
+  
   const { fields } = useFieldArray({
     control: form.control,
     name: "items"
@@ -80,15 +88,23 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     setIsLoading(true);
 
     let hasDivergence = false;
+    for (const item of values.items) {
+        for (const lot of item.suggestedLots) {
+            if (lot.receivedQuantity !== lot.quantityToMove) {
+                hasDivergence = true;
+                break;
+            }
+        }
+        if (hasDivergence) break;
+    }
+    
     const receivedItems: RepositionItem[] = values.items.map((item, itemIndex) => {
         const originalItem = activity.items[itemIndex];
         const receivedLots = item.suggestedLots.map((lot, lotIndex) => {
-            if (lot.receivedQuantity !== lot.quantityToMove) {
-                hasDivergence = true;
-            }
             return {
-                ...originalItem.suggestedLots[lotIndex], // Keep original data
-                receivedQuantity: lot.receivedQuantity
+                ...originalItem.suggestedLots[lotIndex],
+                receivedQuantity: lot.receivedQuantity,
+                receiptNotes: lot.receiptNotes,
             }
         })
         return {
@@ -97,18 +113,11 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
         };
     });
     
-    if (hasDivergence && !values.notes?.trim()) {
-        form.setError("notes", { message: "As notas são obrigatórias em caso de divergência." });
-        setIsLoading(false);
-        return;
-    }
-    
     const newStatus = hasDivergence ? 'Recebido com divergência' : 'Recebido sem divergência';
     
     await updateRepositionActivity(activity.id, {
         status: newStatus,
-        receiptNotes: values.notes,
-        items: receivedItems, // Save the received quantities
+        items: receivedItems,
     });
 
     toast({
@@ -119,6 +128,61 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     setIsLoading(false);
     onOpenChange(false);
   };
+  
+  const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
+    const item = form.getValues().items[itemIndex];
+    const lot = item.suggestedLots[lotIndex];
+    const watchedReceivedQuantity = useWatch({
+      control: form.control,
+      name: `items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`
+    });
+
+    const hasDivergence = watchedReceivedQuantity !== lot.quantityToMove;
+
+    return (
+        <>
+            <TableRow>
+                <TableCell>
+                <p className="font-medium">{lot.productName}</p>
+                <p className="text-xs text-muted-foreground">Lote: {lot.lotId.slice(-8)}</p>
+                </TableCell>
+                <TableCell className="text-center">{lot.quantityToMove}</TableCell>
+                <TableCell>
+                <FormField
+                    control={form.control}
+                    name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormControl>
+                        <Input type="number" {...field} className="text-center" placeholder="0" />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                </TableCell>
+            </TableRow>
+            {hasDivergence && (
+                <TableRow>
+                    <TableCell colSpan={3}>
+                         <FormField
+                            control={form.control}
+                            name={`items.${itemIndex}.suggestedLots.${lotIndex}.receiptNotes`}
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormControl>
+                                <Textarea placeholder="Descreva a divergência aqui (ex: 1 item quebrado, 1 faltando...)" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                    </TableCell>
+                </TableRow>
+            )}
+        </>
+    )
+  }
 
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
@@ -147,48 +211,12 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                       </TableHeader>
                       <TableBody>
                         {item.suggestedLots.map((lot, lotIndex) => (
-                          <TableRow key={lot.lotId}>
-                            <TableCell>
-                              <p className="font-medium">{lot.productName}</p>
-                              <p className="text-xs text-muted-foreground">Lote: {lot.lotId.slice(-8)}</p>
-                            </TableCell>
-                            <TableCell className="text-center">{lot.quantityToMove}</TableCell>
-                            <TableCell>
-                              <FormField
-                                control={form.control}
-                                name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormControl>
-                                      <Input type="number" {...field} className="text-center" placeholder="0" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </TableCell>
-                          </TableRow>
+                           <LotRow key={lot.lotId} itemIndex={itemIndex} lotIndex={lotIndex} />
                         ))}
                       </TableBody>
                     </Table>
                   </div>
                 ))}
-                
-                <div className="pt-4">
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="notes">Notas de Divergência (obrigatório se houver diferença)</Label>
-                        <FormControl>
-                          <Textarea id="notes" placeholder="Descreva o que está faltando, sobrando ou danificado." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
               </div>
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">

@@ -411,6 +411,7 @@ export type RepositionSuggestedLot = {
   productId: string;
   productName: string;
   quantityToMove: number;
+  receiptNotes?: string;
 };
 
 export type RepositionItem = {
