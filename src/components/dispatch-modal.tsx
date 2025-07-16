@@ -40,6 +40,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const [physicalCopyUrl, setPhysicalCopyUrl] = useState<string | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [isSignatureEmpty, setIsSignatureEmpty] = useState(true);
+    const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
 
     const sigCanvas = useRef<SignatureCanvas>(null);
     
@@ -105,11 +106,6 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         return doc;
     };
     
-    const handlePrint = () => {
-        const doc = generatePDF();
-        doc.output('dataurlnewwindow');
-    };
-    
     const handleConfirmDispatch = async () => {
         if (!user) return;
         setIsLoading(true);
@@ -118,12 +114,12 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         let signatureUrlForPdf: string | undefined = undefined;
 
         if (useDigitalSignature) {
-            if (sigCanvas.current?.isEmpty()) {
-                 alert("A assinatura digital é obrigatória.");
+            if (!signatureDataUrl) {
+                 alert("Assinatura digital não encontrada. Por favor, volte e assine novamente.");
                  setIsLoading(false);
                  return;
             }
-            signatureUrlForPdf = sigCanvas.current.toDataURL('image/png');
+            signatureUrlForPdf = signatureDataUrl;
             signatureData.dataUrl = signatureUrlForPdf;
         } else {
              if (!physicalCopyUrl) {
@@ -139,7 +135,6 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             transportSignature: signatureData,
         });
 
-        // Generate and download PDF after successful confirmation
         const doc = generatePDF(signatureUrlForPdf, transporterName);
         doc.save(`despacho_${activity.id.slice(0, 8)}.pdf`);
 
@@ -158,7 +153,12 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         setIsSignatureEmpty(true);
     };
 
-    const handleNextStep = () => setCurrentStep(prev => prev + 1);
+    const handleNextStep = () => {
+        if (currentStep === 2 && useDigitalSignature && sigCanvas.current) {
+            setSignatureDataUrl(sigCanvas.current.toDataURL('image/png'));
+        }
+        setCurrentStep(prev => prev + 1);
+    };
     const handlePrevStep = () => setCurrentStep(prev => prev - 1);
 
     const renderStep1 = () => (
@@ -227,7 +227,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                 </div>
             ) : (
                 <div className="space-y-3">
-                    <Button variant="outline" className="w-full" onClick={handlePrint}>
+                    <Button variant="outline" className="w-full" onClick={() => generatePDF().output('dataurlnewwindow')}>
                         <Printer className="mr-2" />
                         Imprimir Documento para Assinatura
                     </Button>
