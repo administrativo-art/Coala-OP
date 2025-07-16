@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { DateRange } from 'react-day-picker';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -78,13 +78,19 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     let filtered = enrichedHistory;
 
     if (dateRange?.from) {
-      filtered = filtered.filter(item => new Date(item.timestamp) >= dateRange.from!);
+      filtered = filtered.filter(item => {
+        if (!item.timestamp) return false;
+        const itemDate = parseISO(item.timestamp);
+        return isValid(itemDate) && itemDate >= dateRange.from!;
+      });
     }
     if (dateRange?.to) {
       filtered = filtered.filter(item => {
+        if (!item.timestamp) return false;
+        const itemDate = parseISO(item.timestamp);
         const toDate = new Date(dateRange.to!);
         toDate.setHours(23, 59, 59, 999);
-        return new Date(item.timestamp) <= toDate;
+        return isValid(itemDate) && itemDate <= toDate;
       });
     }
     if (typeFilter !== 'all') {
@@ -141,13 +147,14 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     const head = [['Data', 'Produto', 'Lote', 'Tipo', 'Quiosque', 'Qtd.', 'Usuário', 'Notas']];
     const body = filteredAndSortedHistory.map(item => {
         let kioskDisplay = '';
+        const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
         if (item.type?.includes('TRANSFERENCIA')) {
             kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
         } else {
             kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
         }
         return [
-            format(parseISO(item.timestamp), 'dd/MM/yy HH:mm', { locale: ptBR }),
+            timestampDate && isValid(timestampDate) ? format(timestampDate, 'dd/MM/yy HH:mm', { locale: ptBR }) : 'N/A',
             item.productName,
             item.lotNumber,
             (item.type && MOVEMENT_TYPE_CONFIG[item.type]?.label) || item.type || 'N/A',
@@ -260,6 +267,8 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                     <TableBody>
                     {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
                         let kioskDisplay = '';
+                        const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
+
                         if (item.type?.includes('TRANSFERENCIA')) {
                             kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
                         } else {
@@ -268,7 +277,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                         
                         return (
                             <TableRow key={item.id}>
-                                <TableCell className="text-xs font-semibold">{format(parseISO(item.timestamp), "dd/MM/yy HH:mm", { locale: ptBR })}</TableCell>
+                                <TableCell className="text-xs font-semibold">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
                                 <TableCell>
                                     <TooltipProvider><Tooltip><TooltipTrigger>
                                         <p className="font-medium truncate max-w-xs">{item.productName}</p>
