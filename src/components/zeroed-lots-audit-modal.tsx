@@ -96,9 +96,9 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     if (searchTerm) {
         const lowerCaseSearch = searchTerm.toLowerCase();
         filtered = filtered.filter(item => 
-            item.productName.toLowerCase().includes(lowerCaseSearch) ||
-            item.lotNumber.toLowerCase().includes(lowerCaseSearch) ||
-            item.username.toLowerCase().includes(lowerCaseSearch)
+            (item.productName || '').toLowerCase().includes(lowerCaseSearch) ||
+            (item.lotNumber || '').toLowerCase().includes(lowerCaseSearch) ||
+            (item.username || '').toLowerCase().includes(lowerCaseSearch)
         );
     }
 
@@ -141,7 +141,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
     const head = [['Data', 'Produto', 'Lote', 'Tipo', 'Quiosque', 'Qtd.', 'Usuário', 'Notas']];
     const body = filteredAndSortedHistory.map(item => {
         let kioskDisplay = '';
-        if (item.type.includes('TRANSFERENCIA')) {
+        if (item.type?.includes('TRANSFERENCIA')) {
             kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
         } else {
             kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
@@ -150,7 +150,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
             format(parseISO(item.timestamp), 'dd/MM/yy HH:mm', { locale: ptBR }),
             item.productName,
             item.lotNumber,
-            MOVEMENT_TYPE_CONFIG[item.type]?.label || item.type,
+            (item.type && MOVEMENT_TYPE_CONFIG[item.type]?.label) || item.type || 'N/A',
             kioskDisplay,
             item.quantityChange,
             item.username,
@@ -172,11 +172,11 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
 
   const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
-        if (item.type.includes('ENTRADA')) {
+        if (item.type?.includes('ENTRADA')) {
             acc.totalEntradas += item.quantityChange;
-        } else if (item.type.includes('SAIDA')) {
+        } else if (item.type?.includes('SAIDA')) {
             acc.totalSaidas += item.quantityChange;
-        } else if (item.type.includes('TRANSFERENCIA')) {
+        } else if (item.type?.includes('TRANSFERENCIA')) {
             acc.totalTransferencias += item.quantityChange;
         }
         return acc;
@@ -260,7 +260,7 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                     <TableBody>
                     {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
                         let kioskDisplay = '';
-                        if (item.type.includes('TRANSFERENCIA')) {
+                        if (item.type?.includes('TRANSFERENCIA')) {
                             kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
                         } else {
                             kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
@@ -276,9 +276,13 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
                                 </TableCell>
                                 <TableCell>{item.lotNumber}</TableCell>
                                 <TableCell>
-                                    <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type]?.color)}>
-                                        {MOVEMENT_TYPE_CONFIG[item.type]?.label || item.type}
-                                    </Badge>
+                                    {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (
+                                        <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type].color)}>
+                                            {MOVEMENT_TYPE_CONFIG[item.type].label}
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="secondary">{item.type || 'N/A'}</Badge>
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-xs">{kioskDisplay}</TableCell>
                                 <TableCell className="text-right font-bold">{item.quantityChange}</TableCell>
