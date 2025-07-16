@@ -68,11 +68,29 @@ export function RestockAnalysis() {
         }
 
         try {
-          const valueInBase = convertValue(lot.quantity * product.packageSize, product.unit, baseProduct.unit, product.category);
-          currentStock += valueInBase;
+            // Updated logic to handle different conversion scenarios
+            let valueInBaseUnit = 0;
+            const quantityInPackages = lot.quantity;
+
+            // Scenario 1: Advanced conversion using secondary unit
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+            } 
+            // Scenario 2: Standard conversion for same categories
+            else if (product.category === baseProduct.category) {
+                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+            } else {
+                // If categories are different and no secondary unit is set, it's a conversion error.
+                throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
+            }
+
+            currentStock += valueInBaseUnit;
         } catch (error) {
-          console.error("Conversion failed for product:", product, error);
-          hasConversionError = true;
+            console.error("Conversion failed for product:", product, error);
+            hasConversionError = true;
         }
       }
 
