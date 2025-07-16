@@ -19,6 +19,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { AccordionContent, AccordionTrigger } from "./ui/accordion"
 
 const formatNumberForDisplay = (value: number) => {
     return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -205,18 +206,22 @@ export function AverageConsumptionChart() {
 
   return (
     <Card>
-    <CardHeader className="flex flex-col gap-4">
-        <div>
-            <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-6 w-6" /> Consumo médio mensal
-            </CardTitle>
-            <CardDescription>
-                {user?.username === 'Tiago Brasil' 
-                    ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
-                    : `Produtos consumidos no seu quiosque.`}
-            </CardDescription>
+      <AccordionTrigger className="p-4 hover:no-underline">
+        <div className="flex flex-col gap-4 w-full">
+            <div>
+                <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-6 w-6" /> Consumo médio mensal
+                </CardTitle>
+                <CardDescription>
+                    {user?.username === 'Tiago Brasil' 
+                        ? (selectedKiosk === 'matriz' ? 'Soma do consumo médio mensal de todos os quiosques.' : `Produtos consumidos no quiosque selecionado.`)
+                        : `Produtos consumidos no seu quiosque.`}
+                </CardDescription>
+            </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end">
+      </AccordionTrigger>
+      <AccordionContent className="p-4 pt-0">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end mb-4">
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="outline" className="w-full sm:w-auto">
@@ -256,80 +261,82 @@ export function AverageConsumptionChart() {
                 </Select>
             )}
         </div>
-    </CardHeader>
-    <CardContent className="pr-2 pl-0">
-         { (loadingData) ? (
-            <Skeleton className="h-[350px] w-full" />
-            ) : chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={chartHeight}>
-                <BarChart
-                    layout="vertical"
-                    data={chartData}
-                    margin={{
-                        top: 5,
-                        right: 50,
-                        left: 20,
-                        bottom: 5,
-                    }}
-                >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={formatNumberForDisplay} />
-                    <YAxis
-                        type="category"
-                        dataKey="name"
-                        width={150}
-                        tick={{ fontSize: 12 }}
-                        interval={0}
-                    />
-                    <Tooltip 
-                        cursor={{fill: 'hsl(var(--muted))'}}
-                        formatter={formatNumberForDisplay}
-                        contentStyle={{ 
-                            backgroundColor: "hsl(var(--background))", 
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "var(--radius)"
+        <div className="pr-2 pl-0">
+            { (loadingData) ? (
+                <Skeleton className="h-[350px] w-full" />
+                ) : chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                    <BarChart
+                        layout="vertical"
+                        data={chartData}
+                        margin={{
+                            top: 5,
+                            right: 50,
+                            left: 20,
+                            bottom: 5,
                         }}
-                    />
-                    <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
-                        {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                        <LabelList dataKey="Consumo" position="right" offset={10} formatter={formatNumberForDisplay} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
-                    </Bar>
-                </BarChart>
-            </ResponsiveContainer>
-            ) : (
-            <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
-                    <TrendingUp className="h-12 w-12 mb-4" />
-                    <p className="font-semibold">
-                        {selectedBaseProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
-                    </p>
-                    <p className="text-sm">
-                        {selectedBaseProducts.length === 0
-                        ? "Selecione produtos base no filtro para exibi-los no gráfico."
-                        : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
-                            ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
-                            : "Faça o upload de relatórios de consumo para gerar o gráfico."
-                        }
-                    </p>
-            </div>
-            )}
-    </CardContent>
-    <CardFooter className="pt-4 border-t justify-end">
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={chartData.length === 0}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Exportar relatório
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-                <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
-                <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
-                <DropdownMenuItem onSelect={handleExportJson}>Exportar como JSON</DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
-    </CardFooter>
-  </Card>
+                    >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tickFormatter={formatNumberForDisplay} />
+                        <YAxis
+                            type="category"
+                            dataKey="name"
+                            width={150}
+                            tick={{ fontSize: 12 }}
+                            interval={0}
+                        />
+                        <Tooltip 
+                            cursor={{fill: 'hsl(var(--muted))'}}
+                            formatter={formatNumberForDisplay}
+                            contentStyle={{ 
+                                backgroundColor: "hsl(var(--background))", 
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "var(--radius)"
+                            }}
+                        />
+                        <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                            {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                            <LabelList dataKey="Consumo" position="right" offset={10} formatter={formatNumberForDisplay} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+                ) : (
+                <div className="flex h-[350px] flex-col items-center justify-center text-muted-foreground text-center">
+                        <TrendingUp className="h-12 w-12 mb-4" />
+                        <p className="font-semibold">
+                            {selectedBaseProducts.length === 0 ? "Nenhum produto selecionado" : "Sem dados de consumo"}
+                        </p>
+                        <p className="text-sm">
+                            {selectedBaseProducts.length === 0
+                            ? "Selecione produtos base no filtro para exibi-los no gráfico."
+                            : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
+                                ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
+                                : "Faça o upload de relatórios de consumo para gerar o gráfico."
+                            }
+                        </p>
+                </div>
+                )}
+        </div>
+        <CardFooter className="pt-4 border-t justify-end">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" disabled={chartData.length === 0}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar relatório
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleExportJson}>Exportar como JSON</DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </CardFooter>
+      </AccordionContent>
+    </Card>
   )
 }
+
+    

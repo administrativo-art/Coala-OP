@@ -382,7 +382,11 @@ export default function DashboardPage() {
         </Card>
       </div>
       
-      <AverageConsumptionChart />
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value="consumption-chart">
+            <AverageConsumptionChart />
+        </AccordionItem>
+      </Accordion>
 
     </div>
       <EditScheduleModal 
@@ -394,3 +398,5 @@ export default function DashboardPage() {
     </>
   )
 }
+
+    
