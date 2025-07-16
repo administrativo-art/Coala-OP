@@ -588,7 +588,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <Skeleton className="h-96 w-full" />
             ) : (
             <div className="overflow-x-auto border rounded-lg">
-                <div className="grid" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${filteredKiosks.length}, minmax(200px, 1fr))` }}>
+                <div className="grid min-w-max" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${filteredKiosks.length}, minmax(200px, 1fr))` }}>
                     {/* Headers */}
                     <div className="sticky top-0 left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Dia</div>
                     {filteredKiosks.map((kiosk, kioskIndex) => (
