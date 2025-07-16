@@ -24,7 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Input } from './ui/input';
-import { Card } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
