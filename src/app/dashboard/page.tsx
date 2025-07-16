@@ -17,19 +17,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox, ListTodo, ClipboardCheck, PackagePlus, ShieldAlert, TruckForward } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox, ListTodo, ClipboardCheck, PackagePlus, ShieldAlert, TruckForward, Edit } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { type ReturnRequest, returnRequestStatuses } from "@/types"
+import { type ReturnRequest, returnRequestStatuses, type DailySchedule } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
+import { EditScheduleModal } from "@/components/edit-schedule-modal"
 
 
 export default function DashboardPage() {
-  const { user, permissions } = useAuth()
+  const { user, users, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
@@ -38,6 +39,9 @@ export default function DashboardPage() {
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   
+  const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
+  const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
+
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
   const lotsInKiosk = useMemo(() => {
@@ -160,6 +164,18 @@ export default function DashboardPage() {
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
+  
+  const handleEditDay = (dayData: DailySchedule, kioskId: string) => {
+    setDayToEdit(dayData);
+    setKioskToEdit(kioskId);
+  };
+  
+  const handleCloseModal = (open: boolean) => {
+    if (!open) {
+      setDayToEdit(null);
+      setKioskToEdit(null);
+    }
+  };
 
   const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading || itemAdditionLoading || stockCountsLoading || repositionLoading;
 
@@ -186,6 +202,7 @@ export default function DashboardPage() {
   });
 
   return (
+    <>
     <div className="space-y-6">
        <div className="mb-6">
         <h1 className="text-3xl font-bold">Bem-vindo, {user?.username}!</h1>
@@ -193,7 +210,8 @@ export default function DashboardPage() {
       </div>
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+        <Link href="/dashboard/stock/inventory-control">
+        <Card className="hover:bg-muted/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
             <AlertTriangle className="h-6 w-6 text-yellow-500" />
@@ -202,7 +220,9 @@ export default function DashboardPage() {
             <div className="text-4xl font-bold text-yellow-500">{expiringSoonCount}</div>
           </CardContent>
         </Card>
-        <Card>
+        </Link>
+        <Link href="/dashboard/stock/inventory-control">
+        <Card className="hover:bg-muted/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Produtos vencidos</CardTitle>
             <AlertTriangle className="h-6 w-6 text-destructive" />
@@ -211,6 +231,7 @@ export default function DashboardPage() {
             <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
           </CardContent>
         </Card>
+        </Link>
       </div>
       
        {myTasks.length > 0 && (
@@ -322,9 +343,16 @@ export default function DashboardPage() {
                             return (
                                 <AccordionItem value={kiosk.id} key={kiosk.id} className="border-b-0">
                                     <Card>
-                                        <AccordionTrigger className="p-3 hover:no-underline font-semibold text-base">
-                                            {kiosk.name}
-                                        </AccordionTrigger>
+                                        <div className="flex items-center pr-2">
+                                            <AccordionTrigger className="p-3 hover:no-underline flex-1 font-semibold text-base">
+                                                {kiosk.name}
+                                            </AccordionTrigger>
+                                            {permissions.team.manage && (
+                                              <Button variant="ghost" size="icon" onClick={() => handleEditDay(todaySchedule, kiosk.id)}>
+                                                  <Edit className="h-4 w-4 text-muted-foreground" />
+                                              </Button>
+                                            )}
+                                        </div>
                                         <AccordionContent className="p-3 pt-0">
                                             <div className="text-sm mt-2 space-y-1">
                                                 {isSunday ? (
@@ -357,5 +385,12 @@ export default function DashboardPage() {
       <AverageConsumptionChart />
 
     </div>
+      <EditScheduleModal 
+          dayData={dayToEdit}
+          kioskId={kioskToEdit}
+          onOpenChange={handleCloseModal}
+          users={users}
+      />
+    </>
   )
 }
