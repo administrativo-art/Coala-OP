@@ -10,11 +10,13 @@ import { useReturnRequests } from "@/hooks/use-return-requests"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useItemAddition } from "@/hooks/use-item-addition"
+import { useStockCount } from "@/hooks/use-stock-count"
+import { useReposition } from "@/hooks/use-reposition"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox, ListTodo, ClipboardCheck, PackagePlus, ShieldAlert, TruckForward } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -32,6 +34,8 @@ export default function DashboardPage() {
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
+  const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
+  const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
@@ -57,29 +61,106 @@ export default function DashboardPage() {
      if (lotsLoading) return 0;
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
-  
-  const myActiveReturnRequests = useMemo(() => {
-    if (returnRequestsLoading || !user) return [];
-    
-    const activeRequests = returnRequests.filter(r => !r.isArchived);
 
-    if (user.username === 'Tiago Brasil' || permissions.returns.updateStatus) { 
-        return activeRequests;
+  const myTasks = useMemo(() => {
+    if (!user || !permissions) return [];
+
+    const tasks: { id: string, type: string; title: string; description: string; link: string, icon: React.FC<any> }[] = [];
+
+    // 1. Solicitações de Cadastro de Novo Insumo
+    if (permissions.itemRequests.manage) {
+      itemAdditionRequests.filter(req => req.status === 'pending').forEach(req => {
+        tasks.push({
+          id: `itemreq-${req.id}`,
+          type: 'Cadastro de Insumo',
+          title: `Solicitação: ${req.productName} ${req.brand ? `(${req.brand})` : ''}`,
+          description: `Por ${req.requestedBy.username} em ${req.kioskName}`,
+          link: '/dashboard/stock/count',
+          icon: PackagePlus,
+        });
+      });
     }
 
-    return activeRequests.filter(r => r.createdBy.userId === user.id);
-  }, [returnRequests, returnRequestsLoading, user, permissions]);
+    // 2. Contagens de Estoque para Aprovação
+    if (permissions.stockCount.approve) {
+      stockCounts.filter(sc => sc.status === 'pending').forEach(sc => {
+        tasks.push({
+          id: `stockcount-${sc.id}`,
+          type: 'Aprovação de Contagem',
+          title: `Contagem de ${sc.kioskName}`,
+          description: `Enviada por ${sc.countedBy.username} em ${format(parseISO(sc.countedAt), 'dd/MM/yyyy HH:mm')}`,
+          link: '/dashboard/stock/count',
+          icon: ClipboardCheck,
+        });
+      });
+    }
 
-  const pendingItemAdditionRequests = useMemo(() => {
-      if (itemAdditionLoading || !permissions.itemRequests.manage) return [];
-      return itemAdditionRequests.filter(r => r.status === 'pending');
-  }, [itemAdditionRequests, itemAdditionLoading, permissions]);
+    // 3. Chamados de Avaria
+    const activeReturnRequests = returnRequests.filter(r => !r.isArchived);
+    const myReturnRequests = (permissions.returns.updateStatus || user.username === 'Tiago Brasil')
+      ? activeReturnRequests
+      : activeReturnRequests.filter(r => r.createdBy.userId === user.id);
+      
+    myReturnRequests.forEach(req => {
+      tasks.push({
+        id: `return-${req.id}`,
+        type: 'Chamado de Avaria',
+        title: `${req.numero}: ${req.insumoNome}`,
+        description: `Status: ${returnRequestStatuses[req.status]?.label || 'Desconhecido'}`,
+        link: '/dashboard/stock/returns',
+        icon: ShieldAlert,
+      });
+    });
+
+    // 4. Atividades de Reposição
+    const isMaster = user.username === 'Tiago Brasil';
+    repositionActivities.filter(act => act.status !== 'Concluído').forEach(act => {
+      let isVisible = false;
+      let taskTitle = '';
+      let taskDesc = `De ${act.kioskOriginName} para ${act.kioskDestinationName}`;
+      
+      switch (act.status) {
+        case 'Aguardando despacho':
+          if (isMaster || user.assignedKioskIds.includes(act.kioskOriginId)) {
+            isVisible = true;
+            taskTitle = 'Gerenciar Despacho';
+          }
+          break;
+        case 'Aguardando recebimento':
+          if (isMaster || user.assignedKioskIds.includes(act.kioskDestinationId)) {
+            isVisible = true;
+            taskTitle = 'Auditar Recebimento';
+          }
+          break;
+        case 'Recebido com divergência':
+        case 'Recebido sem divergência':
+          if (isMaster) {
+            isVisible = true;
+            taskTitle = 'Efetivar Movimentação';
+          }
+          break;
+      }
+
+      if(isVisible) {
+        tasks.push({
+          id: `reposition-${act.id}`,
+          type: 'Reposição de Estoque',
+          title: taskTitle,
+          description: taskDesc,
+          link: '/dashboard/stock/analysis/restock',
+          icon: Truck,
+        });
+      }
+    });
+
+    return tasks;
+  }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities]);
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
 
-  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading || itemAdditionLoading;
+  const initialLoading = lotsLoading || kiosksLoading || returnRequestsLoading || scheduleLoading || consumptionLoading || itemAdditionLoading || stockCountsLoading || repositionLoading;
 
   if (initialLoading) {
     return (
@@ -129,24 +210,47 @@ export default function DashboardPage() {
             <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
           </CardContent>
         </Card>
-        {pendingItemAdditionRequests.length > 0 && (
-             <Card className="border-primary bg-primary/5">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Cadastros Pendentes</CardTitle>
-                    <Inbox className="h-6 w-6 text-primary" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-4xl font-bold text-primary">{pendingItemAdditionRequests.length}</div>
-                    <p className="text-xs text-muted-foreground">
-                        <Link href="/dashboard/stock/count" className="hover:underline">Ver solicitações de cadastro</Link>
-                    </p>
-                </CardContent>
-            </Card>
-        )}
       </div>
+      
+       {myTasks.length > 0 && (
+          <Card className="lg:col-span-2">
+              <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                      <ListTodo className="h-6 w-6" /> Minhas Tarefas ({myTasks.length})
+                  </CardTitle>
+                  <CardDescription>
+                      Estas são as atividades pendentes que precisam da sua atenção.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <ScrollArea className="h-60">
+                    <div className="space-y-2 pr-4">
+                        {myTasks.map(task => {
+                            const Icon = task.icon;
+                            return (
+                                <Link href={task.link} key={task.id}>
+                                    <div className="flex items-center justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <Icon className="h-5 w-5 text-primary shrink-0" />
+                                            <div>
+                                                <p className="font-semibold">{task.title}</p>
+                                                <p className="text-sm text-muted-foreground">{task.description}</p>
+                                            </div>
+                                        </div>
+                                        <Badge variant="secondary" className="shrink-0">{task.type}</Badge>
+                                    </div>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                  </ScrollArea>
+              </CardContent>
+          </Card>
+        )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {expiringSoonLots.length > 0 && (
-            <Card>
+            <Card className="lg:col-span-1">
                 <CardHeader>
                     <CardTitle>Insumos vencendo em breve</CardTitle>
                     <CardDescription>
@@ -180,8 +284,7 @@ export default function DashboardPage() {
             </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="lg:col-span-2">
+        <Card className={cn("lg:col-span-1", expiringSoonLots.length === 0 && "lg:col-span-2")}>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Users className="h-6 w-6" /> Escala de hoje - {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
@@ -241,47 +344,6 @@ export default function DashboardPage() {
                 )}
             </CardContent>
         </Card>
-
-        {myActiveReturnRequests.length > 0 && (
-            <Card className="lg:col-span-2">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Truck className="h-6 w-6" /> Chamados de avarias abertos
-                    </CardTitle>
-                    <CardDescription>
-                        Estes são os seus chamados que precisam de atenção. Clique em um chamado para ver os detalhes.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-2">
-                        {myActiveReturnRequests.map(req => {
-                            const statusInfo = returnRequestStatuses[req.status];
-                            let isOverdue = false;
-                            if (req.status === 'em_andamento' && req.dataPrevisaoRetorno) {
-                                isOverdue = differenceInDays(new Date(), parseISO(req.dataPrevisaoRetorno)) > 0;
-                            }
-                            return (
-                                <Link href="/dashboard/stock/returns" key={req.id}>
-                                    <div className="flex items-center justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors">
-                                        <div>
-                                            <p className="font-semibold">{req.numero}: <span className="font-normal">{req.insumoNome}</span></p>
-                                            <p className="text-sm text-muted-foreground">
-                                                Previsão de conclusão: {format(parseISO(req.dataPrevisaoRetorno), "dd/MM/yyyy", { locale: ptBR })}
-                                            </p>
-                                        </div>
-                                        {statusInfo && (
-                                            <Badge className={cn("text-white shrink-0", isOverdue ? 'bg-red-700' : statusInfo.color)}>
-                                                {isOverdue ? `${statusInfo.label} | Atrasado` : statusInfo.label}
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </Link>
-                            )
-                        })}
-                    </div>
-                </CardContent>
-            </Card>
-        )}
       </div>
       
       <AverageConsumptionChart />
