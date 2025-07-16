@@ -424,6 +424,12 @@ export type RepositionItem = {
 
 export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído';
 
+export type SignatureData = {
+    dataUrl: string;
+    signedBy: string; // username
+    signedAt: string; // ISO date
+};
+
 export type RepositionActivity = {
   id: string;
   status: RepositionActivityStatus;
@@ -439,9 +445,9 @@ export type RepositionActivity = {
   updatedAt: string; // ISO String
   items: RepositionItem[];
   transportDocumentUrl?: string;
-  transportSignature?: { signedBy: string; signedAt: string; };
+  transportSignature?: SignatureData;
   receiptNotes?: string;
-  receiptSignature?: { signedBy: string; signedAt: string; };
+  receiptSignature?: SignatureData;
 };
 
 

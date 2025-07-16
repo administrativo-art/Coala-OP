@@ -1,9 +1,11 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import SignatureCanvas from 'react-signature-canvas';
 import { useReposition } from '@/hooks/use-reposition';
-import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot } from '@/types';
+import { useAuth } from '@/hooks/use-auth';
+import { type RepositionActivity, type RepositionItem, type SignatureData } from '@/types';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Eraser, Signature } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from './ui/textarea';
 
@@ -61,8 +63,10 @@ interface AuditReceiptModalProps {
 
 export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalProps) {
   const { updateRepositionActivity } = useReposition();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const sigCanvas = useRef<SignatureCanvas>(null);
 
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -85,6 +89,10 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   });
 
   const handleConfirmReceipt = async (values: AuditFormValues) => {
+    if (!user || sigCanvas.current?.isEmpty()) {
+        toast({ variant: 'destructive', title: 'Assinatura obrigatória', description: 'Por favor, assine para confirmar o recebimento.' });
+        return;
+    }
     setIsLoading(true);
 
     let hasDivergence = false;
@@ -115,9 +123,16 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     
     const newStatus = hasDivergence ? 'Recebido com divergência' : 'Recebido sem divergência';
     
+    const signature: SignatureData = {
+        dataUrl: sigCanvas.current.toDataURL('image/png'),
+        signedBy: user.username,
+        signedAt: new Date().toISOString()
+    };
+    
     await updateRepositionActivity(activity.id, {
         status: newStatus,
         items: receivedItems,
+        receiptSignature: signature,
     });
 
     toast({
@@ -129,6 +144,10 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     onOpenChange(false);
   };
   
+  const clearSignature = () => {
+    sigCanvas.current?.clear();
+  };
+  
   const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
     const item = form.getValues().items[itemIndex];
     const lot = item.suggestedLots[lotIndex];
@@ -137,7 +156,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
       name: `items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`
     });
 
-    const hasDivergence = watchedReceivedQuantity !== lot.quantityToMove;
+    const hasDivergence = watchedReceivedQuantity !== '' && watchedReceivedQuantity !== undefined && parseFloat(watchedReceivedQuantity) !== lot.quantityToMove;
 
     return (
         <>
@@ -217,6 +236,19 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                     </Table>
                   </div>
                 ))}
+                 <div className="p-4 border rounded-lg space-y-2">
+                    <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do Recebedor</Label>
+                    <div className="rounded-md border bg-background">
+                        <SignatureCanvas
+                        ref={sigCanvas}
+                        penColor="black"
+                        canvasProps={{ className: "w-full h-[150px]" }}
+                        />
+                    </div>
+                     <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
+                        <Eraser className="mr-1 h-3 w-3" /> Limpar
+                    </Button>
+                </div>
               </div>
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
