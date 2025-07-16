@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
@@ -39,8 +39,15 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const [useDigitalSignature, setUseDigitalSignature] = useState(true);
     const [physicalCopyUrl, setPhysicalCopyUrl] = useState<string | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const [isSignatureEmpty, setIsSignatureEmpty] = useState(true);
 
     const sigCanvas = useRef<SignatureCanvas>(null);
+    
+    useEffect(() => {
+        if (sigCanvas.current) {
+            setIsSignatureEmpty(sigCanvas.current.isEmpty());
+        }
+    }, [useDigitalSignature, currentStep]);
 
     const generatePDF = (signatureUrl?: string, name?: string) => {
         const doc = new jsPDF();
@@ -140,7 +147,16 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         onOpenChange(false);
     }
     
-    const clearSignature = () => sigCanvas.current?.clear();
+    const handleSignatureEnd = () => {
+        if (sigCanvas.current) {
+            setIsSignatureEmpty(sigCanvas.current.isEmpty());
+        }
+    };
+    
+    const clearSignature = () => {
+        sigCanvas.current?.clear();
+        setIsSignatureEmpty(true);
+    };
 
     const handleNextStep = () => setCurrentStep(prev => prev + 1);
     const handlePrevStep = () => setCurrentStep(prev => prev - 1);
@@ -202,6 +218,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                             ref={sigCanvas}
                             penColor='black'
                             canvasProps={{ className: 'w-full h-[150px]' }} 
+                            onEnd={handleSignatureEnd}
                         />
                     </div>
                     <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1 text-muted-foreground">
@@ -247,6 +264,12 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         </div>
     );
 
+    const isNextDisabled = currentStep === 2 && (
+        !transporterName ||
+        (useDigitalSignature && isSignatureEmpty) ||
+        (!useDigitalSignature && !physicalCopyUrl)
+    );
+
     return (
         <>
         <Dialog open={true} onOpenChange={onOpenChange}>
@@ -275,7 +298,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                             Cancelar
                         </Button>
                         {currentStep < 3 ? (
-                             <Button onClick={handleNextStep} disabled={currentStep === 2 && (!transporterName || (!useDigitalSignature && !physicalCopyUrl) || (useDigitalSignature && sigCanvas.current?.isEmpty()))}>
+                             <Button onClick={handleNextStep} disabled={isNextDisabled}>
                                 Próximo <ArrowRight className="ml-2" />
                             </Button>
                         ) : (
