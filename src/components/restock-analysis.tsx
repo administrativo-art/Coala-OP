@@ -13,9 +13,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package } from 'lucide-react';
-import { type BaseProduct } from '@/types';
+import { AlertTriangle, CheckCircle, Package, Wand2 } from 'lucide-react';
+import { type BaseProduct, type LotEntry, type Kiosk } from '@/types';
 import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { RestockSuggestionModal } from './restock-suggestion-modal';
+
+interface SuggestedLot {
+    lot: LotEntry;
+    quantityToMove: number;
+}
 
 interface AnalysisResult {
   baseProduct: BaseProduct;
@@ -25,6 +32,7 @@ interface AnalysisResult {
   status: 'ok' | 'repor' | 'excesso' | 'sem_meta';
   stockPercentage: number | null;
   hasConversionError: boolean;
+  suggestion?: SuggestedLot[];
 }
 
 export function RestockAnalysis() {
@@ -33,6 +41,7 @@ export function RestockAnalysis() {
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { products, loading: productsLoading } = useProducts();
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+  const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
   
@@ -49,6 +58,7 @@ export function RestockAnalysis() {
     
     const productMap = new Map(products.map(p => [p.id, p]));
     const lotsInKiosk = lots.filter(lot => lot.kioskId === selectedKioskId);
+    const lotsInMatriz = lots.filter(lot => lot.kioskId === 'matriz');
 
     return baseProducts.map(baseProduct => {
       const minimumStock = baseProduct.stockLevels?.[selectedKioskId]?.min;
@@ -94,6 +104,7 @@ export function RestockAnalysis() {
       let status: AnalysisResult['status'] = 'ok';
       let restockNeeded = 0;
       let stockPercentage: number | null = null;
+      let suggestion: SuggestedLot[] | undefined = undefined;
 
       if (minimumStock === undefined || minimumStock === null) {
         status = 'sem_meta';
@@ -107,6 +118,40 @@ export function RestockAnalysis() {
         if (minimumStock > 0) {
             stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
         }
+
+        if (status === 'repor' && restockNeeded > 0) {
+            const availableMatrizLots = lotsInMatriz
+                .filter(lot => {
+                    const p = productMap.get(lot.productId);
+                    return p?.baseProductId === baseProduct.id && lot.quantity > 0;
+                })
+                .sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+            
+            let needed = restockNeeded;
+            const suggestionList: SuggestedLot[] = [];
+
+            for (const lot of availableMatrizLots) {
+                if (needed <= 0) break;
+                const product = productMap.get(lot.productId)!;
+                const lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                if (lotPackageSizeInBase > 0) {
+                    const lotTotalValueInBase = lot.quantity * lotPackageSizeInBase;
+                    const quantityToTakeFromLot = Math.min(lotTotalValueInBase, needed);
+                    const packagesToTake = Math.ceil(quantityToTakeFromLot / lotPackageSizeInBase);
+                    
+                    suggestionList.push({
+                        lot,
+                        quantityToMove: Math.min(lot.quantity, packagesToTake)
+                    });
+
+                    needed -= lot.quantity * lotPackageSizeInBase;
+                }
+            }
+            if(suggestionList.length > 0) {
+                suggestion = suggestionList;
+            }
+        }
+
       }
 
       return {
@@ -117,6 +162,7 @@ export function RestockAnalysis() {
         status,
         stockPercentage,
         hasConversionError,
+        suggestion,
       };
     }).sort((a, b) => a.baseProduct.name.localeCompare(b.baseProduct.name));
   }, [selectedKioskId, baseProducts, products, lots, loading]);
@@ -138,6 +184,7 @@ export function RestockAnalysis() {
   };
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Análise de Reposição</CardTitle>
@@ -180,14 +227,22 @@ export function RestockAnalysis() {
                 {analysisResults.length > 0 ? analysisResults.map(result => (
                   <TableRow key={result.baseProduct.id}>
                     <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
-                    <TableCell className="text-center">{result.minimumStock} {result.baseProduct.unit}</TableCell>
+                    <TableCell className="text-center">{result.minimumStock > 0 ? `${result.minimumStock} ${result.baseProduct.unit}` : '-'}</TableCell>
                     <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
                     <TableCell className="text-center">
                         {result.stockPercentage !== null ? (
                              <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
                         ) : '-'}
                     </TableCell>
-                    <TableCell className="text-center font-bold text-primary">{result.restockNeeded > 0 ? `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}` : '-'}</TableCell>
+                    <TableCell className="text-center font-bold text-primary">
+                      {result.suggestion ? (
+                        <Button variant="outline" size="sm" onClick={() => setSuggestionToView(result)}>
+                          <Wand2 className="mr-2 h-4 w-4"/> Ver Sugestão
+                        </Button>
+                      ) : result.restockNeeded > 0 ? (
+                        `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`
+                      ) : '-'}
+                    </TableCell>
                     <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                   </TableRow>
                 )) : (
@@ -203,5 +258,14 @@ export function RestockAnalysis() {
         )}
       </CardContent>
     </Card>
+
+    {suggestionToView && (
+        <RestockSuggestionModal
+            suggestionResult={suggestionToView}
+            targetKiosk={kiosks.find(k => k.id === selectedKioskId)!}
+            onOpenChange={() => setSuggestionToView(null)}
+        />
+    )}
+    </>
   );
 }
