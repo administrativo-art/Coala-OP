@@ -64,7 +64,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
         productName: item.productName,
         suggestedLots: item.suggestedLots.map(lot => ({
           ...lot,
-          receivedQuantity: lot.quantityToMove, // Default to expected quantity
+          receivedQuantity: '' as any, // Start with an empty field
         })),
       })),
       notes: '',
@@ -160,7 +160,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormControl>
-                                      <Input type="number" {...field} className="text-center" />
+                                      <Input type="number" {...field} className="text-center" placeholder="0" />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
