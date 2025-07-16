@@ -14,6 +14,7 @@ import { useStockCount } from "@/hooks/use-stock-count"
 import { useReposition } from "@/hooks/use-reposition"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox, ListTodo, ClipboardCheck, PackagePlus, ShieldAlert, TruckForward } from 'lucide-react'
@@ -294,48 +295,55 @@ export default function DashboardPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {scheduleLoading ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <Skeleton className="h-24 w-full" />
-                        <Skeleton className="h-24 w-full" />
+                 {scheduleLoading ? (
+                    <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
                     </div>
                 ) : todaySchedule ? (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <Accordion type="multiple" className="w-full space-y-2">
                         {kiosksToDisplay.map(kiosk => {
                             const t1 = todaySchedule[`${kiosk.name} T1`];
                             const t2 = todaySchedule[`${kiosk.name} T2`];
                             const t3 = todaySchedule[`${kiosk.name} T3`];
                             const folga = todaySchedule[`${kiosk.name} Folga`];
                             const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
-                            
-                            if (!t1 && !t2 && !t3 && !folga) {
+                            const hasSchedule = t1 || t2 || t3 || folga;
+
+                            if (!hasSchedule) {
                                 return (
-                                    <div key={kiosk.id} className="p-3 border rounded-lg bg-muted/50">
+                                    <div key={kiosk.id} className="p-3 border rounded-lg bg-muted/50 text-sm">
                                         <h4 className="font-semibold">{kiosk.name}</h4>
-                                        <p className="text-sm mt-2 text-muted-foreground">Sem escala para hoje.</p>
+                                        <p className="mt-2 text-muted-foreground">Sem escala para hoje.</p>
                                     </div>
                                 )
                             }
                             
                             return (
-                                <div key={kiosk.id} className="p-3 border rounded-lg bg-muted/50">
-                                    <h4 className="font-semibold">{kiosk.name}</h4>
-                                    <div className="text-sm mt-2 space-y-1">
-                                        {isSunday ? (
-                                            t1 && <p><strong>Turno Único:</strong> {t1}</p>
-                                        ) : (
-                                            <>
-                                                {t1 && <p><strong>T1:</strong> {t1}</p>}
-                                                {t2 && <p><strong>T2:</strong> {t2}</p>}
-                                                {t3 && <p><strong>T3:</strong> {t3}</p>}
-                                            </>
-                                        )}
-                                        {folga && <p className="text-muted-foreground"><strong>Folga:</strong> {folga}</p>}
-                                    </div>
-                                </div>
+                                <AccordionItem value={kiosk.id} key={kiosk.id} className="border-b-0">
+                                    <Card>
+                                        <AccordionTrigger className="p-3 hover:no-underline font-semibold text-base">
+                                            {kiosk.name}
+                                        </AccordionTrigger>
+                                        <AccordionContent className="p-3 pt-0">
+                                            <div className="text-sm mt-2 space-y-1">
+                                                {isSunday ? (
+                                                    t1 && <p><strong>Turno Único:</strong> {t1}</p>
+                                                ) : (
+                                                    <>
+                                                        {t1 && <p><strong>T1:</strong> {t1}</p>}
+                                                        {t2 && <p><strong>T2:</strong> {t2}</p>}
+                                                        {t3 && <p><strong>T3:</strong> {t3}</p>}
+                                                    </>
+                                                )}
+                                                {folga && <p className="text-muted-foreground"><strong>Folga:</strong> {folga}</p>}
+                                            </div>
+                                        </AccordionContent>
+                                    </Card>
+                                </AccordionItem>
                             )
                         })}
-                    </div>
+                    </Accordion>
                 ) : (
                     <div className="flex flex-col items-center justify-center text-muted-foreground text-center py-4">
                         <Users className="h-10 w-10 mb-2" />
