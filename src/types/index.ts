@@ -406,6 +406,40 @@ export type ItemAdditionRequest = {
   reviewedAt?: string; // ISO String
 };
 
+export type RepositionItem = {
+  baseProductId: string;
+  productName: string;
+  quantityNeeded: number;
+  suggestedLots: {
+    lotId: string;
+    productId: string;
+    productName: string;
+    quantityToMove: number;
+  }[];
+};
+
+export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído';
+
+export type RepositionActivity = {
+  id: string;
+  status: RepositionActivityStatus;
+  kioskOriginId: string;
+  kioskOriginName: string;
+  kioskDestinationId: string;
+  kioskDestinationName: string;
+  requestedBy: {
+    userId: string;
+    username: string;
+  };
+  createdAt: string; // ISO String
+  updatedAt: string; // ISO String
+  items: RepositionItem[];
+  transportDocumentUrl?: string;
+  transportSignature?: { signedBy: string; signedAt: string; };
+  receiptNotes?: string;
+  receiptSignature?: { signedBy: string; signedAt: string; };
+};
+
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },

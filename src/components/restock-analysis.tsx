@@ -13,11 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { RepositionManagement } from './reposition-management';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -35,7 +37,7 @@ export interface AnalysisResult {
   suggestion?: SuggestedLot[];
 }
 
-export function RestockAnalysis() {
+function AnalysisTab() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -280,5 +282,22 @@ export function RestockAnalysis() {
         />
     )}
     </>
+  );
+}
+
+export function RestockAnalysis() {
+  return (
+    <Tabs defaultValue="analysis" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="analysis"><Wand2 className="mr-2 h-4 w-4" /> Análise</TabsTrigger>
+        <TabsTrigger value="management"><Truck className="mr-2 h-4 w-4" /> Gerenciar Reposição</TabsTrigger>
+      </TabsList>
+      <TabsContent value="analysis" className="mt-4">
+        <AnalysisTab />
+      </TabsContent>
+      <TabsContent value="management" className="mt-4">
+        <RepositionManagement />
+      </TabsContent>
+    </Tabs>
   );
 }

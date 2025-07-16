@@ -14,16 +14,16 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Trash2, PlusCircle, Wand2, ArrowRight } from 'lucide-react';
+import { Trash2, ArrowRight } from 'lucide-react';
 import { convertValue } from '@/lib/conversion';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useToast } from '@/hooks/use-toast';
-import { type LotEntry, type Kiosk, type BaseProduct, type Product } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
+import { useReposition } from '@/hooks/use-reposition';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -52,8 +52,9 @@ type MoveFormValues = z.infer<typeof moveFormSchema>;
 
 export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenChange }: RestockSuggestionModalProps) {
   const { user } = useAuth();
-  const { lots, moveMultipleLots } = useExpiryProducts();
+  const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
+  const { createRepositionActivity, loading } = useReposition();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -114,15 +115,43 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
   }, [watchedItems, lots, products, suggestionResult.baseProduct]);
 
   const onSubmit = async (values: MoveFormValues) => {
-    toast({ title: "Sugestão Salva (Demonstração)", description: "A funcionalidade de salvar a sugestão será implementada." });
+    if (!user) return;
+    setIsProcessing(true);
+
+    const repositionItem = {
+      baseProductId: suggestionResult.baseProduct.id,
+      productName: suggestionResult.baseProduct.name,
+      quantityNeeded: suggestionResult.restockNeeded,
+      suggestedLots: values.items.map(item => {
+        const lot = lots.find(l => l.id === item.lotId)!;
+        const product = products.find(p => p.id === lot.productId)!;
+        return {
+          lotId: item.lotId,
+          productId: lot.productId,
+          productName: getProductFullName(product),
+          quantityToMove: item.quantity,
+        };
+      })
+    };
+    
+    await createRepositionActivity({
+      kioskOriginId: 'matriz',
+      kioskOriginName: 'Centro de distribuição - Matriz',
+      kioskDestinationId: targetKiosk.id,
+      kioskDestinationName: targetKiosk.name,
+      items: [repositionItem]
+    });
+    
+    setIsProcessing(false);
     onOpenChange(false);
+    toast({ title: "Atividade de Reposição Criada", description: "A solicitação foi salva e está aguardando despacho." });
   };
 
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Wand2/> Sugestão de Reposição</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">Sugestão de Reposição</DialogTitle>
           <DialogDescription>
             Reposição de <strong>{suggestionResult.baseProduct.name}</strong> para o quiosque <strong>{targetKiosk.name}</strong>. Necessidade: {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}.
           </DialogDescription>
@@ -142,7 +171,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                       <div>
                         <p className="font-semibold">{getProductFullName(product)}</p>
                         <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                         <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} pacotes</p>
+                         <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} {product.unit}(s)</p>
                       </div>
                        <ArrowRight className="h-4 w-4 text-muted-foreground"/>
                       <FormField
@@ -188,7 +217,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 </div>
                 <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isProcessing}>{isProcessing ? "Processando..." : "Salvar Sugestão"}</Button>
+                    <Button type="submit" disabled={isProcessing || loading}>{isProcessing || loading ? "Salvando..." : "Salvar Reposição"}</Button>
                 </div>
             </DialogFooter>
           </form>
