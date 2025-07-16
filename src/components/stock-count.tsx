@@ -24,14 +24,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X } from 'lucide-react';
-import { Textarea } from './ui/textarea';
-import { RequestItemAdditionModal } from './request-item-addition-modal';
-import { ItemAdditionRequestManagement } from './item-addition-request-management';
+import { Textarea } from '@/components/ui/textarea';
+import { RequestItemAdditionModal } from '@/components/request-item-addition-modal';
+import { ItemAdditionRequestManagement } from '@/components/item-addition-request-management';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Badge } from './ui/badge';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 
 
 const countItemSchema = z.object({
@@ -46,7 +46,7 @@ const countFormSchema = z.object({
 type CountFormValues = z.infer<typeof countFormSchema>;
 
 function PendingApprovals() {
-  const { counts, updateStockCount, loading: loadingCounts } from useStockCount();
+  const { counts, updateStockCount, loading: loadingCounts } = useStockCount();
   const { adjustLotQuantity } = useExpiryProducts();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
