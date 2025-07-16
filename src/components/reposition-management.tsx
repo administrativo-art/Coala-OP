@@ -6,7 +6,7 @@ import { useReposition } from "@/hooks/use-reposition";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2 } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format } from "date-fns";
@@ -14,6 +14,7 @@ import { ptBR } from "date-fns/locale";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
+import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 
 const getStatusBadge = (status: RepositionActivity['status']) => {
     switch (status) {
@@ -33,9 +34,10 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 }
 
 export function RepositionManagement() {
-    const { activities, loading } = useReposition();
+    const { activities, loading, deleteRepositionActivity } = useReposition();
     const { kiosks } = useKiosks();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
+    const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
 
     if (loading) {
         return (
@@ -58,25 +60,37 @@ export function RepositionManagement() {
         )
     }
 
+    const handleDeleteConfirm = async () => {
+        if (activityToDelete) {
+            await deleteRepositionActivity(activityToDelete.id);
+            setActivityToDelete(null);
+        }
+    };
+
     return (
         <>
         <div className="space-y-3">
             {activities.map(activity => (
                 <Accordion type="single" collapsible key={activity.id}>
                     <AccordionItem value={activity.id} className="border rounded-lg">
-                        <AccordionTrigger className="p-4 hover:no-underline">
-                            <div className="flex justify-between items-center w-full">
-                                <div>
-                                    <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Solicitado em {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                                    </p>
+                        <div className="flex items-center p-4">
+                            <AccordionTrigger className="p-0 hover:no-underline flex-1">
+                                <div className="flex justify-between items-center w-full">
+                                    <div>
+                                        <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Solicitado em {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                    {getStatusBadge(activity.status)}
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                   {getStatusBadge(activity.status)}
-                                </div>
-                            </div>
-                        </AccordionTrigger>
+                            </AccordionTrigger>
+                            <Button variant="ghost" size="icon" className="ml-2 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setActivityToDelete(activity); }}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
                         <AccordionContent className="p-4 pt-0">
                             <div className="space-y-4">
                                 {activity.items.map((item, index) => (
@@ -111,6 +125,16 @@ export function RepositionManagement() {
             <DispatchModal 
                 activity={activityToDispatch}
                 onOpenChange={() => setActivityToDispatch(null)}
+            />
+        )}
+
+        {activityToDelete && (
+            <DeleteConfirmationDialog 
+                open={!!activityToDelete}
+                onOpenChange={() => setActivityToDelete(null)}
+                onConfirm={handleDeleteConfirm}
+                itemName={`a atividade de reposição`}
+                description="Esta ação não pode ser desfeita. A atividade será permanentemente removida."
             />
         )}
         </>
