@@ -103,37 +103,38 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         doc.output('dataurlnewwindow');
     };
     
-    const handleExportSignedPdf = () => {
-        const signatureUrl = sigCanvas.current?.toDataURL('image/png');
-        const doc = generatePDF(signatureUrl, transporterName);
-        doc.save(`despacho_${activity.id.slice(0, 8)}.pdf`);
-    };
-
     const handleConfirmDispatch = async () => {
         if (!user) return;
+        setIsLoading(true);
 
         let signatureData: SignatureData = { signedBy: transporterName, signedAt: new Date().toISOString() };
-        
+        let signatureUrlForPdf: string | undefined = undefined;
+
         if (useDigitalSignature) {
             if (sigCanvas.current?.isEmpty()) {
                  alert("A assinatura digital é obrigatória.");
+                 setIsLoading(false);
                  return;
             }
-            signatureData.dataUrl = sigCanvas.current.toDataURL('image/png');
+            signatureUrlForPdf = sigCanvas.current.toDataURL('image/png');
+            signatureData.dataUrl = signatureUrlForPdf;
         } else {
              if (!physicalCopyUrl) {
                 alert("A foto do documento assinado é obrigatória.");
+                setIsLoading(false);
                 return;
             }
             signatureData.physicalCopyUrl = physicalCopyUrl;
         }
 
-        setIsLoading(true);
-
         await updateRepositionActivity(activity.id, {
             status: 'Aguardando recebimento',
             transportSignature: signatureData,
         });
+
+        // Generate and download PDF after successful confirmation
+        const doc = generatePDF(signatureUrlForPdf, transporterName);
+        doc.save(`despacho_${activity.id.slice(0, 8)}.pdf`);
 
         setIsLoading(false);
         onOpenChange(false);
@@ -236,18 +237,13 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             <Alert>
                 <AlertTitle className="flex items-center gap-2"><Send /> Tudo pronto para o despacho!</AlertTitle>
                 <AlertDescription>
-                    Ao confirmar, a atividade de reposição será atualizada para "Aguardando recebimento" e não poderá mais ser editada nesta etapa.
+                    Ao confirmar, a atividade de reposição será atualizada para "Aguardando recebimento" e um PDF do documento assinado será gerado para download.
                 </AlertDescription>
             </Alert>
              <div className="p-4 rounded-md border bg-muted/50">
                 <p><strong>Transportador:</strong> {transporterName || "Não informado"}</p>
                 <p><strong>Método de Assinatura:</strong> {useDigitalSignature ? "Digital" : "Física (Anexada)"}</p>
             </div>
-            {useDigitalSignature && (
-                 <Button variant="outline" onClick={handleExportSignedPdf}>
-                    <FileText className="mr-2" /> Exportar Documento (PDF)
-                </Button>
-            )}
         </div>
     );
 
@@ -285,7 +281,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                         ) : (
                             <Button onClick={handleConfirmDispatch} disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                                {isLoading ? "Confirmando..." : "Confirmar Despacho"}
+                                {isLoading ? "Confirmando..." : "Confirmar e Gerar PDF"}
                             </Button>
                         )}
                     </div>
