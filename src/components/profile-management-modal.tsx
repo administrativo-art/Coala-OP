@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -21,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -37,6 +38,8 @@ const permissionsSchema = z.object({
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     team: z.object({ manage: z.boolean(), view: z.boolean() }),
     purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
+    stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
+    itemRequests: z.object({ manage: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -96,6 +99,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       returns: { ...defaultGuestPermissions.returns, ...profile.permissions?.returns },
       team: { ...defaultGuestPermissions.team, ...profile.permissions?.team },
       purchasing: { ...defaultGuestPermissions.purchasing, ...profile.permissions?.purchasing },
+      stockCount: { ...defaultGuestPermissions.stockCount, ...profile.permissions?.stockCount },
+      itemRequests: { ...defaultGuestPermissions.itemRequests, ...profile.permissions?.itemRequests },
     };
 
     form.reset({
@@ -182,6 +187,19 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.team.view", "Visualizar escalas", "Permite que o usuário veja as escalas de trabalho.")}
                             {renderPermissionSwitch("permissions.team.manage", "Gerenciar escalas", "Permite criar, editar e excluir escalas de trabalho.")}
+                        </AccordionContent>
+                    </AccordionItem>
+                     <AccordionItem value="stockCount">
+                        <AccordionTrigger className="text-lg font-semibold"><ListOrdered className="mr-2 h-5 w-5" /> Contagem de Estoque</AccordionTrigger>
+                        <AccordionContent className="space-y-2 pt-4 p-1">
+                            {renderPermissionSwitch("permissions.stockCount.perform", "Realizar contagem", "Permite registrar contagens de estoque.")}
+                            {renderPermissionSwitch("permissions.stockCount.approve", "Aprovar contagem", "Permite aprovar ou rejeitar contagens, ajustando o estoque.")}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="itemRequests">
+                        <AccordionTrigger className="text-lg font-semibold"><PlusCircle className="mr-2 h-5 w-5" /> Solicitações de Insumos</AccordionTrigger>
+                        <AccordionContent className="space-y-2 pt-4 p-1">
+                            {renderPermissionSwitch("permissions.itemRequests.manage", "Gerenciar solicitações", "Permite aprovar ou rejeitar solicitações de cadastro de novos insumos.")}
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="stockAnalysis">

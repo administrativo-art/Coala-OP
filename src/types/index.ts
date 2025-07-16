@@ -168,7 +168,7 @@ export type PermissionSet = {
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
     team: { manage: boolean, view: boolean };
     purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
-    stockCount: { perform: boolean; approve: boolean; viewHistory: boolean; };
+    stockCount: { perform: boolean; approve: boolean; };
     itemRequests: { manage: boolean; };
 };
 
@@ -464,7 +464,7 @@ export const defaultGuestPermissions: PermissionSet = {
     returns: { add: false, updateStatus: false, delete: false },
     team: { manage: false, view: false },
     purchasing: { suggest: false, approve: false, viewHistory: false },
-    stockCount: { perform: false, approve: false, viewHistory: false },
+    stockCount: { perform: false, approve: false },
     itemRequests: { manage: false },
 };
 
@@ -480,7 +480,7 @@ export const defaultUserPermissions: PermissionSet = {
     returns: { add: true, updateStatus: true, delete: false },
     team: { manage: false, view: true },
     purchasing: { suggest: true, approve: false, viewHistory: true },
-    stockCount: { perform: true, approve: false, viewHistory: true },
+    stockCount: { perform: true, approve: false },
     itemRequests: { manage: false },
 };
 
@@ -496,6 +496,6 @@ export const defaultAdminPermissions: PermissionSet = {
     returns: { add: true, updateStatus: true, delete: true },
     team: { manage: true, view: true },
     purchasing: { suggest: true, approve: true, viewHistory: true },
-    stockCount: { perform: true, approve: true, viewHistory: true },
+    stockCount: { perform: true, approve: true },
     itemRequests: { manage: true },
 };
