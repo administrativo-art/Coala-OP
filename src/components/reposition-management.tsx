@@ -3,10 +3,10 @@
 
 import { useState } from "react";
 import { useReposition } from "@/hooks/use-reposition";
-import { useKiosks } from "@/hooks/use-kiosks";
+import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2 } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format } from "date-fns";
@@ -36,8 +36,8 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 }
 
 export function RepositionManagement() {
-    const { activities, loading, deleteRepositionActivity } = useReposition();
-    const { kiosks } = useKiosks();
+    const { activities, loading, deleteRepositionActivity, updateRepositionActivity } = useReposition();
+    const { user } = useAuth();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
@@ -68,6 +68,17 @@ export function RepositionManagement() {
             await deleteRepositionActivity(activityToDelete.id);
             setActivityToDelete(null);
         }
+    };
+    
+    const handleReopenAudit = async (activity: RepositionActivity) => {
+        await updateRepositionActivity(activity.id, {
+            status: 'Aguardando recebimento',
+            receiptNotes: '',
+            items: activity.items.map(item => ({
+                ...item,
+                receivedLots: [],
+            }))
+        });
     };
 
     return (
@@ -109,7 +120,7 @@ export function RepositionManagement() {
                                     </div>
                                 ))}
 
-                                <div className="flex justify-end pt-4 border-t">
+                                <div className="flex justify-end pt-4 border-t gap-2">
                                      {activity.status === 'Aguardando despacho' && (
                                         <Button onClick={() => setActivityToDispatch(activity)}>
                                             <Truck className="mr-2 h-4 w-4" />
@@ -120,6 +131,12 @@ export function RepositionManagement() {
                                          <Button onClick={() => setActivityToAudit(activity)}>
                                             <CheckSquare className="mr-2 h-4 w-4" />
                                             Auditar Recebimento
+                                        </Button>
+                                    )}
+                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && user?.username === 'Tiago Brasil' && (
+                                        <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
+                                            <Undo2 className="mr-2 h-4 w-4" />
+                                            Reabrir Auditoria
                                         </Button>
                                     )}
                                 </div>

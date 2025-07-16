@@ -65,8 +65,17 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   const updateRepositionActivity = useCallback(async (activityId: string, updates: Partial<RepositionActivity>) => {
     const activityRef = doc(db, 'repositionActivities', activityId);
+    
+    // Create a new object for Firestore to avoid mutating the original and to remove undefined values
+    const updatePayload: Record<string, any> = { ...updates, updatedAt: new Date().toISOString() };
+    Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === undefined) {
+            delete updatePayload[key];
+        }
+    });
+
     try {
-      await updateDoc(activityRef, { ...updates, updatedAt: new Date().toISOString() });
+      await updateDoc(activityRef, updatePayload);
     } catch (error) {
       console.error("Error updating reposition activity:", error);
     }
