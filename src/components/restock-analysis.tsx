@@ -7,7 +7,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue } from '@/lib/conversion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
