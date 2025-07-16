@@ -16,6 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Trash2, PlusCircle, Wand2, ArrowRight } from 'lucide-react';
+import { convertValue } from '@/lib/conversion';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
@@ -82,10 +83,37 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         .sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
   }, [matrizLots, fields]);
 
+  const watchedItems = form.watch('items');
+
+  const totalSuggestedInBaseUnit = useMemo(() => {
+    return watchedItems.reduce((total, currentItem) => {
+        const lot = lots.find(l => l.id === currentItem.lotId);
+        if (!lot) return total;
+        
+        const product = products.find(p => p.id === lot.productId);
+        if (!product) return total;
+
+        const quantityToMove = currentItem.quantity || 0;
+        
+        try {
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
+                return total + (quantityToMove * valueOfOnePackageInBase);
+            } 
+            else if (product.category === suggestionResult.baseProduct.category) {
+                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, suggestionResult.baseProduct.unit, product.category);
+                 return total + (quantityToMove * valueOfOnePackageInBase);
+            }
+        } catch {
+            return total; // Ignore if conversion fails
+        }
+
+        return total;
+    }, 0);
+  }, [watchedItems, lots, products, suggestionResult.baseProduct]);
 
   const onSubmit = async (values: MoveFormValues) => {
-    // For now, this just closes the modal.
-    // The logic to save/move will be implemented later.
     toast({ title: "Sugestão Salva (Demonstração)", description: "A funcionalidade de salvar a sugestão será implementada." });
     onOpenChange(false);
   };
@@ -96,8 +124,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Wand2/> Sugestão de Reposição</DialogTitle>
           <DialogDescription>
-            Reposição de <strong>{suggestionResult.baseProduct.name}</strong> para o quiosque <strong>{targetKiosk.name}</strong>.
-            Necessidade: {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}.
+            Reposição de <strong>{suggestionResult.baseProduct.name}</strong> para o quiosque <strong>{targetKiosk.name}</strong>. Necessidade: {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -115,7 +142,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                       <div>
                         <p className="font-semibold">{getProductFullName(product)}</p>
                         <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                         <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity}</p>
+                         <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} pacotes</p>
                       </div>
                        <ArrowRight className="h-4 w-4 text-muted-foreground"/>
                       <FormField
@@ -154,9 +181,15 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isProcessing}>{isProcessing ? "Processando..." : "Salvar Sugestão"}</Button>
+            <DialogFooter className="pt-4 border-t flex-col sm:flex-row sm:justify-between items-center">
+                <div className="text-sm font-semibold">
+                    Total a ser movido:
+                    <span className="text-primary ml-2">{totalSuggestedInBaseUnit.toLocaleString()} / {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}</span>
+                </div>
+                <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button type="submit" disabled={isProcessing}>{isProcessing ? "Processando..." : "Salvar Sugestão"}</Button>
+                </div>
             </DialogFooter>
           </form>
         </Form>
