@@ -16,6 +16,7 @@ import { useReturnRequests } from '@/hooks/use-return-requests';
 import { useReposition } from '@/hooks/use-reposition';
 import { format, parseISO } from 'date-fns';
 import { returnRequestStatuses, type ReturnRequest } from '@/types';
+import { DebugPanel } from '@/components/debug-panel';
 
 export default function DashboardLayout({
   children,
@@ -25,6 +26,7 @@ export default function DashboardLayout({
   const { user, isAuthenticated, loading, originalUser, stopImpersonating, permissions } = useAuth();
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
 
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
@@ -32,8 +34,13 @@ export default function DashboardLayout({
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.push('/login');
+    const startTime = performance.now();
+    if (!loading) {
+      const endTime = performance.now();
+      setDataLoadTime(endTime - startTime);
+      if (!isAuthenticated) {
+        router.push('/login');
+      }
     }
   }, [isAuthenticated, loading, router]);
 
@@ -177,6 +184,7 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+      {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
     </div>
   )
 }
