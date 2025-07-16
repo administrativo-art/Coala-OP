@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -27,6 +27,7 @@ export function Header({ tasks }: { tasks: Task[] }) {
     const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
     const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve);
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
+    const canUseHelp = !loading && permissions.help.view;
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
 
@@ -39,6 +40,7 @@ export function Header({ tasks }: { tasks: Task[] }) {
         { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
         { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
         { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
+        { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
     ]
 
   return (

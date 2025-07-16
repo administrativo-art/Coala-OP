@@ -93,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
             returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
             team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
+            help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

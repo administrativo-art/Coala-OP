@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart, LifeBuoy } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -25,6 +25,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
   const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve) || (permissions.stockCount.perform || permissions.stockCount.approve);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
+  const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
 
@@ -37,6 +38,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
     { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
+    { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
   ];
 
   return (
