@@ -21,7 +21,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useToast } from '@/hooks/use-toast';
-import { type LotEntry, type Kiosk, type BaseProduct } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type Product } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 
 interface SuggestedLot {
@@ -52,7 +52,7 @@ type MoveFormValues = z.infer<typeof moveFormSchema>;
 export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenChange }: RestockSuggestionModalProps) {
   const { user } = useAuth();
   const { lots, moveMultipleLots } = useExpiryProducts();
-  const { getProductFullName } = useProducts();
+  const { products, getProductFullName } = useProducts();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -71,7 +71,11 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     name: 'items',
   });
   
-  const matrizLots = useMemo(() => lots.filter(l => l.kioskId === 'matriz' && l.productId.startsWith(suggestionResult.baseProduct.id)), [lots, suggestionResult.baseProduct.id]);
+  const matrizLots = useMemo(() => {
+    const productMap = new Map(products.map(p => [p.id, p]));
+    return lots.filter(l => l.kioskId === 'matriz' && productMap.get(l.productId)?.baseProductId === suggestionResult.baseProduct.id);
+  }, [lots, products, suggestionResult.baseProduct.id]);
+  
   const availableLotsToAdd = useMemo(() => {
     const selectedLotIds = new Set(fields.map(f => f.lotId));
     return matrizLots.filter(l => !selectedLotIds.has(l.id) && l.quantity > 0)
@@ -80,40 +84,10 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
 
 
   const onSubmit = async (values: MoveFormValues) => {
-    if (!user) return;
-    setIsProcessing(true);
-
-    const moveParams: MoveLotParams[] = [];
-    for (const item of values.items) {
-      if (item.quantity > 0) {
-        const lot = lots.find(l => l.id === item.lotId);
-        if (lot) {
-          moveParams.push({
-            lotId: lot.id,
-            productId: lot.productId,
-            toKioskId: targetKiosk.id,
-            fromKioskId: 'matriz',
-            quantityToMove: item.quantity,
-            fromKioskName: "Centro de distribuição - Matriz",
-            toKioskName: targetKiosk.name,
-            movedByUserId: user.id,
-            movedByUsername: user.username,
-            productName: getProductFullName(lot as any), // Assuming lot has product info
-            lotNumber: lot.lotNumber
-          });
-        }
-      }
-    }
-
-    try {
-        await moveMultipleLots(moveParams);
-        toast({ title: "Transferência confirmada!", description: "O estoque foi movimentado com sucesso." });
-        onOpenChange(false);
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Erro na transferência", description: error.message || "Não foi possível mover o estoque." });
-    } finally {
-        setIsProcessing(false);
-    }
+    // For now, this just closes the modal.
+    // The logic to save/move will be implemented later.
+    toast({ title: "Sugestão Salva (Demonstração)", description: "A funcionalidade de salvar a sugestão será implementada." });
+    onOpenChange(false);
   };
 
   return (
@@ -133,10 +107,13 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 {fields.map((field, index) => {
                   const lot = lots.find(l => l.id === field.lotId);
                   if (!lot) return null;
+                  const product = products.find(p => p.id === lot.productId);
+                  if (!product) return null;
+                  
                   return (
                     <div key={field.id} className="grid grid-cols-[1fr_auto_120px_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
                       <div>
-                        <p className="font-semibold">{getProductFullName(lot as any)}</p>
+                        <p className="font-semibold">{getProductFullName(product)}</p>
                         <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity}</p>
                       </div>
@@ -165,11 +142,13 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             <SelectValue placeholder={availableLotsToAdd.length > 0 ? "Selecione um lote..." : "Nenhum outro lote disponível"} />
                         </SelectTrigger>
                         <SelectContent>
-                            {availableLotsToAdd.map(lot => (
+                            {availableLotsToAdd.map(lot => {
+                                const product = products.find(p => p.id === lot.productId);
+                                return (
                                 <SelectItem key={lot.id} value={lot.id}>
-                                    {getProductFullName(lot as any)} (Lote: {lot.lotNumber}, Qtd: {lot.quantity})
+                                    {product ? getProductFullName(product) : 'Produto desconhecido'} (Lote: {lot.lotNumber}, Qtd: {lot.quantity})
                                 </SelectItem>
-                            ))}
+                            )})}
                         </SelectContent>
                     </Select>
                 </div>
@@ -177,7 +156,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
             </ScrollArea>
             <DialogFooter className="pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isProcessing}>{isProcessing ? "Processando..." : "Confirmar e Mover Estoque"}</Button>
+              <Button type="submit" disabled={isProcessing}>{isProcessing ? "Processando..." : "Salvar Sugestão"}</Button>
             </DialogFooter>
           </form>
         </Form>

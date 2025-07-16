@@ -24,7 +24,7 @@ interface SuggestedLot {
     quantityToMove: number;
 }
 
-interface AnalysisResult {
+export interface AnalysisResult {
   baseProduct: BaseProduct;
   currentStock: number;
   minimumStock: number;
@@ -133,18 +133,31 @@ export function RestockAnalysis() {
             for (const lot of availableMatrizLots) {
                 if (needed <= 0) break;
                 const product = productMap.get(lot.productId)!;
-                const lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                let lotPackageSizeInBase = 0;
+
+                try {
+                     if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                        lotPackageSizeInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    } else if (product.category === baseProduct.category) {
+                        lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    } else {
+                        continue;
+                    }
+                } catch {
+                    continue;
+                }
+                
                 if (lotPackageSizeInBase > 0) {
-                    const lotTotalValueInBase = lot.quantity * lotPackageSizeInBase;
-                    const quantityToTakeFromLot = Math.min(lotTotalValueInBase, needed);
-                    const packagesToTake = Math.ceil(quantityToTakeFromLot / lotPackageSizeInBase);
+                    const packagesToMeetNeed = Math.ceil(needed / lotPackageSizeInBase);
+                    const packagesToMove = Math.min(lot.quantity, packagesToMeetNeed);
                     
                     suggestionList.push({
                         lot,
-                        quantityToMove: Math.min(lot.quantity, packagesToTake)
+                        quantityToMove: packagesToMove
                     });
 
-                    needed -= lot.quantity * lotPackageSizeInBase;
+                    needed -= packagesToMove * lotPackageSizeInBase;
                 }
             }
             if(suggestionList.length > 0) {
