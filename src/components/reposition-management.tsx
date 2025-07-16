@@ -117,19 +117,40 @@ export function RepositionManagement() {
                             </Button>
                         </div>
                         <AccordionContent className="p-4 pt-0">
-                            <div className="space-y-4">
-                                {activity.items.map((item, index) => (
-                                    <div key={index} className="p-3 border rounded-md bg-muted/50">
-                                        <p className="font-semibold">{item.productName}</p>
-                                        <ul className="list-disc pl-5 mt-1 text-sm">
-                                            {item.suggestedLots.map(lot => (
-                                                <li key={lot.lotId}>
-                                                    {lot.quantityToMove}x {lot.productName} (Lote: {lot.lotId.slice(-6)})
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ))}
+                             <div className="space-y-4">
+                                {activity.items.map((item, index) => {
+                                    const hasBeenAudited = activity.status.startsWith('Recebido');
+
+                                    return (
+                                        <div key={index} className="p-3 border rounded-md bg-muted/50">
+                                            <p className="font-semibold">{item.productName}</p>
+                                            <ul className="list-disc pl-5 mt-1 text-sm space-y-1">
+                                                {(hasBeenAudited ? item.receivedLots : item.suggestedLots)?.map(lot => {
+                                                    const originalLot = item.suggestedLots.find(sl => sl.lotId === lot.lotId);
+                                                    const sentQty = originalLot?.quantityToMove || 0;
+                                                    const receivedQty = (lot as any).receivedQuantity;
+                                                    const hasDivergence = hasBeenAudited && receivedQty !== sentQty;
+                                                    
+                                                    return (
+                                                        <li key={lot.lotId}>
+                                                            {hasBeenAudited ? (
+                                                                <span className={hasDivergence ? 'text-destructive font-bold' : ''}>
+                                                                    Recebido: {receivedQty} / Enviado: {sentQty}
+                                                                </span>
+                                                            ) : (
+                                                                `Enviando: ${sentQty}`
+                                                            )}
+                                                            <span className="text-muted-foreground"> x {lot.productName} (Lote: {lot.lotId.slice(-6)})</span>
+                                                            {hasDivergence && lot.receiptNotes && (
+                                                                <p className="text-xs text-destructive pl-4 border-l-2 border-destructive ml-1 mt-1 italic">"{lot.receiptNotes}"</p>
+                                                            )}
+                                                        </li>
+                                                    )
+                                                })}
+                                            </ul>
+                                        </div>
+                                    )
+                                })}
 
                                 <div className="flex justify-end pt-4 border-t gap-2">
                                      {activity.status === 'Aguardando despacho' && (

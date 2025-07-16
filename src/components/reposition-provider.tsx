@@ -69,7 +69,6 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const updateRepositionActivity = useCallback(async (activityId: string, updates: Partial<RepositionActivity>) => {
     const activityRef = doc(db, 'repositionActivities', activityId);
     
-    // Create a new object for Firestore to avoid mutating the original and to remove undefined values
     const updatePayload: Record<string, any> = { ...updates, updatedAt: new Date().toISOString() };
     Object.keys(updatePayload).forEach(key => {
         if (updatePayload[key] === undefined) {
@@ -97,12 +96,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (!activity.items) return;
 
     const lotsToMove = activity.items.flatMap(item => 
-      (item.receivedLots || item.suggestedLots).map(lot => ({
+      (item.receivedLots || []).map(lot => ({
         lotId: lot.lotId,
         productId: lot.productId,
         productName: lot.productName,
-        lotNumber: lot.lotId, // Placeholder, will be fetched from lot data
-        quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
+        lotNumber: lot.lotId,
+        quantityToMove: lot.receivedQuantity,
         fromKioskId: activity.kioskOriginId,
         fromKioskName: activity.kioskOriginName,
         toKioskId: activity.kioskDestinationId,
@@ -110,9 +109,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         movedByUserId: user.id,
         movedByUsername: user.username,
       }))
-    );
+    ).filter(lot => lot.quantityToMove > 0);
     
-    await moveMultipleLots(lotsToMove);
+    if (lotsToMove.length > 0) {
+      await moveMultipleLots(lotsToMove);
+    }
+    
     await updateRepositionActivity(activity.id, { status: 'Concluído' });
 
   }, [user, moveMultipleLots, updateRepositionActivity]);
