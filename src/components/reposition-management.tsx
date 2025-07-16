@@ -6,7 +6,7 @@ import { useReposition } from "@/hooks/use-reposition";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2 } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format } from "date-fns";
@@ -16,6 +16,7 @@ import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { AuditReceiptModal } from "./audit-receipt-modal";
+import { useExpiryProducts } from "@/hooks/use-expiry-products";
 
 
 const getStatusBadge = (status: RepositionActivity['status']) => {
@@ -36,11 +37,13 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 }
 
 export function RepositionManagement() {
-    const { activities, loading, deleteRepositionActivity, updateRepositionActivity } = useReposition();
+    const { activities, loading, deleteRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
     const { user } = useAuth();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
+    const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
+    const [isFinalizing, setIsFinalizing] = useState(false);
 
     if (loading) {
         return (
@@ -79,6 +82,14 @@ export function RepositionManagement() {
                 receivedLots: [],
             }))
         });
+    };
+    
+    const handleFinalizeConfirm = async () => {
+        if (!activityToFinalize) return;
+        setIsFinalizing(true);
+        await finalizeRepositionActivity(activityToFinalize);
+        setIsFinalizing(false);
+        setActivityToFinalize(null);
     };
 
     return (
@@ -134,10 +145,16 @@ export function RepositionManagement() {
                                         </Button>
                                     )}
                                     {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && user?.username === 'Tiago Brasil' && (
-                                        <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
-                                            <Undo2 className="mr-2 h-4 w-4" />
-                                            Reabrir Auditoria
-                                        </Button>
+                                        <>
+                                            <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
+                                                <Undo2 className="mr-2 h-4 w-4" />
+                                                Reabrir Auditoria
+                                            </Button>
+                                            <Button onClick={() => setActivityToFinalize(activity)}>
+                                                <BadgeCheck className="mr-2 h-4 w-4" />
+                                                Efetivar Movimentação
+                                            </Button>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -168,6 +185,19 @@ export function RepositionManagement() {
                 onConfirm={handleDeleteConfirm}
                 itemName={`a atividade de reposição`}
                 description="Esta ação não pode ser desfeita. A atividade será permanentemente removida."
+            />
+        )}
+        
+        {activityToFinalize && (
+            <DeleteConfirmationDialog 
+                open={!!activityToFinalize}
+                onOpenChange={() => setActivityToFinalize(null)}
+                onConfirm={handleFinalizeConfirm}
+                isDeleting={isFinalizing}
+                title="Efetivar Movimentação de Estoque?"
+                description="Esta ação é irreversível. O estoque será debitado da origem e creditado no destino conforme a auditoria. Deseja continuar?"
+                confirmButtonText="Sim, efetivar"
+                confirmButtonVariant="default"
             />
         )}
         </>

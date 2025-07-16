@@ -6,6 +6,7 @@ import { type RepositionActivity, type RepositionItem } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 export interface RepositionContextType {
   activities: RepositionActivity[];
@@ -13,6 +14,7 @@ export interface RepositionContextType {
   createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>) => Promise<string | null>;
   updateRepositionActivity: (activityId: string, updates: Partial<RepositionActivity>) => Promise<void>;
   deleteRepositionActivity: (activityId: string) => Promise<void>;
+  finalizeRepositionActivity: (activity: RepositionActivity) => Promise<void>;
 }
 
 export const RepositionContext = createContext<RepositionContextType | undefined>(undefined);
@@ -21,6 +23,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const { user } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const { moveMultipleLots } = useExpiryProducts();
 
   useEffect(() => {
     const q = query(collection(db, "repositionActivities"));
@@ -88,6 +91,31 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       console.error("Error deleting reposition activity:", error);
     }
   }, []);
+  
+  const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
+    if (!user) throw new Error("Usuário não autenticado.");
+    if (!activity.items) return;
+
+    const lotsToMove = activity.items.flatMap(item => 
+      (item.receivedLots || item.suggestedLots).map(lot => ({
+        lotId: lot.lotId,
+        productId: lot.productId,
+        productName: lot.productName,
+        lotNumber: lot.lotId, // Placeholder, will be fetched from lot data
+        quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
+        fromKioskId: activity.kioskOriginId,
+        fromKioskName: activity.kioskOriginName,
+        toKioskId: activity.kioskDestinationId,
+        toKioskName: activity.kioskDestinationName,
+        movedByUserId: user.id,
+        movedByUsername: user.username,
+      }))
+    );
+    
+    await moveMultipleLots(lotsToMove);
+    await updateRepositionActivity(activity.id, { status: 'Concluído' });
+
+  }, [user, moveMultipleLots, updateRepositionActivity]);
 
   const value = useMemo(() => ({
     activities,
@@ -95,7 +123,8 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     createRepositionActivity,
     updateRepositionActivity,
     deleteRepositionActivity,
-  }), [activities, loading, createRepositionActivity, updateRepositionActivity, deleteRepositionActivity]);
+    finalizeRepositionActivity,
+  }), [activities, loading, createRepositionActivity, updateRepositionActivity, deleteRepositionActivity, finalizeRepositionActivity]);
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
