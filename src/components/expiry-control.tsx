@@ -414,119 +414,106 @@ export function ExpiryControl() {
           <CardDescription>Gerencie os lotes, vencimentos, transferências e reposições do seu estoque.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-            <Tabs defaultValue="control" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="control"><ClipboardCheck className="mr-2" />Controle de Insumos</TabsTrigger>
-                    <TabsTrigger value="restock"><RefreshCw className="mr-2" />Reposição</TabsTrigger>
-                </TabsList>
-                <TabsContent value="control" className="mt-6">
-                    <div className="mb-4">
-                        <div className="relative w-full">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar por insumo base, produto, lote, código..."
-                                className="pl-10 pr-12"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                            <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="icon" 
-                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                                onClick={() => setIsSearchScannerOpen(true)}
-                                aria-label="Escanear código de barras para busca"
-                            >
-                                <Camera className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                        </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                        <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
-                            <Plus className="mr-2" /> Adicionar lote
+            <div className="mb-4">
+                <div className="relative w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por insumo base, produto, lote, código..."
+                        className="pl-10 pr-12"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                        onClick={() => setIsSearchScannerOpen(true)}
+                        aria-label="Escanear código de barras para busca"
+                    >
+                        <Camera className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
+                    <Plus className="mr-2" /> Adicionar lote
+                </Button>
+                {permissions.lots.viewMovementHistory && (
+                    <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
+                        <History className="mr-2" /> Histórico de movimentações
+                    </Button>
+                )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Filter className="mr-2 h-4 w-4" />
+                            Status {statusFilters.length > 0 && `(${statusFilters.length})`}
                         </Button>
-                        {permissions.lots.viewMovementHistory && (
-                            <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
-                                <History className="mr-2" /> Histórico de movimentações
-                            </Button>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline">
-                                    <Filter className="mr-2 h-4 w-4" />
-                                    Status {statusFilters.length > 0 && `(${statusFilters.length})`}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilters.includes('expiring')}
-                                    onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
-                                    onSelect={(e) => e.preventDefault()}
-                                >
-                                    Vencendo em breve
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilters.includes('expired')}
-                                    onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
-                                    onSelect={(e) => e.preventDefault()}
-                                >
-                                    Vencidos
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                    Limpar filtros
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilters.includes('expiring')}
+                            onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            Vencendo em breve
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilters.includes('expired')}
+                            onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            Vencidos
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                            Limpar filtros
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
-                        {user?.username === 'Tiago Brasil' && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline">
-                                        <Filter className="mr-2 h-4 w-4" />
-                                        Quiosques ({selectedKiosks.length})
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-64" align="start">
-                                    <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
-                                        Selecionar todos
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                        Limpar seleção
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <ScrollArea className="h-48">
-                                    {sortedKiosks.map(kiosk => (
-                                        <DropdownMenuCheckboxItem
-                                            key={kiosk.id}
-                                            checked={selectedKiosks.includes(kiosk.id)}
-                                            onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
-                                            onSelect={(e) => e.preventDefault()}
-                                        >
-                                            {kiosk.name}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
-                                    </ScrollArea>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
-                    </div>
-                    <div className="mt-6">
-                        {renderContent()}
-                    </div>
-                </TabsContent>
-                <TabsContent value="restock" className="mt-6">
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <p>A funcionalidade de reposição será configurada aqui.</p>
-                    </div>
-                </TabsContent>
-            </Tabs>
+                {user?.username === 'Tiago Brasil' && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Filter className="mr-2 h-4 w-4" />
+                                Quiosques ({selectedKiosks.length})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64" align="start">
+                            <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
+                                Selecionar todos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                Limpar seleção
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-48">
+                            {sortedKiosks.map(kiosk => (
+                                <DropdownMenuCheckboxItem
+                                    key={kiosk.id}
+                                    checked={selectedKiosks.includes(kiosk.id)}
+                                    onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {kiosk.name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+            </div>
+            <div className="mt-6">
+                {renderContent()}
+            </div>
         </CardContent>
       </Card>
       
