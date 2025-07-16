@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package } from 'lucide-react';
 import { type BaseProduct } from '@/types';
+import { cn } from '@/lib/utils';
 
 interface AnalysisResult {
   baseProduct: BaseProduct;
@@ -68,22 +69,18 @@ export function RestockAnalysis() {
         }
 
         try {
-            // Updated logic to handle different conversion scenarios
             let valueInBaseUnit = 0;
             const quantityInPackages = lot.quantity;
 
-            // Scenario 1: Advanced conversion using secondary unit
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                 const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } 
-            // Scenario 2: Standard conversion for same categories
             else if (product.category === baseProduct.category) {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else {
-                // If categories are different and no secondary unit is set, it's a conversion error.
                 throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
             }
 
@@ -187,7 +184,7 @@ export function RestockAnalysis() {
                     <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
                     <TableCell className="text-center">
                         {result.stockPercentage !== null ? (
-                             <Progress value={result.stockPercentage} className={result.stockPercentage < 100 ? 'bg-orange-500 [&>*]:bg-orange-500' : 'bg-green-500 [&>*]:bg-green-500'} />
+                             <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
                         ) : '-'}
                     </TableCell>
                     <TableCell className="text-center font-bold text-primary">{result.restockNeeded > 0 ? `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}` : '-'}</TableCell>
