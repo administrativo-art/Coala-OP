@@ -28,7 +28,7 @@ const simulationItemSchema = z.object({
 });
 
 const simulationSchema = z.object({
-  name: z.string().min(1, 'O nome da simulação é obrigatório.'),
+  name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -212,7 +212,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                    <h3 className="font-semibold text-lg">Resultados da análise</h3>
                    <div className="rounded-lg border p-4 space-y-3">
                     <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">CMV Total</span>
+                        <span className="text-muted-foreground">CMV total</span>
                         <span className="font-bold text-lg">{formatCurrency(cmv)}</span>
                     </div>
                     <Separator />
@@ -263,7 +263,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{simulationToEdit ? 'Salvar alterações' : 'Criar simulação'}</Button>
+              <Button type="submit">{simulationToEdit ? 'Salvar alterações' : 'Criar análise'}</Button>
             </DialogFooter>
           </form>
         </Form>
