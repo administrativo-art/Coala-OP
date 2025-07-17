@@ -109,10 +109,10 @@ export function PricingSimulator() {
                                     </div>
                                 </AccordionTrigger>
                                  <div className="flex items-center gap-1 shrink-0">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
                                         <Edit className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSimulationToDelete(sim)}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                  </div>
