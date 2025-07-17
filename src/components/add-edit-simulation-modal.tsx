@@ -85,32 +85,33 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     }
   }, [open, simulationToEdit, simulationItems, form]);
 
-  const { cmv, partialCosts } = useMemo(() => {
+  const { cmv, partialCosts, unitCosts } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
+    const units: Record<number, number> = {};
 
     watchedItems.forEach((item, index) => {
       const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
       if (!baseProduct || !baseProduct.lastEffectivePrice?.pricePerUnit || !item.quantity || !item.unit) {
         partials[index] = 0;
+        units[index] = 0;
         return;
       }
       try {
         const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit;
-        
-        // A unidade do item na composição já é a unidade base do produto base.
-        // Portanto, a conversão é direta.
-        const partialCost = item.quantity * pricePerBaseUnit;
+        units[index] = pricePerBaseUnit;
 
+        const partialCost = item.quantity * pricePerBaseUnit;
         partials[index] = partialCost;
         totalCmv += partialCost;
       } catch (e) {
         console.error("Error calculating CMV for item:", item, e);
         partials[index] = 0;
+        units[index] = 0;
       }
     });
 
-    return { cmv: totalCmv, partialCosts: partials };
+    return { cmv: totalCmv, partialCosts: partials, unitCosts: units };
   }, [watchedItems, baseProducts]);
 
   const grossCost = useMemo(() => {
@@ -179,21 +180,33 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                      <h3 className="font-semibold text-lg">Composição (CMV)</h3>
                      <p className="text-xs text-muted-foreground">A unidade de medida é travada na que foi configurada para cada insumo base.</p>
                   </div>
-
                   
                   <div className="rounded-md border p-2 space-y-2">
+                    {fields.length > 0 && (
+                        <div className="grid grid-cols-[1fr_80px_100px_90px_90px_auto] items-center gap-2 p-1 text-xs text-muted-foreground font-semibold">
+                            <span>Insumo Base</span>
+                            <span className="text-center">Qtd.</span>
+                            <span className="text-center">Unidade</span>
+                            <span className="text-center">Custo/Unid.</span>
+                            <span className="text-center">Custo Total</span>
+                            <span></span>
+                        </div>
+                    )}
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                       return (
-                        <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto_auto] items-center gap-2 p-2 rounded bg-muted/50">
-                          <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
+                        <div key={field.id} className="grid grid-cols-[1fr_80px_100px_90px_90px_auto] items-center gap-2 p-2 rounded bg-muted/50">
+                          <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                            <FormItem><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                           )}/>
                            <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
                               <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
                            </div>
-                           <div className="font-semibold text-primary text-sm w-[70px] text-right">
+                           <div className="font-semibold text-sm w-full text-center">
+                            {formatCurrency(unitCosts[index])}
+                           </div>
+                           <div className="font-semibold text-primary text-sm w-full text-center">
                             {formatCurrency(partialCosts[index])}
                            </div>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}>
@@ -229,7 +242,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <FormLabel>+ % operação</FormLabel>
                         <FormControl>
                             <div className="relative w-24">
-                                <Input type="number" className="pr-8" {...field} value={field.value ?? ''} />
+                                <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''} />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                             </div>
                         </FormControl>
@@ -246,7 +259,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <FormControl>
                             <div className="relative w-32">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                                <Input type="number" step="0.01" className="pl-8 font-semibold" {...field} value={field.value ?? ''} />
+                                <Input type="number" step="0.01" className="pl-8 font-semibold text-right" {...field} value={field.value ?? ''} />
                             </div>
                         </FormControl>
                       </FormItem>
@@ -271,7 +284,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{simulationToEdit ? 'Salvar alterações' : 'Criar análise'}</Button>
+              <Button type="submit">Salvar Análise</Button>
             </DialogFooter>
           </form>
         </Form>
