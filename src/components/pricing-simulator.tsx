@@ -6,16 +6,15 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, PlusCircle, Inbox, Trash2, Edit } from "lucide-react";
+import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
-import { cn } from "@/lib/utils";
+import { Input } from "./ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || isNaN(value)) return 'R$ 0,00';
@@ -29,6 +28,8 @@ export function PricingSimulator() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [insumoFilter, setInsumoFilter] = useState('all');
 
     const handleAddNew = () => {
         setSimulationToEdit(null);
@@ -54,6 +55,17 @@ export function PricingSimulator() {
         });
         return map;
     }, [baseProducts]);
+    
+    const filteredSimulations = useMemo(() => {
+        return simulations.filter(sim => {
+            const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const insumoMatch = insumoFilter === 'all' || 
+                simulationItems.some(item => item.simulationId === sim.id && item.baseProductId === insumoFilter);
+
+            return searchMatch && insumoMatch;
+        });
+    }, [simulations, searchTerm, insumoFilter, simulationItems]);
 
     const renderContent = () => {
         if (loading || baseProductsLoading) {
@@ -75,6 +87,16 @@ export function PricingSimulator() {
             );
         }
         
+        if (filteredSimulations.length === 0) {
+            return (
+                <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                    <Inbox className="mx-auto h-12 w-12" />
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhum resultado encontrado</h3>
+                    <p className="mt-1 text-sm">Tente ajustar os filtros de busca.</p>
+                </div>
+            );
+        }
+        
         return (
             <div className="space-y-3">
                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
@@ -86,7 +108,7 @@ export function PricingSimulator() {
                     <div className="w-20"></div>
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
-                    {simulations.map(sim => {
+                    {filteredSimulations.map(sim => {
                         const items = simulationItems.filter(item => item.simulationId === sim.id);
                         return (
                             <AccordionItem value={sim.id} key={sim.id} className="border rounded-lg overflow-hidden bg-card hover:bg-muted/50 transition-colors">
@@ -119,13 +141,17 @@ export function PricingSimulator() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {items.map(item => (
-                                                <TableRow key={item.id}>
-                                                    <TableCell>{baseProductMap.get(item.baseProductId)?.name || 'Insumo não encontrado'}</TableCell>
-                                                    <TableCell className="text-right">{item.quantity} {baseProductMap.get(item.baseProductId)?.unit}</TableCell>
-                                                    <TableCell className="text-right">{formatCurrency(item.partialCost)}</TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {items.map(item => {
+                                                const baseProductInfo = baseProductMap.get(item.baseProductId);
+                                                const cost = item.costPerUnit * item.quantity;
+                                                return (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
+                                                        <TableCell className="text-right">{item.quantity} {baseProductInfo?.unit}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(cost)}</TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </AccordionContent>
@@ -158,6 +184,32 @@ export function PricingSimulator() {
                     </div>
                 </CardHeader>
                 <CardContent>
+                    <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
+                        <div className="relative flex-grow">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                placeholder="Buscar por nome da mercadoria..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <Select value={insumoFilter} onValueChange={setInsumoFilter}>
+                            <SelectTrigger className="w-full sm:w-[250px]">
+                                <SelectValue placeholder="Filtrar por insumo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos os insumos</SelectItem>
+                                {baseProducts.map(bp => (
+                                    <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setInsumoFilter("all"); }}>
+                            <Eraser className="mr-2 h-4 w-4" />
+                            Limpar
+                        </Button>
+                    </div>
                    {renderContent()}
                 </CardContent>
             </Card>
