@@ -10,7 +10,7 @@ export function PricingSimulator() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <DollarSign />
-                    Simulador de Preços de Mercadorias
+                    Análise de Custo de Mercadorias
                 </CardTitle>
                 <CardDescription>
                     Crie composições de produtos, analise o Custo da Mercadoria Vendida (CMV) e simule preços de venda para entender a lucratividade.
@@ -18,7 +18,7 @@ export function PricingSimulator() {
             </CardHeader>
             <CardContent>
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                    <p>O módulo de simulação de preços está em construção.</p>
+                    <p>O módulo de análise de custo está em construção.</p>
                 </div>
             </CardContent>
         </Card>
