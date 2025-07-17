@@ -25,7 +25,7 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <ClipboardCheck className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Controle de Estoque</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Controle de estoque</CardTitle>
                         <CardDescription>Acompanhe a validade dos lotes, adicione novos insumos e faça transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
@@ -43,13 +43,13 @@ export function StockManagement() {
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
                                 <ListOrdered className="h-10 w-10 text-primary" />
                             </div>
-                            <CardTitle className="text-2xl mb-2">Contagem de Estoque</CardTitle>
+                            <CardTitle className="text-2xl mb-2">Contagem de estoque</CardTitle>
                             <CardDescription>Realize contagens parciais do estoque e gerencie solicitações de novos insumos.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                             <Link href="/dashboard/stock/count" className="w-full">
                                 <Button className="w-full text-lg py-6">
-                                    Iniciar Contagem <ArrowRight className="ml-2" />
+                                    Iniciar contagem <ArrowRight className="ml-2" />
                                 </Button>
                             </Link>
                         </CardContent>
@@ -111,7 +111,7 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Repeat className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Conversão de Medidas</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Conversão de medidas</CardTitle>
                         <CardDescription>Converta unidades de inventário com base nos seus produtos cadastrados.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">

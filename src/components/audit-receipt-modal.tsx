@@ -207,7 +207,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     <Dialog open={true} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Auditar Recebimento de Reposição</DialogTitle>
+          <DialogTitle>Auditar recebimento de reposição</DialogTitle>
           <DialogDescription>
             Confirme as quantidades recebidas de {activity.kioskOriginName} para {activity.kioskDestinationName}.
           </DialogDescription>
@@ -224,8 +224,8 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                       <TableHeader>
                         <TableRow>
                           <TableHead>Lote</TableHead>
-                          <TableHead className="text-center w-[120px]">Qtd. Enviada</TableHead>
-                          <TableHead className="text-center w-[120px]">Qtd. Recebida</TableHead>
+                          <TableHead className="text-center w-[120px]">Qtd. enviada</TableHead>
+                          <TableHead className="text-center w-[120px]">Qtd. recebida</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -237,7 +237,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                   </div>
                 ))}
                  <div className="p-4 border rounded-lg space-y-2">
-                    <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do Recebedor</Label>
+                    <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do recebedor</Label>
                     <div className="rounded-md border bg-background">
                         <SignatureCanvas
                         ref={sigCanvas}
@@ -257,7 +257,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
               </Button>
               <Button type="submit" form="audit-form" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                {isLoading ? "Confirmando..." : "Confirmar Recebimento"}
+                {isLoading ? "Confirmando..." : "Confirmar recebimento"}
               </Button>
             </DialogFooter>
           </form>

@@ -172,7 +172,7 @@ export function PredefinedConverter() {
                       <div className="flex justify-end">
                         <Button onClick={() => handleSaveCount(list)}>
                             <Save className="mr-2" />
-                            Salvar Contagem
+                            Salvar contagem
                         </Button>
                       </div>
                     </>
@@ -193,7 +193,7 @@ export function PredefinedConverter() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-center font-headline flex items-center justify-center gap-2">
-            <ClipboardList /> Contagem de Estoque
+            <ClipboardList /> Contagem de estoque
           </CardTitle>
           <CardDescription className="text-center">Use modelos de contagem para agilizar as tarefas comuns.</CardDescription>
         </CardHeader>

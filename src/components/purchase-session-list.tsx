@@ -119,7 +119,7 @@ export function PurchaseSessionList() {
                     <AccordionItem value="session-history" className="border-none">
                         <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
                             <div className="flex items-center gap-2">
-                                <History /> Histórico de Pesquisas
+                                <History /> Histórico de pesquisas
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="pt-4">

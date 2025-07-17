@@ -13,7 +13,7 @@ export default function StockPurchasingPage() {
             <Link href="/dashboard/stock" className="inline-block mb-4">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    Voltar para Gestão de Estoque
+                    Voltar para gestão de estoque
                 </Button>
             </Link>
             <PurchaseManagement />

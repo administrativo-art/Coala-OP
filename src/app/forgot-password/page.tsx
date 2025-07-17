@@ -107,7 +107,7 @@ export default function ForgotPasswordPage() {
                         <FormControl>
                            <Input
                                 type="password"
-                                placeholder="Senha Atual"
+                                placeholder="Senha atual"
                                 className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
                                 {...field}
                             />
@@ -127,7 +127,7 @@ export default function ForgotPasswordPage() {
                         <FormControl>
                            <Input
                                 type="password"
-                                placeholder="Nova Senha"
+                                placeholder="Nova senha"
                                 className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
                                 {...field}
                             />
@@ -147,7 +147,7 @@ export default function ForgotPasswordPage() {
                         <FormControl>
                            <Input
                                 type="password"
-                                placeholder="Confirmar Nova Senha"
+                                placeholder="Confirmar nova senha"
                                 className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
                                 {...field}
                             />

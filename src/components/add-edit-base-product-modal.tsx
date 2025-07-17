@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -161,7 +161,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
                   )}/>
                 </div>
                 
-                <h3 className="text-md font-medium border-t pt-4">Níveis de estoque mínimo (Opcional)</h3>
+                <h3 className="text-md font-medium border-t pt-4">Níveis de estoque mínimo (opcional)</h3>
 
                 <div className="rounded-md border">
                     <Table>

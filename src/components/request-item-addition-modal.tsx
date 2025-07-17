@@ -70,7 +70,7 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Solicitar Cadastro de Insumo</DialogTitle>
+          <DialogTitle>Solicitar cadastro de insumo</DialogTitle>
           <DialogDescription>
             Preencha os dados do insumo encontrado no estoque que não está cadastrado no sistema.
           </DialogDescription>
@@ -123,7 +123,7 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enviar Solicitação
+                Enviar solicitação
               </Button>
             </DialogFooter>
           </form>

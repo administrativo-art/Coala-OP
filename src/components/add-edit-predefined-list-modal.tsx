@@ -212,7 +212,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                 <PopoverContent className="w-80">
                     <div className="grid gap-4">
                         <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Selecionar Produtos</h4>
+                            <h4 className="font-medium leading-none">Selecionar produtos</h4>
                             <p className="text-sm text-muted-foreground">
                                 Marque os produtos que deseja adicionar.
                             </p>
@@ -223,10 +223,10 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
                                 <DropdownMenuItem onSelect={() => setProductsToAdd(new Set(activeProducts.map(p => p.id)))}>
-                                    Selecionar Todos
+                                    Selecionar todos
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onSelect={() => setProductsToAdd(new Set())}>
-                                    Limpar Seleção
+                                    Limpar seleção
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

@@ -33,7 +33,7 @@ export function ConsumptionAnalysisDashboard() {
                 </Button>
                 <Button onClick={() => setIsImportModalOpen(true)} className="w-full sm:w-auto">
                     <UploadCloud className="mr-2" />
-                    Importar relatório de consumo
+                    Importar relatório
                 </Button>
             </div>
             

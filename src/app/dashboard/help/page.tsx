@@ -9,7 +9,7 @@ import Image from 'next/image';
 const helpTopics = [
     {
         icon: LayoutDashboard,
-        title: "Dashboard Principal",
+        title: "Dashboard principal",
         content: [
             {
                 question: "O que são os cards de KPI no topo?",
@@ -41,7 +41,7 @@ const helpTopics = [
     },
     {
         icon: ClipboardCheck,
-        title: "Gestão de Estoque",
+        title: "Gestão de estoque",
         content: [
             {
                 question: "Como adicionar um novo lote ao estoque?",
@@ -63,7 +63,7 @@ const helpTopics = [
     },
     {
         icon: BarChart3,
-        title: "Análise de Estoque",
+        title: "Análise de estoque",
         content: [
             {
                 question: "Como funciona a 'Análise de Reposição'?",
@@ -77,7 +77,7 @@ const helpTopics = [
     },
     {
         icon: ShieldAlert,
-        title: "Gestão de Avarias",
+        title: "Gestão de avarias",
         content: [
             {
                 question: "Quando devo abrir um chamado de avaria?",
@@ -98,7 +98,7 @@ export default function HelpPage() {
                 <div className="p-4 bg-primary/10 rounded-full mb-4">
                     <LifeBuoy className="h-12 w-12 text-primary" />
                 </div>
-                <h1 className="text-4xl font-bold tracking-tight">Central de Ajuda</h1>
+                <h1 className="text-4xl font-bold tracking-tight">Central de ajuda</h1>
                 <p className="text-lg text-muted-foreground mt-2">
                     Encontre respostas para suas dúvidas sobre o funcionamento do sistema.
                 </p>

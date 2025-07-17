@@ -22,13 +22,13 @@ export default function AnalysisPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><RefreshCw /> Análise de Reposição</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><RefreshCw /> Análise de reposição</CardTitle>
                         <CardDescription>Compare o estoque atual com as metas e veja o que precisa ser reposto.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end">
                         <Link href="/dashboard/stock/analysis/restock" className="w-full">
                             <Button className="w-full">
-                                Analisar Reposição <ArrowRight className="ml-2" />
+                                Analisar reposição <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>

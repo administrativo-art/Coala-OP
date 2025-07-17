@@ -81,14 +81,14 @@ function LabelSettings() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Configurações de Etiqueta</CardTitle>
+                <CardTitle>Configurações de etiqueta</CardTitle>
                 <CardDescription>
                     Personalize a aparência das etiquetas de lote.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                  <div className="space-y-2">
-                    <h3 className="text-lg font-medium">Tamanho da Etiqueta</h3>
+                    <h3 className="text-lg font-medium">Tamanho da etiqueta</h3>
                     <p className="text-sm text-muted-foreground">
                         Selecione o modelo de etiqueta que você utiliza para a impressão.
                     </p>
@@ -106,7 +106,7 @@ function LabelSettings() {
                             </SelectContent>
                         </Select>
                         <Button variant="outline" onClick={handlePrintSample} disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Eye className="mr-2 h-4 w-4" />} Ver Exemplo
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Eye className="mr-2 h-4 w-4" />} Ver exemplo
                         </Button>
                     </div>
                 </div>
@@ -128,7 +128,7 @@ export default function SettingsPage() {
             
              <Tabs defaultValue="users" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                    {canManageUsers && <TabsTrigger value="users"><Users className="mr-2 h-4 w-4" /> Usuários e Perfis</TabsTrigger>}
+                    {canManageUsers && <TabsTrigger value="users"><Users className="mr-2 h-4 w-4" /> Usuários e perfis</TabsTrigger>}
                     <TabsTrigger value="labels"><Ticket className="mr-2 h-4 w-4" /> Etiquetas</TabsTrigger>
                 </TabsList>
                 {canManageUsers && 

@@ -100,7 +100,7 @@ export function AverageConsumptionChart() {
     if (chartData.length === 0) return;
     
     const doc = new jsPDF();
-    const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
+    const kioskName = selectedKiosk === 'matriz' ? 'Todos os quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque desconhecido';
     const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
     doc.setFontSize(18);
@@ -110,7 +110,7 @@ export function AverageConsumptionChart() {
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
     doc.text(`Gerado em: ${monthYear}`, 14, 35);
 
-    const tableHead = [['Produto Base (unidade)', 'Consumo Médio']];
+    const tableHead = [['Produto base (unidade)', 'Consumo médio']];
     const tableBody = chartData.map(item => [
         item.name,
         formatNumberForDisplay(item.Consumo),

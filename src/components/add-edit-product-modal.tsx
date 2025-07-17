@@ -247,7 +247,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
                                         <div className="flex items-center gap-2">
-                                            <FormLabel>Qtd. Embalagem</FormLabel>
+                                            <FormLabel>Qtd. embalagem</FormLabel>
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
                                                     <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
@@ -266,7 +266,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 <Separator/>
                                 <div className="p-4 border rounded-lg bg-muted/30">
-                                    <h4 className="text-md font-medium mb-2">Unidade de medida do insumo base (Opcional)</h4>
+                                    <h4 className="text-md font-medium mb-2">Unidade de medida do insumo base (opcional)</h4>
                                     <p className="text-sm text-muted-foreground mb-4">
                                         Use esta seção se o estoque geral (produto base) for controlado por uma unidade diferente da do insumo. Ex: um insumo em "unidades" controlado por "peso" no estoque geral.
                                     </p>

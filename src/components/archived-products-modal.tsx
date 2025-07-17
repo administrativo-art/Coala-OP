@@ -25,7 +25,7 @@ export function ArchivedProductsModal({ open, onOpenChange }: ArchivedProductsMo
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Insumos Arquivados</DialogTitle>
+                    <DialogTitle>Insumos arquivados</DialogTitle>
                     <DialogDescription>
                         Gerencie os insumos que foram arquivados. Eles não aparecerão nas buscas a menos que sejam desarquivados.
                     </DialogDescription>

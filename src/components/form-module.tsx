@@ -108,7 +108,7 @@ export function FormModule() {
             <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
                 <CardHeader>
                     <CardTitle className="font-headline flex items-center gap-2">
-                       <ListChecks /> Módulo de Formulários
+                       <ListChecks /> Módulo de formulários
                     </CardTitle>
                     <CardDescription>Crie, preencha e gerencie formulários para as operações diárias. Consulte o histórico de respostas.</CardDescription>
                 </CardHeader>
@@ -116,8 +116,8 @@ export function FormModule() {
                     <Tabs defaultValue="available" className="w-full">
                         <div className="flex justify-between items-center">
                             <TabsList>
-                                <TabsTrigger value="available">Formulários Disponíveis</TabsTrigger>
-                                {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de Respostas</TabsTrigger>}
+                                <TabsTrigger value="available">Formulários disponíveis</TabsTrigger>
+                                {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de respostas</TabsTrigger>}
                             </TabsList>
                             {permissions.forms.manage && (
                                 <Button onClick={handleAddNew}>

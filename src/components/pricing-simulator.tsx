@@ -10,10 +10,10 @@ export function PricingSimulator() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <DollarSign />
-                    Análise de Custo de Mercadorias
+                    Análise de custo de mercadorias
                 </CardTitle>
                 <CardDescription>
-                    Crie composições de produtos, analise o Custo da Mercadoria Vendida (CMV) e simule preços de venda para entender a lucratividade.
+                    Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
                 </CardDescription>
             </CardHeader>
             <CardContent>

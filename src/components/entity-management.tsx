@@ -119,7 +119,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>{entityToEdit ? 'Editar Cadastro' : 'Novo Cadastro'}</DialogTitle>
+                    <DialogTitle>{entityToEdit ? 'Editar cadastro' : 'Novo cadastro'}</DialogTitle>
                     <DialogDescription>{entityToEdit ? 'Edite as informações abaixo.' : 'Crie um novo cadastro de pessoa física ou jurídica.'}</DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -128,16 +128,16 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                             <div className="space-y-4">
                                 <FormField control={form.control} name="type" render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Tipo de Cadastro</FormLabel>
+                                        <FormLabel>Tipo de cadastro</FormLabel>
                                         <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                         <SelectContent><SelectItem value="pessoa_fisica">Pessoa Física</SelectItem><SelectItem value="pessoa_juridica">Pessoa Jurídica</SelectItem></SelectContent>
                                         </Select><FormMessage />
                                     </FormItem>
                                 )}/>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome Completo / Razão Social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome completo / Razão social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                     {entityType === 'pessoa_juridica' ? (
-                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome fantasia</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     ) : (
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CPF</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                     )}
@@ -175,7 +175,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                         </ScrollArea>
                         <DialogFooter className="pt-4 border-t mt-auto">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                            <Button type="submit">{entityToEdit ? 'Salvar Alterações' : 'Adicionar'}</Button>
+                            <Button type="submit">{entityToEdit ? 'Salvar alterações' : 'Adicionar'}</Button>
                         </DialogFooter>
                     </form>
                 </Form>
@@ -230,12 +230,12 @@ export function EntityManagement() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Pessoas e Empresas</CardTitle>
+          <CardTitle>Pessoas e empresas</CardTitle>
           <CardDescription>Gerencie seus contatos, clientes e fornecedores.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
            <Button onClick={handleAddNew} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Cadastro
+                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo cadastro
            </Button>
 
             <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
@@ -253,7 +253,7 @@ export function EntityManagement() {
                         <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">Todos os Tipos</SelectItem>
+                        <SelectItem value="all">Todos os tipos</SelectItem>
                         <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
                         <SelectItem value="pessoa_juridica">Pessoa Jurídica</SelectItem>
                     </SelectContent>

@@ -135,7 +135,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     <Dialog open={true} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">Sugestão de Reposição</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">Sugestão de reposição</DialogTitle>
           <DialogDescription>
             Reposição de <strong>{suggestionResult.baseProduct.name}</strong> para o quiosque <strong>{targetKiosk.name}</strong>. Necessidade: {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}.
           </DialogDescription>
@@ -201,7 +201,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 </div>
                 <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isProcessing}>{isProcessing ? "Adicionando..." : "Adicionar à Reposição"}</Button>
+                    <Button type="submit" disabled={isProcessing}>{isProcessing ? "Adicionando..." : "Adicionar à reposição"}</Button>
                 </div>
             </DialogFooter>
           </form>

@@ -19,7 +19,7 @@ export default function RegistrationPage() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Package className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Gerenciar Insumos</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Gerenciar insumos</CardTitle>
                         <CardDescription>Cadastre produtos, agrupe-os em "produtos base" e defina metas de estoque.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
@@ -35,7 +35,7 @@ export default function RegistrationPage() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Users className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Pessoas e Empresas</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Pessoas e empresas</CardTitle>
                         <CardDescription>Gerencie seus contatos, clientes e fornecedores em um único lugar.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">

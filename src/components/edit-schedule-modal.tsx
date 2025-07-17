@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -127,7 +128,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Editar Escala - {editingKiosk.name}</DialogTitle>
+          <DialogTitle>Editar escala - {editingKiosk.name}</DialogTitle>
           <DialogDescription>
             Alterando a escala para {format(new Date(dayData.id), "EEEE, dd 'de' MMMM", { locale: ptBR })}.
           </DialogDescription>
@@ -141,7 +142,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                     name={`shifts.0.value`} // Assumes T1 is at index 0
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Turno Único</FormLabel>
+                        <FormLabel>Turno único</FormLabel>
                         {renderSelect(field)}
                         <FormMessage />
                         </FormItem>
@@ -211,7 +212,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
             <DialogFooter className="pt-3 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={loading}>Salvar Alterações</Button>
+              <Button type="submit" disabled={loading}>Salvar alterações</Button>
             </DialogFooter>
           </form>
         </Form>

@@ -25,11 +25,11 @@ export function PurchaseManagement() {
                         <TabsList className="grid w-full grid-cols-2">
                              <TabsTrigger value="sessions">
                                 <ShoppingCart className="mr-2 h-4 w-4"/>
-                                Pesquisas Atuais
+                                Pesquisas atuais
                             </TabsTrigger>
                             <TabsTrigger value="history">
                                 <History className="mr-2 h-4 w-4"/>
-                                Histórico de Preços
+                                Histórico de preços
                             </TabsTrigger>
                         </TabsList>
                         <TabsContent value="sessions" className="mt-6">

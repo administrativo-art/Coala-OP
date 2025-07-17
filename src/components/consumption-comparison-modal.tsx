@@ -184,7 +184,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         doc.text(`Período A: ${periodALabel}`, 14, 30);
         doc.text(`Período B: ${periodBLabel}`, 14, 36);
 
-        const tableHead = [['Produto Base', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
+        const tableHead = [['Produto base', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
         const tableBody = comparisonResults.map(item => {
             let percentageText: string;
             if (item.percentageChange === null) {
@@ -329,7 +329,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead>Produto Base</TableHead>
+                                                    <TableHead>Produto base</TableHead>
                                                     <TableHead className="text-right">Período A</TableHead>
                                                     <TableHead className="text-right">Período B</TableHead>
                                                     <TableHead className="text-right">Variação (absoluta e %)</TableHead>

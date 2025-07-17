@@ -66,7 +66,7 @@ export default function DashboardLayout({
       stockCounts.filter(sc => sc.status === 'pending').forEach(sc => {
         tasks.push({
           id: `stockcount-${sc.id}`,
-          type: 'Aprovação de Contagem',
+          type: 'Aprovação de contagem',
           title: `Contagem de ${sc.kioskName}`,
           description: `Enviada por ${sc.countedBy.username} em ${format(parseISO(sc.countedAt), 'dd/MM/yyyy HH:mm')}`,
           link: '/dashboard/stock/count',
@@ -83,7 +83,7 @@ export default function DashboardLayout({
     myReturnRequests.forEach(req => {
       tasks.push({
         id: `return-${req.id}`,
-        type: 'Chamado de Avaria',
+        type: 'Chamado de avaria',
         title: `${req.numero}: ${req.insumoNome}`,
         description: `Status: ${returnRequestStatuses[req.status]?.label || 'Desconhecido'}`,
         link: '/dashboard/stock/returns',
@@ -101,20 +101,20 @@ export default function DashboardLayout({
         case 'Aguardando despacho':
           if (isMaster || user.assignedKioskIds.includes(act.kioskOriginId)) {
             isVisible = true;
-            taskTitle = 'Gerenciar Despacho';
+            taskTitle = 'Gerenciar despacho';
           }
           break;
         case 'Aguardando recebimento':
           if (isMaster || user.assignedKioskIds.includes(act.kioskDestinationId)) {
             isVisible = true;
-            taskTitle = 'Auditar Recebimento';
+            taskTitle = 'Auditar recebimento';
           }
           break;
         case 'Recebido com divergência':
         case 'Recebido sem divergência':
           if (isMaster) {
             isVisible = true;
-            taskTitle = 'Efetivar Movimentação';
+            taskTitle = 'Efetivar movimentação';
           }
           break;
       }
@@ -122,7 +122,7 @@ export default function DashboardLayout({
       if(isVisible) {
         tasks.push({
           id: `reposition-${act.id}`,
-          type: 'Reposição de Estoque',
+          type: 'Reposição de estoque',
           title: taskTitle,
           description: taskDesc,
           link: '/dashboard/stock/analysis/restock',

@@ -54,11 +54,11 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         const doc = new jsPDF();
         
         doc.setFontSize(18);
-        doc.text("Documento de Transporte de Mercadoria", 14, 22);
+        doc.text("Documento de transporte de mercadoria", 14, 22);
 
         doc.setFontSize(11);
         doc.text(`Atividade ID: ${activity.id}`, 14, 32);
-        doc.text(`Data de Emissão: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 38);
+        doc.text(`Data de emissão: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 38);
         doc.text(`Origem: ${activity.kioskOriginName}`, 14, 44);
         doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 50);
 
@@ -90,14 +90,14 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         doc.text(splitText, 14, finalY + 15);
         
         doc.line(14, finalY + 40, 100, finalY + 40);
-        doc.text("Assinatura do Transportador", 14, finalY + 45);
+        doc.text("Assinatura do transportador", 14, finalY + 45);
 
         if (signatureUrl) {
             doc.addImage(signatureUrl, 'PNG', 14, finalY + 20, 60, 20);
         }
 
         doc.line(110, finalY + 40, 196, finalY + 40);
-        doc.text("Nome do Transportador", 110, finalY + 45);
+        doc.text("Nome do transportador", 110, finalY + 45);
         
         if (name) {
             doc.text(name, 110, finalY + 35);
@@ -163,7 +163,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
 
     const renderStep1 = () => (
         <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Conferência dos Itens</h3>
+            <h3 className="text-lg font-semibold">Conferência dos itens</h3>
             <p className="text-sm text-muted-foreground">Revise os itens e as quantidades que serão transportados.</p>
             <div className="max-h-60 overflow-y-auto rounded-md border p-2 bg-muted/50">
                 <Table>
@@ -187,7 +187,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             </div>
              <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
-                    <Label className="text-base">Assinatura Digital</Label>
+                    <Label className="text-base">Assinatura digital</Label>
                     <p className="text-sm text-muted-foreground">Coletar a assinatura na tela?</p>
                 </div>
                 <Switch checked={useDigitalSignature} onCheckedChange={setUseDigitalSignature} />
@@ -197,11 +197,11 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     
     const renderStep2 = () => (
         <div className="space-y-4">
-            <h3 className="text-lg font-semibold">{useDigitalSignature ? "Coleta de Assinatura Digital" : "Coleta de Assinatura Física"}</h3>
+            <h3 className="text-lg font-semibold">{useDigitalSignature ? "Coleta de assinatura digital" : "Coleta de assinatura física"}</h3>
             <p className="text-sm text-muted-foreground">Solicite que o transportador preencha o nome e assine.</p>
 
              <div>
-                <Label htmlFor="transporter-name">Nome do Transportador</Label>
+                <Label htmlFor="transporter-name">Nome do transportador</Label>
                 <Input 
                     id="transporter-name" 
                     value={transporterName} 
@@ -212,7 +212,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             
             {useDigitalSignature ? (
                 <div>
-                    <Label>Assinatura Digital</Label>
+                    <Label>Assinatura digital</Label>
                     <div className="rounded-md border bg-white">
                         <SignatureCanvas 
                             ref={sigCanvas}
@@ -222,14 +222,14 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                         />
                     </div>
                     <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1 text-muted-foreground">
-                        <Eraser className="mr-1 h-3 w-3" /> Limpar Assinatura
+                        <Eraser className="mr-1 h-3 w-3" /> Limpar assinatura
                     </Button>
                 </div>
             ) : (
                 <div className="space-y-3">
                     <Button variant="outline" className="w-full" onClick={() => generatePDF().output('dataurlnewwindow')}>
                         <Printer className="mr-2" />
-                        Imprimir Documento para Assinatura
+                        Imprimir documento para assinatura
                     </Button>
                      <div className="rounded-md border p-4 text-center">
                         {physicalCopyUrl ? (
@@ -241,7 +241,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                         )}
                         <Button variant="secondary" onClick={() => setIsPhotoModalOpen(true)}>
                            <Camera className="mr-2" />
-                           {physicalCopyUrl ? "Tirar outra foto" : "Anexar Foto"}
+                           {physicalCopyUrl ? "Tirar outra foto" : "Anexar foto"}
                        </Button>
                     </div>
                 </div>
@@ -259,7 +259,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             </Alert>
              <div className="p-4 rounded-md border bg-muted/50">
                 <p><strong>Transportador:</strong> {transporterName || "Não informado"}</p>
-                <p><strong>Método de Assinatura:</strong> {useDigitalSignature ? "Digital" : "Física (Anexada)"}</p>
+                <p><strong>Método de assinatura:</strong> {useDigitalSignature ? "Digital" : "Física (Anexada)"}</p>
             </div>
         </div>
     );
@@ -275,7 +275,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         <Dialog open={true} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Gerenciar Despacho de Reposição</DialogTitle>
+                    <DialogTitle>Gerenciar despacho de reposição</DialogTitle>
                     <DialogDescription>
                         Siga os passos para confirmar o envio da mercadoria de {activity.kioskOriginName} para {activity.kioskDestinationName}.
                     </DialogDescription>
@@ -304,7 +304,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                         ) : (
                             <Button onClick={handleConfirmDispatch} disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                                {isLoading ? "Confirmando..." : "Confirmar e Gerar PDF"}
+                                {isLoading ? "Confirmando..." : "Confirmar e gerar PDF"}
                             </Button>
                         )}
                     </div>

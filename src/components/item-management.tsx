@@ -159,7 +159,7 @@ export function ItemManagement() {
                                 </div>
                                 <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
                                     <p><strong>Categoria:</strong> {product.category}</p>
-                                    <p><strong>Cód. Barras:</strong> {product.barcode || 'N/A'}</p>
+                                    <p><strong>Cód. barras:</strong> {product.barcode || 'N/A'}</p>
                                     {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
                                     <div className="flex items-center gap-1 mt-4 pt-4 border-t">
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /> <span className="sr-only">Editar</span></Button>
@@ -200,7 +200,7 @@ export function ItemManagement() {
       <Dialog open={isBaseProductModalOpen} onOpenChange={setIsBaseProductModalOpen}>
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
             <DialogHeader>
-                <DialogTitle>Gerenciar Produto Base</DialogTitle>
+                <DialogTitle>Gerenciar produto base</DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-auto p-1">
                 <BaseProductManagement />

@@ -12,7 +12,7 @@ export default function StockCountPage() {
             <Link href="/dashboard/stock" className="inline-block">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    Voltar para Gestão de Estoque
+                    Voltar para gestão de estoque
                 </Button>
             </Link>
             <StockCount />

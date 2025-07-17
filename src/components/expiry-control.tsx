@@ -409,7 +409,7 @@ export function ExpiryControl() {
       <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
         <CardHeader>
           <CardTitle className="font-headline flex items-center gap-2">
-            Controle de Estoque
+            Controle de estoque
           </CardTitle>
           <CardDescription>Gerencie os lotes, vencimentos, transferências e reposições do seu estoque.</CardDescription>
         </CardHeader>

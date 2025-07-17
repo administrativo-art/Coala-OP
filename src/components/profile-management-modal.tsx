@@ -175,11 +175,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                 <ScrollArea className="h-[55vh] pr-6">
                     <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'purchasing']} className="w-full">
                     <AccordionItem value="purchasing">
-                        <AccordionTrigger className="text-lg font-semibold"><ShoppingCart className="mr-2 h-5 w-5" /> Gestão de Compras</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><ShoppingCart className="mr-2 h-5 w-5" /> Gestão de compras</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
-                            {renderPermissionSwitch("permissions.purchasing.suggest", "Sugerir/Pesquisar Preços", "Permite que o usuário insira preços durante uma sessão de pesquisa.")}
-                            {renderPermissionSwitch("permissions.purchasing.approve", "Aprovar Compras", "Permite efetivar uma compra, atualizando o preço médio do insumo.")}
-                            {renderPermissionSwitch("permissions.purchasing.viewHistory", "Visualizar Histórico", "Permite ver o histórico de pesquisas de preço e compras efetivadas.")}
+                            {renderPermissionSwitch("permissions.purchasing.suggest", "Sugerir/pesquisar preços", "Permite que o usuário insira preços durante uma sessão de pesquisa.")}
+                            {renderPermissionSwitch("permissions.purchasing.approve", "Aprovar compras", "Permite efetivar uma compra, atualizando o preço médio do insumo.")}
+                            {renderPermissionSwitch("permissions.purchasing.viewHistory", "Visualizar histórico", "Permite ver o histórico de pesquisas de preço e compras efetivadas.")}
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="team">
@@ -190,14 +190,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         </AccordionContent>
                     </AccordionItem>
                      <AccordionItem value="stockCount">
-                        <AccordionTrigger className="text-lg font-semibold"><ListOrdered className="mr-2 h-5 w-5" /> Contagem de Estoque</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><ListOrdered className="mr-2 h-5 w-5" /> Contagem de estoque</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.stockCount.perform", "Realizar contagem", "Permite registrar contagens de estoque.")}
                             {renderPermissionSwitch("permissions.stockCount.approve", "Aprovar contagem", "Permite aprovar ou rejeitar contagens, ajustando o estoque.")}
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="itemRequests">
-                        <AccordionTrigger className="text-lg font-semibold"><PlusCircle className="mr-2 h-5 w-5" /> Solicitações de Insumos</AccordionTrigger>
+                        <AccordionTrigger className="text-lg font-semibold"><PlusCircle className="mr-2 h-5 w-5" /> Solicitações de insumos</AccordionTrigger>
                         <AccordionContent className="space-y-2 pt-4 p-1">
                             {renderPermissionSwitch("permissions.itemRequests.manage", "Gerenciar solicitações", "Permite aprovar ou rejeitar solicitações de cadastro de novos insumos.")}
                         </AccordionContent>

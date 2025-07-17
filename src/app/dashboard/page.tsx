@@ -219,7 +219,7 @@ export default function DashboardPage() {
                                         <AccordionContent className="p-3 pt-0">
                                             <div className="text-sm mt-2 space-y-1">
                                                 {isSunday ? (
-                                                    t1 && <p><strong>Turno Único:</strong> {t1}</p>
+                                                    t1 && <p><strong>Turno único:</strong> {t1}</p>
                                                 ) : (
                                                     <>
                                                         {t1 && <p><strong>T1:</strong> {t1}</p>}

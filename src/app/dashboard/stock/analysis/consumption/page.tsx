@@ -11,7 +11,7 @@ export default function ConsumptionAnalysisPage() {
             <Link href="/dashboard/stock/analysis" className="inline-block mb-4">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    Voltar para Análises
+                    Voltar para análises
                 </Button>
             </Link>
             <ConsumptionAnalysisDashboard />

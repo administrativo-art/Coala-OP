@@ -12,7 +12,7 @@ export default function RegistrationItemsPage() {
             <Link href="/dashboard/registration" className="inline-block mb-4">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    Voltar para Cadastros
+                    Voltar para cadastros
                 </Button>
             </Link>
             <ItemManagement />

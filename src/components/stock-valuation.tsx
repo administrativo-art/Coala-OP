@@ -124,15 +124,15 @@ export function StockValuation() {
 
         const doc = new jsPDF();
         doc.setFontSize(18);
-        doc.text(`Avaliação Financeira do Estoque - ${kioskName}`, 14, 22);
+        doc.text(`Avaliação financeira do estoque - ${kioskName}`, 14, 22);
         doc.setFontSize(12);
-        doc.text(`Valor Total do Estoque: ${formatCurrency(totalStockValue)}`, 14, 30);
+        doc.text(`Valor total do estoque: ${formatCurrency(totalStockValue)}`, 14, 30);
         
         doc.setFontSize(14);
-        doc.text("Resumo por Insumo Base", 14, 45);
+        doc.text("Resumo por insumo base", 14, 45);
         autoTable(doc, {
             startY: 50,
-            head: [['Insumo Base', 'Quantidade Total (Pacotes)', 'Valor Total (R$)']],
+            head: [['Insumo Base', 'Quantidade total (pacotes)', 'Valor Total (R$)']],
             body: summaryByBaseProduct.map(item => [
                 item.name,
                 `${item.quantity.toLocaleString()} pct`,
@@ -142,10 +142,10 @@ export function StockValuation() {
         
         doc.addPage();
         doc.setFontSize(14);
-        doc.text("Detalhes por Lote", 14, 20);
+        doc.text("Detalhes por lote", 14, 20);
         autoTable(doc, {
              startY: 25,
-            head: [['Lote', 'Insumo', 'Quantidade (Pct)', 'R$/Pct.', 'Valor do Lote (R$)']],
+            head: [['Lote', 'Insumo', 'Quantidade (pct)', 'R$/pct.', 'Valor do lote (R$)']],
             body: valuedLots.map(item => [
                 item.lotNumber,
                 item.productName,
@@ -194,7 +194,7 @@ export function StockValuation() {
                  <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setIsAnalysisModalOpen(true)}>
                         <Scale className="mr-2" />
-                        Análise por Período
+                        Análise por período
                     </Button>
                     <Button onClick={handleExportPdf} disabled={!selectedKioskId || valuedLots.length === 0}>
                         <Download className="mr-2" />
@@ -218,14 +218,14 @@ export function StockValuation() {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Valor Total do Estoque</CardTitle>
+                                <CardTitle className="text-sm font-medium">Valor total do estoque</CardTitle>
                                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent><div className="text-2xl font-bold">{formatCurrency(totalStockValue)}</div></CardContent>
                         </Card>
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Insumos Base em Estoque</CardTitle>
+                                <CardTitle className="text-sm font-medium">Insumos base em estoque</CardTitle>
                                 <Package className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent><div className="text-2xl font-bold">{totalSkuCount}</div></CardContent>
@@ -235,7 +235,7 @@ export function StockValuation() {
                     <div className="grid gap-6 lg:grid-cols-2">
                         <Card>
                              <CardHeader>
-                                <CardTitle>Composição do Valor do Estoque</CardTitle>
+                                <CardTitle>Composição do valor do estoque</CardTitle>
                                 <CardDescription>Participação de cada insumo base no valor total.</CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -254,7 +254,7 @@ export function StockValuation() {
                         </Card>
                          <Card>
                             <CardHeader>
-                                <CardTitle>Resumo por Insumo Base</CardTitle>
+                                <CardTitle>Resumo por insumo base</CardTitle>
                                 <CardDescription>Totalização por tipo de insumo.</CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -263,8 +263,8 @@ export function StockValuation() {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Insumo</TableHead>
-                                                <TableHead className="text-right">Quantidade (Pct)</TableHead>
-                                                <TableHead className="text-right">Valor Total</TableHead>
+                                                <TableHead className="text-right">Quantidade (pct)</TableHead>
+                                                <TableHead className="text-right">Valor total</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -284,7 +284,7 @@ export function StockValuation() {
 
                      <Card>
                         <CardHeader>
-                            <CardTitle>Detalhes por Lote</CardTitle>
+                            <CardTitle>Detalhes por lote</CardTitle>
                             <CardDescription>Valor individual de cada lote em estoque.</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -293,10 +293,10 @@ export function StockValuation() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Lote</TableHead>
-                                            <TableHead>Insumo Vinculado</TableHead>
-                                            <TableHead className="text-right">Quantidade (Pct)</TableHead>
-                                            <TableHead className="text-right">R$/Pct.</TableHead>
-                                            <TableHead className="text-right">Valor do Lote</TableHead>
+                                            <TableHead>Insumo vinculado</TableHead>
+                                            <TableHead className="text-right">Quantidade (pct)</TableHead>
+                                            <TableHead className="text-right">R$/pct.</TableHead>
+                                            <TableHead className="text-right">Valor do lote</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>

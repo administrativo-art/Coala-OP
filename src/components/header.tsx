@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -30,6 +30,7 @@ export function Header({ tasks }: { tasks: Task[] }) {
     const canUseHelp = !loading && permissions.help.view;
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
+    const canSimulatePricing = !loading && permissions.pricing.simulate;
 
 
     const navItems = [
@@ -40,6 +41,7 @@ export function Header({ tasks }: { tasks: Task[] }) {
         { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
         { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
         { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
+        { href: '/dashboard/pricing', label: 'Análise de custo', icon: DollarSign, show: canSimulatePricing },
     ]
 
   return (
