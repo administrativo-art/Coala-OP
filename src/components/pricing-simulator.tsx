@@ -79,10 +79,10 @@ export function PricingSimulator() {
             <div className="space-y-3">
                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
                     <div>Mercadoria</div>
-                    <div className="text-right">Preço Venda</div>
+                    <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
-                    <div className="text-right">Lucro (R$)</div>
-                    <div className="text-right">Lucro (%)</div>
+                    <div className="text-right">Lucro</div>
+                    <div className="text-right">Lucro</div>
                     <div className="w-20"></div>
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
