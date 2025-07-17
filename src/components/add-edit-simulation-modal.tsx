@@ -97,8 +97,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
       }
       try {
         const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit;
-        const convertedQuantity = convertValue(item.quantity, item.unit, baseProduct.unit, baseProduct.category);
-        const partialCost = convertedQuantity * pricePerBaseUnit;
+        
+        // A unidade do item na composição já é a unidade base do produto base.
+        // Portanto, a conversão é direta.
+        const partialCost = item.quantity * pricePerBaseUnit;
+
         partials[index] = partialCost;
         totalCmv += partialCost;
       } catch (e) {
@@ -155,7 +158,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
+          <DialogTitle>Nova análise de custo</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -172,28 +175,24 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       </FormItem>
                   )}/>
                   
-                  <h3 className="font-semibold text-lg border-t pt-4">Composição (CMV)</h3>
+                  <div className="flex justify-between items-center border-t pt-4">
+                     <h3 className="font-semibold text-lg">Composição (CMV)</h3>
+                     <p className="text-xs text-muted-foreground">A unidade de medida é travada na que foi configurada para cada insumo base.</p>
+                  </div>
+
                   
                   <div className="rounded-md border p-2 space-y-2">
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
-                      const availableUnits = baseProduct ? getUnitsForCategory(baseProduct.category) : [];
                       return (
                         <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto] items-center gap-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                             <FormItem><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
                           )}/>
-                           <FormField control={form.control} name={`items.${index}.unit`} render={({ field: unitField }) => (
-                            <FormItem><FormControl>
-                                <Select onValueChange={unitField.onChange} value={unitField.value}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>
-                                        {availableUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </FormControl><FormMessage /></FormItem>
-                          )}/>
+                           <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
+                              <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
+                           </div>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
