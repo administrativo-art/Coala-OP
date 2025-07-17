@@ -169,8 +169,6 @@ export type ProductSimulationItem = {
   baseProductId: string;
   quantity: number;
   unit: string;
-  costPerUnit: number; // Stored at the time of simulation
-  partialCost: number;
   useDefaultCost: boolean;
   overrideCostPerUnit?: number;
 };

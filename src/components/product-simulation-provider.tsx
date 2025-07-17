@@ -11,7 +11,8 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface SimulationData {
     name: string;
-    category?: string;
+    categoryId?: string;
+    subcategoryId?: string | null;
     items: {
         baseProductId: string;
         quantity: number;
@@ -91,7 +92,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             
             items.forEach(item => {
                 const itemRef = doc(collection(db, "productSimulationItems"));
-                const newItem: Omit<ProductSimulationItem, 'id' | 'costPerUnit' | 'partialCost'> = {
+                const newItem: Omit<ProductSimulationItem, 'id'> = {
                     simulationId: simulationRef.id,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
@@ -130,7 +131,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             // Add new items
             items.forEach(item => {
                 const itemRef = doc(collection(db, "productSimulationItems"));
-                 const newItem: Omit<ProductSimulationItem, 'id' | 'costPerUnit' | 'partialCost'> = {
+                 const newItem: Omit<ProductSimulationItem, 'id'> = {
                     simulationId: id,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
@@ -167,20 +168,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
 
     const value = useMemo(() => {
-        // Enrich simulation items with cost data
-        const enrichedItems = simulationItems.map(item => {
-            const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-            const costPerUnit = item.useDefaultCost
-              ? baseProduct?.lastEffectivePrice?.pricePerUnit || 0
-              : item.overrideCostPerUnit || 0;
-
-            const partialCost = costPerUnit * item.quantity;
-            return { ...item, costPerUnit, partialCost };
-        });
-
         return {
             simulations,
-            simulationItems: enrichedItems,
+            simulationItems,
             loading,
             addSimulation,
             updateSimulation,

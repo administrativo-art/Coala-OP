@@ -68,7 +68,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
-  const watchedItems = form.watch('items');
+  const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
   const watchedCategoryId = form.watch('categoryId');
@@ -123,9 +123,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         return;
       }
       try {
-        const pricePerBaseUnit = item.useDefaultCost
-            ? (baseProduct.lastEffectivePrice?.pricePerUnit || 0)
-            : (item.overrideCostPerUnit || 0);
+        const defaultCost = baseProduct.lastEffectivePrice?.pricePerUnit || 0;
+        const pricePerBaseUnit = item.useDefaultCost ? defaultCost : (item.overrideCostPerUnit || 0);
         
         units[index] = pricePerBaseUnit;
 
@@ -164,8 +163,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
       append({ 
           baseProductId: product.id,
           quantity: 1,
-          useDefaultCost: true,
-          overrideCostPerUnit: 0,
+          useDefaultCost: !!product.lastEffectivePrice,
+          overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit || 0,
         });
     }
   };
@@ -261,65 +260,74 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   </div>
                   
                   <div className="rounded-md border p-2 space-y-2">
-                     <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                    <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                         <span>Insumo Base</span>
                         <span className="text-center">Qtd.</span>
-                        <span className="text-center">Unidade</span>
+                        <span className="text-center">Unid.</span>
                         <span className="text-right">Custo/Unid.</span>
                         <span className="text-right">Custo Total</span>
                         <span className="w-8"></span>
                     </div>
                     {fields.map((field, index) => {
-                      const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
-                      const useDefault = watchedItems[index].useDefaultCost;
+                        const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
+                        const useDefault = watchedItems[index].useDefaultCost;
+                        const hasDefaultCost = !!baseProduct?.lastEffectivePrice;
 
-                      return (
-                        <div key={field.id} className="p-2 rounded bg-muted/50">
-                          <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2">
-                            <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
-                            <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                              <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
-                            )}/>
-                            <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
-                                <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
+                        return (
+                            <div key={field.id} className="p-2 rounded bg-muted/50">
+                            <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2">
+                                <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
+                                <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
+                                <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
+                                    <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
+                                </div>
+                                
+                                <Controller
+                                    control={form.control}
+                                    name={`items.${index}.overrideCostPerUnit`}
+                                    render={({ field: costField }) => (
+                                        <Input
+                                            type="number"
+                                            step="any"
+                                            value={useDefault ? unitCosts[index]?.toFixed(4) ?? '' : costField.value ?? ''}
+                                            onChange={costField.onChange}
+                                            disabled={useDefault}
+                                            className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
+                                        />
+                                    )}
+                                />
+
+                            <div className="font-semibold text-primary text-sm w-full text-right">
+                                {formatCurrency(partialCosts[index])}
                             </div>
-                            
-                            <Controller
-                                control={form.control}
-                                name={`items.${index}.overrideCostPerUnit`}
-                                render={({ field: costField }) => (
-                                    <Input
-                                        type="number"
-                                        step="any"
-                                        value={useDefault ? unitCosts[index]?.toFixed(4) ?? '' : costField.value ?? ''}
-                                        onChange={costField.onChange}
-                                        disabled={useDefault}
-                                        className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
-                                    />
-                                )}
-                            />
-
-                           <div className="font-semibold text-primary text-sm w-full text-right">
-                            {formatCurrency(partialCosts[index])}
-                           </div>
-                            <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(index)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="flex justify-end mt-1">
-                               <FormField
-                                control={form.control}
-                                name={`items.${index}.useDefaultCost`}
-                                render={({ field: switchField }) => (
-                                    <FormItem className="flex items-center gap-2">
-                                        <FormControl><Switch checked={switchField.value} onCheckedChange={switchField.onChange} /></FormControl>
-                                        <FormLabel className="text-xs text-muted-foreground">Usar custo padrão</FormLabel>
-                                    </FormItem>
-                                )}
-                            />
-                          </div>
-                        </div>
-                      )
+                                <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(index)}>
+                                <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <div className="flex justify-end mt-1">
+                                <FormField
+                                    control={form.control}
+                                    name={`items.${index}.useDefaultCost`}
+                                    render={({ field: switchField }) => (
+                                        <FormItem className="flex items-center gap-2">
+                                            <FormControl>
+                                                <Switch 
+                                                    checked={switchField.value} 
+                                                    onCheckedChange={switchField.onChange} 
+                                                    disabled={!hasDefaultCost}
+                                                />
+                                            </FormControl>
+                                            <FormLabel className="text-xs text-muted-foreground">
+                                                {hasDefaultCost ? 'Usar custo padrão' : 'Sem custo padrão'}
+                                            </FormLabel>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                            </div>
+                        )
                     })}
                   </div>
 
@@ -327,8 +335,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
                       <SelectContent>
                         {baseProducts.map(bp => (
-                          <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice}>
-                            {bp.name} {!bp.lastEffectivePrice ? '(sem custo)' : ''}
+                          <SelectItem key={bp.id} value={bp.id}>
+                            {bp.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
