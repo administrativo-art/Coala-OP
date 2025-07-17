@@ -176,15 +176,17 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto] items-center gap-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field }) => (
-                            <FormItem><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                            <FormItem><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                           )}/>
                            <FormField control={form.control} name={`items.${index}.unit`} render={({ field }) => (
                             <FormItem><FormControl>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>{availableUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                    <SelectContent>
+                                        {availableUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                    </SelectContent>
                                 </Select>
-                            </FormControl></FormItem>
+                            </FormControl><FormMessage /></FormItem>
                           )}/>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4" />
