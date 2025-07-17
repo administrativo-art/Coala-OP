@@ -43,7 +43,8 @@ interface AddEditSimulationModalProps {
   simulationToEdit: ProductSimulation | null;
 }
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | undefined) => {
+    if (value === undefined || isNaN(value)) return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
@@ -206,7 +207,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
                 {/* Analysis Column */}
                 <div className="space-y-4">
-                   <h3 className="font-semibold text-lg">Resultados da Análise</h3>
+                   <h3 className="font-semibold text-lg">Resultados da análise</h3>
                    <div className="rounded-lg border p-4 space-y-3">
                     <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">CMV Total</span>
@@ -215,34 +216,34 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                     <Separator />
                      <FormField control={form.control} name="operationPercentage" render={({ field }) => (
                       <FormItem className="flex justify-between items-center">
-                        <FormLabel>+ % Operação</FormLabel>
+                        <FormLabel>+ % operação</FormLabel>
                         <FormControl>
                             <div className="relative w-24">
-                                <Input type="number" className="pr-8" {...field} />
+                                <Input type="number" className="pr-8" {...field} value={field.value ?? ''} />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                             </div>
                         </FormControl>
                       </FormItem>
                     )}/>
                      <div className="flex justify-between items-center text-primary font-bold">
-                        <span>= Custo Bruto</span>
+                        <span>= Custo bruto</span>
                         <span className="text-xl">{formatCurrency(grossCost)}</span>
                     </div>
                      <Separator />
                      <FormField control={form.control} name="salePrice" render={({ field }) => (
                       <FormItem className="flex justify-between items-center">
-                        <FormLabel>Preço de Venda</FormLabel>
+                        <FormLabel>Preço de venda</FormLabel>
                         <FormControl>
                             <div className="relative w-32">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                                <Input type="number" className="pl-8 font-semibold" {...field} />
+                                <Input type="number" className="pl-8 font-semibold" {...field} value={field.value ?? ''} />
                             </div>
                         </FormControl>
                       </FormItem>
                     )}/>
                      <Separator />
                       <div className="flex justify-between items-center text-green-600 font-bold">
-                        <span>= Lucro Bruto</span>
+                        <span>= Lucro bruto</span>
                         <div className="text-right">
                             <p className="text-xl">{formatCurrency(profitValue)}</p>
                             <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
@@ -252,7 +253,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                    <FormField control={form.control} name="notes" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Observações</FormLabel>
-                        <FormControl><Textarea placeholder="Adicione notas sobre esta simulação (opcional)" {...field} /></FormControl>
+                        <FormControl><Textarea placeholder="Adicione notas sobre esta simulação (opcional)" {...field} value={field.value ?? ''} /></FormControl>
                       </FormItem>
                    )}/>
                 </div>
@@ -260,7 +261,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">{simulationToEdit ? 'Salvar Alterações' : 'Criar Simulação'}</Button>
+              <Button type="submit">{simulationToEdit ? 'Salvar alterações' : 'Criar simulação'}</Button>
             </DialogFooter>
           </form>
         </Form>
