@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -18,6 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const simulationItemSchema = z.object({
   baseProductId: z.string().min(1, 'Selecione um insumo.'),
@@ -26,7 +27,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  category: z.string().optional(),
+  category: z.string().min(1, 'A categoria é obrigatória.'),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -39,6 +40,7 @@ interface AddEditSimulationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   simulationToEdit: ProductSimulation | null;
+  allCategories: string[];
 }
 
 const formatCurrency = (value: number | undefined) => {
@@ -46,9 +48,17 @@ const formatCurrency = (value: number | undefined) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }: AddEditSimulationModalProps) {
+export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, allCategories }: AddEditSimulationModalProps) {
   const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
+  const { toast } = useToast();
+  
+  const [categories, setCategories] = useState<string[]>(allCategories);
+  const [newCategory, setNewCategory] = useState('');
+
+  useEffect(() => {
+    setCategories(allCategories);
+  }, [allCategories]);
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
@@ -158,6 +168,17 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     }
     onOpenChange(false);
   };
+  
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim();
+    if (trimmed && !categories.includes(trimmed)) {
+      const updatedCategories = [...categories, trimmed].sort();
+      setCategories(updatedCategories);
+      form.setValue('category', trimmed);
+      setNewCategory('');
+      toast({title: "Categoria adicionada!", description: `A categoria "${trimmed}" foi adicionada e selecionada.`})
+    }
+  };
 
   return (
     <>
@@ -173,22 +194,40 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Composition Column */}
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                     <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome da mercadoria</FormLabel>
                         <FormControl><Input placeholder="Ex: Milkshake de Morango (P)" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}/>
+                    
                     <FormField control={form.control} name="category" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Categoria (Opcional)</FormLabel>
-                        <FormControl><Input placeholder="Ex: Milkshakes" {...field} /></FormControl>
+                        <FormLabel>Categoria</FormLabel>
+                        <div className="flex gap-2 items-center">
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                    <SelectTrigger><SelectValue placeholder="Selecione uma categoria..."/></SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <div className="p-2">
+                                        <div className="flex gap-2">
+                                            <Input 
+                                                placeholder="Nova categoria..." 
+                                                value={newCategory}
+                                                onChange={(e) => setNewCategory(e.target.value)}
+                                            />
+                                            <Button type="button" size="sm" onClick={handleAddCategory}>Adicionar</Button>
+                                        </div>
+                                    </div>
+                                    {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}/>
-                  </div>
                   
                   <div className="border-t pt-4">
                      <div className="flex justify-between items-start">
@@ -198,20 +237,18 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   </div>
                   
                   <div className="rounded-md border p-2 space-y-2">
-                    {fields.length > 0 && (
-                        <div className="grid grid-cols-[1fr_80px_80px_90px_90px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                            <span>Insumo Base</span>
-                            <span className="text-center">Qtd.</span>
-                            <span className="text-center">Unidade</span>
-                            <span className="text-right">Custo/Unid.</span>
-                            <span className="text-right">Custo Total</span>
-                            <span className="w-8"></span>
-                        </div>
-                    )}
+                     <div className="grid grid-cols-[1fr_80px_80px_100px_90px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                        <span>Insumo Base</span>
+                        <span className="text-center">Qtd.</span>
+                        <span className="text-center">Unidade</span>
+                        <span className="text-right">Custo/Unid.</span>
+                        <span className="text-right">Custo Total</span>
+                        <span className="w-8"></span>
+                    </div>
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                       return (
-                        <div key={field.id} className="grid grid-cols-[1fr_80px_80px_90px_90px_auto] items-center gap-x-2 p-2 rounded bg-muted/50">
+                        <div key={field.id} className="grid grid-cols-[1fr_80px_80px_100px_90px_auto] items-center gap-x-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                             <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>

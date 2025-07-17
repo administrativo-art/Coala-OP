@@ -84,7 +84,7 @@ export function PricingSimulator() {
     }, [simulations, searchTerm, insumoFilter, categoryFilter, simulationItems]);
 
     const allCategories = useMemo(() => {
-        const categorySet = new Set(simulations.map(s => s.category).filter(Boolean));
+        const categorySet = new Set(simulations.map(s => s.category).filter((c): c is string => !!c));
         return Array.from(categorySet).sort();
     }, [simulations]);
 
@@ -263,6 +263,7 @@ export function PricingSimulator() {
                 open={isModalOpen}
                 onOpenChange={setIsModalOpen}
                 simulationToEdit={simulationToEdit}
+                allCategories={allCategories}
             />
 
             {simulationToDelete && (
