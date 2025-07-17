@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -6,16 +7,18 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Package, Folder } from "lucide-react";
+import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder, Settings } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { type ProductSimulation } from "@/types";
+import { type ProductSimulation, type ProductSimulationCategory } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
+import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
+import { CategoryManagementModal } from "./category-management-modal";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || isNaN(value)) return 'R$ 0,00';
@@ -24,25 +27,26 @@ const formatCurrency = (value: number) => {
 
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading, deleteSimulation } = useProductSimulation();
-    const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation } = useProductSimulation();
+    const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
+    const { categories, loading: loadingCategories } = useProductSimulationCategories();
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [insumoFilter, setInsumoFilter] = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('all');
 
 
     const handleAddNew = () => {
         setSimulationToEdit(null);
-        setIsModalOpen(true);
+        setIsAddEditModalOpen(true);
     };
 
     const handleEdit = (simulation: ProductSimulation) => {
         setSimulationToEdit(simulation);
-        setIsModalOpen(true);
+        setIsAddEditModalOpen(true);
     };
 
     const handleDelete = async () => {
@@ -60,17 +64,21 @@ export function PricingSimulator() {
         return map;
     }, [baseProducts]);
     
+    const categoryMap = useMemo(() => {
+        return new Map(categories.map(c => [c.id, c]));
+    }, [categories]);
+    
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const insumoMatch = insumoFilter === 'all' || simulationItems.some(item => item.simulationId === sim.id && item.baseProductId === insumoFilter);
-            const categoryMatch = categoryFilter === 'all' || (sim.category || '').toLowerCase() === categoryFilter.toLowerCase();
-            return searchMatch && insumoMatch && categoryMatch;
+            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
+            return searchMatch && categoryMatch;
         });
 
         const grouped: Record<string, ProductSimulation[]> = {};
         filtered.forEach(sim => {
-            const categoryName = sim.category || 'Sem Categoria';
+            const category = categoryMap.get(sim.categoryId);
+            const categoryName = category?.name || 'Sem Categoria';
             if (!grouped[categoryName]) {
                 grouped[categoryName] = [];
             }
@@ -82,14 +90,9 @@ export function PricingSimulator() {
             return catA.localeCompare(catB);
         });
 
-    }, [simulations, searchTerm, insumoFilter, categoryFilter, simulationItems]);
+    }, [simulations, searchTerm, categoryFilter, categoryMap]);
 
-    const allCategories = useMemo(() => {
-        const categorySet = new Set(simulations.map(s => s.category).filter((c): c is string => !!c));
-        return Array.from(categorySet).sort();
-    }, [simulations]);
-
-    const isLoading = loading || baseProductsLoading;
+    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
 
     const renderContent = () => {
         if (isLoading) {
@@ -131,71 +134,71 @@ export function PricingSimulator() {
                     <div className="text-right">Lucro</div>
                     <div className="w-20"></div>
                 </div>
-                {simulationsByCategory.map(([categoryName, sims]) => (
-                    <div key={categoryName}>
-                        {categoryName !== 'Sem Categoria' && (
+                {simulationsByCategory.map(([categoryName, sims]) => {
+                    const category = categories.find(c => c.name === categoryName);
+                    return (
+                        <div key={categoryName}>
                             <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                                <Folder className="h-5 w-5" />
+                                {category && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: category.color }}></div>}
                                 {categoryName}
                             </h3>
-                        )}
-                        <Accordion type="multiple" className="w-full space-y-3">
-                            {sims.map(sim => {
-                                const items = simulationItems.filter(item => item.simulationId === sim.id);
-                                return (
-                                    <AccordionItem value={sim.id} key={sim.id} className="border rounded-lg overflow-hidden bg-card hover:bg-muted/50 transition-colors">
-                                        <div className="flex items-center">
-                                        <AccordionTrigger className="p-4 flex-1 hover:no-underline">
-                                            <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
-                                                <div className="font-semibold text-left">{sim.name}</div>
-                                                <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                                <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                                <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
-                                                <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
+                            <Accordion type="multiple" className="w-full space-y-3">
+                                {sims.map(sim => {
+                                    const items = simulationItems.filter(item => item.simulationId === sim.id);
+                                    return (
+                                        <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-r-lg" style={{ borderColor: category?.color || 'transparent' }}>
+                                            <div className="flex items-center">
+                                            <AccordionTrigger className="p-4 flex-1 hover:no-underline">
+                                                <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
+                                                    <div className="font-semibold text-left">{sim.name}</div>
+                                                    <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                                    <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                                    <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
+                                                    <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <div className="flex items-center gap-1 shrink-0 px-4">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </div>
-                                        </AccordionTrigger>
-                                        <div className="flex items-center gap-1 shrink-0 px-4">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                        </div>
-                                        <AccordionContent className="px-4 pb-4 bg-muted/50">
-                                            {!sim.category && <p className="text-xs text-muted-foreground italic mb-2">Sem Categoria</p>}
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Insumo Base</TableHead>
-                                                        <TableHead className="text-right">Quantidade</TableHead>
-                                                        <TableHead className="text-right">Custo / Unidade</TableHead>
-                                                        <TableHead className="text-right">Custo do Item</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {items.map(item => {
-                                                        const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                        const cost = item.costPerUnit * item.quantity;
-                                                        return (
-                                                            <TableRow key={item.id}>
-                                                                <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
-                                                                <TableCell className="text-right">{item.quantity} {baseProductInfo?.unit}</TableCell>
-                                                                <TableCell className="text-right">{formatCurrency(item.costPerUnit)}</TableCell>
-                                                                <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
-                                                </TableBody>
-                                            </Table>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                );
-                            })}
-                        </Accordion>
-                    </div>
-                ))}
+                                            </div>
+                                            <AccordionContent className="px-4 pb-4 bg-muted/50">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Insumo Base</TableHead>
+                                                            <TableHead className="text-right">Quantidade</TableHead>
+                                                            <TableHead className="text-right">Custo / Unidade</TableHead>
+                                                            <TableHead className="text-right">Custo do Item</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {items.map(item => {
+                                                            const baseProductInfo = baseProductMap.get(item.baseProductId);
+                                                            const cost = item.costPerUnit * item.quantity;
+                                                            return (
+                                                                <TableRow key={item.id}>
+                                                                    <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
+                                                                    <TableCell className="text-right">{item.quantity} {baseProductInfo?.unit}</TableCell>
+                                                                    <TableCell className="text-right">{formatCurrency(item.costPerUnit)}</TableCell>
+                                                                    <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
+                                                                </TableRow>
+                                                            )
+                                                        })}
+                                                    </TableBody>
+                                                </Table>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    );
+                                })}
+                            </Accordion>
+                        </div>
+                    )
+                })}
             </div>
         )
     };
@@ -214,10 +217,16 @@ export function PricingSimulator() {
                                 Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
                             </CardDescription>
                         </div>
-                        <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova Análise
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                Gerenciar Categorias
+                            </Button>
+                            <Button onClick={handleAddNew}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Nova Análise
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -237,24 +246,12 @@ export function PricingSimulator() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Todas as Categorias</SelectItem>
-                                {allCategories.map(c => (
-                                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                                ))}
-                                <SelectItem value="Sem Categoria">Sem Categoria</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select value={insumoFilter} onValueChange={setInsumoFilter}>
-                            <SelectTrigger className="w-full sm:w-[250px]">
-                                <SelectValue placeholder="Filtrar por insumo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos os insumos</SelectItem>
-                                {baseProducts.map(bp => (
-                                    <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
+                                {categories.filter(c => c.parentId === null).map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setInsumoFilter("all"); setCategoryFilter("all"); }}>
+                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); }}>
                             <Eraser className="mr-2 h-4 w-4" />
                             Limpar
                         </Button>
@@ -264,10 +261,14 @@ export function PricingSimulator() {
             </Card>
 
             <AddEditSimulationModal 
-                open={isModalOpen}
-                onOpenChange={setIsModalOpen}
+                open={isAddEditModalOpen}
+                onOpenChange={setIsAddEditModalOpen}
                 simulationToEdit={simulationToEdit}
-                allCategories={allCategories}
+            />
+            
+            <CategoryManagementModal
+                open={isCategoryModalOpen}
+                onOpenChange={setIsCategoryModalOpen}
             />
 
             {simulationToDelete && (

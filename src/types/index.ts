@@ -159,6 +159,8 @@ export interface MonthlyScheduleContextType {
 export type ProductSimulationCategory = {
   id: string;
   name: string;
+  color: string;
+  parentId: string | null;
 };
 
 export type ProductSimulationItem = {
@@ -176,7 +178,8 @@ export type ProductSimulationItem = {
 export type ProductSimulation = {
   id: string;
   name: string;
-  category?: string;
+  categoryId: string;
+  subcategoryId?: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;
