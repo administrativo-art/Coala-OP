@@ -8,7 +8,7 @@ import * as z from 'zod';
 import { type ProductSimulation, type ProductSimulationItem } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, getUnitsForCategory } from '@/lib/conversion';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -170,6 +170,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   <div className="rounded-md border p-2 space-y-2">
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
+                      const availableUnits = baseProduct ? getUnitsForCategory(baseProduct.category) : [];
                       return (
                         <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto] items-center gap-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
@@ -180,7 +181,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                             <FormItem><FormControl>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>{baseProduct && Object.keys(baseProduct.category).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                    <SelectContent>{availableUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                                 </Select>
                             </FormControl></FormItem>
                           )}/>
