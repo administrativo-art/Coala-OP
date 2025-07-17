@@ -114,7 +114,7 @@ export function PricingSimulator() {
                         </div>
                         <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova Simulação
+                            Nova análise
                         </Button>
                     </div>
                 </CardHeader>
