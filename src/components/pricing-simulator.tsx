@@ -15,6 +15,7 @@ import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || isNaN(value)) return 'R$ 0,00';
@@ -132,10 +133,12 @@ export function PricingSimulator() {
                 </div>
                 {simulationsByCategory.map(([categoryName, sims]) => (
                     <div key={categoryName}>
-                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                            <Folder className="h-5 w-5" />
-                            {categoryName}
-                        </h3>
+                        {categoryName !== 'Sem Categoria' && (
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
+                                <Folder className="h-5 w-5" />
+                                {categoryName}
+                            </h3>
+                        )}
                         <Accordion type="multiple" className="w-full space-y-3">
                             {sims.map(sim => {
                                 const items = simulationItems.filter(item => item.simulationId === sim.id);
@@ -161,6 +164,7 @@ export function PricingSimulator() {
                                         </div>
                                         </div>
                                         <AccordionContent className="px-4 pb-4 bg-muted/50">
+                                            {!sim.category && <p className="text-xs text-muted-foreground italic mb-2">Sem Categoria</p>}
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
