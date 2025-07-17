@@ -138,10 +138,12 @@ export function PricingSimulator() {
                     const category = categories.find(c => c.name === categoryName);
                     return (
                         <div key={categoryName}>
-                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                                {category && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: category.color }}></div>}
-                                {categoryName}
-                            </h3>
+                            {categoryName !== 'Sem Categoria' && (
+                                <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
+                                    {category && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: category.color }}></div>}
+                                    {categoryName}
+                                </h3>
+                            )}
                             <Accordion type="multiple" className="w-full space-y-3">
                                 {sims.map(sim => {
                                     const items = simulationItems.filter(item => item.simulationId === sim.id);
@@ -217,16 +219,10 @@ export function PricingSimulator() {
                                 Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
                             </CardDescription>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)}>
-                                <Settings className="mr-2 h-4 w-4" />
-                                Gerenciar Categorias
-                            </Button>
-                            <Button onClick={handleAddNew}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Nova Análise
-                            </Button>
-                        </div>
+                        <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nova Análise
+                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent>

@@ -257,7 +257,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   <div className="border-t pt-4">
                      <div className="flex justify-between items-start">
                         <h3 className="font-semibold text-lg">Composição (CMV)</h3>
-                        <p className="text-xs text-muted-foreground text-right max-w-[200px]">A unidade de medida é travada na que foi configurada para cada insumo base.</p>
                      </div>
                   </div>
                   
@@ -327,7 +326,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   <Select onValueChange={handleAddItem}>
                       <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
                       <SelectContent>
-                        {baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice}>{bp.name} {!bp.lastEffectivePrice ? '(sem custo)' : ''}</SelectItem>)}
+                        {baseProducts.map(bp => (
+                          <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice}>
+                            {bp.name} {!bp.lastEffectivePrice ? '(sem custo)' : ''}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                 </div>
