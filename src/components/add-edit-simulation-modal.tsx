@@ -190,26 +190,28 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                     )}/>
                   </div>
                   
-                  <div className="flex justify-between items-center border-t pt-4">
-                     <h3 className="font-semibold text-lg">Composição (CMV)</h3>
-                     <p className="text-xs text-muted-foreground">A unidade de medida é travada na que foi configurada para cada insumo base.</p>
+                  <div className="border-t pt-4">
+                     <div className="flex justify-between items-start">
+                        <h3 className="font-semibold text-lg">Composição (CMV)</h3>
+                        <p className="text-xs text-muted-foreground text-right max-w-[200px]">A unidade de medida é travada na que foi configurada para cada insumo base.</p>
+                     </div>
                   </div>
                   
                   <div className="rounded-md border p-2 space-y-2">
                     {fields.length > 0 && (
-                        <div className="grid grid-cols-[1fr_80px_100px_90px_90px_auto] items-center gap-2 p-1 text-xs text-muted-foreground font-semibold">
+                        <div className="grid grid-cols-[1fr_80px_80px_90px_90px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                             <span>Insumo Base</span>
                             <span className="text-center">Qtd.</span>
                             <span className="text-center">Unidade</span>
-                            <span className="text-center">Custo/Unid.</span>
-                            <span className="text-center">Custo Total</span>
-                            <span></span>
+                            <span className="text-right">Custo/Unid.</span>
+                            <span className="text-right">Custo Total</span>
+                            <span className="w-8"></span>
                         </div>
                     )}
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                       return (
-                        <div key={field.id} className="grid grid-cols-[1fr_80px_100px_90px_90px_auto] items-center gap-2 p-2 rounded bg-muted/50">
+                        <div key={field.id} className="grid grid-cols-[1fr_80px_80px_90px_90px_auto] items-center gap-x-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                             <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
@@ -217,13 +219,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                            <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
                               <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
                            </div>
-                           <div className="font-semibold text-sm w-full text-center">
+                           <div className="font-semibold text-sm w-full text-right">
                             {formatCurrency(unitCosts[index])}
                            </div>
-                           <div className="font-semibold text-primary text-sm w-full text-center">
+                           <div className="font-semibold text-primary text-sm w-full text-right">
                             {formatCurrency(partialCosts[index])}
                            </div>
-                          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}>
+                          <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
