@@ -23,6 +23,7 @@ import { PurchaseProvider } from '@/components/purchase-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
 import { RepositionProvider } from '@/components/reposition-provider';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
+import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
@@ -56,36 +57,38 @@ export default function RootLayout({
                 <CompanySettingsProvider>
                   <BaseProductsProvider>
                     <ProductsProvider>
-                      <ProductSimulationProvider>
-                        <ExpiryProductsProvider>
-                          <PredefinedListsProvider>
-                            <FormProvider>
-                              <EntitiesProvider>
-                                  <ConsumptionAnalysisProvider>
-                                    <MovementHistoryProvider>
-                                      <ReturnsProvider>
-                                        <ScheduleProvider>
-                                          <MonthlyScheduleProvider>
-                                            <StockCountProvider>
-                                              <PurchaseProvider>
-                                                <ItemAdditionProvider>
-                                                  <RepositionProvider>
-                                                    {children}
-                                                    <Toaster />
-                                                  </RepositionProvider>
-                                                </ItemAdditionProvider>
-                                              </PurchaseProvider>
-                                            </StockCountProvider>
-                                          </MonthlyScheduleProvider>
-                                        </ScheduleProvider>
-                                      </ReturnsProvider>
-                                    </MovementHistoryProvider>
-                                  </ConsumptionAnalysisProvider>
-                              </EntitiesProvider>
-                            </FormProvider>
-                          </PredefinedListsProvider>
-                        </ExpiryProductsProvider>
-                      </ProductSimulationProvider>
+                      <ProductSimulationCategoryProvider>
+                        <ProductSimulationProvider>
+                          <ExpiryProductsProvider>
+                            <PredefinedListsProvider>
+                              <FormProvider>
+                                <EntitiesProvider>
+                                    <ConsumptionAnalysisProvider>
+                                      <MovementHistoryProvider>
+                                        <ReturnsProvider>
+                                          <ScheduleProvider>
+                                            <MonthlyScheduleProvider>
+                                              <StockCountProvider>
+                                                <PurchaseProvider>
+                                                  <ItemAdditionProvider>
+                                                    <RepositionProvider>
+                                                      {children}
+                                                      <Toaster />
+                                                    </RepositionProvider>
+                                                  </ItemAdditionProvider>
+                                                </PurchaseProvider>
+                                              </StockCountProvider>
+                                            </MonthlyScheduleProvider>
+                                          </ScheduleProvider>
+                                        </ReturnsProvider>
+                                      </MovementHistoryProvider>
+                                    </ConsumptionAnalysisProvider>
+                                </EntitiesProvider>
+                              </FormProvider>
+                            </PredefinedListsProvider>
+                          </ExpiryProductsProvider>
+                        </ProductSimulationProvider>
+                      </ProductSimulationCategoryProvider>
                     </ProductsProvider>
                   </BaseProductsProvider>
                 </CompanySettingsProvider>

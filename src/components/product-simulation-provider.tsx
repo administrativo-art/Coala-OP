@@ -6,9 +6,12 @@ import { type ProductSimulation, type ProductSimulationItem } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface SimulationData {
     name: string;
+    categoryId: string;
+    categoryName: string;
     items: {
         baseProductId: string;
         quantity: number;
@@ -36,6 +39,7 @@ export const ProductSimulationContext = createContext<ProductSimulationContextTy
 
 export function ProductSimulationProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
+    const { baseProducts } = useBaseProducts();
     const [simulations, setSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -69,30 +73,27 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         if (!user) return;
         
         const now = new Date().toISOString();
+        const {items, ...simulationHeader} = data;
+
         const newSimulation: Omit<ProductSimulation, 'id'> = {
-            name: data.name,
+            ...simulationHeader,
             userId: user.id,
             status: 'draft',
             createdAt: now,
             updatedAt: now,
-            salePrice: data.salePrice || 0,
-            operationPercentage: data.operationPercentage || 0,
-            totalCmv: data.totalCmv,
-            grossCost: data.grossCost,
-            profitValue: data.profitValue,
-            profitPercentage: data.profitPercentage,
-            notes: data.notes,
         };
 
         try {
             const simulationRef = await addDoc(collection(db, "productSimulations"), newSimulation);
             const batch = writeBatch(db);
             
-            data.items.forEach(item => {
+            items.forEach(item => {
                 const itemRef = doc(collection(db, "productSimulationItems"));
-                const newItem: Omit<ProductSimulationItem, 'id'> = {
+                const newItem: Omit<ProductSimulationItem, 'id' | 'costPerUnit' | 'partialCost'> = {
                     simulationId: simulationRef.id,
-                    ...item
+                    baseProductId: item.baseProductId,
+                    quantity: item.quantity,
+                    unit: item.unit,
                 };
                 batch.set(itemRef, newItem);
             });
@@ -125,9 +126,11 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             // Add new items
             items.forEach(item => {
                 const itemRef = doc(collection(db, "productSimulationItems"));
-                const newItem: Omit<ProductSimulationItem, 'id'> = {
+                 const newItem: Omit<ProductSimulationItem, 'id' | 'costPerUnit' | 'partialCost'> = {
                     simulationId: id,
-                    ...item
+                    baseProductId: item.baseProductId,
+                    quantity: item.quantity,
+                    unit: item.unit,
                 };
                 batch.set(itemRef, newItem);
             });
@@ -157,14 +160,24 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     }, []);
 
 
-    const value = useMemo(() => ({
-        simulations,
-        simulationItems,
-        loading,
-        addSimulation,
-        updateSimulation,
-        deleteSimulation,
-    }), [simulations, simulationItems, loading, addSimulation, updateSimulation, deleteSimulation]);
+    const value = useMemo(() => {
+        // Enrich simulation items with cost data
+        const enrichedItems = simulationItems.map(item => {
+            const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+            const costPerUnit = baseProduct?.lastEffectivePrice?.pricePerUnit || 0;
+            const partialCost = costPerUnit * item.quantity;
+            return { ...item, costPerUnit, partialCost };
+        });
+
+        return {
+            simulations,
+            simulationItems: enrichedItems,
+            loading,
+            addSimulation,
+            updateSimulation,
+            deleteSimulation,
+        }
+    }, [simulations, simulationItems, loading, addSimulation, updateSimulation, deleteSimulation, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
