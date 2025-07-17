@@ -185,13 +185,16 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                     {fields.map((field, index) => {
                       const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                       return (
-                        <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto] items-center gap-2 p-2 rounded bg-muted/50">
+                        <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto_auto] items-center gap-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                             <FormItem><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
                           )}/>
                            <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
                               <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
+                           </div>
+                           <div className="font-semibold text-primary text-sm w-[70px] text-right">
+                            {formatCurrency(partialCosts[index])}
                            </div>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4" />
