@@ -91,13 +91,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
     watchedItems.forEach((item, index) => {
       const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-      if (!baseProduct || !baseProduct.lastEffectivePrice || !item.quantity || !item.unit) {
+      if (!baseProduct || !baseProduct.lastEffectivePrice?.pricePerUnit || !item.quantity || !item.unit) {
         partials[index] = 0;
         return;
       }
       try {
+        const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit;
         const convertedQuantity = convertValue(item.quantity, item.unit, baseProduct.unit, baseProduct.category);
-        const partialCost = convertedQuantity * baseProduct.lastEffectivePrice.pricePerUnit;
+        const partialCost = convertedQuantity * pricePerBaseUnit;
         partials[index] = partialCost;
         totalCmv += partialCost;
       } catch (e) {
