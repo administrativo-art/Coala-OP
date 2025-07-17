@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { LifeBuoy, Package, Users, LayoutDashboard, ClipboardCheck, BarChart3, ShoppingCart, ShieldAlert, Truck, Users2 } from 'lucide-react';
+import { LifeBuoy, Package, Users, LayoutDashboard, ClipboardCheck, BarChart3, ShoppingCart, ShieldAlert, Truck, Users2, ListPlus } from 'lucide-react';
 import Image from 'next/image';
 
 const helpTopics = [
