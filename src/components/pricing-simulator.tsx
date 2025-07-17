@@ -1,12 +1,14 @@
 
 "use client";
 
-import { useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
+import { useState, useMemo } from "react";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
+import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, PlusCircle, Inbox, Trash2 } from "lucide-react";
+import { DollarSign, PlusCircle, Inbox, Trash2, Edit } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { format } from "date-fns";
@@ -14,8 +16,15 @@ import { ptBR } from "date-fns/locale";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 
+const formatCurrency = (value: number) => {
+    if (value === undefined || isNaN(value)) return 'R$ 0,00';
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+
 export function PricingSimulator() {
-    const { simulations, loading, deleteSimulation } = useProductSimulation();
+    const { simulations, simulationItems, loading, deleteSimulation } = useProductSimulation();
+    const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
@@ -37,12 +46,20 @@ export function PricingSimulator() {
         }
     };
 
+    const baseProductMap = useMemo(() => {
+        const map = new Map<string, { name: string, unit: string }>();
+        baseProducts.forEach(bp => {
+            map.set(bp.id, { name: bp.name, unit: bp.unit });
+        });
+        return map;
+    }, [baseProducts]);
+
     const renderContent = () => {
-        if (loading) {
+        if (loading || baseProductsLoading) {
             return (
                 <div className="space-y-4">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-28 w-full" />
+                    <Skeleton className="h-28 w-full" />
                 </div>
             );
         }
@@ -51,50 +68,80 @@ export function PricingSimulator() {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
-                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma simulação criada</h3>
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise criada</h3>
                     <p className="mt-1 text-sm">Clique no botão abaixo para criar sua primeira análise de custo.</p>
                 </div>
             );
         }
         
         return (
-            <div className="space-y-3">
-                {simulations.map(sim => (
-                    <Card key={sim.id} className="hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => handleEdit(sim)}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                             <div>
-                                <CardTitle className="text-lg">{sim.name}</CardTitle>
-                                <CardDescription>
-                                    Criada em {format(new Date(sim.createdAt), "dd/MM/yyyy", { locale: ptBR })}
-                                </CardDescription>
-                             </div>
-                             <div className="flex items-center gap-2">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                             </div>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                                <p className="text-muted-foreground">Preço de Venda</p>
-                                <p className="font-semibold">{sim.salePrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">CMV</p>
-                                <p className="font-semibold">{sim.totalCmv.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                            </div>
-                             <div>
-                                <p className="text-muted-foreground">Lucro (R$)</p>
-                                <p className="font-semibold">{sim.profitValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Lucro (%)</p>
-                                <p className="font-semibold text-primary">{sim.profitPercentage.toFixed(2)}%</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+            <Accordion type="multiple" className="w-full space-y-3">
+                {simulations.map(sim => {
+                    const items = simulationItems.filter(item => item.simulationId === sim.id);
+                    return (
+                        <AccordionItem value={sim.id} key={sim.id} className="border rounded-lg overflow-hidden">
+                            <Card className="border-none shadow-none rounded-none">
+                                <div className="flex items-center pr-4">
+                                <AccordionTrigger className="p-4 flex-1 hover:no-underline">
+                                    <div className="w-full">
+                                        <CardTitle className="text-lg">{sim.name}</CardTitle>
+                                        <CardDescription>
+                                            Criada em {format(new Date(sim.createdAt), "dd/MM/yyyy", { locale: ptBR })}
+                                        </CardDescription>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4 text-left">
+                                            <div>
+                                                <p className="text-muted-foreground">Preço de Venda</p>
+                                                <p className="font-semibold">{formatCurrency(sim.salePrice)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground">CMV</p>
+                                                <p className="font-semibold">{formatCurrency(sim.totalCmv)}</p>
+                                            </div>
+                                             <div>
+                                                <p className="text-muted-foreground">Lucro (R$)</p>
+                                                <p className="font-semibold text-green-600">{formatCurrency(sim.profitValue)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground">Lucro (%)</p>
+                                                <p className="font-semibold text-primary">{sim.profitPercentage.toFixed(2)}%</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </AccordionTrigger>
+                                 <div className="flex items-center gap-1 shrink-0">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSimulationToDelete(sim)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                 </div>
+                                </div>
+                            </Card>
+                            <AccordionContent className="px-4 pb-4">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Insumo Base</TableHead>
+                                            <TableHead className="text-right">Quantidade</TableHead>
+                                            <TableHead className="text-right">Custo do Item</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {items.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>{baseProductMap.get(item.baseProductId)?.name || 'Insumo não encontrado'}</TableCell>
+                                                <TableCell className="text-right">{item.quantity} {baseProductMap.get(item.baseProductId)?.unit}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.partialCost)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </AccordionContent>
+                        </AccordionItem>
+                    );
+                })}
+            </Accordion>
         )
     };
 
@@ -114,7 +161,7 @@ export function PricingSimulator() {
                         </div>
                         <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova análise
+                            Nova Análise
                         </Button>
                     </div>
                 </CardHeader>
