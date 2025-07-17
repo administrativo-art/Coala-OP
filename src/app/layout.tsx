@@ -22,6 +22,7 @@ import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
 import { RepositionProvider } from '@/components/reposition-provider';
+import { ProductSimulationProvider } from '@/components/product-simulation-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
@@ -55,6 +56,7 @@ export default function RootLayout({
                 <CompanySettingsProvider>
                   <BaseProductsProvider>
                     <ProductsProvider>
+                      <ProductSimulationProvider>
                         <ExpiryProductsProvider>
                           <PredefinedListsProvider>
                             <FormProvider>
@@ -83,6 +85,7 @@ export default function RootLayout({
                             </FormProvider>
                           </PredefinedListsProvider>
                         </ExpiryProductsProvider>
+                      </ProductSimulationProvider>
                     </ProductsProvider>
                   </BaseProductsProvider>
                 </CompanySettingsProvider>
