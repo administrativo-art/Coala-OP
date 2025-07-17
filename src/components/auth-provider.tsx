@@ -83,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
+            ...profilePermissions,
             products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
             lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
@@ -93,6 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
             returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
             team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
+            purchasing: { ...defaultGuestPermissions.purchasing, ...profilePermissions?.purchasing },
+            stockCount: { ...defaultGuestPermissions.stockCount, ...profilePermissions?.stockCount },
+            itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
+            pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
         };
 

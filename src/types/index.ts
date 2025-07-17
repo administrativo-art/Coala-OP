@@ -154,6 +154,33 @@ export interface MonthlyScheduleContextType {
   currentMonth: number;
 }
 
+// Pricing Simulator Types
+export type ProductSimulationItem = {
+  id: string;
+  simulationId: string;
+  baseProductId: string;
+  quantity: number;
+  unit: string;
+  costPerUnit: number; // Stored at the time of simulation
+  partialCost: number;
+};
+
+export type ProductSimulation = {
+  id: string;
+  name: string;
+  userId: string;
+  status: 'draft' | 'finalized' | 'archived';
+  salePrice: number;
+  operationPercentage: number;
+  totalCmv: number;
+  grossCost: number;
+  profitValue: number;
+  profitPercentage: number;
+  notes?: string;
+  createdAt: string; // ISO String
+  updatedAt: string; // ISO String
+};
+
 
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean; };
@@ -169,6 +196,7 @@ export type PermissionSet = {
     purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
     stockCount: { perform: boolean; approve: boolean; };
     itemRequests: { manage: boolean; };
+    pricing: { simulate: boolean; };
     help: { view: boolean; };
 };
 
@@ -466,6 +494,7 @@ export const defaultGuestPermissions: PermissionSet = {
     purchasing: { suggest: false, approve: false, viewHistory: false },
     stockCount: { perform: false, approve: false },
     itemRequests: { manage: false },
+    pricing: { simulate: false },
     help: { view: true },
 };
 
@@ -483,6 +512,7 @@ export const defaultUserPermissions: PermissionSet = {
     purchasing: { suggest: true, approve: false, viewHistory: true },
     stockCount: { perform: true, approve: false },
     itemRequests: { manage: false },
+    pricing: { simulate: false },
     help: { view: true },
 };
 
@@ -500,5 +530,6 @@ export const defaultAdminPermissions: PermissionSet = {
     purchasing: { suggest: true, approve: true, viewHistory: true },
     stockCount: { perform: true, approve: true },
     itemRequests: { manage: true },
+    pricing: { simulate: true },
     help: { view: true },
 };

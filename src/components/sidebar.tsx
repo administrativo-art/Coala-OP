@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart, LifeBuoy } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -28,6 +28,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
+  const canSimulatePricing = !loading && permissions.pricing.simulate;
 
 
   const navItems = [
@@ -35,6 +36,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
+    { href: '/dashboard/pricing', label: 'Simulador de Preços', icon: DollarSign, show: canSimulatePricing },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
