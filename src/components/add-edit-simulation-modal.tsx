@@ -95,10 +95,15 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         partials[index] = 0;
         return;
       }
-      const convertedQuantity = convertValue(item.quantity, item.unit, baseProduct.unit, baseProduct.category);
-      const partialCost = convertedQuantity * baseProduct.lastEffectivePrice.pricePerUnit;
-      partials[index] = partialCost;
-      totalCmv += partialCost;
+      try {
+        const convertedQuantity = convertValue(item.quantity, item.unit, baseProduct.unit, baseProduct.category);
+        const partialCost = convertedQuantity * baseProduct.lastEffectivePrice.pricePerUnit;
+        partials[index] = partialCost;
+        totalCmv += partialCost;
+      } catch (e) {
+        console.error("Error calculating CMV for item:", item, e);
+        partials[index] = 0;
+      }
     });
 
     return { cmv: totalCmv, partialCosts: partials };
@@ -175,12 +180,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       return (
                         <div key={field.id} className="grid grid-cols-[1fr_80px_100px_auto] items-center gap-2 p-2 rounded bg-muted/50">
                           <p className="font-medium truncate" title={baseProduct?.name}>{baseProduct?.name}</p>
-                          <FormField control={form.control} name={`items.${index}.quantity`} render={({ field }) => (
-                            <FormItem><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                          <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
+                            <FormItem><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
                           )}/>
-                           <FormField control={form.control} name={`items.${index}.unit`} render={({ field }) => (
+                           <FormField control={form.control} name={`items.${index}.unit`} render={({ field: unitField }) => (
                             <FormItem><FormControl>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={unitField.onChange} value={unitField.value}>
                                     <SelectTrigger><SelectValue/></SelectTrigger>
                                     <SelectContent>
                                         {availableUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
@@ -238,7 +243,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <FormControl>
                             <div className="relative w-32">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                                <Input type="number" className="pl-8 font-semibold" {...field} value={field.value ?? ''} />
+                                <Input type="number" step="0.01" className="pl-8 font-semibold" {...field} value={field.value ?? ''} />
                             </div>
                         </FormControl>
                       </FormItem>
