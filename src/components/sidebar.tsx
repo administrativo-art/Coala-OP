@@ -36,7 +36,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
-    { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
   ];
