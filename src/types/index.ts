@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -168,6 +169,8 @@ export type ProductSimulationItem = {
   unit: string;
   costPerUnit: number; // Stored at the time of simulation
   partialCost: number;
+  useDefaultCost: boolean;
+  overrideCostPerUnit?: number;
 };
 
 export type ProductSimulation = {

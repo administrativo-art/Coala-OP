@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -15,6 +16,8 @@ interface SimulationData {
         baseProductId: string;
         quantity: number;
         unit: string;
+        useDefaultCost: boolean;
+        overrideCostPerUnit?: number;
     }[];
     operationPercentage?: number;
     salePrice?: number;
@@ -93,6 +96,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
                     unit: item.unit,
+                    useDefaultCost: item.useDefaultCost,
+                    overrideCostPerUnit: item.overrideCostPerUnit,
                 };
                 batch.set(itemRef, newItem);
             });
@@ -130,6 +135,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
                     unit: item.unit,
+                    useDefaultCost: item.useDefaultCost,
+                    overrideCostPerUnit: item.overrideCostPerUnit,
                 };
                 batch.set(itemRef, newItem);
             });
@@ -163,7 +170,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         // Enrich simulation items with cost data
         const enrichedItems = simulationItems.map(item => {
             const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-            const costPerUnit = baseProduct?.lastEffectivePrice?.pricePerUnit || 0;
+            const costPerUnit = item.useDefaultCost
+              ? baseProduct?.lastEffectivePrice?.pricePerUnit || 0
+              : item.overrideCostPerUnit || 0;
+
             const partialCost = costPerUnit * item.quantity;
             return { ...item, costPerUnit, partialCost };
         });
