@@ -179,7 +179,7 @@ export type ProductSimulation = {
   id: string;
   name: string;
   categoryId: string;
-  subcategoryId?: string | null;
+  subcategoryId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;
