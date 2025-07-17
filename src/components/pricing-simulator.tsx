@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || isNaN(value)) return 'R$ 0,00';
@@ -58,8 +59,8 @@ export function PricingSimulator() {
         if (loading || baseProductsLoading) {
             return (
                 <div className="space-y-4">
-                    <Skeleton className="h-28 w-full" />
-                    <Skeleton className="h-28 w-full" />
+                    <Skeleton className="h-14 w-full" />
+                    <Skeleton className="h-14 w-full" />
                 </div>
             );
         }
@@ -75,40 +76,31 @@ export function PricingSimulator() {
         }
         
         return (
-            <Accordion type="multiple" className="w-full space-y-3">
-                {simulations.map(sim => {
-                    const items = simulationItems.filter(item => item.simulationId === sim.id);
-                    return (
-                        <AccordionItem value={sim.id} key={sim.id} className="border rounded-lg overflow-hidden">
-                            <Card className="border-none shadow-none rounded-none">
-                                <div className="flex items-center pr-4">
+            <div className="space-y-3">
+                <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
+                    <div>Mercadoria</div>
+                    <div className="text-right">Preço Venda</div>
+                    <div className="text-right">CMV</div>
+                    <div className="text-right">Lucro (R$)</div>
+                    <div className="text-right">Lucro (%)</div>
+                    <div className="w-20"></div>
+                </div>
+                <Accordion type="multiple" className="w-full space-y-3">
+                    {simulations.map(sim => {
+                        const items = simulationItems.filter(item => item.simulationId === sim.id);
+                        return (
+                            <AccordionItem value={sim.id} key={sim.id} className="border rounded-lg overflow-hidden bg-card hover:bg-muted/50 transition-colors">
+                                <div className="flex items-center">
                                 <AccordionTrigger className="p-4 flex-1 hover:no-underline">
-                                    <div className="w-full">
-                                        <CardTitle className="text-lg">{sim.name}</CardTitle>
-                                        <CardDescription>
-                                            Criada em {format(new Date(sim.createdAt), "dd/MM/yyyy", { locale: ptBR })}
-                                        </CardDescription>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4 text-left">
-                                            <div>
-                                                <p className="text-muted-foreground">Preço de Venda</p>
-                                                <p className="font-semibold">{formatCurrency(sim.salePrice)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground">CMV</p>
-                                                <p className="font-semibold">{formatCurrency(sim.totalCmv)}</p>
-                                            </div>
-                                             <div>
-                                                <p className="text-muted-foreground">Lucro (R$)</p>
-                                                <p className="font-semibold text-green-600">{formatCurrency(sim.profitValue)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground">Lucro (%)</p>
-                                                <p className="font-semibold text-primary">{sim.profitPercentage.toFixed(2)}%</p>
-                                            </div>
-                                        </div>
+                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
+                                        <div className="font-semibold text-left">{sim.name}</div>
+                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                        <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
+                                        <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
                                     </div>
                                 </AccordionTrigger>
-                                 <div className="flex items-center gap-1 shrink-0">
+                                 <div className="flex items-center gap-1 shrink-0 px-4">
                                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
                                         <Edit className="h-4 w-4" />
                                     </Button>
@@ -117,31 +109,31 @@ export function PricingSimulator() {
                                     </Button>
                                  </div>
                                 </div>
-                            </Card>
-                            <AccordionContent className="px-4 pb-4">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Insumo Base</TableHead>
-                                            <TableHead className="text-right">Quantidade</TableHead>
-                                            <TableHead className="text-right">Custo do Item</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map(item => (
-                                            <TableRow key={item.id}>
-                                                <TableCell>{baseProductMap.get(item.baseProductId)?.name || 'Insumo não encontrado'}</TableCell>
-                                                <TableCell className="text-right">{item.quantity} {baseProductMap.get(item.baseProductId)?.unit}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.partialCost)}</TableCell>
+                                <AccordionContent className="px-4 pb-4 bg-muted/50">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Insumo Base</TableHead>
+                                                <TableHead className="text-right">Quantidade</TableHead>
+                                                <TableHead className="text-right">Custo do Item</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </AccordionContent>
-                        </AccordionItem>
-                    );
-                })}
-            </Accordion>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {items.map(item => (
+                                                <TableRow key={item.id}>
+                                                    <TableCell>{baseProductMap.get(item.baseProductId)?.name || 'Insumo não encontrado'}</TableCell>
+                                                    <TableCell className="text-right">{item.quantity} {baseProductMap.get(item.baseProductId)?.unit}</TableCell>
+                                                    <TableCell className="text-right">{formatCurrency(item.partialCost)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </AccordionContent>
+                            </AccordionItem>
+                        );
+                    })}
+                </Accordion>
+            </div>
         )
     };
 
