@@ -4,7 +4,6 @@
 import { useState, useMemo } from "react";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
-import { useProductSimulationCategory } from "@/hooks/use-product-simulation-category";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Package, Folder } from "lucide-react";
@@ -16,7 +15,6 @@ import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { SimulationCategoryManagementModal } from "./simulation-category-management-modal";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || isNaN(value)) return 'R$ 0,00';
@@ -27,10 +25,8 @@ const formatCurrency = (value: number) => {
 export function PricingSimulator() {
     const { simulations, simulationItems, loading, deleteSimulation } = useProductSimulation();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-    const { categories, loading: categoriesLoading } = useProductSimulationCategory();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -67,29 +63,32 @@ export function PricingSimulator() {
         const filtered = simulations.filter(sim => {
             const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
             const insumoMatch = insumoFilter === 'all' || simulationItems.some(item => item.simulationId === sim.id && item.baseProductId === insumoFilter);
-            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
+            const categoryMatch = categoryFilter === 'all' || (sim.category || '').toLowerCase() === categoryFilter.toLowerCase();
             return searchMatch && insumoMatch && categoryMatch;
         });
 
         const grouped: Record<string, ProductSimulation[]> = {};
         filtered.forEach(sim => {
-            const categoryId = sim.categoryId || 'sem_categoria';
-            if (!grouped[categoryId]) {
-                grouped[categoryId] = [];
+            const categoryName = sim.category || 'Sem Categoria';
+            if (!grouped[categoryName]) {
+                grouped[categoryName] = [];
             }
-            grouped[categoryId].push(sim);
+            grouped[categoryName].push(sim);
         });
-        return Object.entries(grouped).sort(([catIdA], [catIdB]) => {
-            if (catIdA === 'sem_categoria') return 1;
-            if (catIdB === 'sem_categoria') return -1;
-            const catA = categories.find(c => c.id === catIdA);
-            const catB = categories.find(c => c.id === catIdB);
-            return (catA?.name || '').localeCompare(catB?.name || '');
+        return Object.entries(grouped).sort(([catA], [catB]) => {
+            if (catA === 'Sem Categoria') return 1;
+            if (catB === 'Sem Categoria') return -1;
+            return catA.localeCompare(catB);
         });
 
-    }, [simulations, searchTerm, insumoFilter, categoryFilter, simulationItems, categories]);
+    }, [simulations, searchTerm, insumoFilter, categoryFilter, simulationItems]);
 
-    const isLoading = loading || baseProductsLoading || categoriesLoading;
+    const allCategories = useMemo(() => {
+        const categorySet = new Set(simulations.map(s => s.category).filter(Boolean));
+        return Array.from(categorySet).sort();
+    }, [simulations]);
+
+    const isLoading = loading || baseProductsLoading;
 
     const renderContent = () => {
         if (isLoading) {
@@ -131,13 +130,11 @@ export function PricingSimulator() {
                     <div className="text-right">Lucro</div>
                     <div className="w-20"></div>
                 </div>
-                {simulationsByCategory.map(([categoryId, sims]) => {
-                    const category = categories.find(c => c.id === categoryId);
-                    return (
-                    <div key={categoryId}>
+                {simulationsByCategory.map(([categoryName, sims]) => (
+                    <div key={categoryName}>
                         <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
                             <Folder className="h-5 w-5" />
-                            {category?.name || 'Sem Categoria'}
+                            {categoryName}
                         </h3>
                         <Accordion type="multiple" className="w-full space-y-3">
                             {sims.map(sim => {
@@ -194,7 +191,7 @@ export function PricingSimulator() {
                             })}
                         </Accordion>
                     </div>
-                )})}
+                ))}
             </div>
         )
     };
@@ -213,16 +210,10 @@ export function PricingSimulator() {
                                 Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
                             </CardDescription>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)}>
-                                <Folder className="mr-2 h-4 w-4" />
-                                Gerenciar Categorias
-                            </Button>
-                            <Button onClick={handleAddNew}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Nova Análise
-                            </Button>
-                        </div>
+                        <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nova Análise
+                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -242,10 +233,10 @@ export function PricingSimulator() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Todas as Categorias</SelectItem>
-                                {categories.map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                {allCategories.map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
                                 ))}
-                                <SelectItem value="sem_categoria">Sem Categoria</SelectItem>
+                                <SelectItem value="Sem Categoria">Sem Categoria</SelectItem>
                             </SelectContent>
                         </Select>
                         <Select value={insumoFilter} onValueChange={setInsumoFilter}>
@@ -272,11 +263,6 @@ export function PricingSimulator() {
                 open={isModalOpen}
                 onOpenChange={setIsModalOpen}
                 simulationToEdit={simulationToEdit}
-            />
-
-            <SimulationCategoryManagementModal
-                open={isCategoryModalOpen}
-                onOpenChange={setIsCategoryModalOpen}
             />
 
             {simulationToDelete && (

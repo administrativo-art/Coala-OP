@@ -173,8 +173,7 @@ export type ProductSimulationItem = {
 export type ProductSimulation = {
   id: string;
   name: string;
-  categoryId: string;
-  categoryName: string;
+  category?: string;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;

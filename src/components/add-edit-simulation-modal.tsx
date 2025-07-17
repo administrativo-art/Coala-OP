@@ -1,14 +1,13 @@
 
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import React, { useEffect, useMemo } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { type ProductSimulation, type ProductSimulationItem } from '@/types';
+import { type ProductSimulation } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
-import { useProductSimulationCategory } from '@/hooks/use-product-simulation-category';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -18,9 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Settings } from 'lucide-react';
-import { Separator } from './ui/separator';
-import { SimulationCategoryManagementModal } from './simulation-category-management-modal';
+import { PlusCircle, Trash2 } from 'lucide-react';
 
 const simulationItemSchema = z.object({
   baseProductId: z.string().min(1, 'Selecione um insumo.'),
@@ -29,7 +26,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  categoryId: z.string().min(1, 'A categoria é obrigatória.'),
+  category: z.string().optional(),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -51,14 +48,11 @@ const formatCurrency = (value: number | undefined) => {
 
 export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }: AddEditSimulationModalProps) {
   const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
-  const { categories, loading: categoriesLoading } = useProductSimulationCategory();
   const { baseProducts } = useBaseProducts();
-  const [selectedBaseProduct, setSelectedBaseProduct] = useState('');
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: '', items: [], operationPercentage: 15, salePrice: 0, notes: '' },
+    defaultValues: { name: '', category: '', items: [], operationPercentage: 15, salePrice: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -78,14 +72,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
       form.reset({
         name: simulationToEdit.name,
-        categoryId: simulationToEdit.categoryId,
+        category: simulationToEdit.category,
         items: itemsForForm,
         operationPercentage: simulationToEdit.operationPercentage,
         salePrice: simulationToEdit.salePrice,
         notes: simulationToEdit.notes,
       });
     } else if (open) {
-      form.reset({ name: '', categoryId: '', items: [], operationPercentage: 15, salePrice: 0, notes: '' });
+      form.reset({ name: '', category: '', items: [], operationPercentage: 15, salePrice: 0, notes: '' });
     }
   }, [open, simulationToEdit, simulationItems, form]);
 
@@ -134,21 +128,16 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     return (profitValue / price) * 100;
   }, [profitValue, watchedSalePrice]);
 
-  const handleAddItem = () => {
-    const product = baseProducts.find(bp => bp.id === selectedBaseProduct);
+  const handleAddItem = (baseProductId: string) => {
+    const product = baseProducts.find(bp => bp.id === baseProductId);
     if (product) {
       append({ baseProductId: product.id, quantity: 1 });
-      setSelectedBaseProduct('');
     }
   };
 
   const onSubmit = async (values: SimulationFormValues) => {
-    const category = categories.find(c => c.id === values.categoryId);
-    if (!category) return;
-
     const finalData = {
       ...values,
-      categoryName: category.name,
       items: values.items.map(item => {
         const bp = baseProducts.find(b => b.id === item.baseProductId);
         return {
@@ -184,30 +173,22 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Composition Column */}
                 <div className="space-y-4">
-                  <FormField control={form.control} name="name" render={({ field }) => (
+                  <div className="grid grid-cols-2 gap-4">
+                     <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome da mercadoria</FormLabel>
                         <FormControl><Input placeholder="Ex: Milkshake de Morango (P)" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
-                  )}/>
-                  <FormField control={form.control} name="categoryId" render={({ field }) => (
+                    )}/>
+                    <FormField control={form.control} name="category" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Categoria</FormLabel>
-                        <div className="flex items-center gap-2">
-                            <Select onValueChange={field.onChange} value={field.value} disabled={categoriesLoading}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma categoria..."/></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}>
-                                <Settings className="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <FormLabel>Categoria (Opcional)</FormLabel>
+                        <FormControl><Input placeholder="Ex: Milkshakes" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
-                  )}/>
+                    )}/>
+                  </div>
                   
                   <div className="flex justify-between items-center border-t pt-4">
                      <h3 className="font-semibold text-lg">Composição (CMV)</h3>
@@ -250,15 +231,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                     })}
                   </div>
 
-                  <div className="flex gap-2">
-                    <Select value={selectedBaseProduct} onValueChange={setSelectedBaseProduct}>
+                  <Select onValueChange={handleAddItem}>
                       <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
                       <SelectContent>
                         {baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Button type="button" onClick={handleAddItem} disabled={!selectedBaseProduct}><PlusCircle className="mr-2"/>Adicionar</Button>
-                  </div>
                 </div>
 
                 {/* Analysis Column */}
@@ -269,8 +247,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <span className="text-muted-foreground">CMV total</span>
                         <span className="font-bold text-lg">{formatCurrency(cmv)}</span>
                     </div>
-                    <Separator />
-                     <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                    <FormField control={form.control} name="operationPercentage" render={({ field }) => (
                       <FormItem className="flex justify-between items-center">
                         <FormLabel>+ % operação</FormLabel>
                         <FormControl>
@@ -285,7 +262,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <span>= Custo bruto</span>
                         <span className="text-xl">{formatCurrency(grossCost)}</span>
                     </div>
-                     <Separator />
                      <FormField control={form.control} name="salePrice" render={({ field }) => (
                       <FormItem className="flex justify-between items-center">
                         <FormLabel>Preço de venda</FormLabel>
@@ -297,7 +273,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         </FormControl>
                       </FormItem>
                     )}/>
-                     <Separator />
                       <div className="flex justify-between items-center text-green-600 font-bold">
                         <span>= Lucro bruto</span>
                         <div className="text-right">
@@ -323,10 +298,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         </Form>
       </DialogContent>
     </Dialog>
-    <SimulationCategoryManagementModal
-        open={isCategoryModalOpen}
-        onOpenChange={setIsCategoryModalOpen}
-    />
     </>
   );
 }
