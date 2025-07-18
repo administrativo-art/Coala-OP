@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ import { CategoryManagementModal } from './category-management-modal';
 import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
 import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-analysis-flow';
 
 
 const simulationItemSchema = z.object({
@@ -87,6 +88,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const { pricingParameters } = useCompanySettings();
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [desiredProfitMargin, setDesiredProfitMargin] = useState(45);
+  const [sensitivityQuestion, setSensitivityQuestion] = useState("");
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { toast } = useToast();
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
@@ -123,15 +130,18 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         } else {
             form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, notes: '' });
         }
+        setAiAnalysis(null);
+        setSensitivityQuestion('');
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
   
   const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
   const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
   
-  const { cmv, partialCosts } = useMemo(() => {
+   const { cmv, partialCosts, itemDetailsForAI } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
+    const itemDetails: { name: string; cost: number }[] = [];
 
     watchedItems.forEach((item, index) => {
         const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
@@ -142,22 +152,28 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
         try {
             let partialCost = 0;
-            if (item.useDefault && baseProduct.lastEffectivePrice) {
-                const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
-                partialCost = item.quantity * pricePerBaseUnit;
-            } else if (!item.useDefault && item.overrideCostPerUnit && item.overrideUnit) {
-                partialCost = item.quantity * item.overrideCostPerUnit;
+            let valueInBase = 0;
+            
+            if (item.useDefault) {
+                if(baseProduct.lastEffectivePrice) {
+                    valueInBase = item.quantity * baseProduct.lastEffectivePrice.pricePerUnit;
+                }
+            } else if (item.overrideCostPerUnit && item.overrideUnit) {
+                valueInBase = item.quantity * item.overrideCostPerUnit;
             }
             
+            partialCost = valueInBase;
             partials[index] = partialCost;
             totalCmv += partialCost;
+            itemDetails.push({ name: baseProduct.name, cost: partialCost });
+
         } catch (e) {
             console.error("Error calculating CMV for item:", item, e);
             partials[index] = 0;
         }
     });
 
-    return { cmv: totalCmv, partialCosts: partials };
+    return { cmv: totalCmv, partialCosts: partials, itemDetailsForAI: itemDetails };
   }, [watchedItems, baseProducts]);
 
 
@@ -187,6 +203,58 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
           overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit || 0,
           overrideUnit: product.unit,
         });
+    }
+  };
+  
+  const handleSuggestPrice = async () => {
+    if (cmv <= 0) {
+      toast({ variant: "destructive", title: "CMV zerado", description: "Adicione insumos à composição para sugerir um preço." });
+      return;
+    }
+    setIsSuggestingPrice(true);
+    try {
+      const input: PricingAnalysisInput = {
+        action: 'suggestPrice',
+        cmv: grossCost,
+        items: [],
+        desiredProfitMargin,
+      };
+      const result = await analyzePricing(input);
+      if (result.suggestedPrice) {
+        form.setValue('salePrice', result.suggestedPrice, { shouldValidate: true });
+        toast({ title: "Preço de venda sugerido!" });
+      }
+    } catch (error) {
+      console.error("Error suggesting price:", error);
+      toast({ variant: "destructive", title: "Erro da IA", description: "Não foi possível sugerir um preço." });
+    } finally {
+      setIsSuggestingPrice(false);
+    }
+  };
+
+  const handleAnalyzeSensitivity = async () => {
+    if (!sensitivityQuestion) {
+      toast({ variant: "destructive", title: "Pergunta vazia", description: "Por favor, insira uma pergunta para a análise." });
+      return;
+    }
+    setIsAnalyzing(true);
+    setAiAnalysis(null);
+    try {
+      const input: PricingAnalysisInput = {
+        action: 'analyzeSensitivity',
+        cmv,
+        items: itemDetailsForAI,
+        question: sensitivityQuestion,
+      };
+      const result = await analyzePricing(input);
+      if (result.analysis) {
+        setAiAnalysis(result.analysis);
+      }
+    } catch (error) {
+      console.error("Error analyzing sensitivity:", error);
+      toast({ variant: "destructive", title: "Erro da IA", description: "Não foi possível realizar a análise." });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -438,6 +506,37 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         </div>
                     </div>
                    </div>
+
+                   <div className="space-y-4 rounded-lg border p-4 bg-muted/40">
+                      <h4 className="font-medium flex items-center gap-2"><Sparkles className="text-primary" /> Análise com IA</h4>
+                      <div className="space-y-2">
+                         <Label>Sugerir preço de venda</Label>
+                         <div className="flex items-center gap-2">
+                             <div className="relative w-32">
+                                <Input type="number" className="pr-8 text-right" value={desiredProfitMargin} onChange={(e) => setDesiredProfitMargin(Number(e.target.value))} />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                            </div>
+                            <Button type="button" onClick={handleSuggestPrice} disabled={isSuggestingPrice}>
+                                {isSuggestingPrice ? <Loader2 className="animate-spin" /> : <Wand2 />} Sugerir
+                            </Button>
+                         </div>
+                         <FormDescription>Defina a margem de lucro desejada e peça uma sugestão.</FormDescription>
+                      </div>
+
+                       <div className="space-y-2 pt-2">
+                         <Label>Análise de Sensibilidade de Custo</Label>
+                         <div className="flex items-center gap-2">
+                            <Input placeholder="Qual item é o mais caro?" value={sensitivityQuestion} onChange={(e) => setSensitivityQuestion(e.target.value)} />
+                             <Button type="button" variant="secondary" onClick={handleAnalyzeSensitivity} disabled={isAnalyzing}>
+                                {isAnalyzing ? <Loader2 className="animate-spin" /> : <Bot />} Analisar
+                            </Button>
+                         </div>
+                          {aiAnalysis && (
+                              <div className="p-3 rounded-md bg-background border border-primary/20 text-sm">{aiAnalysis}</div>
+                          )}
+                      </div>
+                   </div>
+
                    <FormField control={form.control} name="notes" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Observações</FormLabel>
