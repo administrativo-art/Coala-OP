@@ -165,7 +165,7 @@ export function PricingSimulator() {
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                     <div className="flex items-center gap-4 px-4 py-2 text-sm w-full">
-                                        <AccordionTrigger className={cn("flex-1 p-0 hover:no-underline [&>svg]:ml-2", gridClass)}>
+                                        <AccordionTrigger className={cn("flex-1 p-0 hover:no-underline grid items-center gap-4 w-full", gridClass)}>
                                             <div className="font-semibold text-left">{sim.name}</div>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
@@ -185,10 +185,10 @@ export function PricingSimulator() {
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead>Insumo Base</TableHead>
+                                                    <TableHead>Insumo base</TableHead>
                                                     <TableHead className="text-right">Quantidade</TableHead>
-                                                    <TableHead className="text-right">Custo / Unidade</TableHead>
-                                                    <TableHead className="text-right">Custo do Item</TableHead>
+                                                    <TableHead className="text-right">Custo / unidade</TableHead>
+                                                    <TableHead className="text-right">Custo do item</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -234,7 +234,7 @@ export function PricingSimulator() {
                         </Button>
                          <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova Análise
+                            Nova análise
                         </Button>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
@@ -252,7 +252,7 @@ export function PricingSimulator() {
                                 <SelectValue placeholder="Filtrar por categoria" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todas as Categorias</SelectItem>
+                                <SelectItem value="all">Todas as categorias</SelectItem>
                                 {mainCategories.map(c => (
                                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                 ))}
@@ -263,7 +263,7 @@ export function PricingSimulator() {
                                 <SelectValue placeholder="Filtrar por linha" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todas as Linhas</SelectItem>
+                                <SelectItem value="all">Todas as linhas</SelectItem>
                                 {lines.map(l => (
                                     <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
                                 ))}
@@ -280,7 +280,7 @@ export function PricingSimulator() {
                     {permissions.pricing.manageParameters && (
                         <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
                             <Settings className="mr-2 h-4 w-4" />
-                            Configurar Parâmetros
+                            Configurar parâmetros
                         </Button>
                     )}
                 </CardFooter>

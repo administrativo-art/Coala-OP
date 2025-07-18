@@ -357,11 +357,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   
                   <div className="rounded-md border p-2 space-y-2">
                     <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                        <span>Insumo Base</span>
+                        <span>Insumo base</span>
                         <span className="text-center">Qtd.</span>
                         <span className="text-center">Unid.</span>
-                        <span className="text-right">Custo/Unid.</span>
-                        <span className="text-right">Custo Total</span>
+                        <span className="text-right">Custo/unid.</span>
+                        <span className="text-right">Custo total</span>
                         <span className="w-8"></span>
                     </div>
                     {fields.map((field, index) => {
@@ -526,7 +526,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       </div>
 
                        <div className="space-y-2 pt-2">
-                         <Label>Análise de Sensibilidade de Custo</Label>
+                         <Label>Análise de sensibilidade de custo</Label>
                          <div className="flex items-center gap-2">
                             <Input placeholder="Qual item é o mais caro?" value={sensitivityQuestion} onChange={(e) => setSensitivityQuestion(e.target.value)} />
                              <Button type="button" variant="secondary" onClick={handleAnalyzeSensitivity} disabled={isAnalyzing}>
@@ -550,7 +550,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Salvar Análise</Button>
+              <Button type="submit">Salvar análise</Button>
             </DialogFooter>
           </form>
         </Form>

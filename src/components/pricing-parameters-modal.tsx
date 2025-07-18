@@ -74,7 +74,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Configurar Parâmetros de Precificação</DialogTitle>
+          <DialogTitle>Configurar parâmetros de precificação</DialogTitle>
           <DialogDescription>
             Defina os valores padrão e as faixas de cores para a análise de lucratividade.
           </DialogDescription>
@@ -88,7 +88,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                   name="defaultOperationPercentage"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Percentual de Operação Padrão</FormLabel>
+                      <FormLabel>Percentual de operação padrão</FormLabel>
                       <div className="relative w-32">
                         <Input type="number" className="pr-8" {...field} />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
@@ -99,7 +99,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                 />
 
                 <div>
-                  <FormLabel>Faixas de Lucratividade</FormLabel>
+                  <FormLabel>Faixas de lucratividade</FormLabel>
                   <div className="space-y-2 mt-2 p-3 border rounded-lg">
                     <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center text-sm text-muted-foreground">
                         <span>De (%)</span>
@@ -158,7 +158,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                         onClick={() => append({ id: `range-${Date.now()}`, from: 0, to: 0, color: 'text-primary' })}
                         >
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Adicionar Faixa
+                        Adicionar faixa
                     </Button>
                   </div>
                 </div>
@@ -166,7 +166,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Salvar Parâmetros</Button>
+              <Button type="submit">Salvar parâmetros</Button>
             </DialogFooter>
           </form>
         </Form>

@@ -80,7 +80,7 @@ export function BatchPriceUpdateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Alteração de Preço em Lote</DialogTitle>
+          <DialogTitle>Alteração de preço em lote</DialogTitle>
           <DialogDescription>
             Aplique um reajuste de preço a todos os {simulationsToUpdate.length} itens que correspondem aos filtros atuais.
           </DialogDescription>
@@ -92,7 +92,7 @@ export function BatchPriceUpdateModal({
                     <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
                         <h4 className="flex items-center gap-2 text-sm font-semibold">
                             <Filter className="h-4 w-4" />
-                            Filtros Ativos
+                            Filtros ativos
                         </h4>
                         <p className="text-xs text-muted-foreground">
                             <strong>Categoria:</strong> {activeFilters.categoryName || 'Todas'}
@@ -106,7 +106,7 @@ export function BatchPriceUpdateModal({
                     name="adjustmentType"
                     render={({ field }) => (
                         <FormItem className="space-y-3">
-                        <FormLabel>Tipo de Reajuste</FormLabel>
+                        <FormLabel>Tipo de reajuste</FormLabel>
                         <FormControl>
                             <ToggleGroup
                             type="single"
@@ -132,7 +132,7 @@ export function BatchPriceUpdateModal({
                     name="valueType"
                     render={({ field }) => (
                         <FormItem className="space-y-3">
-                        <FormLabel>Método de Cálculo</FormLabel>
+                        <FormLabel>Método de cálculo</FormLabel>
                         <FormControl>
                             <RadioGroup
                             onValueChange={field.onChange}
@@ -145,7 +145,7 @@ export function BatchPriceUpdateModal({
                             </FormItem>
                             <FormItem className="flex items-center space-x-2">
                                 <RadioGroupItem value="fixed" id="fixed" />
-                                <Label htmlFor="fixed">Valor Fixo (R$)</Label>
+                                <Label htmlFor="fixed">Valor fixo (R$)</Label>
                             </FormItem>
                             </RadioGroup>
                         </FormControl>
@@ -159,7 +159,7 @@ export function BatchPriceUpdateModal({
                     name="value"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Valor do Reajuste</FormLabel>
+                        <FormLabel>Valor do reajuste</FormLabel>
                         <div className="relative">
                             {valueType === 'fixed' && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>}
                             <FormControl>
@@ -193,7 +193,7 @@ export function BatchPriceUpdateModal({
               </Button>
               <Button type="submit" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirmar Alteração
+                Confirmar alteração
               </Button>
             </DialogFooter>
           </form>
