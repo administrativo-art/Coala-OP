@@ -156,7 +156,7 @@ export interface MonthlyScheduleContextType {
 }
 
 // Pricing Simulator Types
-export type ProductSimulationCategory = {
+export type SimulationCategory = {
   id: string;
   name: string;
   color: string;
@@ -177,7 +177,7 @@ export type ProductSimulation = {
   id: string;
   name: string;
   categoryId: string | null;
-  subcategoryId: string | null;
+  lineId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;

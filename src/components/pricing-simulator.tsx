@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder, Settings } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { type ProductSimulation, type ProductSimulationCategory } from "@/types";
+import { type ProductSimulation, type SimulationCategory } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
@@ -181,12 +181,12 @@ export function PricingSimulator() {
                                                     <TableBody>
                                                         {items.map(item => {
                                                             const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                            const cost = item.costPerUnit * item.quantity;
+                                                            const cost = item.overrideCostPerUnit! * item.quantity;
                                                             return (
                                                                 <TableRow key={item.id}>
                                                                     <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
                                                                     <TableCell className="text-right">{item.quantity} {baseProductInfo?.unit}</TableCell>
-                                                                    <TableCell className="text-right">{formatCurrency(item.costPerUnit)}</TableCell>
+                                                                    <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit)}</TableCell>
                                                                     <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
                                                                 </TableRow>
                                                             )

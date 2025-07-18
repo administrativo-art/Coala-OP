@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { type ProductSimulation, type ProductSimulationCategory } from '@/types';
+import { type ProductSimulation, type SimulationCategory } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 
@@ -34,7 +34,7 @@ const simulationItemSchema = z.object({
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   categoryId: z.string().nullable().optional(),
-  subcategoryId: z.string().nullable().optional(),
+  lineId: z.string().nullable().optional(),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -64,7 +64,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: null, subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' },
+    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -87,20 +87,20 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
             form.reset({
                 name: simulationToEdit.name,
                 categoryId: simulationToEdit.categoryId,
-                subcategoryId: simulationToEdit.subcategoryId,
+                lineId: simulationToEdit.lineId,
                 items: itemsForForm,
                 operationPercentage: simulationToEdit.operationPercentage,
                 salePrice: simulationToEdit.salePrice,
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: null, subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' });
+            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' });
         }
     }
   }, [open, simulationToEdit, simulationItems, form]);
   
   const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
-  const subCategories = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
+  const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
   
   const { cmv, partialCosts, unitCosts } = useMemo(() => {
     let totalCmv = 0;
@@ -164,7 +164,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const onSubmit = async (values: SimulationFormValues) => {
     const finalData = {
       ...values,
-      subcategoryId: values.subcategoryId || null,
+      lineId: values.lineId || null,
       categoryId: values.categoryId || null,
       items: values.items.map(item => {
         const bp = baseProducts.find(b => b.id === item.baseProductId);
@@ -228,9 +228,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                                 <FormMessage />
                             </FormItem>
                         )}/>
-                        <FormField control={form.control} name="subcategoryId" render={({ field }) => (
+                        <FormField control={form.control} name="lineId" render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Subcategoria</FormLabel>
+                                <FormLabel>Linha</FormLabel>
                                 <div className="flex items-center gap-1">
                                     <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
                                         <FormControl>
@@ -238,7 +238,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                                         </FormControl>
                                         <SelectContent>
                                             <SelectItem value="none">Nenhuma</SelectItem>
-                                            {subCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            {lines.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-5 w-5" /></Button>

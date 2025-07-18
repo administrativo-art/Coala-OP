@@ -11,8 +11,8 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface SimulationData {
     name: string;
-    categoryId?: string;
-    subcategoryId?: string | null;
+    categoryId?: string | null;
+    lineId?: string | null;
     items: {
         baseProductId: string;
         quantity: number;

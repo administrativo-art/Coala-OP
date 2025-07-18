@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-import { type ProductSimulationCategory } from '@/types';
+import { type SimulationCategory } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -44,8 +44,8 @@ const defaultColors = ['#F87171', '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#
 export function CategoryManagementModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
     const { simulations } = useProductSimulation();
-    const [editingCategory, setEditingCategory] = useState<ProductSimulationCategory | null>(null);
-    const [categoryToDelete, setCategoryToDelete] = useState<ProductSimulationCategory | null>(null);
+    const [editingCategory, setEditingCategory] = useState<SimulationCategory | null>(null);
+    const [categoryToDelete, setCategoryToDelete] = useState<SimulationCategory | null>(null);
 
     const form = useForm<CategoryFormValues>({
         resolver: zodResolver(categorySchema),
@@ -62,7 +62,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
 
     const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
 
-    const handleEditClick = (category: ProductSimulationCategory) => {
+    const handleEditClick = (category: SimulationCategory) => {
         setEditingCategory(category);
         form.reset({
             name: category.name,
@@ -76,12 +76,12 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
         form.reset({ name: '', color: '#F87171', parentId: null });
     };
     
-    const handleDeleteClick = (category: ProductSimulationCategory) => {
-        const isUsed = simulations.some(s => s.categoryId === category.id || s.subcategoryId === category.id);
+    const handleDeleteClick = (category: SimulationCategory) => {
+        const isUsed = simulations.some(s => s.categoryId === category.id || s.lineId === category.id);
         const hasChildren = categories.some(c => c.parentId === category.id);
         
         if (isUsed || hasChildren) {
-            alert(`Não é possível excluir "${category.name}". Ela está sendo usada por mercadorias ou possui subcategorias.`);
+            alert(`Não é possível excluir "${category.name}". Ela está sendo usada por mercadorias ou possui sub-itens.`);
             return;
         }
         setCategoryToDelete(category);
@@ -93,7 +93,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
         } else {
             await addCategory({
                 ...values,
-                color: values.parentId ? '' : values.color!, // Subcategories have no color
+                color: values.parentId ? '' : values.color!,
             });
         }
         handleCancelEdit();
@@ -106,8 +106,8 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="max-w-3xl">
                     <DialogHeader>
-                        <DialogTitle>Gerenciar Categorias</DialogTitle>
-                        <DialogDescription>Crie, edite e organize as categorias e subcategorias para suas mercadorias.</DialogDescription>
+                        <DialogTitle>Gerenciar Categorias e Linhas</DialogTitle>
+                        <DialogDescription>Crie, edite e organize os agrupadores para suas mercadorias.</DialogDescription>
                     </DialogHeader>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                         {/* Form Section */}
@@ -115,7 +115,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
                             <h3 className="font-semibold text-lg mb-4">
                                 {editingCategory 
                                     ? "Editar" 
-                                    : "Nova"} {isSubcategoryMode ? 'Subcategoria' : 'Categoria'}
+                                    : "Novo item"}
                             </h3>
                             <Form {...form}>
                                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -123,11 +123,11 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
                                         <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <FormField control={form.control} name="parentId" render={({ field }) => (
-                                        <FormItem><FormLabel>Categoria Pai (para subcategorias)</FormLabel>
+                                        <FormItem><FormLabel>Agrupador (para Linhas)</FormLabel>
                                             <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
                                                 <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                                 <SelectContent>
-                                                    <SelectItem value="none">Nenhuma (Será uma Categoria Principal)</SelectItem>
+                                                    <SelectItem value="none">Nenhum (Será uma Categoria Principal)</SelectItem>
                                                     {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select><FormMessage />
@@ -135,7 +135,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
                                     )}/>
                                     {!parentIdWatch && (
                                         <FormField control={form.control} name="color" render={({ field }) => (
-                                            <FormItem><FormLabel>Cor</FormLabel>
+                                            <FormItem><FormLabel>Cor da Categoria</FormLabel>
                                                 <FormControl>
                                                     <div className="flex flex-wrap gap-2">
                                                         {defaultColors.map(color => (
@@ -157,7 +157,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
                         </div>
                         {/* List Section */}
                         <div className="p-4 border rounded-lg">
-                            <h3 className="font-semibold text-lg mb-4">Categorias existentes</h3>
+                            <h3 className="font-semibold text-lg mb-4">Itens existentes</h3>
                             <ScrollArea className="h-72">
                                 <div className="space-y-2 pr-4">
                                     {mainCategories.map(cat => (
@@ -200,7 +200,7 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
                         await deleteCategory(categoryToDelete.id);
                         setCategoryToDelete(null);
                     }}
-                    itemName={`a categoria "${categoryToDelete.name}"`}
+                    itemName={`o item "${categoryToDelete.name}"`}
                 />
             )}
         </>
