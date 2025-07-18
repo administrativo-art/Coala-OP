@@ -113,7 +113,7 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
     
     const handleFilterChange = (value: string) => {
         if (value === 'all') {
@@ -252,27 +252,10 @@ export function PricingSimulator() {
                 <CardContent>
                     <Tabs defaultValue="dashboard" className="w-full">
                          
-                        <div className="flex flex-col sm:flex-row justify-between items-center border-b pb-4">
-                            <TabsList className="grid w-full grid-cols-2 max-w-sm">
-                                <TabsTrigger value="dashboard"><BarChart3 className="mr-2" />Painel de análise</TabsTrigger>
-                                <TabsTrigger value="table"><TableIcon className="mr-2" />Análise de custo</TabsTrigger>
-                            </TabsList>
-                             <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0">
-                                <Button onClick={handleAddNew}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Nova análise
-                                </Button>
-                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                </Button>
-                                {permissions.pricing.manageParameters && (
-                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                        <Settings className="mr-2 h-4 w-4" />
-                                        Parâmetros
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
+                        <TabsList className="grid w-full grid-cols-2 max-w-sm">
+                            <TabsTrigger value="dashboard"><BarChart3 className="mr-2" />Painel de análise</TabsTrigger>
+                            <TabsTrigger value="table"><TableIcon className="mr-2" />Análise de custo</TabsTrigger>
+                        </TabsList>
 
                         <TabsContent value="dashboard" className="mt-4">
                              <PricingDashboard 
@@ -286,6 +269,21 @@ export function PricingSimulator() {
 
                         <TabsContent value="table" className="mt-4">
                             <div className="space-y-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Button onClick={handleAddNew}>
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        Nova análise
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                        <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                    </Button>
+                                    {permissions.pricing.manageParameters && (
+                                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                            <Settings className="mr-2 h-4 w-4" />
+                                            Parâmetros
+                                        </Button>
+                                    )}
+                                </div>
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
                                      <div className="relative flex-grow w-full">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
