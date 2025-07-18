@@ -137,16 +137,20 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         partials[index] = 0;
         return;
       }
+
       try {
         let partialCost = 0;
-        const linkedProductsOfBase = products.filter(p => p.baseProductId === item.baseProductId);
-
         if (item.useDefault && baseProduct.lastEffectivePrice) {
-            const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
-            partialCost = item.quantity * pricePerBaseUnit;
-        } else if (!item.useDefault && item.overrideCostPerUnit) {
-            // Se não está usando o padrão, o custo é direto (quantidade * custo/unidade manual)
-            partialCost = item.quantity * item.overrideCostPerUnit;
+          const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
+          partialCost = item.quantity * pricePerBaseUnit;
+        } else if (!item.useDefault && item.overrideCostPerUnit && item.overrideUnit) {
+           const linkedProductsOfBase = products.filter(p => p.baseProductId === item.baseProductId);
+           if(linkedProductsOfBase.length > 0){
+              const representativeProduct = linkedProductsOfBase[0];
+              const convertedQuantity = convertValue(item.quantity, item.overrideUnit, representativeProduct.unit, representativeProduct.category);
+              const costPerBaseUnit = item.overrideCostPerUnit;
+              partialCost = convertedQuantity * costPerBaseUnit;
+           }
         }
          
         partials[index] = partialCost;
