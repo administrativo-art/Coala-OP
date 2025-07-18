@@ -229,7 +229,7 @@ export function PricingSimulator() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-wrap justify-end gap-2 mb-4">
-                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                         <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                             <Layers className="mr-2 h-4 w-4" /> Alterar em lote
                         </Button>
                          <Button onClick={handleAddNew}>
