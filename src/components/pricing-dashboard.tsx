@@ -5,16 +5,12 @@ import { useState, useMemo, useEffect } from "react";
 import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, PieChart, Pie, Legend, ReferenceLine, LineChart, Line, Dot } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle, Gauge, SlidersHorizontal, PackageCheck, FileQuestion, Star, Search } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search } from 'lucide-react';
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useCompanySettings } from "@/hooks/use-company-settings";
-import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "./ui/button";
-import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
+import { Input } from "./ui/input";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -33,7 +29,6 @@ interface PricingDashboardProps {
     isLoading: boolean;
     getProfitColorClass: (percentage: number) => string;
     pricingParameters: PricingParameters | null;
-    onSelectItem: (item: ProductSimulation | null) => void;
     activeFilters: {
         categoryName: string | null;
         lineName: string | null;
@@ -42,42 +37,44 @@ interface PricingDashboardProps {
     }
 }
 
-export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, onSelectItem, activeFilters }: PricingDashboardProps) {
+export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, activeFilters }: PricingDashboardProps) {
+    const [chartSearchTerm, setChartSearchTerm] = useState('');
     const [selectedItemForCharts, setSelectedItemForCharts] = useState<ProductSimulation | null>(null);
-    
+
     useEffect(() => {
         if (simulations.length > 0) {
             const currentSelectionExists = simulations.some(s => s.id === selectedItemForCharts?.id);
             if (!currentSelectionExists) {
-                const newSelection = simulations[0];
-                onSelectItem(newSelection);
-                setSelectedItemForCharts(newSelection);
+                setSelectedItemForCharts(simulations[0]);
             }
         } else {
-            onSelectItem(null);
             setSelectedItemForCharts(null);
         }
-    }, [simulations, onSelectItem, selectedItemForCharts]);
+    }, [simulations, selectedItemForCharts]);
 
-    const { kpis, profitChartData, costCompositionData } = useMemo(() => {
-        if (!simulations || simulations.length === 0) {
-            return { kpis: {}, profitChartData: [], costCompositionData: [] };
+    const { kpis, profitChartData } = useMemo(() => {
+        const filteredSimulations = chartSearchTerm 
+            ? simulations.filter(s => s.name.toLowerCase().includes(chartSearchTerm.toLowerCase()))
+            : simulations;
+            
+        if (!filteredSimulations || filteredSimulations.length === 0) {
+            return { kpis: {}, profitChartData: [] };
         }
 
-        const totalSimulations = simulations.length;
-        const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
+        const totalSimulations = filteredSimulations.length;
+        const itemsWithGoal = filteredSimulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
         const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
         const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
 
-        let highestMarginItem = simulations[0];
-        let lowestMarginItem = simulations[0];
+        let highestMarginItem = filteredSimulations[0];
+        let lowestMarginItem = filteredSimulations[0];
 
-        for (const s of simulations) {
+        for (const s of filteredSimulations) {
             if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
             if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
         }
 
-        const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
+        const totalMarkup = filteredSimulations.reduce((acc, s) => acc + s.markup, 0);
 
         const priceDeltas = itemsBelowGoal.map(s => {
             const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
@@ -95,30 +92,32 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             averagePriceDelta: averagePriceDelta,
         };
 
-        const profitChartDataResult = simulations
+        const profitChartDataResult = filteredSimulations
             .map(s => ({
                 id: s.id,
                 name: s.name,
                 'Lucro %': s.profitPercentage,
             }))
             .sort((a, b) => a['Lucro %'] - b['Lucro %']);
-            
-        let costCompData: { name: string, value: number }[] = [];
-        if (selectedItemForCharts) {
-            costCompData = [
-                { name: 'Insumos', value: selectedItemForCharts.totalCmv },
-                { name: 'Operacional', value: selectedItemForCharts.grossCost - selectedItemForCharts.totalCmv }
-            ];
-        }
 
-        return { kpis: kpisResult, profitChartData: profitChartDataResult, costCompositionData: costCompData };
-    }, [simulations, selectedItemForCharts]);
+        return { kpis: kpisResult, profitChartData: profitChartDataResult };
+    }, [simulations, chartSearchTerm]);
     
-    const handleSelectionChange = (id: string | null) => {
-        const item = simulations.find(s => s.id === id);
-        if (item) {
-            setSelectedItemForCharts(item);
-            onSelectItem(item);
+    const costCompositionData = useMemo(() => {
+        if (!selectedItemForCharts) return [];
+        return [
+            { name: 'Insumos', value: selectedItemForCharts.totalCmv },
+            { name: 'Operacional', value: selectedItemForCharts.grossCost - selectedItemForCharts.totalCmv }
+        ];
+    }, [selectedItemForCharts]);
+    
+    const handleSelectionChange = (data: any) => {
+        if (data && data.activePayload && data.activePayload[0]) {
+            const selectedId = data.activePayload[0].payload.id;
+            const item = simulations.find(s => s.id === selectedId);
+            if (item) {
+                setSelectedItemForCharts(item);
+            }
         }
     };
     
@@ -128,7 +127,6 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         
         for (const range of sortedRanges) {
             if (percentage >= range.from && (range.to === Infinity || percentage < range.to)) {
-                // This is a workaround because the `color` property is a CSS class, not a direct color value
                 if(range.color.includes('green')) return '#16A34A';
                 if(range.color.includes('orange')) return '#F97316';
                 if(range.color.includes('yellow')) return '#FBBF24';
@@ -231,25 +229,29 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start gap-4">
                             <div>
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
                                 <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
+                            </div>
+                            <div className="relative w-full max-w-xs">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input 
+                                    placeholder="Filtrar mercadoria..."
+                                    className="pl-10"
+                                    value={chartSearchTerm}
+                                    onChange={(e) => setChartSearchTerm(e.target.value)}
+                                />
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
                          <ResponsiveContainer width="100%" height={350}>
-                            <BarChart data={profitChartData} onClick={(data) => {
-                                if (data && data.activePayload && data.activePayload[0]) {
-                                    const selectedId = data.activePayload[0].payload.id;
-                                    handleSelectionChange(selectedId);
-                                }
-                            }}>
+                            <BarChart data={profitChartData} onClick={handleSelectionChange}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} interval={0} />
                                 <YAxis unit="%" />
-                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} cursor={{ fill: 'hsl(var(--muted))' }}/>
+                                <Tooltip formatter={(value: number, name, props) => [`${value.toFixed(2)}%`, props.payload.name]} cursor={{ fill: 'hsl(var(--muted))' }}/>
                                 {activeFilters.profitGoalFilter !== 'all' && (
                                     <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={{ value: `Meta ${activeFilters.profitGoalFilter}%`, position: 'insideTopRight' }} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
                                 )}

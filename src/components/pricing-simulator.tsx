@@ -51,7 +51,6 @@ export function PricingSimulator() {
     const [lineFilter, setLineFilter] = useState('all');
     const [profitGoalFilter, setProfitGoalFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [selectedDashboardItem, setSelectedDashboardItem] = useState<ProductSimulation | null>(null);
 
 
     const handleAddNew = () => {
@@ -263,7 +262,6 @@ export function PricingSimulator() {
                                 isLoading={isLoading}
                                 getProfitColorClass={getProfitColorClass}
                                 pricingParameters={pricingParameters}
-                                onSelectItem={setSelectedDashboardItem}
                                 activeFilters={activeFilters}
                             />
                         </TabsContent>
