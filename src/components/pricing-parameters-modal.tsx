@@ -119,7 +119,16 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                     <FormItem className="flex-grow">
                                     <FormControl>
                                       <div className="relative">
-                                        <Input type="number" className="pr-8" {...inputField} onChange={e => inputField.onChange(e.target.valueAsNumber)} />
+                                        <Input
+                                            type="number"
+                                            className="pr-8"
+                                            {...inputField}
+                                            value={inputField.value ?? ''}
+                                            onChange={e => {
+                                                const value = e.target.value;
+                                                inputField.onChange(value === '' ? '' : parseInt(value, 10));
+                                            }}
+                                        />
                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                                       </div>
                                     </FormControl>
