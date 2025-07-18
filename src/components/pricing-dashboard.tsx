@@ -5,10 +5,8 @@ import { useState, useMemo, useEffect } from "react";
 import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search } from 'lucide-react';
-import { useProductSimulation } from "@/hooks/use-product-simulation";
-import { useCompanySettings } from "@/hooks/use-company-settings";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine, PieChart, Pie, Legend } from 'recharts';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 
