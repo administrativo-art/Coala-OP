@@ -489,61 +489,57 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 <div className="space-y-4">
                    <h3 className="font-semibold text-lg">Resultados da análise</h3>
                    <div className="rounded-lg border p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">CMV total</span>
-                        <span className="font-bold text-lg">{formatCurrency(cmv)}</span>
-                    </div>
-                    <FormField control={form.control} name="operationPercentage" render={({ field }) => (
-                      <FormItem className="flex justify-between items-center">
-                        <FormLabel>+ % operação</FormLabel>
-                        <FormControl>
-                            <div className="relative w-24">
-                                <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''} />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                            </div>
-                        </FormControl>
-                      </FormItem>
-                    )}/>
-                     <div className="flex justify-between items-center text-primary font-bold">
-                        <span>= Custo bruto</span>
-                        <span className="text-xl">{formatCurrency(grossCost)}</span>
-                    </div>
-                     <FormField control={form.control} name="salePrice" render={({ field }) => (
-                      <FormItem className="flex justify-between items-center">
-                        <FormLabel>Preço de venda</FormLabel>
-                        <FormControl>
-                            <div className="relative w-32">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                                <Input type="number" step="0.01" className="pl-8 font-semibold text-right" {...field} value={field.value ?? ''} />
-                            </div>
-                        </FormControl>
-                      </FormItem>
-                    )}/>
-                      <FormField control={form.control} name="profitGoal" render={({ field }) => (
-                        <FormItem className="flex justify-between items-center">
-                            <FormLabel>Meta de Lucro</FormLabel>
-                             <FormControl>
-                                 <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
-                                    <SelectTrigger className="w-32">
-                                        <SelectValue placeholder="Meta..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Nenhuma</SelectItem>
-                                        {(pricingParameters?.profitGoals || []).map(goal => (
-                                            <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                        <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                        <div className="flex justify-between items-center">
+                            <FormLabel>+ % operação</FormLabel>
+                            <FormControl>
+                                <div className="relative w-24">
+                                    <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''} />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                                </div>
                             </FormControl>
-                        </FormItem>
-                      )}/>
-                      <div className="flex justify-between items-center text-green-600 font-bold">
-                        <span>= Lucro bruto</span>
-                        <div className="text-right">
-                            <p className="text-xl">{formatCurrency(profitValue)}</p>
-                            <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
                         </div>
-                    </div>
+                        )}/>
+                        <div className="flex justify-between items-center text-destructive font-bold">
+                            <span>= Custo bruto</span>
+                            <span className="text-xl">{formatCurrency(grossCost)}</span>
+                        </div>
+                        <FormField control={form.control} name="salePrice" render={({ field }) => (
+                        <div className="flex justify-between items-center">
+                            <FormLabel>Preço de venda</FormLabel>
+                            <FormControl>
+                                <div className="relative w-32">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
+                                    <Input type="number" step="0.01" className="pl-8 font-semibold text-right" {...field} value={field.value ?? ''} />
+                                </div>
+                            </FormControl>
+                        </div>
+                        )}/>
+                        <FormField control={form.control} name="profitGoal" render={({ field }) => (
+                          <div className="flex justify-between items-center">
+                              <FormLabel>Meta de Lucro</FormLabel>
+                               <FormControl>
+                                   <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
+                                      <SelectTrigger className="w-32">
+                                          <SelectValue placeholder="Meta..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="none">Nenhuma</SelectItem>
+                                          {(pricingParameters?.profitGoals || []).map(goal => (
+                                              <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                              </FormControl>
+                          </div>
+                        )}/>
+                        <div className="flex justify-between items-center text-green-600 font-bold">
+                          <span>= Lucro bruto</span>
+                          <div className="text-right">
+                              <p className="text-xl">{formatCurrency(profitValue)}</p>
+                              <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
+                          </div>
+                      </div>
                    </div>
 
                    <div className="space-y-4 rounded-lg border p-4 bg-muted/40">
