@@ -115,6 +115,8 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm";
+
     const renderContent = () => {
         if (isLoading) {
             return (
@@ -145,17 +147,15 @@ export function PricingSimulator() {
             );
         }
         
-        const gridClass = "grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]";
-
         return (
             <div className="space-y-4">
-                 <div className={cn("hidden md:grid gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground", gridClass)}>
+                 <div className={cn("hidden md:grid gap-4 px-4 py-2 font-semibold text-muted-foreground", gridClass)}>
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
                     <div className="text-right">Lucro %</div>
-                    <div className="text-center">Ações</div>
+                    <div className="text-center w-20">Ações</div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
                     {simulationsByCategory.map(sim => {
@@ -165,16 +165,14 @@ export function PricingSimulator() {
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                     <div className="flex items-center p-4">
-                                        <AccordionTrigger className={cn("p-0 hover:no-underline flex-1 grid items-center gap-4 text-sm w-full", gridClass)}>
+                                        <AccordionTrigger className={cn("p-0 hover:no-underline flex-1", gridClass)}>
                                             <div className="font-semibold text-left">{sim.name}</div>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
                                             <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
                                             <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                            {/* This div is a placeholder to align with the actions column */}
-                                            <div></div>
                                         </AccordionTrigger>
-                                        <div className="flex items-center gap-1 shrink-0 justify-center">
+                                        <div className="flex items-center gap-1 shrink-0 justify-center w-20">
                                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                                 <Edit className="h-4 w-4" />
                                             </Button>
