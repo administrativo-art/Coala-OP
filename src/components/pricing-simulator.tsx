@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { type ProductSimulation } from "@/types";
+import { type ProductSimulation, type PricingParameters } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "./pricing-dashboard";
 
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
     const isNegative = value < 0;
     const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -97,8 +97,6 @@ export function PricingSimulator() {
         const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
         
         for (const range of sortedRanges) {
-            // Check if the percentage falls within the range (inclusive of 'from', exclusive of 'to')
-            // For the last range, we can assume 'to' is Infinity.
             if (percentage >= range.from && (range.to === Infinity || percentage < range.to)) {
                 return range.color;
             }
@@ -252,38 +250,39 @@ export function PricingSimulator() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="dashboard" className="w-full">
-                         <div className="flex justify-between items-center mb-4">
+                         <div className="flex justify-between items-center">
                             <TabsList>
                                 <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
                                 <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
                             </TabsList>
                          </div>
+                        
+                        <div className="flex flex-wrap items-center gap-2 mt-4">
+                            <Button onClick={handleAddNew}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Nova análise
+                            </Button>
+                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                            </Button>
+                            {permissions.pricing.manageParameters && (
+                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    Parâmetros
+                                </Button>
+                            )}
+                        </div>
+
                         <TabsContent value="dashboard" className="mt-4">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Button onClick={handleAddNew}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Nova análise
-                                </Button>
-                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                </Button>
-                                {permissions.pricing.manageParameters && (
-                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                        <Settings className="mr-2 h-4 w-4" />
-                                        Parâmetros
-                                    </Button>
-                                )}
-                            </div>
-                            <div className="mt-4">
-                                <PricingDashboard 
-                                    simulations={simulationsByCategory} 
-                                    isLoading={isLoading}
-                                    getProfitColorClass={(p) => getProfitColorClass(p)}
-                                    formatCurrency={formatCurrency}
-                                    pricingParameters={pricingParameters}
-                                />
-                            </div>
+                             <PricingDashboard 
+                                simulations={simulationsByCategory} 
+                                isLoading={isLoading}
+                                getProfitColorClass={getProfitColorClass}
+                                formatCurrency={formatCurrency}
+                                pricingParameters={pricingParameters}
+                            />
                         </TabsContent>
+
                         <TabsContent value="table" className="mt-4">
                             <div className="space-y-4">
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
