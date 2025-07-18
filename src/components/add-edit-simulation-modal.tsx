@@ -277,7 +277,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
@@ -380,8 +380,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
                         return (
                             <div key={field.id} className="p-2 rounded bg-muted/50">
-                            <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2">
-                                <p className="font-medium truncate text-sm col-span-1" title={baseProduct?.name}>{baseProduct?.name}</p>
+                            <div className="grid grid-cols-[minmax(0,1fr)_80px_100px_100px_100px_auto] items-center gap-x-2">
+                                <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                                 <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                 <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                 )}/>
