@@ -1,14 +1,15 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
-import { type ProductSimulation, type PricingParameters } from '@/types';
+import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { type SimulationCategory } from "@/types";
+import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
@@ -33,6 +34,9 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
+type SortKey = keyof ProductSimulation | 'name';
+type SortDirection = 'asc' | 'desc';
+
 export function PricingSimulator() {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices, priceHistory } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
@@ -51,6 +55,7 @@ export function PricingSimulator() {
     const [lineFilter, setLineFilter] = useState('all');
     const [profitGoalFilter, setProfitGoalFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
 
 
     const handleAddNew = () => {
@@ -96,10 +101,32 @@ export function PricingSimulator() {
 
             return searchMatch && categoryMatch && lineMatch && profitGoalMatch && statusMatch;
         });
+        
+        return filtered.sort((a, b) => {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
 
-        return filtered.sort((a,b) => a.name.localeCompare(b.name));
+            if (aValue === undefined || aValue === null) return 1;
+            if (bValue === undefined || bValue === null) return -1;
 
-    }, [simulations, searchTerm, categoryFilter, lineFilter, profitGoalFilter, statusFilter]);
+            let comparison = 0;
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                comparison = aValue.localeCompare(bValue);
+            } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+                comparison = aValue - bValue;
+            }
+
+            return sortConfig.direction === 'asc' ? comparison : -comparison;
+        });
+
+    }, [simulations, searchTerm, categoryFilter, lineFilter, profitGoalFilter, statusFilter, sortConfig]);
+
+    const handleSort = (key: SortKey) => {
+        setSortConfig(prevConfig => ({
+            key,
+            direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
 
     const getProfitColorClass = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'text-primary';
@@ -122,6 +149,13 @@ export function PricingSimulator() {
         return { categoryName, lineName, profitGoalFilter, statusFilter };
     }, [categoryFilter, lineFilter, profitGoalFilter, statusFilter, categoryMap]);
     
+    const renderSortableHeader = (label: string, key: SortKey) => (
+        <Button variant="ghost" onClick={() => handleSort(key)} className="justify-end w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
+            {label}
+            {sortConfig.key === key && <ArrowUpDown className="ml-2 h-4 w-4" />}
+        </Button>
+    );
+
     const renderTable = () => {
         if (isLoading) {
             return (
@@ -154,14 +188,17 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
-                    <div className="text-left">Mercadoria</div>
+                 <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                    <Button variant="ghost" onClick={() => handleSort('name')} className="justify-start w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
+                        Mercadoria
+                        {sortConfig.key === 'name' && <ArrowUpDown className="ml-2 h-4 w-4" />}
+                    </Button>
                     <div className="w-6"></div> {/* Spacer for trigger */}
-                    <div className="text-right">Preço atual</div>
-                    <div className="text-right">Custo Total</div>
-                    <div className="text-right">Markup</div>
-                    <div className="text-right">Meta Lucro</div>
-                    <div className="text-right">Lucro %</div>
+                    {renderSortableHeader("Preço atual", "salePrice")}
+                    {renderSortableHeader("Custo Total", "grossCost")}
+                    {renderSortableHeader("Markup", "markup")}
+                    {renderSortableHeader("Meta Lucro", "profitGoal")}
+                    {renderSortableHeader("Lucro %", "profitPercentage")}
                     <div className="text-center">Status</div>
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
