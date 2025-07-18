@@ -145,10 +145,10 @@ export function PricingSimulator() {
                         sims.map(sim => {
                             const items = simulationItems.filter(item => item.simulationId === sim.id);
                             const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                            const shadowColor = category?.color ? `${category.color}99` : 'rgba(0,0,0,0.1)';
+                            const borderColor = category?.color || 'hsl(var(--border))';
                             
                             return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 8px 28px -8px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
+                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ border: `2px solid ${borderColor}`, transition: 'border-color 0.3s' }}>
                                     <div className="flex items-center">
                                     <AccordionTrigger className="p-4 flex-1 hover:no-underline">
                                         <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
