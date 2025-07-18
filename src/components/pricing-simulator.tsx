@@ -132,84 +132,73 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div>Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
-                    <div className="text-right">Lucro</div>
+                    <div className="text-right">Lucro %</div>
                     <div className="w-20"></div>
                 </div>
-                {simulationsByCategory.map(([categoryName, sims]) => {
-                    const category = categories.find(c => c.name === categoryName);
-                    return (
-                        <div key={categoryName}>
-                            {categoryName !== 'Sem Categoria' && (
-                                <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category?.color || 'transparent' }}></div>
-                                  {categoryName}
-                                </h3>
-                            )}
-                            <Accordion type="multiple" className="w-full space-y-3">
-                                {sims.map(sim => {
-                                    const items = simulationItems.filter(item => item.simulationId === sim.id);
-                                    const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                                    const shadowColor = category?.color ? `${category.color}99` : 'rgba(0,0,0,0.1)';
-                                    
-                                    return (
-                                        <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 4px 14px -1px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
-                                            <div className="flex items-center">
-                                            <AccordionTrigger className="p-4 flex-1 hover:no-underline">
-                                                <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
-                                                    <div className="font-semibold text-left">{sim.name}</div>
-                                                    <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                                    <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                                    <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
-                                                    <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
-                                                </div>
-                                            </AccordionTrigger>
-                                            <div className="flex items-center gap-1 shrink-0 px-4">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                            </div>
-                                            <AccordionContent className="px-4 pb-4 bg-muted/50">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead>Insumo Base</TableHead>
-                                                            <TableHead className="text-right">Quantidade</TableHead>
-                                                            <TableHead className="text-right">Custo / Unidade</TableHead>
-                                                            <TableHead className="text-right">Custo do Item</TableHead>
+                 <Accordion type="multiple" className="w-full space-y-3">
+                    {simulationsByCategory.flatMap(([categoryName, sims]) => 
+                        sims.map(sim => {
+                            const items = simulationItems.filter(item => item.simulationId === sim.id);
+                            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+                            const shadowColor = category?.color ? `${category.color}99` : 'rgba(0,0,0,0.1)';
+                            
+                            return (
+                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 4px 14px -4px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
+                                    <div className="flex items-center">
+                                    <AccordionTrigger className="p-4 flex-1 hover:no-underline">
+                                        <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
+                                            <div className="font-semibold text-left">{sim.name}</div>
+                                            <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                            <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                            <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
+                                            <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <div className="flex items-center gap-1 shrink-0 px-4">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                    </div>
+                                    <AccordionContent className="px-4 pb-4 bg-muted/50">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Insumo Base</TableHead>
+                                                    <TableHead className="text-right">Quantidade</TableHead>
+                                                    <TableHead className="text-right">Custo / Unidade</TableHead>
+                                                    <TableHead className="text-right">Custo do Item</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {items.map(item => {
+                                                    const baseProductInfo = baseProductMap.get(item.baseProductId);
+                                                    const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                                                    return (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
+                                                            <TableCell className="text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
+                                                            <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
+                                                            <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
                                                         </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {items.map(item => {
-                                                            const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                            const cost = (item.overrideCostPerUnit || 0) * item.quantity;
-                                                            return (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
-                                                                    <TableCell className="text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
-                                                                    <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
-                                                                    <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
-                                                                </TableRow>
-                                                            )
-                                                        })}
-                                                    </TableBody>
-                                                </Table>
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    );
-                                })}
-                            </Accordion>
-                        </div>
-                    )
-                })}
+                                                    )
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            );
+                        })
+                    )}
+                </Accordion>
             </div>
         )
     };
