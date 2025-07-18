@@ -277,7 +277,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
@@ -285,7 +285,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1 pr-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="space-y-8">
                 {/* Composition Column */}
                 <div className="space-y-4">
                     <FormField control={form.control} name="name" render={({ field }) => (
@@ -364,7 +364,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                   </div>
                   
                   <div className="rounded-md border p-2 space-y-2">
-                    <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                         <span className="col-span-1">Insumo base</span>
                         <span className="text-center">Qtd.</span>
                         <span className="text-center">Unid.</span>
@@ -380,7 +380,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
                         return (
                             <div key={field.id} className="p-2 rounded bg-muted/50">
-                            <div className="grid grid-cols-[minmax(0,1fr)_80px_100px_100px_100px_auto] items-center gap-x-2">
+                            <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2">
                                 <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                                 <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                 <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
@@ -474,7 +474,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     </Select>
                 </div>
 
-                {/* Analysis Column */}
+                {/* Analysis Section */}
                 <div className="space-y-4">
                    <h3 className="font-semibold text-lg">Resultados da análise</h3>
                    <div className="rounded-lg border p-4 space-y-4">
