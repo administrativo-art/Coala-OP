@@ -6,10 +6,10 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Settings, Layers } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { type ProductSimulation, type SimulationCategory } from "@/types";
+import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
@@ -59,11 +59,10 @@ export function PricingSimulator() {
         setIsAddEditModalOpen(true);
     };
 
-    const handleDelete = async () => {
-        if (simulationToDelete) {
-            await deleteSimulation(simulationToDelete.id);
-            setSimulationToDelete(null);
-        }
+    const handleDelete = async (simulationId: string) => {
+        await deleteSimulation(simulationId);
+        setIsAddEditModalOpen(false); // Fecha o modal de edição
+        setSimulationToEdit(null);
     };
 
     const baseProductMap = useMemo(() => {
@@ -115,7 +114,7 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm";
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm";
 
     const renderContent = () => {
         if (isLoading) {
@@ -155,7 +154,6 @@ export function PricingSimulator() {
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
                     <div className="text-right">Lucro %</div>
-                    <div className="text-center w-20">Ações</div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
                     {simulationsByCategory.map(sim => {
@@ -164,23 +162,18 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className="flex items-center p-4">
-                                        <AccordionTrigger className={cn("p-0 hover:no-underline flex-1", gridClass)}>
-                                            <div className="font-semibold text-left">{sim.name}</div>
-                                            <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                            <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                            <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
-                                            <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                        </AccordionTrigger>
-                                        <div className="flex items-center gap-1 shrink-0 justify-center w-20">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSimulationToDelete(sim)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                    <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
+                                        <div
+                                            className="font-semibold text-left hover:underline cursor-pointer"
+                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                        >
+                                            {sim.name}
                                         </div>
-                                    </div>
+                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
+                                    </AccordionTrigger>
                                     <AccordionContent className="px-4 pb-4 bg-muted/50">
                                         <Table>
                                             <TableHeader>
@@ -228,11 +221,13 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex flex-wrap justify-end gap-2 mb-4">
-                         <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                        </Button>
-                         <Button onClick={handleAddNew}>
+                     <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
+                        <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                            </Button>
+                        </div>
+                        <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Nova análise
                         </Button>
@@ -290,6 +285,7 @@ export function PricingSimulator() {
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
                 simulationToEdit={simulationToEdit}
+                onDelete={handleDelete}
             />
             
             <CategoryManagementModal
@@ -314,7 +310,12 @@ export function PricingSimulator() {
                  <DeleteConfirmationDialog
                     open={!!simulationToDelete}
                     onOpenChange={() => setSimulationToDelete(null)}
-                    onConfirm={handleDelete}
+                    onConfirm={() => {
+                        if (simulationToDelete) {
+                            deleteSimulation(simulationToDelete.id);
+                        }
+                        setSimulationToDelete(null);
+                    }}
                     itemName={`a simulação "${simulationToDelete.name}"`}
                 />
             )}

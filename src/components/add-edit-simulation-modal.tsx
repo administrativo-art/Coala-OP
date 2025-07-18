@@ -28,6 +28,7 @@ import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } 
 import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-analysis-flow';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 
 const simulationItemSchema = z.object({
@@ -72,6 +73,7 @@ interface AddEditSimulationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   simulationToEdit: ProductSimulation | null;
+  onDelete: (simulationId: string) => void;
 }
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -81,7 +83,7 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }: AddEditSimulationModalProps) {
+export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, onDelete }: AddEditSimulationModalProps) {
   const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
   const { products } = useProducts();
@@ -89,6 +91,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const { pricingParameters } = useCompanySettings();
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [desiredProfitMargin, setDesiredProfitMargin] = useState(45);
   const [sensitivityQuestion, setSensitivityQuestion] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -287,12 +290,19 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     onOpenChange(false);
   };
   
+  const handleDeleteConfirm = () => {
+      if (simulationToEdit) {
+          onDelete(simulationToEdit.id);
+      }
+      setIsDeleteConfirmOpen(false);
+  }
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Nova análise de custo</DialogTitle>
+          <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -548,9 +558,19 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-4 border-t mt-auto">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit">Salvar análise</Button>
+            <DialogFooter className="pt-4 border-t mt-auto flex justify-between w-full">
+              <div>
+                {simulationToEdit && (
+                    <Button type="button" variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                    </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                <Button type="submit">Salvar análise</Button>
+              </div>
             </DialogFooter>
           </form>
         </Form>
@@ -561,6 +581,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         open={isCategoryModalOpen}
         onOpenChange={setIsCategoryModalOpen}
     />
+    {simulationToEdit && (
+        <DeleteConfirmationDialog
+            open={isDeleteConfirmOpen}
+            onOpenChange={setIsDeleteConfirmOpen}
+            onConfirm={handleDeleteConfirm}
+            itemName={`a simulação "${simulationToEdit.name}"`}
+        />
+    )}
     </>
   );
 }
