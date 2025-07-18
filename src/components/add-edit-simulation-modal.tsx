@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -488,21 +488,10 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 {/* Analysis Column */}
                 <div className="space-y-4">
                    <h3 className="font-semibold text-lg">Resultados da análise</h3>
-                   <div className="rounded-lg border p-4 space-y-3">
-                        <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                   <div className="rounded-lg border p-4 space-y-4">
                         <div className="flex justify-between items-center">
-                            <FormLabel>+ % operação</FormLabel>
-                            <FormControl>
-                                <div className="relative w-24">
-                                    <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''} />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                                </div>
-                            </FormControl>
-                        </div>
-                        )}/>
-                        <div className="flex justify-between items-center text-destructive font-bold">
-                            <span>= Custo bruto</span>
-                            <span className="text-xl">{formatCurrency(grossCost)}</span>
+                            <FormLabel className="text-destructive font-bold">= Custo bruto</FormLabel>
+                            <span className="text-xl font-bold text-destructive">{formatCurrency(grossCost)}</span>
                         </div>
                         <FormField control={form.control} name="salePrice" render={({ field }) => (
                         <div className="flex justify-between items-center">
