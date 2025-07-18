@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -152,17 +153,18 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
         try {
             let partialCost = 0;
-            let valueInBase = 0;
             
             if (item.useDefault) {
                 if(baseProduct.lastEffectivePrice) {
-                    valueInBase = item.quantity * baseProduct.lastEffectivePrice.pricePerUnit;
+                    partialCost = item.quantity * baseProduct.lastEffectivePrice.pricePerUnit;
                 }
             } else if (item.overrideCostPerUnit && item.overrideUnit) {
-                valueInBase = item.quantity * item.overrideCostPerUnit;
+                const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
+                if (valueInBase > 0) {
+                     partialCost = item.quantity * (item.overrideCostPerUnit / valueInBase);
+                }
             }
             
-            partialCost = valueInBase;
             partials[index] = partialCost;
             totalCmv += partialCost;
             itemDetails.push({ name: baseProduct.name, cost: partialCost });
