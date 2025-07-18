@@ -115,11 +115,11 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                             <FormField
                                 control={form.control}
                                 name={`profitGoals.${index}`}
-                                render={({ field }) => (
+                                render={({ field: inputField }) => (
                                     <FormItem className="flex-grow">
                                     <FormControl>
                                       <div className="relative">
-                                        <Input type="number" className="pr-8" {...field} />
+                                        <Input type="number" className="pr-8" {...inputField} onChange={e => inputField.onChange(e.target.valueAsNumber)} />
                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                                       </div>
                                     </FormControl>

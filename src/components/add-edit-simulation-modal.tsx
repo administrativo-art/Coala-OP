@@ -46,7 +46,7 @@ const simulationSchema = z.object({
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
-  profitGoal: z.coerce.number().optional(),
+  profitGoal: z.coerce.number().nullable().optional(),
   notes: z.string().optional(),
 }).superRefine((data, ctx) => {
     data.items.forEach((item, index) => {
@@ -134,7 +134,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' });
+            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
         }
         setAiAnalysis(null);
         setSensitivityQuestion('');
@@ -523,11 +523,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                         <FormItem className="flex justify-between items-center">
                             <FormLabel>Meta de Lucro</FormLabel>
                              <FormControl>
-                                 <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value || '')}>
+                                 <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
                                     <SelectTrigger className="w-32">
                                         <SelectValue placeholder="Meta..." />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="none">Nenhuma</SelectItem>
                                         {(pricingParameters?.profitGoals || []).map(goal => (
                                             <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
                                         ))}

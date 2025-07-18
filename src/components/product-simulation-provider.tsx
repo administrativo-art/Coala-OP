@@ -22,7 +22,7 @@ interface SimulationData {
     }[];
     operationPercentage?: number;
     salePrice?: number;
-    profitGoal?: number;
+    profitGoal?: number | null;
     notes?: string;
     totalCmv: number;
     grossCost: number;

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -93,7 +92,7 @@ export function PricingSimulator() {
 
     }, [simulations, searchTerm, categoryFilter, lineFilter]);
 
-    const getProfitColorClass = (percentage: number, goal?: number) => {
+    const getProfitColorClass = (percentage: number, goal?: number | null) => {
         if (goal !== undefined && goal !== null) {
             return percentage >= goal ? 'text-green-600' : 'text-destructive';
         }
@@ -179,7 +178,7 @@ export function PricingSimulator() {
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage, sim.profitGoal);
-                        const meetsGoal = sim.profitGoal !== undefined && sim.profitPercentage >= sim.profitGoal;
+                        const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         
                         return (
                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>

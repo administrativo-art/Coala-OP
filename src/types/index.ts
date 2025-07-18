@@ -182,7 +182,7 @@ export type ProductSimulation = {
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;
   operationPercentage: number;
-  profitGoal?: number;
+  profitGoal?: number | null;
   totalCmv: number;
   grossCost: number;
   profitValue: number;
