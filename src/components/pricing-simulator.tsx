@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent, ArrowUp, ArrowDown } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent, History } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulation, type PricingParameters } from "@/types";
 import { Skeleton } from "./ui/skeleton";
@@ -22,8 +22,7 @@ import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "./pricing-dashboard";
-import { usePurchase } from "@/hooks/use-purchase";
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { PriceHistoryModal } from "./price-history-modal";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -34,19 +33,19 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices } = useProductSimulation();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices, priceHistory } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
-    const { lastSavedPrices, loading: loadingHistory } = usePurchase();
     const { permissions } = useAuth();
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
-    const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
+    const [simulationForHistory, setSimulationForHistory] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [lineFilter, setLineFilter] = useState('all');
@@ -67,8 +66,13 @@ export function PricingSimulator() {
 
     const handleDelete = async (simulationId: string) => {
         await deleteSimulation(simulationId);
-        setIsAddEditModalOpen(false); // Fecha o modal de edição
+        setIsAddEditModalOpen(false); 
         setSimulationToEdit(null);
+    };
+    
+    const handleViewHistory = (simulation: ProductSimulation) => {
+        setSimulationForHistory(simulation);
+        setIsHistoryModalOpen(true);
     };
 
     const baseProductMap = useMemo(() => {
@@ -113,10 +117,10 @@ export function PricingSimulator() {
             }
         }
         
-        return 'text-primary'; // Default color if no range matches
+        return 'text-primary'; 
     };
 
-    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams || loadingHistory;
+    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
     
     const activeFilters = useMemo(() => {
         const categoryName = categoryFilter === 'all' ? null : categoryMap.get(categoryFilter)?.name || null;
@@ -170,9 +174,8 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
-                    <div className="text-right">Preço anterior</div>
                     <div className="text-right">Preço atual</div>
                     <div className="text-right">Custo Total</div>
                     <div className="text-right">Markup</div>
@@ -185,36 +188,16 @@ export function PricingSimulator() {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
-                        const lastPrice = lastSavedPrices.get(sim.id);
 
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
                                      <div
                                         className="font-semibold text-left hover:underline cursor-pointer flex items-center gap-2"
                                         onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
                                     >
                                         <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible" />
                                         <span>{sim.name}</span>
-                                    </div>
-                                    <div className="text-right text-muted-foreground">
-                                        {lastPrice !== undefined && lastPrice !== sim.salePrice ? (
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <span className={cn("flex items-center justify-end gap-1", sim.salePrice > lastPrice ? "text-green-600" : "text-destructive")}>
-                                                            {formatCurrency(lastPrice)}
-                                                            {sim.salePrice > lastPrice ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Preço anterior: {formatCurrency(lastPrice)}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        ) : (
-                                            '-'
-                                        )}
                                     </div>
                                     <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
                                     <div className="text-right">{formatCurrency(sim.grossCost)}</div>
@@ -308,6 +291,9 @@ export function PricingSimulator() {
                                             <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                                                 <Layers className="mr-2 h-4 w-4" /> Alterar em lote
                                             </Button>
+                                             <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                                                <History className="mr-2 h-4 w-4" /> Histórico de ajustes
+                                            </Button>
                                             {permissions.pricing.manageParameters && (
                                                 <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
                                                     <Settings className="mr-2 h-4 w-4" />
@@ -396,8 +382,13 @@ export function PricingSimulator() {
                 onConfirm={bulkUpdatePrices}
                 activeFilters={activeFilters}
             />
+            
+            <PriceHistoryModal
+                open={isHistoryModalOpen}
+                onOpenChange={setIsHistoryModalOpen}
+                history={priceHistory}
+                simulations={simulations}
+            />
         </div>
     );
 }
-
-    

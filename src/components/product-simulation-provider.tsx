@@ -3,7 +3,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ProductSimulation, type ProductSimulationItem } from '@/types';
+import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -34,6 +34,7 @@ interface SimulationData {
 export interface ProductSimulationContextType {
   simulations: ProductSimulation[];
   simulationItems: ProductSimulationItem[];
+  priceHistory: SimulationPriceHistory[];
   loading: boolean;
   addSimulation: (data: SimulationData) => Promise<void>;
   updateSimulation: (data: ProductSimulation & { items: SimulationData['items'] }) => Promise<void>;
@@ -48,6 +49,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     const { baseProducts } = useBaseProducts();
     const [simulations, setSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
+    const [priceHistory, setPriceHistory] = useState<SimulationPriceHistory[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -68,10 +70,19 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }, (error) => {
             console.error("Error fetching simulation items:", error);
         });
+        
+        const qHistory = query(collection(db, "simulationPriceHistory"));
+        const unsubHistory = onSnapshot(qHistory, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimulationPriceHistory));
+            setPriceHistory(data.sort((a,b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()));
+        }, (error) => {
+            console.error("Error fetching price history:", error);
+        });
 
         return () => {
             unsubSims();
             unsubItems();
+            unsubHistory();
         };
     }, []);
 
@@ -120,6 +131,15 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         const { items, id: simulationId, ...simulationData } = data;
         const simulationRef = doc(db, "productSimulations", simulationId);
         
+        const existingSimulation = simulations.find(s => s.id === simulationId);
+        if (!existingSimulation) {
+            console.error("Simulation to update not found");
+            return;
+        }
+        
+        const oldPrice = existingSimulation.salePrice;
+        const newPrice = simulationData.salePrice;
+
         try {
             const batch = writeBatch(db);
             
@@ -128,8 +148,19 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
               ...restOfData,
               updatedAt: now
             };
-
             batch.update(simulationRef, updatePayload);
+            
+            if (oldPrice !== newPrice) {
+                const historyRef = doc(collection(db, "simulationPriceHistory"));
+                const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
+                    simulationId,
+                    oldPrice,
+                    newPrice,
+                    changedAt: now,
+                    changedBy: { userId: user.id, username: user.username },
+                };
+                batch.set(historyRef, historyEntry);
+            }
 
             const oldItemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
             const oldItemsSnapshot = await getDocs(oldItemsQuery);
@@ -152,7 +183,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         } catch (error) {
             console.error("Error updating simulation:", error);
         }
-    }, [user]);
+    }, [user, simulations]);
 
     const deleteSimulation = useCallback(async (simulationId: string) => {
         try {
@@ -163,6 +194,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const itemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
             const itemsSnapshot = await getDocs(itemsQuery);
             itemsSnapshot.forEach(doc => batch.delete(doc.ref));
+            
+            const historyQuery = query(collection(db, "simulationPriceHistory"), where("simulationId", "==", simulationId));
+            const historySnapshot = await getDocs(historyQuery);
+            historySnapshot.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
         } catch (error) {
@@ -176,12 +211,13 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         valueType: 'percentage' | 'fixed',
         value: number
     ) => {
-        if (value <= 0) return;
+        if (!user || value <= 0) return;
 
         const batch = writeBatch(db);
         const now = new Date().toISOString();
 
         simulationsToUpdate.forEach(sim => {
+            const oldPrice = sim.salePrice;
             let newSalePrice = sim.salePrice;
             const multiplier = adjustmentType === 'increase' ? 1 : -1;
 
@@ -191,20 +227,32 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 newSalePrice = sim.salePrice + (value * multiplier);
             }
             
-            newSalePrice = Math.max(0, newSalePrice); // Ensure price doesn't go below zero
+            newSalePrice = Math.max(0, newSalePrice); 
 
-            const newProfitValue = newSalePrice - sim.grossCost;
-            const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
-            const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
-
-            const simRef = doc(db, "productSimulations", sim.id);
-            batch.update(simRef, {
-                salePrice: newSalePrice,
-                profitValue: newProfitValue,
-                profitPercentage: newProfitPercentage,
-                markup: newMarkup,
-                updatedAt: now,
-            });
+            if (oldPrice !== newSalePrice) {
+                const newProfitValue = newSalePrice - sim.grossCost;
+                const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
+                const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
+                
+                const simRef = doc(db, "productSimulations", sim.id);
+                batch.update(simRef, {
+                    salePrice: newSalePrice,
+                    profitValue: newProfitValue,
+                    profitPercentage: newProfitPercentage,
+                    markup: newMarkup,
+                    updatedAt: now,
+                });
+                
+                const historyRef = doc(collection(db, "simulationPriceHistory"));
+                const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
+                    simulationId: sim.id,
+                    oldPrice,
+                    newPrice: newSalePrice,
+                    changedAt: now,
+                    changedBy: { userId: user.id, username: user.username },
+                };
+                batch.set(historyRef, historyEntry);
+            }
         });
 
         try {
@@ -212,20 +260,21 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         } catch (error) {
             console.error("Error performing bulk price update:", error);
         }
-    }, []);
+    }, [user]);
 
 
     const value = useMemo(() => {
         return {
             simulations,
             simulationItems,
+            priceHistory,
             loading,
             addSimulation,
             updateSimulation,
             deleteSimulation,
             bulkUpdatePrices,
         }
-    }, [simulations, simulationItems, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, baseProducts]);
+    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }

@@ -163,6 +163,18 @@ export type SimulationCategory = {
   parentId: string | null;
 };
 
+export type SimulationPriceHistory = {
+  id: string;
+  simulationId: string;
+  oldPrice: number;
+  newPrice: number;
+  changedAt: string; // ISO string
+  changedBy: {
+    userId: string;
+    username: string;
+  }
+};
+
 export type ProductSimulationItem = {
   id: string;
   simulationId: string;
