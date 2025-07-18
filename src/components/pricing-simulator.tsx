@@ -137,7 +137,7 @@ export function PricingSimulator() {
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
-                    <div className="text-right">Lucro %</div>
+                    <div className="text-right">Lucro</div>
                     <div className="w-20"></div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
@@ -148,7 +148,7 @@ export function PricingSimulator() {
                             const shadowColor = category?.color ? `${category.color}99` : 'rgba(0,0,0,0.1)';
                             
                             return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 4px 14px -4px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
+                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 8px 28px -8px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
                                     <div className="flex items-center">
                                     <AccordionTrigger className="p-4 flex-1 hover:no-underline">
                                         <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
