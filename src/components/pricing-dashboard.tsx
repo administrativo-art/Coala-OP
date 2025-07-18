@@ -6,7 +6,7 @@ import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, PieChart, Pie, Legend } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox } from 'lucide-react';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle } from 'lucide-react';
 
 interface PricingDashboardProps {
     simulations: ProductSimulation[];
@@ -23,23 +23,32 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             return { kpis: {}, profitChartData: [], costCompositionData: [] };
         }
 
-        const metaOkCount = simulations.filter(s => {
-            const salePrice = s.salePrice || 0;
-            const grossCost = s.grossCost || 0;
-            const profitPercentage = salePrice > 0 ? ((salePrice - grossCost) / salePrice) * 100 : 0;
-            const meta = pricingParameters?.profitRanges?.find(r => profitPercentage >= r.from && profitPercentage < r.to)?.id === '4'; // assuming id '4' is 'OK'
-            return meta;
-        }).length;
-        
         const totalSimulations = simulations.length;
+
+        const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
+        const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
+        const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
+
         const totalProfitPercentage = simulations.reduce((acc, s) => acc + (s.profitPercentage || 0), 0);
         const lowestMarginItem = simulations.reduce((min, s) => (s.profitPercentage < min.profitPercentage ? s : min), simulations[0]);
+        
+        const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
+
+        const priceDeltas = itemsBelowGoal.map(s => {
+            const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
+            return priceForGoal - s.salePrice;
+        });
+
+        const averagePriceDelta = priceDeltas.length > 0 ? priceDeltas.reduce((acc, delta) => acc + delta, 0) / priceDeltas.length : 0;
+
 
         const kpisResult = {
-            okPercentage: totalSimulations > 0 ? (metaOkCount / totalSimulations) * 100 : 0,
-            reviewPercentage: totalSimulations > 0 ? 100 - ((metaOkCount / totalSimulations) * 100) : 0,
+            okPercentage: totalSimulations > 0 ? (itemsMeetingGoal.length / totalSimulations) * 100 : 0,
+            reviewPercentage: totalSimulations > 0 ? (itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!).length / totalSimulations) * 100 : 0,
             averageProfit: totalSimulations > 0 ? totalProfitPercentage / totalSimulations : 0,
             lowestMarginItem: lowestMarginItem,
+            averageMarkup: totalSimulations > 0 ? totalMarkup / totalSimulations : 0,
+            averagePriceDelta: averagePriceDelta,
         };
 
         const profitChartDataResult = simulations
@@ -62,12 +71,13 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
     if (isLoading) {
         return (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Skeleton className="h-28" />
                 <Skeleton className="h-28" />
                 <Skeleton className="h-28" />
                 <Skeleton className="h-28" />
                 <Skeleton className="h-80 col-span-full lg:col-span-2" />
-                <Skeleton className="h-80 col-span-full lg:col-span-1" />
+                <Skeleton className="h-80 col-span-full lg:col-span-2" />
             </div>
         );
     }
@@ -84,11 +94,11 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens na meta</CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                        <Target className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{kpis.okPercentage?.toFixed(1)}%</div>
@@ -96,25 +106,40 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Itens para revisar</CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-orange-500">{kpis.reviewPercentage?.toFixed(1)}%</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Lucratividade média</CardTitle>
+                        <CardTitle className="text-sm font-medium">Lucratividade Média</CardTitle>
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{kpis.averageProfit?.toFixed(2)}%</div>
                     </CardContent>
                 </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Markup Médio</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.averageMarkup?.toFixed(2)}x</div>
+                         <p className="text-xs text-muted-foreground">
+                           Preço de venda / Custo Bruto
+                        </p>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Aumento Médio</CardTitle>
+                        <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(kpis.averagePriceDelta)}</div>
+                        <p className="text-xs text-muted-foreground">
+                           Necessário para atingir a meta
+                        </p>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Menor margem</CardTitle>
+                        <CardTitle className="text-sm font-medium">Menor Margem</CardTitle>
                         <TrendingDown className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -122,6 +147,15 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                         <p className="text-xs text-muted-foreground">
                             {kpis.lowestMarginItem?.profitPercentage?.toFixed(2)}%
                         </p>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Itens p/ Revisar</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-orange-500">{kpis.reviewPercentage?.toFixed(1)}%</div>
                     </CardContent>
                 </Card>
             </div>
