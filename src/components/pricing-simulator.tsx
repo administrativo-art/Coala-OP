@@ -120,13 +120,13 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(120px,auto)] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
-                    <div className="text-right">Lucro</div>
-                    <div className="text-right">Lucro %</div>
-                    <div className="text-center w-20">Ações</div>
+                    <div className="text-right font-bold">Lucro</div>
+                    <div className="text-right font-bold">Lucro %</div>
+                    <div className="text-center">Ações</div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
                     {simulationsByCategory.map(sim => {
@@ -135,8 +135,8 @@ export function PricingSimulator() {
                             const borderColor = category?.color || 'hsl(var(--border))';
                             
                             return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg" style={{ borderColor: borderColor }}>
-                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 px-4 py-2 text-sm w-full">
+                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: borderColor }}>
+                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(120px,auto)] items-center gap-4 px-4 py-2 text-sm w-full">
                                         <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left col-span-1">
                                             {sim.name}
                                         </AccordionTrigger>
