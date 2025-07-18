@@ -218,20 +218,12 @@ export function PricingSimulator() {
         <>
             <Card>
                 <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                Análise de custo de mercadorias
-                            </CardTitle>
-                            <CardDescription>
-                                Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
-                            </CardDescription>
-                        </div>
-                        <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova Análise
-                        </Button>
-                    </div>
+                    <CardTitle className="flex items-center gap-2">
+                        Análise de custo de mercadorias
+                    </CardTitle>
+                    <CardDescription>
+                        Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
@@ -272,6 +264,10 @@ export function PricingSimulator() {
                         </Button>
                         <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                             <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                        </Button>
+                         <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nova Análise
                         </Button>
                     </div>
                    {renderContent()}
