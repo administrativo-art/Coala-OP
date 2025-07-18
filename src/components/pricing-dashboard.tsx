@@ -5,14 +5,16 @@ import { useState, useMemo, useEffect } from "react";
 import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, PieChart, Pie, Legend, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle, Gauge, SlidersHorizontal, PackageCheck, FileQuestion, Star } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, PieChart, Pie, Legend, ReferenceLine, LineChart, Line, Dot } from 'recharts';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle, Gauge, SlidersHorizontal, PackageCheck, FileQuestion, Star, Search } from 'lucide-react';
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useCompanySettings } from "@/hooks/use-company-settings";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
-import { Slider } from "./ui/slider";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "./ui/button";
+import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -42,40 +44,63 @@ interface PricingDashboardProps {
 
 export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, onSelectItem, activeFilters }: PricingDashboardProps) {
     const [selectedItemForCharts, setSelectedItemForCharts] = useState<ProductSimulation | null>(null);
+    const { categories } = useProductSimulationCategories();
+    const [searchFilter, setSearchFilter] = useState('');
+    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
+    const categoryMap = useMemo(() => {
+        return new Map(categories.map(c => [c.id, c]));
+    }, [categories]);
+
+    const filteredSimulations = useMemo(() => {
+        if (!searchFilter) return simulations;
+        const lowerCaseFilter = searchFilter.toLowerCase();
+        return simulations.filter(s => {
+            const category = s.categoryId ? categoryMap.get(s.categoryId) : null;
+            const line = s.lineId ? categoryMap.get(s.lineId) : null;
+            return (
+                s.name.toLowerCase().includes(lowerCaseFilter) ||
+                (category && category.name.toLowerCase().includes(lowerCaseFilter)) ||
+                (line && line.name.toLowerCase().includes(lowerCaseFilter))
+            );
+        });
+    }, [simulations, searchFilter, categoryMap]);
+    
     useEffect(() => {
-        if (simulations.length > 0) {
-            // If the current selection is no longer in the filtered list, select the first one.
-            const currentSelectionExists = simulations.some(s => s.id === selectedItemForCharts?.id);
+        if (filteredSimulations.length > 0) {
+            const currentSelectionExists = filteredSimulations.some(s => s.id === selectedItemForCharts?.id);
             if (!currentSelectionExists) {
-                onSelectItem(simulations[0]);
-                setSelectedItemForCharts(simulations[0]);
+                const newSelection = filteredSimulations[0];
+                onSelectItem(newSelection);
+                setSelectedItemForCharts(newSelection);
             }
         } else {
             onSelectItem(null);
             setSelectedItemForCharts(null);
         }
-    }, [simulations, onSelectItem, selectedItemForCharts]);
+    }, [filteredSimulations, onSelectItem, selectedItemForCharts]);
 
     const { kpis, profitChartData, costCompositionData } = useMemo(() => {
-        if (!simulations || simulations.length === 0) {
+        const simsToProcess = filteredSimulations.length > 0 ? filteredSimulations : simulations;
+
+        if (!simsToProcess || simsToProcess.length === 0) {
             return { kpis: {}, profitChartData: [], costCompositionData: [] };
         }
 
-        const totalSimulations = simulations.length;
-        const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
+        const totalSimulations = simsToProcess.length;
+        const itemsWithGoal = simsToProcess.filter(s => s.profitGoal != null && s.profitGoal > 0);
         const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
         const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
 
-        let highestMarginItem = simulations[0];
-        let lowestMarginItem = simulations[0];
+        let highestMarginItem = simsToProcess[0];
+        let lowestMarginItem = simsToProcess[0];
 
-        for (const s of simulations) {
+        for (const s of simsToProcess) {
             if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
             if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
         }
 
-        const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
+        const totalMarkup = simsToProcess.reduce((acc, s) => acc + s.markup, 0);
 
         const priceDeltas = itemsBelowGoal.map(s => {
             const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
@@ -93,8 +118,9 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             averagePriceDelta: averagePriceDelta,
         };
 
-        const profitChartDataResult = simulations
+        const profitChartDataResult = simsToProcess
             .map(s => ({
+                id: s.id,
                 name: s.name,
                 'Lucro %': s.profitPercentage,
             }))
@@ -109,14 +135,15 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         }
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult, costCompositionData: costCompData };
-    }, [simulations, selectedItemForCharts]);
+    }, [simulations, filteredSimulations, selectedItemForCharts]);
     
-    const handleSelectionChange = (id: string) => {
+    const handleSelectionChange = (id: string | null) => {
         const item = simulations.find(s => s.id === id);
         if (item) {
             setSelectedItemForCharts(item);
             onSelectItem(item);
         }
+        setIsPopoverOpen(false);
     };
 
     if (isLoading) {
@@ -209,18 +236,46 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Lucratividade por mercadoria</CardTitle>
-                        <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle>Lucratividade por mercadoria</CardTitle>
+                                <CardDescription>Clique em um ponto para selecionar o item e ver mais detalhes.</CardDescription>
+                            </div>
+                            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className="w-[300px]" role="combobox">
+                                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50"/>
+                                        {selectedItemForCharts ? selectedItemForCharts.name : "Buscar mercadoria, categoria ou linha..."}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Buscar..." onValueChange={setSearchFilter} />
+                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                        <CommandList>
+                                            <CommandGroup>
+                                            {filteredSimulations.map((sim) => (
+                                                <CommandItem
+                                                    key={sim.id}
+                                                    value={sim.name}
+                                                    onSelect={() => handleSelectionChange(sim.id)}
+                                                >
+                                                {sim.name}
+                                                </CommandItem>
+                                            ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                     </CardHeader>
                     <CardContent>
                          <ResponsiveContainer width="100%" height={350}>
-                            <BarChart data={profitChartData} onClick={(data) => {
+                            <LineChart data={profitChartData} onClick={(data) => {
                                 if (data && data.activePayload && data.activePayload[0]) {
-                                    const selectedName = data.activePayload[0].payload.name;
-                                    const item = simulations.find(s => s.name === selectedName);
-                                    if(item) {
-                                      handleSelectionChange(item.id);
-                                    }
+                                    const selectedId = data.activePayload[0].payload.id;
+                                    handleSelectionChange(selectedId);
                                 }
                             }}>
                                 <CartesianGrid strokeDasharray="3 3" />
@@ -230,16 +285,21 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                 {activeFilters.profitGoalFilter !== 'all' && (
                                     <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={`Meta ${activeFilters.profitGoalFilter}%`} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
                                 )}
-                                <Bar dataKey="Lucro %" radius={[4, 4, 0, 0]}>
-                                    {profitChartData.map((entry, index) => (
-                                        <Cell 
-                                            key={`cell-${index}`} 
-                                            fill={getProfitColorClass(entry['Lucro %'])} 
-                                            className={cn("cursor-pointer", selectedItemForCharts?.name === entry.name && "opacity-100", selectedItemForCharts?.name !== entry.name && "opacity-50 hover:opacity-75")}
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
+                                <Line 
+                                    dataKey="Lucro %" 
+                                    type="monotone"
+                                    stroke="hsl(var(--primary))" 
+                                    strokeWidth={2}
+                                    dot={(props) => {
+                                        const { cx, cy, payload } = props;
+                                        if (payload.id === selectedItemForCharts?.id) {
+                                            return <Dot cx={cx} cy={cy} r={6} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />;
+                                        }
+                                        return <Dot cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
+                                    }}
+                                    activeDot={{ r: 8 }}
+                                />
+                            </LineChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
