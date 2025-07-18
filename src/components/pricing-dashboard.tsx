@@ -148,7 +148,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens na meta</CardTitle>
@@ -241,11 +241,11 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                     stroke="hsl(var(--primary))" 
                                     strokeWidth={2}
                                     dot={(props) => {
-                                        const { cx, cy, payload } = props;
+                                        const { cx, cy, payload, key } = props;
                                         if (payload.id === selectedItemForCharts?.id) {
-                                            return <Dot cx={cx} cy={cy} r={6} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />;
+                                            return <Dot key={key} cx={cx} cy={cy} r={6} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />;
                                         }
-                                        return <Dot cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
+                                        return <Dot key={key} cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
                                     }}
                                     activeDot={{ r: 8 }}
                                 />
