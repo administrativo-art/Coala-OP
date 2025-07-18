@@ -101,7 +101,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                 name: s.name,
                 'Lucro %': s.profitPercentage,
             }))
-            .sort((a, b) => b['Lucro %'] - a['Lucro %']);
+            .sort((a, b) => a['Lucro %'] - b['Lucro %']);
             
         let costCompData: { name: string, value: number }[] = [];
         if (selectedItemForCharts) {
@@ -120,6 +120,25 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             setSelectedItemForCharts(item);
             onSelectItem(item);
         }
+    };
+    
+    const getBarColor = (percentage: number) => {
+        if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
+        const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
+        
+        for (const range of sortedRanges) {
+            if (percentage >= range.from && (range.to === Infinity || percentage < range.to)) {
+                // This is a workaround because the `color` property is a CSS class, not a direct color value
+                if(range.color.includes('green')) return '#16A34A';
+                if(range.color.includes('orange')) return '#F97316';
+                if(range.color.includes('yellow')) return '#FBBF24';
+                if(range.color.includes('destructive')) return '#EF4444';
+                if(range.color.includes('blue')) return '#3B82F6';
+                if(range.color.includes('primary')) return '#F43F5E';
+            }
+        }
+        
+        return 'hsl(var(--primary))'; 
     };
 
     if (isLoading) {
@@ -215,13 +234,13 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                         <div className="flex justify-between items-start">
                             <div>
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
-                                <CardDescription>Clique em um ponto para selecionar o item e ver mais detalhes.</CardDescription>
+                                <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
                          <ResponsiveContainer width="100%" height={350}>
-                            <LineChart data={profitChartData} onClick={(data) => {
+                            <BarChart data={profitChartData} onClick={(data) => {
                                 if (data && data.activePayload && data.activePayload[0]) {
                                     const selectedId = data.activePayload[0].payload.id;
                                     handleSelectionChange(selectedId);
@@ -230,25 +249,20 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} interval={0} />
                                 <YAxis unit="%" />
-                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} />
+                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} cursor={{ fill: 'hsl(var(--muted))' }}/>
                                 {activeFilters.profitGoalFilter !== 'all' && (
-                                    <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={`Meta ${activeFilters.profitGoalFilter}%`} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
+                                    <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={{ value: `Meta ${activeFilters.profitGoalFilter}%`, position: 'insideTopRight' }} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
                                 )}
-                                <Line 
-                                    dataKey="Lucro %" 
-                                    type="monotone"
-                                    stroke="hsl(var(--primary))" 
-                                    strokeWidth={2}
-                                    dot={(props) => {
-                                        const { key, cx, cy, payload } = props;
-                                        if (payload.id === selectedItemForCharts?.id) {
-                                            return <Dot key={key} cx={cx} cy={cy} r={6} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />;
-                                        }
-                                        return <Dot key={key} cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
-                                    }}
-                                    activeDot={{ r: 8 }}
-                                />
-                            </LineChart>
+                                <Bar dataKey="Lucro %">
+                                    {profitChartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={getBarColor(entry['Lucro %'])}
+                                            radius={[4, 4, 0, 0]}
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
