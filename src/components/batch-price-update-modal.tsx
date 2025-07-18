@@ -21,6 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import { type ProductSimulation } from '@/types';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
+import { Label } from './ui/label';
 
 const updateSchema = z.object({
   adjustmentType: z.enum(['increase', 'decrease']),
