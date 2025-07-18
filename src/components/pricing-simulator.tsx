@@ -145,11 +145,11 @@ export function PricingSimulator() {
             );
         }
         
-        const gridClass = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]";
+        const gridClass = "grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]";
 
         return (
             <div className="space-y-4">
-                 <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                 <div className={cn("hidden md:grid gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground", gridClass)}>
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -164,8 +164,8 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className="flex items-center gap-4 px-4 py-2 text-sm w-full">
-                                        <AccordionTrigger className={cn("flex-1 p-0 hover:no-underline grid items-center gap-4 w-full", gridClass)}>
+                                    <div className={cn("grid items-center gap-4 px-4 py-2 text-sm w-full", gridClass)}>
+                                        <AccordionTrigger className="p-0 hover:no-underline col-span-5 grid grid-cols-subgrid">
                                             <div className="font-semibold text-left">{sim.name}</div>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
@@ -228,7 +228,7 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex justify-end gap-2 mb-4">
+                    <div className="flex flex-wrap justify-end gap-2 mb-4">
                         <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                             <Layers className="mr-2 h-4 w-4" /> Alterar em lote
                         </Button>
