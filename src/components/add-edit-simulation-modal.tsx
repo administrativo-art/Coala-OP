@@ -93,11 +93,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [desiredProfitMargin, setDesiredProfitMargin] = useState(45);
-  const [sensitivityQuestion, setSensitivityQuestion] = useState("");
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   const { toast } = useToast();
 
   const form = useForm<SimulationFormValues>({
@@ -136,15 +132,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         } else {
             form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
         }
-        setAiAnalysis(null);
-        setSensitivityQuestion('');
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
   
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
   const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
   
-   const { cmv, partialCosts, itemDetailsForAI } = useMemo(() => {
+   const { cmv, partialCosts } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
     const itemDetails: { name: string; cost: number }[] = [];
@@ -180,7 +174,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         }
     });
 
-    return { cmv: totalCmv, partialCosts: partials, itemDetailsForAI: itemDetails };
+    return { cmv: totalCmv, partialCosts: partials };
   }, [watchedItems, baseProducts]);
 
 
@@ -215,58 +209,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
           overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit || 0,
           overrideUnit: product.unit,
         });
-    }
-  };
-  
-  const handleSuggestPrice = async () => {
-    if (cmv <= 0) {
-      toast({ variant: "destructive", title: "CMV zerado", description: "Adicione insumos à composição para sugerir um preço." });
-      return;
-    }
-    setIsSuggestingPrice(true);
-    try {
-      const input: PricingAnalysisInput = {
-        action: 'suggestPrice',
-        cmv: grossCost,
-        items: [],
-        desiredProfitMargin,
-      };
-      const result = await analyzePricing(input);
-      if (result.suggestedPrice) {
-        form.setValue('salePrice', result.suggestedPrice, { shouldValidate: true });
-        toast({ title: "Preço de venda sugerido!" });
-      }
-    } catch (error) {
-      console.error("Error suggesting price:", error);
-      toast({ variant: "destructive", title: "Erro da IA", description: "Não foi possível sugerir um preço." });
-    } finally {
-      setIsSuggestingPrice(false);
-    }
-  };
-
-  const handleAnalyzeSensitivity = async () => {
-    if (!sensitivityQuestion) {
-      toast({ variant: "destructive", title: "Pergunta vazia", description: "Por favor, insira uma pergunta para a análise." });
-      return;
-    }
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
-    try {
-      const input: PricingAnalysisInput = {
-        action: 'analyzeSensitivity',
-        cmv,
-        items: itemDetailsForAI,
-        question: sensitivityQuestion,
-      };
-      const result = await analyzePricing(input);
-      if (result.analysis) {
-        setAiAnalysis(result.analysis);
-      }
-    } catch (error) {
-      console.error("Error analyzing sensitivity:", error);
-      toast({ variant: "destructive", title: "Erro da IA", description: "Não foi possível realizar a análise." });
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -489,6 +431,17 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 <div className="space-y-4">
                    <h3 className="font-semibold text-lg">Resultados da análise</h3>
                    <div className="rounded-lg border p-4 space-y-4">
+                       <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                        <div className="flex justify-between items-center">
+                            <FormLabel>Operacional (%)</FormLabel>
+                            <FormControl>
+                                <div className="relative w-32">
+                                    <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''}/>
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                                </div>
+                            </FormControl>
+                        </div>
+                       )}/>
                         <div className="flex justify-between items-center">
                             <FormLabel className="text-destructive font-bold">= Custo bruto</FormLabel>
                             <span className="text-xl font-bold text-destructive">{formatCurrency(grossCost)}</span>
@@ -528,36 +481,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                               <p className="text-xl">{formatCurrency(profitValue)}</p>
                               <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
                           </div>
-                      </div>
-                   </div>
-
-                   <div className="space-y-4 rounded-lg border p-4 bg-muted/40">
-                      <h4 className="font-medium flex items-center gap-2"><Sparkles className="text-primary" /> Análise com IA</h4>
-                      <div className="space-y-2">
-                         <Label>Sugerir preço de venda</Label>
-                         <div className="flex items-center gap-2">
-                             <div className="relative w-32">
-                                <Input type="number" className="pr-8 text-right" value={desiredProfitMargin} onChange={(e) => setDesiredProfitMargin(Number(e.target.value))} />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                            </div>
-                            <Button type="button" onClick={handleSuggestPrice} disabled={isSuggestingPrice}>
-                                {isSuggestingPrice ? <Loader2 className="animate-spin" /> : <Wand2 />} Sugerir
-                            </Button>
-                         </div>
-                         <FormDescription>Defina a margem de lucro desejada e peça uma sugestão.</FormDescription>
-                      </div>
-
-                       <div className="space-y-2 pt-2">
-                         <Label>Análise de sensibilidade de custo</Label>
-                         <div className="flex items-center gap-2">
-                            <Input placeholder="Qual item é o mais caro?" value={sensitivityQuestion} onChange={(e) => setSensitivityQuestion(e.target.value)} />
-                             <Button type="button" variant="secondary" onClick={handleAnalyzeSensitivity} disabled={isAnalyzing}>
-                                {isAnalyzing ? <Loader2 className="animate-spin" /> : <Bot />} Analisar
-                            </Button>
-                         </div>
-                          {aiAnalysis && (
-                              <div className="p-3 rounded-md bg-background border border-primary/20 text-sm">{aiAnalysis}</div>
-                          )}
                       </div>
                    </div>
 
