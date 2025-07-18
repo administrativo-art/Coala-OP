@@ -6,13 +6,11 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, HelpCircle, Table as TableIcon, Edit, Trash2 } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
-import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -22,6 +20,10 @@ import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
 import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PricingDashboard } from "./pricing-dashboard";
+import { BarChart3, Table as TableIcon } from "lucide-react";
+
 
 const formatCurrency = (value: number) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -113,9 +115,9 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm";
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm";
     
-    const renderContent = () => {
+    const renderTable = () => {
         if (isLoading) {
             return (
                 <div className="space-y-4">
@@ -161,45 +163,45 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className="flex items-center pr-4">
-                                        <AccordionTrigger className={cn("p-4 hover:no-underline flex-1 grid items-center gap-4 text-sm", gridClass)}>
-                                            <div
-                                                className="font-semibold text-left hover:underline cursor-pointer"
-                                                onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
-                                            >
-                                                {sim.name}
-                                            </div>
-                                            <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                            <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                            <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
-                                            <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                        </AccordionTrigger>
-                                    </div>
+                                    <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
+                                        <div
+                                            className="font-semibold text-left hover:underline cursor-pointer"
+                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                        >
+                                            {sim.name}
+                                        </div>
+                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
+                                    </AccordionTrigger>
                                     <AccordionContent className="px-4 pb-4 bg-muted/50">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Insumo base</TableHead>
-                                                    <TableHead className="text-right">Quantidade</TableHead>
-                                                    <TableHead className="text-right">Custo / unidade</TableHead>
-                                                    <TableHead className="text-right">Custo do item</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
-                                                    const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                    const cost = (item.overrideCostPerUnit || 0) * item.quantity;
-                                                    return (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
-                                                            <TableCell className="text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
-                                                            <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
-                                                            <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
-                                                        </TableRow>
-                                                    )
-                                                })}
-                                            </TableBody>
-                                        </Table>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead>
+                                                    <tr className="border-b">
+                                                        <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
+                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
+                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
+                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo do item</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
+                                                        const baseProductInfo = baseProductMap.get(item.baseProductId);
+                                                        const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                                                        return (
+                                                            <tr key={item.id} className="border-b">
+                                                                <td className="p-2">{baseProductInfo?.name || 'Insumo não encontrado'}</td>
+                                                                <td className="p-2 text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</td>
+                                                                <td className="p-2 text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</td>
+                                                                <td className="p-2 text-right font-semibold text-primary">{formatCurrency(cost)}</td>
+                                                            </tr>
+                                                        )
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </AccordionContent>
                                 </AccordionItem>
                             );
@@ -222,53 +224,73 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
-                        <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova análise
-                        </Button>
-                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                        </Button>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
-                        <div className="relative flex-grow">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="Buscar por nome da mercadoria..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10"
-                            />
+                     <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                             <Button onClick={handleAddNew}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Nova análise
+                            </Button>
+                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                            </Button>
                         </div>
-                         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                            <SelectTrigger className="w-full sm:w-[250px]">
-                                <SelectValue placeholder="Filtrar por categoria" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas as categorias</SelectItem>
-                                {mainCategories.map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                         <Select value={lineFilter} onValueChange={setLineFilter}>
-                            <SelectTrigger className="w-full sm:w-[250px]">
-                                <SelectValue placeholder="Filtrar por linha" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas as linhas</SelectItem>
-                                {lines.map(l => (
-                                    <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
-                            <Eraser className="mr-2 h-4 w-4" />
-                            Limpar
-                        </Button>
+                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                            <div className="relative flex-grow">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input 
+                                    placeholder="Buscar por nome da mercadoria..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-10"
+                                />
+                            </div>
+                            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                                <SelectTrigger className="w-full sm:w-[200px]">
+                                    <SelectValue placeholder="Filtrar por categoria" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas as categorias</SelectItem>
+                                    {mainCategories.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={lineFilter} onValueChange={setLineFilter}>
+                                <SelectTrigger className="w-full sm:w-[200px]">
+                                    <SelectValue placeholder="Filtrar por linha" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas as linhas</SelectItem>
+                                    {lines.map(l => (
+                                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
+                                <Eraser className="mr-2 h-4 w-4" />
+                                Limpar
+                            </Button>
+                        </div>
                     </div>
-                   {renderContent()}
+                     <Tabs defaultValue="table" className="w-full">
+                        <TabsList>
+                            <TabsTrigger value="table"><TableIcon />Análise detalhada</TabsTrigger>
+                            <TabsTrigger value="dashboard"><BarChart3 />Dashboard gerencial</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="table" className="mt-4">
+                            {renderTable()}
+                        </TabsContent>
+                        <TabsContent value="dashboard" className="mt-4">
+                            <PricingDashboard 
+                                simulations={simulationsByCategory} 
+                                isLoading={isLoading}
+                                getProfitColorClass={getProfitColorClass}
+                                formatCurrency={formatCurrency}
+                                pricingParameters={pricingParameters}
+                            />
+                        </TabsContent>
+                    </Tabs>
+
                 </CardContent>
                  <CardFooter className="border-t px-6 py-4">
                     {permissions.pricing.manageParameters && (
@@ -304,20 +326,6 @@ export function PricingSimulator() {
                 onConfirm={bulkUpdatePrices}
                 activeFilters={activeFilters}
             />
-
-            {simulationToDelete && (
-                 <DeleteConfirmationDialog
-                    open={!!simulationToDelete}
-                    onOpenChange={() => setSimulationToDelete(null)}
-                    onConfirm={() => {
-                        if (simulationToDelete) {
-                            deleteSimulation(simulationToDelete.id);
-                        }
-                        setSimulationToDelete(null);
-                    }}
-                    itemName={`a simulação "${simulationToDelete.name}"`}
-                />
-            )}
         </div>
     );
 }
