@@ -176,7 +176,7 @@ export function PricingSimulator() {
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
                     <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise criada</h3>
-                    <p className="mt-1 text-sm">Clique no botão "Nova análise" para começar.</p>
+                    <p className="mt-1 text-sm">Clique no botão "Nova Mercadoria" para começar.</p>
                 </div>
             );
         }
@@ -314,7 +314,7 @@ export function PricingSimulator() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             <Button onClick={handleAddNew}>
                                                 <PlusCircle className="mr-2 h-4 w-4" />
-                                                Nova análise
+                                                Mercadoria
                                             </Button>
                                             <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                                                 <Layers className="mr-2 h-4 w-4" /> Alterar em lote
