@@ -33,7 +33,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  categoryId: z.string().min(1, 'A categoria é obrigatória.'),
+  categoryId: z.string().nullable().optional(),
   subcategoryId: z.string().nullable().optional(),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
@@ -64,14 +64,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: '', subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' },
+    defaultValues: { name: '', categoryId: null, subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
-  const watchedCategoryId = form.watch('categoryId');
 
   useEffect(() => {
     if (open) {
@@ -95,21 +94,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: '', subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' });
+            form.reset({ name: '', categoryId: null, subcategoryId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' });
         }
     }
   }, [open, simulationToEdit, simulationItems, form]);
   
   const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
-  const subCategories = useMemo(() => categories.filter(c => c.parentId === watchedCategoryId), [categories, watchedCategoryId]);
+  const subCategories = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
   
-  useEffect(() => {
-    const currentSubcategoryId = form.getValues('subcategoryId');
-    if (currentSubcategoryId && !subCategories.some(sc => sc.id === currentSubcategoryId)) {
-        form.setValue('subcategoryId', null);
-    }
-  }, [watchedCategoryId, subCategories, form]);
-
   const { cmv, partialCosts, unitCosts } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
@@ -173,6 +165,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     const finalData = {
       ...values,
       subcategoryId: values.subcategoryId || null,
+      categoryId: values.categoryId || null,
       items: values.items.map(item => {
         const bp = baseProducts.find(b => b.id === item.baseProductId);
         return {
@@ -221,11 +214,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                             <FormItem>
                                 <FormLabel>Categoria</FormLabel>
                                 <div className="flex items-center gap-1">
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>
-                                        <SelectContent>{mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                        <SelectContent>
+                                            <SelectItem value="none">Nenhuma</SelectItem>
+                                            {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
                                     <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-5 w-5" /></Button>
                                 </div>
@@ -234,9 +230,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         )}/>
                         <FormField control={form.control} name="subcategoryId" render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Subcategoria (Opcional)</FormLabel>
+                                <FormLabel>Subcategoria</FormLabel>
                                 <div className="flex items-center gap-1">
-                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'} disabled={!watchedCategoryId}>
+                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>
@@ -245,7 +241,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                                             {subCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setIsCategoryModalOpen(true)} disabled={!watchedCategoryId}><PlusCircle className="h-5 w-5" /></Button>
                                 </div>
                                 <FormMessage />
                             </FormItem>
@@ -335,7 +330,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
                       <SelectContent>
                         {baseProducts.map(bp => (
-                          <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice}>
+                          <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice && bp.id !=='temp'}>
                             {bp.name}
                           </SelectItem>
                         ))}
@@ -406,7 +401,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     <CategoryManagementModal 
         open={isCategoryModalOpen}
         onOpenChange={setIsCategoryModalOpen}
-        parentCategoryId={watchedCategoryId || null}
     />
     </>
   );

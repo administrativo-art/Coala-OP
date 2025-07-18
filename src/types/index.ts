@@ -176,7 +176,7 @@ export type ProductSimulationItem = {
 export type ProductSimulation = {
   id: string;
   name: string;
-  categoryId: string;
+  categoryId: string | null;
   subcategoryId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';

@@ -24,7 +24,7 @@ const categorySchema = z.object({
   color: z.string().optional(),
   parentId: z.string().nullable(),
 }).superRefine((data, ctx) => {
-    if (!data.parentId) { // It's a main category
+    if (!data.parentId) {
         if (!data.color || !/^#[0-9a-fA-F]{6}$/.test(data.color)) {
              ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -41,7 +41,7 @@ type CategoryFormValues = z.infer<typeof categorySchema>;
 
 const defaultColors = ['#F87171', '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#F472B6', '#FCA5A5', '#818CF8'];
 
-export function CategoryManagementModal({ open, onOpenChange, parentCategoryId }: { open: boolean, onOpenChange: (open: boolean) => void, parentCategoryId: string | null }) {
+export function CategoryManagementModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
     const { simulations } = useProductSimulation();
     const [editingCategory, setEditingCategory] = useState<ProductSimulationCategory | null>(null);
@@ -56,9 +56,9 @@ export function CategoryManagementModal({ open, onOpenChange, parentCategoryId }
     
     useEffect(() => {
         if(open && !editingCategory) {
-            form.setValue('parentId', parentCategoryId || null);
+            form.setValue('parentId', null);
         }
-    }, [open, parentCategoryId, editingCategory, form]);
+    }, [open, editingCategory, form]);
 
     const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
 
@@ -73,7 +73,7 @@ export function CategoryManagementModal({ open, onOpenChange, parentCategoryId }
 
     const handleCancelEdit = () => {
         setEditingCategory(null);
-        form.reset({ name: '', color: '#F87171', parentId: parentCategoryId || null });
+        form.reset({ name: '', color: '#F87171', parentId: null });
     };
     
     const handleDeleteClick = (category: ProductSimulationCategory) => {
@@ -115,7 +115,7 @@ export function CategoryManagementModal({ open, onOpenChange, parentCategoryId }
                             <h3 className="font-semibold text-lg mb-4">
                                 {editingCategory 
                                     ? "Editar" 
-                                    : "Nova"} {isSubcategoryMode && !editingCategory ? 'Subcategoria' : 'Categoria'}
+                                    : "Nova"} {isSubcategoryMode ? 'Subcategoria' : 'Categoria'}
                             </h3>
                             <Form {...form}>
                                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -145,8 +145,7 @@ export function CategoryManagementModal({ open, onOpenChange, parentCategoryId }
                                                         ))}
                                                         <Input type="color" value={field.value || '#000000'} onChange={field.onChange} className="w-12 h-8 p-1" />
                                                     </div>
-                                                </FormControl><FormMessage />
-                                            </FormItem>
+                                                </FormControl><FormMessage /></FormItem>
                                         )}/>
                                     )}
                                     <div className="flex justify-end gap-2 pt-4">
