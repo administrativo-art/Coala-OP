@@ -145,11 +145,11 @@ export function PricingSimulator() {
             );
         }
         
-        const gridClass = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_100px]";
+        const gridClass = "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]";
 
         return (
             <div className="space-y-4">
-                 <div className={cn("hidden md:grid gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground", gridClass)}>
+                 <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -165,21 +165,21 @@ export function PricingSimulator() {
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                     <div className="flex items-center gap-4 px-4 py-2 text-sm w-full">
-                                        <AccordionTrigger className={cn("grid flex-1 items-center gap-4 p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left", gridClass)}>
-                                            <span>{sim.name}</span>
+                                        <AccordionTrigger className={cn("flex-1 p-0 hover:no-underline [&>svg]:ml-2", gridClass)}>
+                                            <div className="font-semibold text-left">{sim.name}</div>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
                                             <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
                                             <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                            <div className="flex items-center gap-1 shrink-0 justify-center">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
                                         </AccordionTrigger>
+                                        <div className="flex items-center gap-1 shrink-0 justify-center">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSimulationToDelete(sim)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                     <AccordionContent className="px-4 pb-4 bg-muted/50">
                                         <Table>
