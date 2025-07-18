@@ -2,13 +2,18 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { type ProductSimulation, type PricingParameters } from '@/types';
+import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine, PieChart, Pie, Legend } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Button } from "./ui/button";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -36,23 +41,21 @@ interface PricingDashboardProps {
 }
 
 export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, activeFilters }: PricingDashboardProps) {
+    const { categories } = useProductSimulationCategories();
     const [chartSearchTerm, setChartSearchTerm] = useState('');
-    const [selectedItemForCharts, setSelectedItemForCharts] = useState<ProductSimulation | null>(null);
-
-    useEffect(() => {
-        if (simulations.length > 0) {
-            const currentSelectionExists = simulations.some(s => s.id === selectedItemForCharts?.id);
-            if (!currentSelectionExists) {
-                setSelectedItemForCharts(simulations[0]);
-            }
-        } else {
-            setSelectedItemForCharts(null);
-        }
-    }, [simulations, selectedItemForCharts]);
+    const [popoverOpen, setPopoverOpen] = useState(false);
 
     const { kpis, profitChartData } = useMemo(() => {
         const filteredSimulations = chartSearchTerm 
-            ? simulations.filter(s => s.name.toLowerCase().includes(chartSearchTerm.toLowerCase()))
+            ? simulations.filter(s => {
+                const category = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
+                const line = s.lineId ? categories.find(c => c.id === s.lineId) : null;
+                const searchTermLower = chartSearchTerm.toLowerCase();
+
+                return s.name.toLowerCase().includes(searchTermLower) ||
+                       (category && category.name.toLowerCase().includes(searchTermLower)) ||
+                       (line && line.name.toLowerCase().includes(searchTermLower));
+            })
             : simulations;
             
         if (!filteredSimulations || filteredSimulations.length === 0) {
@@ -99,25 +102,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult };
-    }, [simulations, chartSearchTerm]);
-    
-    const costCompositionData = useMemo(() => {
-        if (!selectedItemForCharts) return [];
-        return [
-            { name: 'Insumos', value: selectedItemForCharts.totalCmv },
-            { name: 'Operacional', value: selectedItemForCharts.grossCost - selectedItemForCharts.totalCmv }
-        ];
-    }, [selectedItemForCharts]);
-    
-    const handleSelectionChange = (data: any) => {
-        if (data && data.activePayload && data.activePayload[0]) {
-            const selectedId = data.activePayload[0].payload.id;
-            const item = simulations.find(s => s.id === selectedId);
-            if (item) {
-                setSelectedItemForCharts(item);
-            }
-        }
-    };
+    }, [simulations, chartSearchTerm, categories]);
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
@@ -137,6 +122,14 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         return 'hsl(var(--primary))'; 
     };
 
+    const filterOptions = useMemo(() => {
+        const mercadorias = simulations.map(s => ({ value: s.name.toLowerCase(), label: s.name, group: 'Mercadorias' }));
+        const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: c.name.toLowerCase(), label: c.name, group: 'Categorias' }));
+        const lines = categories.filter(c => c.type === 'line').map(l => ({ value: l.name.toLowerCase(), label: l.name, group: 'Linhas' }));
+        return [...mercadorias, ...mainCategories, ...lines];
+    }, [simulations, categories]);
+    
+
     if (isLoading) {
         return (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -144,8 +137,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                 <Skeleton className="h-28" />
                 <Skeleton className="h-28" />
                 <Skeleton className="h-28" />
-                <Skeleton className="h-80 col-span-full lg:col-span-2" />
-                <Skeleton className="h-80 col-span-full lg:col-span-2" />
+                <Skeleton className="h-80 col-span-full" />
             </div>
         );
     }
@@ -224,28 +216,102 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                     </CardContent>
                 </Card>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
+            <div>
+                <Card>
                     <CardHeader>
                         <div className="flex justify-between items-start gap-4">
                             <div>
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
                                 <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
                             </div>
-                            <div className="relative w-full max-w-xs">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input 
-                                    placeholder="Filtrar mercadoria..."
-                                    className="pl-10"
-                                    value={chartSearchTerm}
-                                    onChange={(e) => setChartSearchTerm(e.target.value)}
-                                />
-                            </div>
+                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={popoverOpen}
+                                    className="w-[300px] justify-between"
+                                >
+                                    {chartSearchTerm
+                                    ? filterOptions.find(option => option.value === chartSearchTerm)?.label || "Filtrar..."
+                                    : "Filtrar mercadoria, categoria..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Buscar..." />
+                                    <CommandList>
+                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                        <CommandGroup heading="Mercadorias">
+                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                         <CommandGroup heading="Categorias">
+                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                         <CommandGroup heading="Linhas">
+                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </CardHeader>
                     <CardContent>
                          <ResponsiveContainer width="100%" height={350}>
-                            <BarChart data={profitChartData} onClick={handleSelectionChange}>
+                            <BarChart data={profitChartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} interval={0} />
                                 <YAxis unit="%" />
@@ -263,24 +329,6 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                     ))}
                                 </Bar>
                             </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Composição de Custo</CardTitle>
-                         <CardDescription>{selectedItemForCharts ? `Para: ${selectedItemForCharts.name}`: "Selecione um item no gráfico"}</CardDescription>
-                    </CardHeader>
-                     <CardContent>
-                        <ResponsiveContainer width="100%" height={350}>
-                            <PieChart>
-                                <Pie data={costCompositionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                                    <Cell fill="#E57373" />
-                                    <Cell fill="#64B5F6" />
-                                </Pie>
-                                <Tooltip formatter={(value) => formatCurrency(value)} />
-                                <Legend />
-                            </PieChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
