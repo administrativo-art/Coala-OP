@@ -78,7 +78,7 @@ const helpTopics = [
     },
     {
         icon: DollarSign,
-        title: "Análise de custo",
+        title: "Custo e preço",
         isTable: true,
         content: [
             { secao: 'Fórmulas', descricao: 'Cálculo de Custo de Mercadoria Vendida (CMV) e Lucro.', localizacao: 'Colunas de resultado', exemplo: 'CMV + (CMV * % op.)' },

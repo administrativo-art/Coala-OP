@@ -243,7 +243,7 @@ export function PricingSimulator() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        Análise de custo de mercadorias
+                        Custo e preço
                     </CardTitle>
                     <CardDescription>
                         Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.
@@ -269,20 +269,22 @@ export function PricingSimulator() {
 
                         <TabsContent value="table" className="mt-4">
                             <div className="space-y-4">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Button onClick={handleAddNew}>
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        Nova análise
-                                    </Button>
-                                    <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                        <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                    </Button>
-                                    {permissions.pricing.manageParameters && (
-                                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                            <Settings className="mr-2 h-4 w-4" />
-                                            Parâmetros
-                                        </Button>
-                                    )}
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                      <Button onClick={handleAddNew}>
+                                          <PlusCircle className="mr-2 h-4 w-4" />
+                                          Nova análise
+                                      </Button>
+                                      <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                          <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                      </Button>
+                                      {permissions.pricing.manageParameters && (
+                                          <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                              <Settings className="mr-2 h-4 w-4" />
+                                              Parâmetros
+                                          </Button>
+                                      )}
+                                  </div>
                                 </div>
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
                                      <div className="relative flex-grow w-full">

@@ -41,7 +41,7 @@ export function Header({ tasks }: { tasks: Task[] }) {
         { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
         { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: canManageUsers },
         { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, show: canUseHelp },
-        { href: '/dashboard/pricing', label: 'Análise de custo', icon: DollarSign, show: canSimulatePricing },
+        { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, show: canSimulatePricing },
     ]
 
   return (
