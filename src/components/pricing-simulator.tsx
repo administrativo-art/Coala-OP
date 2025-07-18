@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent, ArrowUp, ArrowDown } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulation, type PricingParameters } from "@/types";
 import { Skeleton } from "./ui/skeleton";
@@ -22,6 +22,8 @@ import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "./pricing-dashboard";
+import { usePurchase } from "@/hooks/use-purchase";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -35,7 +37,8 @@ export function PricingSimulator() {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
-    const { pricingParameters } = useCompanySettings();
+    const { pricingParameters, loading: loadingParams } = useCompanySettings();
+    const { lastSavedPrices, loading: loadingHistory } = usePurchase();
     const { permissions } = useAuth();
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -47,6 +50,9 @@ export function PricingSimulator() {
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [lineFilter, setLineFilter] = useState('all');
+    const [profitGoalFilter, setProfitGoalFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [selectedDashboardItem, setSelectedDashboardItem] = useState<ProductSimulation | null>(null);
 
 
     const handleAddNew = () => {
@@ -85,12 +91,17 @@ export function PricingSimulator() {
             const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
             const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
             const lineMatch = lineFilter === 'all' || sim.lineId === lineFilter;
-            return searchMatch && categoryMatch && lineMatch;
+            const profitGoalMatch = profitGoalFilter === 'all' || (sim.profitGoal !== null && sim.profitGoal !== undefined && sim.profitGoal.toString() === profitGoalFilter);
+            
+            const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
+            const statusMatch = statusFilter === 'all' || (statusFilter === 'ok' && meetsGoal) || (statusFilter === 'revisar' && !meetsGoal);
+
+            return searchMatch && categoryMatch && lineMatch && profitGoalMatch && statusMatch;
         });
 
         return filtered.sort((a,b) => a.name.localeCompare(b.name));
 
-    }, [simulations, searchTerm, categoryFilter, lineFilter]);
+    }, [simulations, searchTerm, categoryFilter, lineFilter, profitGoalFilter, statusFilter]);
 
     const getProfitColorClass = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'text-primary';
@@ -105,16 +116,14 @@ export function PricingSimulator() {
         return 'text-primary'; // Default color if no range matches
     };
 
-    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
+    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams || loadingHistory;
     
     const activeFilters = useMemo(() => {
         const categoryName = categoryFilter === 'all' ? null : categoryMap.get(categoryFilter)?.name || null;
         const lineName = lineFilter === 'all' ? null : categoryMap.get(lineFilter)?.name || null;
-        return { categoryName, lineName };
-    }, [categoryFilter, lineFilter, categoryMap]);
+        return { categoryName, lineName, profitGoalFilter, statusFilter };
+    }, [categoryFilter, lineFilter, profitGoalFilter, statusFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4";
-    
     const handleFilterChange = (value: string) => {
         if (value === 'all') {
             setCategoryFilter('all');
@@ -161,10 +170,11 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className={cn("py-2 font-semibold text-muted-foreground", gridClass)}>
+                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
-                    <div className="text-right">Venda</div>
-                    <div className="text-right">CMV Total</div>
+                    <div className="text-right">Preço anterior</div>
+                    <div className="text-right">Preço atual</div>
+                    <div className="text-right">Custo Total</div>
                     <div className="text-right">Markup</div>
                     <div className="text-right">Meta Lucro</div>
                     <div className="text-right">Lucro %</div>
@@ -173,26 +183,46 @@ export function PricingSimulator() {
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                        
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
-                        
+                        const lastPrice = lastSavedPrices.get(sim.id);
+
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                <AccordionTrigger className={cn("py-4 hover:no-underline", gridClass)}>
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
                                      <div
-                                        className="font-semibold text-left hover:underline cursor-pointer flex items-center"
+                                        className="font-semibold text-left hover:underline cursor-pointer flex items-center gap-2"
                                         onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
                                     >
-                                        <Edit className="h-4 w-4 mr-2 text-muted-foreground invisible group-hover:visible" />
-                                        {sim.name}
+                                        <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible" />
+                                        <span>{sim.name}</span>
                                     </div>
-                                    <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                    <div className="text-right text-muted-foreground">
+                                        {lastPrice !== undefined && lastPrice !== sim.salePrice ? (
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span className={cn("flex items-center justify-end gap-1", sim.salePrice > lastPrice ? "text-green-600" : "text-destructive")}>
+                                                            {formatCurrency(lastPrice)}
+                                                            {sim.salePrice > lastPrice ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Preço anterior: {formatCurrency(lastPrice)}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        ) : (
+                                            '-'
+                                        )}
+                                    </div>
+                                    <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
                                     <div className="text-right">{formatCurrency(sim.grossCost)}</div>
                                     <div className="text-right">{sim.markup.toFixed(1)}x</div>
                                     <div className="text-right font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</div>
                                     <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
                                     <div className="flex justify-center">
+                                        <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2" />
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
                                             meetsGoal ? (
                                                 <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -201,7 +231,7 @@ export function PricingSimulator() {
                                             )
                                         ) : <div className="h-5 w-5" />}
                                     </div>
-                                </AccordionTrigger>
+                                </div>
                                 <AccordionContent className="px-4 pb-4 bg-background">
                                     <div className="overflow-x-auto pt-2">
                                         <table className="w-full">
@@ -252,76 +282,85 @@ export function PricingSimulator() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="dashboard" className="w-full">
-                         
                         <TabsList className="grid w-full grid-cols-2 max-w-sm">
                             <TabsTrigger value="dashboard"><BarChart3 className="mr-2" />Painel de análise</TabsTrigger>
                             <TabsTrigger value="table"><TableIcon className="mr-2" />Análise de custo</TabsTrigger>
                         </TabsList>
-
                         <TabsContent value="dashboard" className="mt-4">
                              <PricingDashboard 
                                 simulations={simulationsByCategory} 
                                 isLoading={isLoading}
                                 getProfitColorClass={getProfitColorClass}
-                                formatCurrency={formatCurrency}
                                 pricingParameters={pricingParameters}
+                                onSelectItem={setSelectedDashboardItem}
+                                activeFilters={activeFilters}
                             />
                         </TabsContent>
-
                         <TabsContent value="table" className="mt-4">
                              <div className="space-y-4">
-                                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Button onClick={handleAddNew}>
-                                            <PlusCircle className="mr-2 h-4 w-4" />
-                                            Nova análise
-                                        </Button>
-                                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                        </Button>
-                                        {permissions.pricing.manageParameters && (
-                                            <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                                <Settings className="mr-2 h-4 w-4" />
-                                                Parâmetros
+                                <div className="space-y-2">
+                                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Button onClick={handleAddNew}>
+                                                <PlusCircle className="mr-2 h-4 w-4" />
+                                                Nova análise
                                             </Button>
-                                        )}
+                                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                            </Button>
+                                            {permissions.pricing.manageParameters && (
+                                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                                    <Settings className="mr-2 h-4 w-4" />
+                                                    Parâmetros
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                                     <div className="relative flex-grow w-full">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input 
-                                            placeholder="Buscar por nome da mercadoria..."
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="pl-10"
-                                        />
-                                    </div>
-                                     <div className="flex gap-2 w-full md:w-auto">
-                                        <Select onValueChange={handleFilterChange} value={lineFilter !== 'all' ? `line-${lineFilter}` : (categoryFilter !== 'all' ? `cat-${categoryFilter}` : 'all')}>
-                                            <SelectTrigger className="w-full md:w-[250px]">
-                                                <SelectValue placeholder="Filtrar por categoria ou linha" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">Todas</SelectItem>
-                                                <SelectGroup>
-                                                    <SelectLabel>Categorias</SelectLabel>
+                                     <div className="flex flex-col md:flex-row items-center justify-between gap-2">
+                                         <div className="relative flex-grow w-full">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                            <Input 
+                                                placeholder="Buscar por nome da mercadoria..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="pl-10"
+                                            />
+                                        </div>
+                                         <div className="flex gap-2 w-full md:w-auto">
+                                            <Select onValueChange={handleFilterChange} value={lineFilter !== 'all' ? `line-${lineFilter}` : (categoryFilter !== 'all' ? `cat-${categoryFilter}` : 'all')}>
+                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Categoria/Linha" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">Todas as Categorias/Linhas</SelectItem>
                                                     {mainCategories.map(c => (
-                                                        <SelectItem key={c.id} value={`cat-${c.id}`}>{c.name}</SelectItem>
+                                                        <SelectGroup key={c.id}>
+                                                            <SelectLabel>{c.name}</SelectLabel>
+                                                            <SelectItem value={`cat-${c.id}`}>Todos de {c.name}</SelectItem>
+                                                            {lines.filter(l => l.parentId === c.id).map(l => (
+                                                                <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
+                                                            ))}
+                                                        </SelectGroup>
                                                     ))}
-                                                </SelectGroup>
-                                                <SelectGroup>
-                                                    <SelectLabel>Linhas</SelectLabel>
-                                                    {lines.map(l => (
-                                                        <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
-                                                    ))}
-                                                </SelectGroup>
-                                            </SelectContent>
-                                        </Select>
-                                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
-                                            <Eraser className="mr-2 h-4 w-4" />
-                                            Limpar
-                                        </Button>
+                                                </SelectContent>
+                                            </Select>
+                                            <Select value={profitGoalFilter} onValueChange={setProfitGoalFilter}>
+                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Meta de lucro" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">Todas as Metas</SelectItem>
+                                                    {(pricingParameters?.profitGoals || []).map(g => <SelectItem key={g} value={String(g)}>{g}%</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Status" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">Todos os Status</SelectItem>
+                                                    <SelectItem value="ok">OK</SelectItem>
+                                                    <SelectItem value="revisar">Revisar</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); setProfitGoalFilter("all"); setStatusFilter("all");}}>
+                                                <Eraser className="mr-2 h-4 w-4" />Limpar
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="mt-4">
@@ -330,7 +369,6 @@ export function PricingSimulator() {
                             </div>
                         </TabsContent>
                     </Tabs>
-
                 </CardContent>
             </Card>
 
@@ -361,3 +399,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
