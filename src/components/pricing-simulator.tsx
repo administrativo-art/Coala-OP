@@ -21,6 +21,7 @@ import { CategoryManagementModal } from "./category-management-modal";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
 import { BatchPriceUpdateModal } from "./batch-price-update-modal";
+import { useAuth } from "@/hooks/use-auth";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -35,6 +36,7 @@ export function PricingSimulator() {
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters } = useCompanySettings();
+    const { permissions } = useAuth();
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -275,10 +277,12 @@ export function PricingSimulator() {
                    {renderContent()}
                 </CardContent>
                  <CardFooter className="border-t px-6 py-4">
-                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Configurar Parâmetros
-                    </Button>
+                    {permissions.pricing.manageParameters && (
+                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                            <Settings className="mr-2 h-4 w-4" />
+                            Configurar Parâmetros
+                        </Button>
+                    )}
                 </CardFooter>
             </Card>
 

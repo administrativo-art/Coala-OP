@@ -206,7 +206,7 @@ export type PermissionSet = {
     purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; };
     stockCount: { perform: boolean; approve: boolean; };
     itemRequests: { manage: boolean; };
-    pricing: { simulate: boolean; };
+    pricing: { simulate: boolean; manageParameters: boolean; };
     help: { view: boolean; };
 };
 
@@ -515,7 +515,7 @@ export const defaultGuestPermissions: PermissionSet = {
     purchasing: { suggest: false, approve: false, viewHistory: false },
     stockCount: { perform: false, approve: false },
     itemRequests: { manage: false },
-    pricing: { simulate: false },
+    pricing: { simulate: false, manageParameters: false },
     help: { view: true },
 };
 
@@ -533,7 +533,7 @@ export const defaultUserPermissions: PermissionSet = {
     purchasing: { suggest: true, approve: false, viewHistory: true },
     stockCount: { perform: true, approve: false },
     itemRequests: { manage: false },
-    pricing: { simulate: false },
+    pricing: { simulate: false, manageParameters: false },
     help: { view: true },
 };
 
@@ -551,6 +551,6 @@ export const defaultAdminPermissions: PermissionSet = {
     purchasing: { suggest: true, approve: true, viewHistory: true },
     stockCount: { perform: true, approve: true },
     itemRequests: { manage: true },
-    pricing: { simulate: true },
+    pricing: { simulate: true, manageParameters: true },
     help: { view: true },
 };
