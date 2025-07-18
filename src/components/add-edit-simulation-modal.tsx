@@ -141,8 +141,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
   
-  const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
-  const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
+  const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
+  const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
   
    const { cmv, partialCosts, itemDetailsForAI } = useMemo(() => {
     let totalCmv = 0;
@@ -333,7 +333,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             <FormItem>
                                 <FormLabel>Categoria</FormLabel>
                                 <div className="flex items-center gap-1">
-                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
+                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={String(field.value ?? 'none')}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>
@@ -351,7 +351,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             <FormItem>
                                 <FormLabel>Linha</FormLabel>
                                 <div className="flex items-center gap-1">
-                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
+                                     <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={String(field.value ?? 'none')}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>

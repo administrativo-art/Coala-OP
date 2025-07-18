@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -87,8 +88,8 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
     
-    const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
-    const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
+    const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
+    const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
     
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
@@ -127,20 +128,6 @@ export function PricingSimulator() {
         const lineName = lineFilter === 'all' ? null : categoryMap.get(lineFilter)?.name || null;
         return { categoryName, lineName, profitGoalFilter, statusFilter };
     }, [categoryFilter, lineFilter, profitGoalFilter, statusFilter, categoryMap]);
-
-    const handleFilterChange = (value: string) => {
-        if (value === 'all') {
-            setCategoryFilter('all');
-            setLineFilter('all');
-        } else if (value.startsWith('cat-')) {
-            setCategoryFilter(value.replace('cat-', ''));
-            setLineFilter('all');
-        } else if (value.startsWith('line-')) {
-            const line = lines.find(l => l.id === value.replace('line-', ''));
-            setCategoryFilter(line?.parentId || 'all');
-            setLineFilter(value.replace('line-', ''));
-        }
-    };
     
     const renderTable = () => {
         if (isLoading) {
@@ -313,19 +300,18 @@ export function PricingSimulator() {
                                             />
                                         </div>
                                          <div className="flex gap-2 w-full md:w-auto">
-                                            <Select onValueChange={handleFilterChange} value={lineFilter !== 'all' ? `line-${lineFilter}` : (categoryFilter !== 'all' ? `cat-${categoryFilter}` : 'all')}>
-                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Categoria/Linha" /></SelectTrigger>
+                                             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                                                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="all">Todas as Categorias/Linhas</SelectItem>
-                                                    {mainCategories.map(c => (
-                                                        <SelectGroup key={c.id}>
-                                                            <SelectLabel>{c.name}</SelectLabel>
-                                                            <SelectItem value={`cat-${c.id}`}>Todos de {c.name}</SelectItem>
-                                                            {lines.filter(l => l.parentId === c.id).map(l => (
-                                                                <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    ))}
+                                                    <SelectItem value="all">Todas as Categorias</SelectItem>
+                                                    {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <Select value={lineFilter} onValueChange={setLineFilter}>
+                                                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Linha" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">Todas as Linhas</SelectItem>
+                                                    {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                             <Select value={profitGoalFilter} onValueChange={setProfitGoalFilter}>

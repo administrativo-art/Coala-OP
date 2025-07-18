@@ -160,7 +160,7 @@ export type SimulationCategory = {
   id: string;
   name: string;
   color: string;
-  parentId: string | null;
+  type: 'category' | 'line';
 };
 
 export type SimulationPriceHistory = {
