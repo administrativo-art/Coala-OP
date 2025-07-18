@@ -44,7 +44,6 @@ interface PricingDashboardProps {
 
 export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, onSelectItem, activeFilters }: PricingDashboardProps) {
     const [selectedItemForCharts, setSelectedItemForCharts] = useState<ProductSimulation | null>(null);
-    const { categories } = useProductSimulationCategories();
     
     useEffect(() => {
         if (simulations.length > 0) {
@@ -241,7 +240,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                     stroke="hsl(var(--primary))" 
                                     strokeWidth={2}
                                     dot={(props) => {
-                                        const { cx, cy, payload, key } = props;
+                                        const { key, cx, cy, payload } = props;
                                         if (payload.id === selectedItemForCharts?.id) {
                                             return <Dot key={key} cx={cx} cy={cy} r={6} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />;
                                         }
