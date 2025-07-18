@@ -3,13 +3,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useProductSimulation } from "@/hooks/use-product-simulation";
-import { useBaseProducts } from "@/hooks/use-base-products";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { type ProductSimulation, type PricingParameters } from '@/types';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent, History } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { type ProductSimulation, type PricingParameters } from "@/types";
+import { type SimulationCategory } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
@@ -161,8 +160,9 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
+                    <div className="w-6"></div> {/* Spacer for trigger */}
                     <div className="text-right">Preço atual</div>
                     <div className="text-right">Custo Total</div>
                     <div className="text-right">Markup</div>
@@ -178,7 +178,7 @@ export function PricingSimulator() {
 
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
                                      <div
                                         className="font-semibold text-left hover:underline cursor-pointer flex items-center gap-2"
                                         onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
@@ -186,13 +186,13 @@ export function PricingSimulator() {
                                         <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible" />
                                         <span>{sim.name}</span>
                                     </div>
+                                    <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2" />
                                     <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
                                     <div className="text-right">{formatCurrency(sim.grossCost)}</div>
                                     <div className="text-right">{sim.markup.toFixed(1)}x</div>
                                     <div className="text-right font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</div>
                                     <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
                                     <div className="flex justify-center">
-                                        <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2" />
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
                                             meetsGoal ? (
                                                 <CheckCircle2 className="h-5 w-5 text-green-600" />
