@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef } from 'react';
@@ -215,43 +216,45 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
 
         <Form {...form}>
           <form id="audit-form" onSubmit={form.handleSubmit(handleConfirmReceipt)} className="flex-1 overflow-hidden flex flex-col">
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-4">
-                {fields.map((item, itemIndex) => (
-                  <div key={item.id} className="p-4 border rounded-lg">
-                    <h3 className="font-semibold text-lg mb-2">{item.productName}</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Lote</TableHead>
-                          <TableHead className="text-center w-[120px]">Qtd. enviada</TableHead>
-                          <TableHead className="text-center w-[120px]">Qtd. recebida</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {item.suggestedLots.map((lot, lotIndex) => (
-                           <LotRow key={lot.lotId} itemIndex={itemIndex} lotIndex={lotIndex} />
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ))}
-                 <div className="p-4 border rounded-lg space-y-2">
-                    <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do recebedor</Label>
-                    <div className="rounded-md border bg-background">
-                        <SignatureCanvas
-                        ref={sigCanvas}
-                        penColor="black"
-                        canvasProps={{ className: "w-full h-[150px]" }}
-                        />
+            <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full pr-4">
+                <div className="space-y-4">
+                    {fields.map((item, itemIndex) => (
+                    <div key={item.id} className="p-4 border rounded-lg">
+                        <h3 className="font-semibold text-lg mb-2">{item.productName}</h3>
+                        <Table>
+                        <TableHeader>
+                            <TableRow>
+                            <TableHead>Lote</TableHead>
+                            <TableHead className="text-center w-[120px]">Qtd. enviada</TableHead>
+                            <TableHead className="text-center w-[120px]">Qtd. recebida</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {item.suggestedLots.map((lot, lotIndex) => (
+                            <LotRow key={lot.lotId} itemIndex={itemIndex} lotIndex={lotIndex} />
+                            ))}
+                        </TableBody>
+                        </Table>
                     </div>
-                     <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
-                        <Eraser className="mr-1 h-3 w-3" /> Limpar
-                    </Button>
+                    ))}
+                    <div className="p-4 border rounded-lg space-y-2">
+                        <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do recebedor</Label>
+                        <div className="rounded-md border bg-background">
+                            <SignatureCanvas
+                            ref={sigCanvas}
+                            penColor="black"
+                            canvasProps={{ className: "w-full h-[150px]" }}
+                            />
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
+                            <Eraser className="mr-1 h-3 w-3" /> Limpar
+                        </Button>
+                    </div>
                 </div>
-              </div>
-            </ScrollArea>
-            <DialogFooter className="pt-4 border-t mt-auto">
+                </ScrollArea>
+            </div>
+            <DialogFooter className="pt-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
                 Cancelar
               </Button>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -240,105 +241,107 @@ CT Sorvetes LTDA`;
             </div>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 pr-6">
-              <div className="space-y-6 py-4">
-                  {request.motivo && (
-                      <div className="p-4 border rounded-lg">
-                          <h3 className="font-semibold text-lg mb-2">Motivo do Chamado</h3>
-                          <p className="text-sm whitespace-pre-wrap">{request.motivo}</p>
-                      </div>
-                  )}
-                  <div className="p-4 border rounded-lg bg-muted/30">
-                      <h3 className="font-semibold text-lg mb-4">Checklist</h3>
-                      
-                      <div className="space-y-3">
-                        {checklist.map((item, index) => {
-                           const isCommunicationItem = item.texto === "Comunicação ao representante";
-                           const isFilmingItem = item.texto === "Filmar o produto para enviar";
-                           const isContactDateItem = item.texto === "Registrar data e hora do contato";
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-6">
+                <div className="space-y-6 py-4">
+                    {request.motivo && (
+                        <div className="p-4 border rounded-lg">
+                            <h3 className="font-semibold text-lg mb-2">Motivo do Chamado</h3>
+                            <p className="text-sm whitespace-pre-wrap">{request.motivo}</p>
+                        </div>
+                    )}
+                    <div className="p-4 border rounded-lg bg-muted/30">
+                        <h3 className="font-semibold text-lg mb-4">Checklist</h3>
+                        
+                        <div className="space-y-3">
+                          {checklist.map((item, index) => {
+                            const isCommunicationItem = item.texto === "Comunicação ao representante";
+                            const isFilmingItem = item.texto === "Filmar o produto para enviar";
+                            const isContactDateItem = item.texto === "Registrar data e hora do contato";
 
-                           return (
-                                <div key={index}>
-                                    <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                            id={`chk-${index}`} 
-                                            checked={item.feito}
-                                            onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
-                                        />
-                                        <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug">
-                                            {item.texto}
-                                        </Label>
-                                        {isCommunicationItem && (
-                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
-                                        )}
-                                        {isFilmingItem && (
-                                            <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
-                                        )}
-                                    </div>
-                                    {isContactDateItem && (
-                                        <div className="pl-6 pt-2">
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                <Button variant={"outline"} size="sm" className={cn("w-[240px] justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
-                                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                                    {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
-                                                </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0">
-                                                    <Calendar mode="single" selected={contactDate} onSelect={setContactDate} initialFocus />
-                                                    <div className="p-2 border-t"><Input type="time" value={contactDate ? format(contactDate, 'HH:mm') : ''} onChange={handleContactTimeChange} /></div>
-                                                </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                    )}
-                                </div>
-                           )
-                        })}
-                      </div>
-
-                        {effectiveStatus === 'em_andamento' && (
-                            <div className="mt-4 pt-4 border-t space-y-4">
-                                <Textarea placeholder="Detalhes do resultado (obrigatório para finalizar)" value={resultDetails} onChange={(e) => setResultDetails(e.target.value)} />
-                                <div className="flex gap-2 flex-wrap">
-                                    <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>
-                                    <Button variant="destructive" onClick={() => handleStatusChange('finalizado_erro')} disabled={!resultDetails}><XCircle className="mr-2"/>Finalizar sem Sucesso</Button>
-                                </div>
-                            </div>
-                        )}
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                      <h3 className="font-semibold text-lg mb-2">Histórico de Situação</h3>
-                      <div className="space-y-4">
-                          {request.historico.map((item, index) => (
-                              <div key={index} className="flex items-start gap-4">
-                                  <div className="flex flex-col items-center">
-                                      <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Check size={16}/></div>
-                                      {index < request.historico.length - 1 && <div className="w-px h-8 bg-border"></div>}
-                                  </div>
-                                  <div>
-                                      {item.detalhes === "Chamado criado." ? (
-                                          <p className="font-medium">
-                                              Chamado criado na situação <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
-                                          </p>
-                                      ) : (
-                                          <p className="font-medium">
-                                              Situação alterada de <span className="font-bold">{returnRequestStatuses[item.statusAnterior as ReturnRequestStatus]?.label || 'Desconhecido'}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
-                                          </p>
+                            return (
+                                  <div key={index}>
+                                      <div className="flex items-center space-x-2">
+                                          <Checkbox 
+                                              id={`chk-${index}`} 
+                                              checked={item.feito}
+                                              onCheckedChange={(checked) => handleChecklistChange(index, !!checked)}
+                                          />
+                                          <Label htmlFor={`chk-${index}`} className="text-sm font-normal leading-snug">
+                                              {item.texto}
+                                          </Label>
+                                          {isCommunicationItem && (
+                                              <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsTemplateModalOpen(true)}><MessageSquareText className="h-4 w-4" /></Button>
+                                          )}
+                                          {isFilmingItem && (
+                                              <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setIsVideosModalOpen(true)}><Video className="h-4 w-4" /></Button>
+                                          )}
+                                      </div>
+                                      {isContactDateItem && (
+                                          <div className="pl-6 pt-2">
+                                              <Popover>
+                                                  <PopoverTrigger asChild>
+                                                  <Button variant={"outline"} size="sm" className={cn("w-[240px] justify-start text-left font-normal", !contactDate && "text-muted-foreground")}>
+                                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                                      {contactDate ? format(contactDate, "dd/MM/yyyy 'às' HH:mm") : <span>Selecionar data e hora</span>}
+                                                  </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-auto p-0">
+                                                      <Calendar mode="single" selected={contactDate} onSelect={setContactDate} initialFocus />
+                                                      <div className="p-2 border-t"><Input type="time" value={contactDate ? format(contactDate, 'HH:mm') : ''} onChange={handleContactTimeChange} /></div>
+                                                  </PopoverContent>
+                                              </Popover>
+                                          </div>
                                       )}
-                                      <p className="text-sm text-muted-foreground">
-                                          por {item.changedBy.username} em {format(parseISO(item.changedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                      </p>
-                                      {item.detalhes && item.detalhes !== "Chamado criado." && <p className="text-sm mt-1 p-2 bg-muted rounded-md">{item.detalhes}</p>}
+                                  </div>
+                            )
+                          })}
+                        </div>
+
+                          {effectiveStatus === 'em_andamento' && (
+                              <div className="mt-4 pt-4 border-t space-y-4">
+                                  <Textarea placeholder="Detalhes do resultado (obrigatório para finalizar)" value={resultDetails} onChange={(e) => setResultDetails(e.target.value)} />
+                                  <div className="flex gap-2 flex-wrap">
+                                      <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusChange('finalizado_sucesso')} disabled={!resultDetails}><Check className="mr-2"/>Finalizar com Sucesso</Button>
+                                      <Button variant="destructive" onClick={() => handleStatusChange('finalizado_erro')} disabled={!resultDetails}><XCircle className="mr-2"/>Finalizar sem Sucesso</Button>
                                   </div>
                               </div>
-                          ))}
-                      </div>
-                  </div>
-              </div>
-          </ScrollArea>
+                          )}
+                    </div>
 
-          <DialogFooter className="pt-4 border-t flex-wrap justify-end gap-2">
+                    <div className="p-4 border rounded-lg">
+                        <h3 className="font-semibold text-lg mb-2">Histórico de Situação</h3>
+                        <div className="space-y-4">
+                            {request.historico.map((item, index) => (
+                                <div key={index} className="flex items-start gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Check size={16}/></div>
+                                        {index < request.historico.length - 1 && <div className="w-px h-8 bg-border"></div>}
+                                    </div>
+                                    <div>
+                                        {item.detalhes === "Chamado criado." ? (
+                                            <p className="font-medium">
+                                                Chamado criado na situação <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
+                                            </p>
+                                        ) : (
+                                            <p className="font-medium">
+                                                Situação alterada de <span className="font-bold">{returnRequestStatuses[item.statusAnterior as ReturnRequestStatus]?.label || 'Desconhecido'}</span> para <span className="font-bold">{returnRequestStatuses[item.statusNovo]?.label || 'Desconhecido'}</span>
+                                            </p>
+                                        )}
+                                        <p className="text-sm text-muted-foreground">
+                                            por {item.changedBy.username} em {format(parseISO(item.changedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                        </p>
+                                        {item.detalhes && item.detalhes !== "Chamado criado." && <p className="text-sm mt-1 p-2 bg-muted rounded-md">{item.detalhes}</p>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </ScrollArea>
+          </div>
+
+          <DialogFooter className="pt-4 border-t flex-wrap justify-end gap-2 shrink-0">
             {isFinalized ? (
                  <Button variant="outline" onClick={handleArchive}>
                     <Archive className="mr-2 h-4 w-4" />

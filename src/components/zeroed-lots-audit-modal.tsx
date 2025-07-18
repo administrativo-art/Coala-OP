@@ -38,7 +38,7 @@ const MOVEMENT_TYPE_CONFIG: Record<MovementType, { label: string; color: string 
     'TRANSFERENCIA_ENTRADA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
 };
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 50;
 
 type SortKey = keyof MovementRecord | 'productName' | 'kioskName';
 type SortDirection = 'asc' | 'desc';
@@ -243,70 +243,72 @@ export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModa
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString()}</p></CardContent></Card>
         </div>
         
-        <div className="flex-grow overflow-hidden border rounded-lg">
-          <ScrollArea className="h-full">
-            {loading ? (
-                <div className="p-4"><Skeleton className="h-64 w-full" /></div>
-            ) : (
-                <Table>
-                    <TableHeader className="sticky top-0 bg-muted z-10">
-                    <TableRow>
-                        {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username'].map(key => {
-                            const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário' };
-                            return (
-                                <TableHead key={key} className="cursor-pointer hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
-                                    <div className="flex items-center gap-2">
-                                        {labels[key]}
-                                        {sortKey === key && <ArrowDownUp className="h-3 w-3" />}
-                                    </div>
-                                </TableHead>
-                            )
-                        })}
-                    </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
-                        let kioskDisplay = '';
-                        const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
+        <div className="flex-grow overflow-hidden border rounded-lg flex flex-col">
+          <div className="overflow-auto flex-1">
+            <ScrollArea className="h-full">
+              {loading ? (
+                  <div className="p-4"><Skeleton className="h-64 w-full" /></div>
+              ) : (
+                  <Table>
+                      <TableHeader className="sticky top-0 bg-muted z-10">
+                      <TableRow>
+                          {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username'].map(key => {
+                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário' };
+                              return (
+                                  <TableHead key={key} className="cursor-pointer hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
+                                      <div className="flex items-center gap-2">
+                                          {labels[key]}
+                                          {sortKey === key && <ArrowDownUp className="h-3 w-3" />}
+                                      </div>
+                                  </TableHead>
+                              )
+                          })}
+                      </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                      {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
+                          let kioskDisplay = '';
+                          const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
 
-                        if (item.type?.includes('TRANSFERENCIA')) {
-                            kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
-                        } else {
-                            kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
-                        }
-                        
-                        return (
-                            <TableRow key={item.id}>
-                                <TableCell className="text-xs font-semibold">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
-                                <TableCell>
-                                    <TooltipProvider><Tooltip><TooltipTrigger>
-                                        <p className="font-medium truncate max-w-xs">{item.productName}</p>
-                                    </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
-                                </TableCell>
-                                <TableCell>{item.lotNumber}</TableCell>
-                                <TableCell>
-                                    {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (
-                                        <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type].color)}>
-                                            {MOVEMENT_TYPE_CONFIG[item.type].label}
-                                        </Badge>
-                                    ) : (
-                                        <Badge variant="secondary">{item.type || 'N/A'}</Badge>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-xs">{kioskDisplay}</TableCell>
-                                <TableCell className="text-right font-bold">{item.quantityChange}</TableCell>
-                                <TableCell>{item.username}</TableCell>
-                            </TableRow>
-                        )
-                    }) : (
-                        <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
-                    )}
-                    </TableBody>
-                </Table>
-            )}
-          </ScrollArea>
+                          if (item.type?.includes('TRANSFERENCIA')) {
+                              kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
+                          } else {
+                              kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
+                          }
+                          
+                          return (
+                              <TableRow key={item.id}>
+                                  <TableCell className="text-xs font-semibold">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
+                                  <TableCell>
+                                      <TooltipProvider><Tooltip><TooltipTrigger>
+                                          <p className="font-medium truncate max-w-xs">{item.productName}</p>
+                                      </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
+                                  </TableCell>
+                                  <TableCell>{item.lotNumber}</TableCell>
+                                  <TableCell>
+                                      {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (
+                                          <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type].color)}>
+                                              {MOVEMENT_TYPE_CONFIG[item.type].label}
+                                          </Badge>
+                                      ) : (
+                                          <Badge variant="secondary">{item.type || 'N/A'}</Badge>
+                                      )}
+                                  </TableCell>
+                                  <TableCell className="text-xs">{kioskDisplay}</TableCell>
+                                  <TableCell className="text-right font-bold">{item.quantityChange}</TableCell>
+                                  <TableCell>{item.username}</TableCell>
+                              </TableRow>
+                          )
+                      }) : (
+                          <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
+                      )}
+                      </TableBody>
+                  </Table>
+              )}
+            </ScrollArea>
+          </div>
         </div>
-        <DialogFooter className="pt-4 border-t mt-auto flex-row justify-between w-full">
+        <DialogFooter className="pt-4 border-t shrink-0 flex-row justify-between w-full">
             <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>
             <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Anterior</Button>

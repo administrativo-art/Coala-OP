@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -22,6 +23,7 @@ import { Switch } from './ui/switch';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import Image from 'next/image';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { ScrollArea } from './ui/scroll-area';
 
 
 interface DispatchModalProps {
@@ -165,26 +167,28 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         <div className="space-y-4">
             <h3 className="text-lg font-semibold">Conferência dos itens</h3>
             <p className="text-sm text-muted-foreground">Revise os itens e as quantidades que serão transportados.</p>
-            <div className="max-h-60 overflow-y-auto rounded-md border p-2 bg-muted/50">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Produto</TableHead>
-                            <TableHead>Lote</TableHead>
-                            <TableHead className="text-right">Qtd.</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                         {activity.items.flatMap(item => item.suggestedLots.map(lot => (
-                            <TableRow key={lot.lotId}>
-                                <TableCell className="font-medium">{lot.productName}</TableCell>
-                                <TableCell>{lot.lotId.slice(-8)}</TableCell>
-                                <TableCell className="text-right font-bold">{lot.quantityToMove}</TableCell>
-                            </TableRow>
-                         )))}
-                    </TableBody>
-                </Table>
-            </div>
+            <ScrollArea className="max-h-60">
+              <div className="rounded-md border p-2 bg-muted/50">
+                  <Table>
+                      <TableHeader>
+                          <TableRow>
+                              <TableHead>Produto</TableHead>
+                              <TableHead>Lote</TableHead>
+                              <TableHead className="text-right">Qtd.</TableHead>
+                          </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {activity.items.flatMap(item => item.suggestedLots.map(lot => (
+                              <TableRow key={lot.lotId}>
+                                  <TableCell className="font-medium">{lot.productName}</TableCell>
+                                  <TableCell>{lot.lotId.slice(-8)}</TableCell>
+                                  <TableCell className="text-right font-bold">{lot.quantityToMove}</TableCell>
+                              </TableRow>
+                          )))}
+                      </TableBody>
+                  </Table>
+              </div>
+            </ScrollArea>
              <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
                     <Label className="text-base">Assinatura digital</Label>

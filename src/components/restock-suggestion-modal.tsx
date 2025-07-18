@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -142,59 +143,61 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-3">
-                {fields.map((field, index) => {
-                  const lot = lots.find(l => l.id === field.lotId);
-                  if (!lot) return null;
-                  const product = products.find(p => p.id === lot.productId);
-                  if (!product) return null;
-                  
-                  return (
-                    <div key={field.id} className="grid grid-cols-[1fr_auto_120px_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
-                      <div>
-                        <p className="font-semibold">{getProductFullName(product)}</p>
-                        <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                         <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} {product.unit}(s)</p>
+            <div className="flex-1 overflow-auto pr-2">
+              <ScrollArea className="h-full">
+                <div className="space-y-3">
+                  {fields.map((field, index) => {
+                    const lot = lots.find(l => l.id === field.lotId);
+                    if (!lot) return null;
+                    const product = products.find(p => p.id === lot.productId);
+                    if (!product) return null;
+                    
+                    return (
+                      <div key={field.id} className="grid grid-cols-[1fr_auto_120px_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
+                        <div>
+                          <p className="font-semibold">{getProductFullName(product)}</p>
+                          <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
+                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} {product.unit}(s)</p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground"/>
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.quantity`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl><Input type="number" {...field} max={lot.quantity} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
                       </div>
-                       <ArrowRight className="h-4 w-4 text-muted-foreground"/>
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.quantity`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl><Input type="number" {...field} max={lot.quantity} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-dashed">
-                <p className="font-semibold mb-2">Adicionar outro lote</p>
-                <div className="flex gap-2">
-                    <Select onValueChange={(lotId) => append({ lotId, quantity: 1 })} disabled={availableLotsToAdd.length === 0}>
-                        <SelectTrigger>
-                            <SelectValue placeholder={availableLotsToAdd.length > 0 ? "Selecione um lote..." : "Nenhum outro lote disponível"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableLotsToAdd.map(lot => {
-                                const product = products.find(p => p.id === lot.productId);
-                                return (
-                                <SelectItem key={lot.id} value={lot.id}>
-                                    {product ? getProductFullName(product) : 'Produto desconhecido'} (Lote: {lot.lotNumber}, Qtd: {lot.quantity})
-                                </SelectItem>
-                            )})}
-                        </SelectContent>
-                    </Select>
+                    );
+                  })}
                 </div>
-              </div>
-            </ScrollArea>
-            <DialogFooter className="pt-4 border-t flex-col sm:flex-row sm:justify-between items-center">
+
+                <div className="mt-4 pt-4 border-t border-dashed">
+                  <p className="font-semibold mb-2">Adicionar outro lote</p>
+                  <div className="flex gap-2">
+                      <Select onValueChange={(lotId) => append({ lotId, quantity: 1 })} disabled={availableLotsToAdd.length === 0}>
+                          <SelectTrigger>
+                              <SelectValue placeholder={availableLotsToAdd.length > 0 ? "Selecione um lote..." : "Nenhum outro lote disponível"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                              {availableLotsToAdd.map(lot => {
+                                  const product = products.find(p => p.id === lot.productId);
+                                  return (
+                                  <SelectItem key={lot.id} value={lot.id}>
+                                      {product ? getProductFullName(product) : 'Produto desconhecido'} (Lote: {lot.lotNumber}, Qtd: {lot.quantity})
+                                  </SelectItem>
+                              )})}
+                          </SelectContent>
+                      </Select>
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+            <DialogFooter className="pt-4 border-t flex-col sm:flex-row sm:justify-between items-center shrink-0">
                 <div className="text-sm font-semibold">
                     Total a ser movido:
                     <span className="text-primary ml-2">{totalSuggestedInBaseUnit.toLocaleString()} / {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}</span>
