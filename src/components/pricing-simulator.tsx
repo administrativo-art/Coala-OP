@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, HelpCircle, Table as TableIcon } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation } from "@/types";
@@ -14,7 +14,7 @@ import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { CategoryManagementModal } from "./category-management-modal";
@@ -29,6 +29,52 @@ const formatCurrency = (value: number) => {
     const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     return isNegative ? `- ${formatted}` : formatted;
 };
+
+const ManualPanel = () => {
+    const manualItems = [
+        { secao: 'Fórmulas', descricao: 'Cálculo de Custo de Mercadoria Vendida (CMV) e Lucro.', localizacao: 'Colunas de resultado', exemplo: 'CMV + (CMV * % op.)' },
+        { secao: 'Simbologia', descricao: 'Unidades de medida padrão utilizadas nos cálculos.', localizacao: 'Cadastro de insumos', exemplo: 'g, ml, un' },
+        { secao: 'Cores', descricao: 'Formatação condicional baseada na lucratividade.', localizacao: 'Coluna "Lucro %"', exemplo: '≥ 50% → Verde' },
+        { secao: 'Meta de Lucro', descricao: 'Sugestão de preço com base na margem de lucro desejada.', localizacao: 'Análise com IA', exemplo: 'Sugerir com 55%' },
+        { secao: 'Atualização', descricao: 'Quando revisar os custos para manter a precisão.', localizacao: 'Módulo de compras', exemplo: 'Efetivar novos preços' },
+    ];
+
+    return (
+        <Card>
+            <CardHeader className="bg-muted/50">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                    <HelpCircle className="h-5 w-5" />
+                    Manual de uso & legenda
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[120px]">Seção</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Exemplo</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {manualItems.map((item) => (
+                            <TableRow key={item.secao}>
+                                <TableCell className="font-semibold">{item.secao}</TableCell>
+                                <TableCell>
+                                    <p>{item.descricao}</p>
+                                    <p className="text-xs text-muted-foreground">Em: {item.localizacao}</p>
+                                </TableCell>
+                                <TableCell>
+                                    <code className="bg-muted text-foreground font-mono p-1 rounded-sm text-xs">{item.exemplo}</code>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    )
+}
 
 
 export function PricingSimulator() {
@@ -114,8 +160,8 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm";
-
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm";
+    
     const renderContent = () => {
         if (isLoading) {
             return (
@@ -162,18 +208,20 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
-                                        <div
-                                            className="font-semibold text-left hover:underline cursor-pointer"
-                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
-                                        >
-                                            {sim.name}
-                                        </div>
-                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                    </AccordionTrigger>
+                                    <div className={cn("flex items-center pr-4", gridClass)}>
+                                        <AccordionTrigger className={cn("p-4 hover:no-underline flex-1", gridClass, "grid-cols-5")}>
+                                            <div
+                                                className="font-semibold text-left hover:underline cursor-pointer"
+                                                onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                            >
+                                                {sim.name}
+                                            </div>
+                                            <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                            <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                            <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                            <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
+                                        </AccordionTrigger>
+                                    </div>
                                     <AccordionContent className="px-4 pb-4 bg-muted/50">
                                         <Table>
                                             <TableHeader>
@@ -210,26 +258,24 @@ export function PricingSimulator() {
     };
 
     return (
-        <>
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         Análise de custo de mercadorias
                     </CardTitle>
                     <CardDescription>
-                        Crie composições de produtos, analise o CMV e simule preços de venda para entender a lucratividade.
+                        Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                      <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
-                        <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                            </Button>
-                        </div>
                         <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Nova análise
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
                         </Button>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
@@ -281,6 +327,10 @@ export function PricingSimulator() {
                 </CardFooter>
             </Card>
 
+            <div className="space-y-6">
+                <ManualPanel />
+            </div>
+
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
@@ -319,6 +369,6 @@ export function PricingSimulator() {
                     itemName={`a simulação "${simulationToDelete.name}"`}
                 />
             )}
-        </>
+        </div>
     );
 }
