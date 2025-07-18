@@ -7,13 +7,12 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { useBaseProducts } from "@/hooks/use-base-products";
@@ -25,6 +24,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "./pricing-dashboard";
 import { PriceHistoryModal } from "./price-history-modal";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -50,11 +51,8 @@ export function PricingSimulator() {
     const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('all');
-    const [lineFilter, setLineFilter] = useState('all');
-    const [profitGoalFilter, setProfitGoalFilter] = useState('all');
-    const [statusFilter, setStatusFilter] = useState('all');
+    const [filterValue, setFilterValue] = useState("");
+    const [popoverOpen, setPopoverOpen] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
 
 
@@ -86,20 +84,17 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
     
-    const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
-    const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
-    
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
-            const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
-            const lineMatch = lineFilter === 'all' || sim.lineId === lineFilter;
-            const profitGoalMatch = profitGoalFilter === 'all' || (sim.profitGoal !== null && sim.profitGoal !== undefined && sim.profitGoal.toString() === profitGoalFilter);
-            
-            const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
-            const statusMatch = statusFilter === 'all' || (statusFilter === 'ok' && meetsGoal) || (statusFilter === 'revisar' && !meetsGoal);
+            if (!filterValue) return true;
 
-            return searchMatch && categoryMatch && lineMatch && profitGoalMatch && statusMatch;
+            const filterLower = filterValue.toLowerCase();
+            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+            const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
+            
+            return sim.name.toLowerCase().includes(filterLower) ||
+                   (category && category.name.toLowerCase().includes(filterLower)) ||
+                   (line && line.name.toLowerCase().includes(filterLower));
         });
         
         return filtered.sort((a, b) => {
@@ -119,7 +114,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, searchTerm, categoryFilter, lineFilter, profitGoalFilter, statusFilter, sortConfig]);
+    }, [simulations, filterValue, categoryMap, sortConfig]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -144,10 +139,20 @@ export function PricingSimulator() {
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
     
     const activeFilters = useMemo(() => {
-        const categoryName = categoryFilter === 'all' ? null : categoryMap.get(categoryFilter)?.name || null;
-        const lineName = lineFilter === 'all' ? null : categoryMap.get(lineFilter)?.name || null;
-        return { categoryName, lineName, profitGoalFilter, statusFilter };
-    }, [categoryFilter, lineFilter, profitGoalFilter, statusFilter, categoryMap]);
+      return {
+          categoryName: null,
+          lineName: null,
+          profitGoalFilter: 'all',
+          statusFilter: 'all'
+      };
+    }, []);
+
+    const filterOptions = useMemo(() => {
+        const mercadorias = simulations.map(s => ({ value: s.name.toLowerCase(), label: s.name, group: 'Mercadorias' }));
+        const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: c.name.toLowerCase(), label: c.name, group: 'Categorias' }));
+        const lines = categories.filter(c => c.type === 'line').map(l => ({ value: l.name.toLowerCase(), label: l.name, group: 'Linhas' }));
+        return [...mercadorias, ...mainCategories, ...lines];
+    }, [simulations, categories]);
     
     const renderSortableHeader = (label: string, key: SortKey) => (
         <Button variant="ghost" onClick={() => handleSort(key)} className="justify-end w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
@@ -326,48 +331,90 @@ export function PricingSimulator() {
                                         </div>
                                     </div>
                                      <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                                         <div className="relative flex-grow w-full">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                            <Input 
-                                                placeholder="Buscar por nome da mercadoria..."
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="pl-10"
-                                            />
-                                        </div>
-                                         <div className="flex gap-2 w-full md:w-auto">
-                                             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                                                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Todas as Categorias</SelectItem>
-                                                    {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                            <Select value={lineFilter} onValueChange={setLineFilter}>
-                                                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Linha" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Todas as Linhas</SelectItem>
-                                                    {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                            <Select value={profitGoalFilter} onValueChange={setProfitGoalFilter}>
-                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Meta de lucro" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Todas as Metas</SelectItem>
-                                                    {(pricingParameters?.profitGoals || []).map(g => <SelectItem key={g} value={String(g)}>{g}%</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                            <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                                <SelectTrigger className="w-full md:w-auto"><SelectValue placeholder="Status" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Todos os Status</SelectItem>
-                                                    <SelectItem value="ok">OK</SelectItem>
-                                                    <SelectItem value="revisar">Revisar</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); setProfitGoalFilter("all"); setStatusFilter("all");}}>
-                                                <Eraser className="mr-2 h-4 w-4" />Limpar
-                                            </Button>
+                                         <div className="flex-grow w-full md:w-auto">
+                                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                                                <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    aria-expanded={popoverOpen}
+                                                    className="w-full justify-between font-normal"
+                                                >
+                                                    {filterValue
+                                                    ? filterOptions.find(option => option.value === filterValue)?.label || "Filtrar..."
+                                                    : "Filtrar mercadoria, categoria..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                                <Command>
+                                                    <CommandInput placeholder="Buscar..." />
+                                                    <CommandList>
+                                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                                        <CommandGroup heading="Mercadorias">
+                                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
+                                                            <CommandItem
+                                                            key={option.value}
+                                                            value={option.value}
+                                                            onSelect={(currentValue) => {
+                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                                setPopoverOpen(false)
+                                                            }}
+                                                            >
+                                                            <Check
+                                                                className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {option.label}
+                                                            </CommandItem>
+                                                        ))}
+                                                        </CommandGroup>
+                                                        <CommandGroup heading="Categorias">
+                                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
+                                                            <CommandItem
+                                                            key={option.value}
+                                                            value={option.value}
+                                                            onSelect={(currentValue) => {
+                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                                setPopoverOpen(false)
+                                                            }}
+                                                            >
+                                                            <Check
+                                                                className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {option.label}
+                                                            </CommandItem>
+                                                        ))}
+                                                        </CommandGroup>
+                                                        <CommandGroup heading="Linhas">
+                                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
+                                                            <CommandItem
+                                                            key={option.value}
+                                                            value={option.value}
+                                                            onSelect={(currentValue) => {
+                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                                setPopoverOpen(false)
+                                                            }}
+                                                            >
+                                                            <Check
+                                                                className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {option.label}
+                                                            </CommandItem>
+                                                        ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                     </div>
                                 </div>
