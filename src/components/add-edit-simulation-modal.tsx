@@ -25,6 +25,7 @@ import { useProductSimulationCategories } from '@/hooks/use-product-simulation-c
 import { CategoryManagementModal } from './category-management-modal';
 import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
 import { useProducts } from '@/hooks/use-products';
+import { useCompanySettings } from '@/hooks/use-company-settings';
 
 
 const simulationItemSchema = z.object({
@@ -83,12 +84,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const { baseProducts } = useBaseProducts();
   const { products } = useProducts();
   const { categories } = useProductSimulationCategories();
+  const { pricingParameters } = useCompanySettings();
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' },
+    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -119,10 +121,10 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: 15, salePrice: 0, notes: '' });
+            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, notes: '' });
         }
     }
-  }, [open, simulationToEdit, simulationItems, form]);
+  }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
   
   const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
   const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
@@ -132,37 +134,31 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     const partials: Record<number, number> = {};
 
     watchedItems.forEach((item, index) => {
-      const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-      if (!baseProduct || !item.quantity) {
-        partials[index] = 0;
-        return;
-      }
-
-      try {
-        let partialCost = 0;
-        if (item.useDefault && baseProduct.lastEffectivePrice) {
-          const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
-          partialCost = item.quantity * pricePerBaseUnit;
-        } else if (!item.useDefault && item.overrideCostPerUnit && item.overrideUnit) {
-           const linkedProductsOfBase = products.filter(p => p.baseProductId === item.baseProductId);
-           if(linkedProductsOfBase.length > 0){
-              const representativeProduct = linkedProductsOfBase[0];
-              const convertedQuantity = convertValue(item.quantity, item.overrideUnit, representativeProduct.unit, representativeProduct.category);
-              const costPerBaseUnit = item.overrideCostPerUnit;
-              partialCost = convertedQuantity * costPerBaseUnit;
-           }
+        const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+        if (!baseProduct || !item.quantity) {
+            partials[index] = 0;
+            return;
         }
-         
-        partials[index] = partialCost;
-        totalCmv += partialCost;
-      } catch (e) {
-        console.error("Error calculating CMV for item:", item, e);
-        partials[index] = 0;
-      }
+
+        try {
+            let partialCost = 0;
+            if (item.useDefault && baseProduct.lastEffectivePrice) {
+                const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
+                partialCost = item.quantity * pricePerBaseUnit;
+            } else if (!item.useDefault && item.overrideCostPerUnit && item.overrideUnit) {
+                partialCost = item.quantity * item.overrideCostPerUnit;
+            }
+            
+            partials[index] = partialCost;
+            totalCmv += partialCost;
+        } catch (e) {
+            console.error("Error calculating CMV for item:", item, e);
+            partials[index] = 0;
+        }
     });
 
     return { cmv: totalCmv, partialCosts: partials };
-  }, [watchedItems, baseProducts, products]);
+  }, [watchedItems, baseProducts]);
 
 
   const grossCost = useMemo(() => {

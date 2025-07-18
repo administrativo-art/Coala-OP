@@ -489,6 +489,17 @@ export type RepositionActivity = {
   receiptSignature?: SignatureData;
 };
 
+export type ProfitRange = {
+  id: string;
+  from: number;
+  to: number;
+  color: string;
+};
+
+export type PricingParameters = {
+  defaultOperationPercentage: number;
+  profitRanges: ProfitRange[];
+};
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },

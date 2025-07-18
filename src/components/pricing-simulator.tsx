@@ -1,13 +1,12 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder } from "lucide-react";
+import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Settings } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation, type SimulationCategory } from "@/types";
@@ -19,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { CategoryManagementModal } from "./category-management-modal";
+import { useCompanySettings } from "@/hooks/use-company-settings";
+import { PricingParametersModal } from "./pricing-parameters-modal";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -32,9 +33,11 @@ export function PricingSimulator() {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
+    const { pricingParameters } = useCompanySettings();
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+    const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -86,6 +89,20 @@ export function PricingSimulator() {
 
     }, [simulations, searchTerm, categoryFilter, lineFilter]);
 
+    const getProfitColorClass = (percentage: number) => {
+        if (!pricingParameters?.profitRanges) return 'text-primary';
+
+        const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
+        
+        for (const range of sortedRanges) {
+            if (percentage >= range.from && percentage <= range.to) {
+                return range.color;
+            }
+        }
+        
+        return 'text-primary'; // Default color if no range matches
+    };
+
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
 
     const renderContent = () => {
@@ -124,26 +141,26 @@ export function PricingSimulator() {
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
-                    <div className="text-right font-bold">Lucro</div>
-                    <div className="text-right font-bold">Lucro %</div>
+                    <div className="text-right">Lucro</div>
+                    <div className="text-right">Lucro %</div>
                     <div className="text-center">Ações</div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
                     {simulationsByCategory.map(sim => {
                             const items = simulationItems.filter(item => item.simulationId === sim.id);
                             const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                            const borderColor = category?.color || 'hsl(var(--border))';
+                            const profitColorClass = getProfitColorClass(sim.profitPercentage);
                             
                             return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: borderColor }}>
+                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                     <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(120px,auto)] items-center gap-4 px-4 py-2 text-sm w-full">
                                         <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left col-span-1">
                                             {sim.name}
                                         </AccordionTrigger>
                                         <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                         <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                        <div className={cn("text-right font-bold", sim.profitValue >= 0 ? 'text-green-600' : 'text-destructive')}>{formatCurrency(sim.profitValue)}</div>
-                                        <div className={cn("text-right font-bold", sim.profitPercentage >= 0 ? 'text-primary' : 'text-destructive')}>{sim.profitPercentage.toFixed(2)}%</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
                                         <div className="flex items-center gap-1 shrink-0 justify-center">
                                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                                 <Edit className="h-4 w-4" />
@@ -247,6 +264,12 @@ export function PricingSimulator() {
                     </div>
                    {renderContent()}
                 </CardContent>
+                 <CardFooter className="border-t px-6 py-4">
+                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Configurar Parâmetros
+                    </Button>
+                </CardFooter>
             </Card>
 
             <AddEditSimulationModal 
@@ -258,6 +281,11 @@ export function PricingSimulator() {
             <CategoryManagementModal
                 open={isCategoryModalOpen}
                 onOpenChange={setIsCategoryModalOpen}
+            />
+
+            <PricingParametersModal
+                open={isParamsModalOpen}
+                onOpenChange={setIsParamsModalOpen}
             />
 
             {simulationToDelete && (
