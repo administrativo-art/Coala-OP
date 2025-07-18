@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -85,7 +85,7 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, onDelete }: AddEditSimulationModalProps) {
-  const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
+  const { simulations, addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
   const { products } = useProducts();
   const { categories } = useProductSimulationCategories();
@@ -134,6 +134,32 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         }
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
+  
+  const handleCopyFrom = (simulationId: string) => {
+    const sourceSimulation = simulations.find(s => s.id === simulationId);
+    if (!sourceSimulation) return;
+
+    const sourceItems = simulationItems
+        .filter(item => item.simulationId === sourceSimulation.id)
+        .map(item => ({
+            baseProductId: item.baseProductId,
+            quantity: item.quantity,
+            useDefault: item.useDefault,
+            overrideCostPerUnit: item.overrideCostPerUnit,
+            overrideUnit: item.overrideUnit,
+        }));
+
+    form.reset({
+        name: `${sourceSimulation.name} (cópia)`,
+        categoryId: sourceSimulation.categoryId,
+        lineId: sourceSimulation.lineId,
+        items: sourceItems,
+        operationPercentage: sourceSimulation.operationPercentage,
+        salePrice: sourceSimulation.salePrice,
+        profitGoal: sourceSimulation.profitGoal,
+        notes: sourceSimulation.notes,
+    });
+  };
   
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
   const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
@@ -269,6 +295,27 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                         <FormMessage />
                       </FormItem>
                     )}/>
+
+                    {!simulationToEdit && (
+                      <FormItem>
+                          <FormLabel>Copiar de (Opcional)</FormLabel>
+                          <Select onValueChange={handleCopyFrom}>
+                              <SelectTrigger>
+                                  <SelectValue placeholder="Selecione uma mercadoria para copiar a composição..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {simulations.map(sim => (
+                                      <SelectItem key={sim.id} value={sim.id}>
+                                          {sim.name}
+                                      </SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                          <FormDescription>
+                              Use uma mercadoria existente como modelo para acelerar o cadastro.
+                          </FormDescription>
+                      </FormItem>
+                    )}
                     
                     <div className="grid grid-cols-2 gap-2">
                         <FormField control={form.control} name="categoryId" render={({ field }) => (
