@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Slider } from "./ui/slider";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Label } from "./ui/label";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -40,98 +39,6 @@ interface PricingDashboardProps {
         profitGoalFilter: string;
         statusFilter: string;
     }
-}
-
-function ScenarioTable({ selectedItem, pricingParameters }: { selectedItem: ProductSimulation | null, pricingParameters: PricingParameters | null }) {
-    if (!selectedItem) return null;
-
-    const scenarios = pricingParameters?.profitGoals || [50, 55, 60];
-
-    const calculatePriceForGoal = (goal: number) => selectedItem.grossCost / (1 - (goal / 100));
-
-    return (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="text-right">Margem %</TableHead>
-                    <TableHead className="text-right">Preço Sugerido</TableHead>
-                    <TableHead className="text-right">Delta (vs Atual)</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {scenarios.map(goal => {
-                    const priceForGoal = calculatePriceForGoal(goal);
-                    const delta = priceForGoal - selectedItem.salePrice;
-                    return (
-                        <TableRow key={goal}>
-                            <TableCell className="text-right font-bold">{goal}%</TableCell>
-                            <TableCell className="text-right font-semibold text-primary">{formatCurrency(priceForGoal)}</TableCell>
-                            <TableCell className={cn("text-right font-semibold", delta > 0 ? "text-orange-500" : "text-green-600")}>
-                                {formatCurrency(delta, true)}
-                            </TableCell>
-                        </TableRow>
-                    )
-                })}
-            </TableBody>
-        </Table>
-    );
-}
-
-function WhatIfSimulator({ item }: { item: ProductSimulation | null }) {
-    const [simulatedPrice, setSimulatedPrice] = useState<number | undefined>(undefined);
-
-    useEffect(() => {
-        if (item) {
-            setSimulatedPrice(item.salePrice);
-        }
-    }, [item]);
-
-    if (!item || simulatedPrice === undefined) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
-                <FileQuestion className="h-10 w-10 mb-2" />
-                <p className="font-semibold">Selecione uma mercadoria</p>
-                <p className="text-sm">Clique em uma mercadoria na tabela ou no gráfico para simular cenários aqui.</p>
-            </div>
-        )
-    }
-
-    const simulatedMargin = item.grossCost > 0 && simulatedPrice > 0
-        ? ((simulatedPrice - item.grossCost) / simulatedPrice) * 100
-        : 0;
-
-    const minPrice = item.grossCost;
-    const maxPrice = minPrice * 3;
-
-    return (
-        <div className="p-4 space-y-4">
-            <h4 className="font-semibold">{item.name}</h4>
-             <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                    <p className="text-sm text-muted-foreground">Margem Simulada</p>
-                    <p className="text-3xl font-bold">{simulatedMargin.toFixed(1)}<span className="text-lg">%</span></p>
-                </div>
-                <div>
-                    <p className="text-sm text-muted-foreground">Preço Simulado</p>
-                    <p className="text-3xl font-bold">{formatCurrency(simulatedPrice)}</p>
-                </div>
-            </div>
-            <div>
-                <Label>Ajustar Preço de Venda</Label>
-                <Slider
-                    value={[simulatedPrice]}
-                    min={minPrice}
-                    max={maxPrice}
-                    step={0.05}
-                    onValueChange={(value) => setSimulatedPrice(value[0])}
-                />
-                 <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>{formatCurrency(minPrice)}</span>
-                    <span>{formatCurrency(maxPrice)}</span>
-                </div>
-            </div>
-        </div>
-    );
 }
 
 export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, onSelectItem, activeFilters }: PricingDashboardProps) {
@@ -356,41 +263,6 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                     </CardContent>
                 </Card>
             </div>
-            
-            <div className="border-t pt-4">
-                 <div className="mb-4">
-                    <Label>Selecionar Mercadoria para Análise</Label>
-                    <Select value={selectedItemForCharts?.id} onValueChange={handleSelectionChange}>
-                        <SelectTrigger><SelectValue placeholder="Selecione uma mercadoria..."/></SelectTrigger>
-                        <SelectContent>
-                            {simulations.map(sim => (
-                                <SelectItem key={sim.id} value={sim.id}>{sim.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    <Card className="lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><SlidersHorizontal/> Simulador "What-If"</CardTitle>
-                            <CardDescription>Arraste o slider de preço e veja o impacto na margem em tempo real.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <WhatIfSimulator item={selectedItemForCharts} />
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Tabela de Cenários</CardTitle>
-                            <CardDescription>Preços sugeridos para atingir as principais metas de margem.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                        <ScenarioTable selectedItem={selectedItemForCharts} pricingParameters={pricingParameters} />
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
         </div>
     );
 }
-
