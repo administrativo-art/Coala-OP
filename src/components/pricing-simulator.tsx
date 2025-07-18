@@ -173,8 +173,9 @@ export function PricingSimulator() {
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
+                        
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
+                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
                         
                         return (
                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
@@ -250,27 +251,27 @@ export function PricingSimulator() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="dashboard" className="w-full">
-                         <div className="flex justify-between items-center">
-                            <TabsList>
-                                <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
-                                <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
+                         
+                        <div className="flex flex-col sm:flex-row justify-between items-center border-b pb-4">
+                            <TabsList className="grid w-full grid-cols-2 max-w-sm">
+                                <TabsTrigger value="dashboard"><BarChart3 className="mr-2" />Painel de análise</TabsTrigger>
+                                <TabsTrigger value="table"><TableIcon className="mr-2" />Análise de custo</TabsTrigger>
                             </TabsList>
-                         </div>
-                        
-                        <div className="flex flex-wrap items-center gap-2 mt-4">
-                            <Button onClick={handleAddNew}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Nova análise
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                            </Button>
-                            {permissions.pricing.manageParameters && (
-                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    Parâmetros
+                             <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0">
+                                <Button onClick={handleAddNew}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Nova análise
                                 </Button>
-                            )}
+                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                </Button>
+                                {permissions.pricing.manageParameters && (
+                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        Parâmetros
+                                    </Button>
+                                )}
+                            </div>
                         </div>
 
                         <TabsContent value="dashboard" className="mt-4">
@@ -296,7 +297,7 @@ export function PricingSimulator() {
                                         />
                                     </div>
                                      <div className="flex gap-2 w-full md:w-auto">
-                                        <Select onValueChange={handleFilterChange}>
+                                        <Select onValueChange={handleFilterChange} value={lineFilter !== 'all' ? `line-${lineFilter}` : (categoryFilter !== 'all' ? `cat-${categoryFilter}` : 'all')}>
                                             <SelectTrigger className="w-full md:w-[250px]">
                                                 <SelectValue placeholder="Filtrar por categoria ou linha" />
                                             </SelectTrigger>
