@@ -125,7 +125,9 @@ export function PricingSimulator() {
             setCategoryFilter(value.replace('cat-', ''));
             setLineFilter('all');
         } else if (value.startsWith('line-')) {
-            setCategoryFilter('all');
+            // Se uma linha é selecionada, a categoria principal é inferida ou pode ser resetada
+            const line = lines.find(l => l.id === value.replace('line-', ''));
+            setCategoryFilter(line?.parentId || 'all');
             setLineFilter(value.replace('line-', ''));
         }
     };
@@ -238,65 +240,12 @@ export function PricingSimulator() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="dashboard" className="w-full">
-                         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                         <div className="flex justify-between items-center mb-4">
                             <TabsList>
                                 <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
                                 <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
                             </TabsList>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Button onClick={handleAddNew}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Nova análise
-                                </Button>
-                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                </Button>
-                                 {permissions.pricing.manageParameters && (
-                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                        <Settings className="mr-2 h-4 w-4" />
-                                        Parâmetros
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-
-                         <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
-                            <div className="relative flex-grow w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input 
-                                    placeholder="Buscar por nome da mercadoria..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10"
-                                />
-                            </div>
-                             <div className="flex gap-2 w-full md:w-auto">
-                                <Select onValueChange={handleFilterChange}>
-                                    <SelectTrigger className="w-full md:w-[250px]">
-                                        <SelectValue placeholder="Filtrar por categoria ou linha" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todas</SelectItem>
-                                        <SelectGroup>
-                                            <SelectLabel>Categorias</SelectLabel>
-                                            {mainCategories.map(c => (
-                                                <SelectItem key={c.id} value={`cat-${c.id}`}>{c.name}</SelectItem>
-                                            ))}
-                                        </SelectGroup>
-                                        <SelectGroup>
-                                            <SelectLabel>Linhas</SelectLabel>
-                                            {lines.map(l => (
-                                                <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
-                                            ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                                <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
-                                    <Eraser className="mr-2 h-4 w-4" />
-                                    Limpar
-                                </Button>
-                            </div>
-                        </div>
+                         </div>
                         <TabsContent value="dashboard" className="mt-4">
                             <PricingDashboard 
                                 simulations={simulationsByCategory} 
@@ -307,7 +256,64 @@ export function PricingSimulator() {
                             />
                         </TabsContent>
                         <TabsContent value="table" className="mt-4">
-                            {renderTable()}
+                            <div className="space-y-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Button onClick={handleAddNew}>
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        Nova análise
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                        <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                    </Button>
+                                    {permissions.pricing.manageParameters && (
+                                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                            <Settings className="mr-2 h-4 w-4" />
+                                            Parâmetros
+                                        </Button>
+                                    )}
+                                </div>
+                                
+                                <div className="flex flex-col md:flex-row items-center justify-between gap-2">
+                                    <div className="relative flex-grow w-full">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input 
+                                            placeholder="Buscar por nome da mercadoria..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="pl-10"
+                                        />
+                                    </div>
+                                     <div className="flex gap-2 w-full md:w-auto">
+                                        <Select onValueChange={handleFilterChange}>
+                                            <SelectTrigger className="w-full md:w-[250px]">
+                                                <SelectValue placeholder="Filtrar por categoria ou linha" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Todas</SelectItem>
+                                                <SelectGroup>
+                                                    <SelectLabel>Categorias</SelectLabel>
+                                                    {mainCategories.map(c => (
+                                                        <SelectItem key={c.id} value={`cat-${c.id}`}>{c.name}</SelectItem>
+                                                    ))}
+                                                </SelectGroup>
+                                                <SelectGroup>
+                                                    <SelectLabel>Linhas</SelectLabel>
+                                                    {lines.map(l => (
+                                                        <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
+                                                    ))}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
+                                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
+                                            <Eraser className="mr-2 h-4 w-4" />
+                                            Limpar
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                  {renderTable()}
+                                </div>
+                            </div>
                         </TabsContent>
                     </Tabs>
 
