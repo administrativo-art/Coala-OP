@@ -82,7 +82,7 @@ export function PricingSimulator() {
 
         const grouped: Record<string, ProductSimulation[]> = {};
         filtered.forEach(sim => {
-            const category = categoryMap.get(sim.categoryId);
+            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
             const categoryName = category?.name || 'Sem Categoria';
             if (!grouped[categoryName]) {
                 grouped[categoryName] = [];
@@ -132,7 +132,7 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
+                <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div>Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -144,9 +144,9 @@ export function PricingSimulator() {
                     const category = categories.find(c => c.name === categoryName);
                     return (
                         <div key={categoryName}>
-                            {categoryName !== 'Sem Categoria' && category?.color && (
+                            {categoryName !== 'Sem Categoria' && (
                                 <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category.color }}></div>
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category?.color || 'transparent' }}></div>
                                   {categoryName}
                                 </h3>
                             )}
