@@ -7,7 +7,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder, Settings } from "lucide-react";
+import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder, Settings } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation, type SimulationCategory } from "@/types";
@@ -71,7 +71,7 @@ export function PricingSimulator() {
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
+            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter || sim.lineId === categoryFilter;
             return searchMatch && categoryMatch;
         });
 
@@ -140,14 +140,13 @@ export function PricingSimulator() {
                         <div key={categoryName}>
                             {categoryName !== 'Sem Categoria' && (
                                 <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
-                                    {category && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: category.color }}></div>}
                                 </h3>
                             )}
                             <Accordion type="multiple" className="w-full space-y-3">
                                 {sims.map(sim => {
                                     const items = simulationItems.filter(item => item.simulationId === sim.id);
                                     return (
-                                        <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-r-lg" style={{ borderColor: category?.color || 'transparent' }}>
+                                        <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: category?.color ? `0 4px 12px -1px ${category.color}50` : 'none', transition: 'box-shadow 0.3s' }}>
                                             <div className="flex items-center">
                                             <AccordionTrigger className="p-4 flex-1 hover:no-underline">
                                                 <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
@@ -180,12 +179,12 @@ export function PricingSimulator() {
                                                     <TableBody>
                                                         {items.map(item => {
                                                             const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                            const cost = item.overrideCostPerUnit! * item.quantity;
+                                                            const cost = (item.overrideCostPerUnit || 0) * item.quantity;
                                                             return (
                                                                 <TableRow key={item.id}>
                                                                     <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
-                                                                    <TableCell className="text-right">{item.quantity} {baseProductInfo?.unit}</TableCell>
-                                                                    <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit)}</TableCell>
+                                                                    <TableCell className="text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
+                                                                    <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
                                                                     <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
                                                                 </TableRow>
                                                             )
@@ -211,7 +210,6 @@ export function PricingSimulator() {
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                         <div>
                             <CardTitle className="flex items-center gap-2">
-                                <DollarSign />
                                 Análise de custo de mercadorias
                             </CardTitle>
                             <CardDescription>
@@ -242,6 +240,10 @@ export function PricingSimulator() {
                             <SelectContent>
                                 <SelectItem value="all">Todas as Categorias</SelectItem>
                                 {categories.filter(c => c.parentId === null).map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                ))}
+                                <SelectItem value="lines" disabled>--- Linhas ---</SelectItem>
+                                {categories.filter(c => c.parentId !== null).map(c => (
                                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                 ))}
                             </SelectContent>
