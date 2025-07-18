@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Slider } from "./ui/slider";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Label } from "./ui/label";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -350,5 +351,3 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         </div>
     );
 }
-
-    
