@@ -141,7 +141,6 @@ export function PricingSimulator() {
                             {categoryName !== 'Sem Categoria' && (
                                 <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
                                     {category && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: category.color }}></div>}
-                                    {categoryName}
                                 </h3>
                             )}
                             <Accordion type="multiple" className="w-full space-y-3">
