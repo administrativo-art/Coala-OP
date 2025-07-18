@@ -282,6 +282,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <span className="w-8"></span>
                     </div>
                     {fields.map((field, index) => {
+                        if (!watchedItems[index]) return null;
                         const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                         const useDefault = watchedItems[index].useDefault;
                         const hasDefaultCost = !!baseProduct?.lastEffectivePrice;
