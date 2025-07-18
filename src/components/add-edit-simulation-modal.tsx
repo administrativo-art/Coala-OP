@@ -23,12 +23,14 @@ import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { CategoryManagementModal } from './category-management-modal';
+import { getUnitsForCategory, unitCategories, type UnitCategory } from '@/lib/conversion';
 
 const simulationItemSchema = z.object({
   baseProductId: z.string().min(1, 'Selecione um insumo.'),
   quantity: z.coerce.number().min(0.001, 'Deve ser > 0'),
-  useDefaultCost: z.boolean(),
+  useDefault: z.boolean(),
   overrideCostPerUnit: z.coerce.number().optional(),
+  overrideUnit: z.string().optional(),
 });
 
 const simulationSchema = z.object({
@@ -39,7 +41,25 @@ const simulationSchema = z.object({
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
+}).superRefine((data, ctx) => {
+    data.items.forEach((item, index) => {
+        if (!item.useDefault) {
+            if (!item.overrideUnit) {
+                ctx.addIssue({
+                    path: [`items`, index, 'overrideUnit'],
+                    message: "Unidade é obrigatória.",
+                });
+            }
+             if (item.overrideCostPerUnit === undefined || item.overrideCostPerUnit <= 0) {
+                ctx.addIssue({
+                    path: [`items`, index, 'overrideCostPerUnit'],
+                    message: "Custo deve ser > 0.",
+                });
+            }
+        }
+    });
 });
+
 
 type SimulationFormValues = z.infer<typeof simulationSchema>;
 
@@ -58,7 +78,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
   const { categories } = useProductSimulationCategories();
-  const { toast } = useToast();
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
@@ -80,8 +99,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                 .map(item => ({
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
-                    useDefaultCost: item.useDefaultCost,
+                    useDefault: item.useDefault,
                     overrideCostPerUnit: item.overrideCostPerUnit,
+                    overrideUnit: item.overrideUnit,
                 }));
 
             form.reset({
@@ -102,35 +122,38 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
   const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
   
-  const { cmv, partialCosts, unitCosts } = useMemo(() => {
+  const { cmv, partialCosts } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
-    const units: Record<number, number> = {};
 
     watchedItems.forEach((item, index) => {
       const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
       if (!baseProduct || !item.quantity) {
         partials[index] = 0;
-        units[index] = 0;
         return;
       }
       try {
-        const defaultCost = baseProduct.lastEffectivePrice?.pricePerUnit || 0;
-        const pricePerBaseUnit = item.useDefaultCost ? defaultCost : (item.overrideCostPerUnit || 0);
-        
-        units[index] = pricePerBaseUnit;
+        const pricePerUnit = item.useDefault 
+          ? (baseProduct.lastEffectivePrice?.pricePerUnit || 0)
+          : (item.overrideCostPerUnit || 0);
+          
+        const unit = item.useDefault ? baseProduct.unit : item.overrideUnit;
 
-        const partialCost = item.quantity * pricePerBaseUnit;
+        if (!unit) {
+             partials[index] = 0;
+             return;
+        }
+
+        const partialCost = item.quantity * pricePerUnit;
         partials[index] = partialCost;
         totalCmv += partialCost;
       } catch (e) {
         console.error("Error calculating CMV for item:", item, e);
         partials[index] = 0;
-        units[index] = 0;
       }
     });
 
-    return { cmv: totalCmv, partialCosts: partials, unitCosts: units };
+    return { cmv: totalCmv, partialCosts: partials };
   }, [watchedItems, baseProducts]);
 
   const grossCost = useMemo(() => {
@@ -155,8 +178,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
       append({ 
           baseProductId: product.id,
           quantity: 1,
-          useDefaultCost: !!product.lastEffectivePrice,
+          useDefault: !!product.lastEffectivePrice,
           overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit || 0,
+          overrideUnit: product.unit,
         });
     }
   };
@@ -166,13 +190,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
       ...values,
       lineId: values.lineId || null,
       categoryId: values.categoryId || null,
-      items: values.items.map(item => {
-        const bp = baseProducts.find(b => b.id === item.baseProductId);
-        return {
-          ...item,
-          unit: bp?.unit || '',
-        };
-      }),
       totalCmv: cmv,
       grossCost,
       profitValue,
@@ -256,7 +273,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                   </div>
                   
                   <div className="rounded-md border p-2 space-y-2">
-                    <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                    <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                         <span>Insumo Base</span>
                         <span className="text-center">Qtd.</span>
                         <span className="text-center">Unid.</span>
@@ -266,32 +283,58 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                     </div>
                     {fields.map((field, index) => {
                         const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
-                        const useDefault = watchedItems[index].useDefaultCost;
+                        const useDefault = watchedItems[index].useDefault;
                         const hasDefaultCost = !!baseProduct?.lastEffectivePrice;
 
                         return (
                             <div key={field.id} className="p-2 rounded bg-muted/50">
-                            <div className="grid grid-cols-[1fr_80px_80px_100px_100px_auto] items-center gap-x-2">
+                            <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2">
                                 <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                                 <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                 <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                 )}/>
-                                <div className="flex items-center justify-center px-3 py-2 h-10 rounded-md border border-input bg-background">
-                                    <span className="text-sm font-medium">{baseProduct?.unit || '...'}</span>
-                                </div>
                                 
-                                <Controller
+                                <FormField
+                                    control={form.control}
+                                    name={`items.${index}.overrideUnit`}
+                                    render={({ field: unitField }) => (
+                                        <FormItem>
+                                            <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
+                                                <FormControl>
+                                                    <SelectTrigger className={cn(useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {unitCategories.map(cat => (
+                                                        <React.Fragment key={cat}>
+                                                            {getUnitsForCategory(cat as UnitCategory).map(unit => (
+                                                                <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage/>
+                                        </FormItem>
+                                    )}
+                                />
+                                
+                                <FormField
                                     control={form.control}
                                     name={`items.${index}.overrideCostPerUnit`}
                                     render={({ field: costField }) => (
-                                        <Input
-                                            type="number"
-                                            step="any"
-                                            value={useDefault ? unitCosts[index]?.toFixed(4) ?? '' : costField.value ?? ''}
-                                            onChange={costField.onChange}
-                                            disabled={useDefault}
-                                            className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
-                                        />
+                                        <FormItem>
+                                            <Input
+                                                type="number"
+                                                step="any"
+                                                value={useDefault ? baseProduct?.lastEffectivePrice?.pricePerUnit?.toFixed(4) ?? '' : costField.value ?? ''}
+                                                onChange={costField.onChange}
+                                                disabled={useDefault}
+                                                className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
+                                            />
+                                            <FormMessage/>
+                                        </FormItem>
                                     )}
                                 />
 
@@ -305,7 +348,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                             <div className="flex justify-end mt-1">
                                 <FormField
                                     control={form.control}
-                                    name={`items.${index}.useDefaultCost`}
+                                    name={`items.${index}.useDefault`}
                                     render={({ field: switchField }) => (
                                         <FormItem className="flex items-center gap-2">
                                             <FormControl>
@@ -316,7 +359,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                                                 />
                                             </FormControl>
                                             <FormLabel className="text-xs text-muted-foreground">
-                                                {hasDefaultCost ? 'Usar custo padrão' : 'Sem custo padrão'}
+                                                {hasDefaultCost ? 'Usar custo/unidade padrão' : 'Sem custo padrão'}
                                             </FormLabel>
                                         </FormItem>
                                     )}
@@ -331,7 +374,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                       <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
                       <SelectContent>
                         {baseProducts.map(bp => (
-                          <SelectItem key={bp.id} value={bp.id} disabled={!bp.lastEffectivePrice && bp.id !=='temp'}>
+                          <SelectItem key={bp.id} value={bp.id}>
                             {bp.name}
                           </SelectItem>
                         ))}

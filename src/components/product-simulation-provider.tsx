@@ -16,9 +16,9 @@ interface SimulationData {
     items: {
         baseProductId: string;
         quantity: number;
-        unit: string;
-        useDefaultCost: boolean;
+        useDefault: boolean;
         overrideCostPerUnit?: number;
+        overrideUnit?: string;
     }[];
     operationPercentage?: number;
     salePrice?: number;
@@ -96,9 +96,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     simulationId: simulationRef.id,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
-                    unit: item.unit,
-                    useDefaultCost: item.useDefaultCost,
+                    useDefault: item.useDefault,
                     overrideCostPerUnit: item.overrideCostPerUnit,
+                    overrideUnit: item.overrideUnit
                 };
                 batch.set(itemRef, newItem);
             });
@@ -135,9 +135,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     simulationId: id,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
-                    unit: item.unit,
-                    useDefaultCost: item.useDefaultCost,
+                    useDefault: item.useDefault,
                     overrideCostPerUnit: item.overrideCostPerUnit,
+                    overrideUnit: item.overrideUnit
                 };
                 batch.set(itemRef, newItem);
             });

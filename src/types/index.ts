@@ -168,9 +168,9 @@ export type ProductSimulationItem = {
   simulationId: string;
   baseProductId: string;
   quantity: number;
-  unit: string;
-  useDefaultCost: boolean;
+  useDefault: boolean;
   overrideCostPerUnit?: number;
+  overrideUnit?: string;
 };
 
 export type ProductSimulation = {
