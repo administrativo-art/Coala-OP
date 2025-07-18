@@ -115,7 +115,7 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm";
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
     
     const renderTable = () => {
         if (isLoading) {
@@ -131,8 +131,8 @@ export function PricingSimulator() {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
-                    <h3 className="mt-4 text-lg font-semibold text-foreground">nenhuma análise criada</h3>
-                    <p className="mt-1 text-sm">Clique no botão abaixo para criar sua primeira análise de custo.</p>
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise criada</h3>
+                    <p className="mt-1 text-sm">Clique no botão "Nova análise" para começar.</p>
                 </div>
             );
         }
@@ -149,7 +149,7 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                <div className={cn("px-4 py-2 font-semibold text-muted-foreground", gridClass)}>
+                <div className={cn("py-2 font-semibold text-muted-foreground", gridClass)}>
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -163,8 +163,8 @@ export function PricingSimulator() {
                         
                         return (
                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
-                                    <div
+                                <AccordionTrigger className={cn("py-4 hover:no-underline", gridClass)}>
+                                     <div
                                         className="font-semibold text-left hover:underline cursor-pointer"
                                         onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
                                     >
@@ -224,17 +224,18 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                     <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nova análise
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                        </Button>
+                    </div>
+
                      <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                             <Button onClick={handleAddNew}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Nova análise
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                            </Button>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                        <div className="flex flex-col sm:flex-row gap-2 w-full">
                             <div className="relative flex-grow">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input 
@@ -272,14 +273,11 @@ export function PricingSimulator() {
                             </Button>
                         </div>
                     </div>
-                     <Tabs defaultValue="table" className="w-full">
+                     <Tabs defaultValue="dashboard" className="w-full">
                         <TabsList>
-                            <TabsTrigger value="table"><TableIcon />Análise detalhada</TabsTrigger>
-                            <TabsTrigger value="dashboard"><BarChart3 />Dashboard gerencial</TabsTrigger>
+                            <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
+                            <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="table" className="mt-4">
-                            {renderTable()}
-                        </TabsContent>
                         <TabsContent value="dashboard" className="mt-4">
                             <PricingDashboard 
                                 simulations={simulationsByCategory} 
@@ -288,6 +286,9 @@ export function PricingSimulator() {
                                 formatCurrency={formatCurrency}
                                 pricingParameters={pricingParameters}
                             />
+                        </TabsContent>
+                        <TabsContent value="table" className="mt-4">
+                            {renderTable()}
                         </TabsContent>
                     </Tabs>
 
