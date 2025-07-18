@@ -21,8 +21,10 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { CategoryManagementModal } from "./category-management-modal";
 
 const formatCurrency = (value: number) => {
-    if (value === undefined || isNaN(value)) return 'R$ 0,00';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    const isNegative = value < 0;
+    const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return isNegative ? `- ${formatted}` : formatted;
 };
 
 
@@ -80,23 +82,9 @@ export function PricingSimulator() {
             return searchMatch && categoryMatch && lineMatch;
         });
 
-        const grouped: Record<string, ProductSimulation[]> = {};
-        filtered.forEach(sim => {
-            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-            const categoryName = category?.name || 'Sem Categoria';
-            if (!grouped[categoryName]) {
-                grouped[categoryName] = [];
-            }
-            grouped[categoryName].push(sim);
-        });
-        
-        return Object.entries(grouped).sort(([catA], [catB]) => {
-            if (catA === 'Sem Categoria') return 1;
-            if (catB === 'Sem Categoria') return -1;
-            return catA.localeCompare(catB);
-        });
+        return filtered.sort((a,b) => a.name.localeCompare(b.name));
 
-    }, [simulations, searchTerm, categoryFilter, lineFilter, categoryMap]);
+    }, [simulations, searchTerm, categoryFilter, lineFilter]);
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
 
@@ -133,41 +121,38 @@ export function PricingSimulator() {
         return (
             <div className="space-y-4">
                  <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
-                    <div>Mercadoria</div>
+                    <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
-                    <div className="text-right">Lucro</div>
-                    <div className="w-20"></div>
+                    <div className="text-right">Lucro %</div>
+                    <div className="text-center w-20">Ações</div>
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
-                    {simulationsByCategory.flatMap(([categoryName, sims]) => 
-                        sims.map(sim => {
+                    {simulationsByCategory.map(sim => {
                             const items = simulationItems.filter(item => item.simulationId === sim.id);
                             const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
                             const borderColor = category?.color || 'hsl(var(--border))';
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ border: `2px solid ${borderColor}`, transition: 'border-color 0.3s' }}>
-                                    <div className="flex items-center">
-                                    <AccordionTrigger className="p-4 flex-1 hover:no-underline">
-                                        <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
+                                    <AccordionTrigger className="p-4 flex-1 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
+                                        <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm w-full">
                                             <div className="font-semibold text-left">{sim.name}</div>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                            <div className="text-right font-bold text-green-600">{formatCurrency(sim.profitValue)}</div>
-                                            <div className="text-right font-bold text-primary">{sim.profitPercentage.toFixed(2)}%</div>
+                                            <div className={cn("text-right font-bold", sim.profitValue >= 0 ? 'text-green-600' : 'text-destructive')}>{formatCurrency(sim.profitValue)}</div>
+                                            <div className={cn("text-right font-bold", sim.profitPercentage >= 0 ? 'text-primary' : 'text-destructive')}>{sim.profitPercentage.toFixed(2)}%</div>
+                                             <div className="flex items-center gap-1 shrink-0 justify-center">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </div>
                                     </AccordionTrigger>
-                                    <div className="flex items-center gap-1 shrink-0 px-4">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {e.stopPropagation(); handleEdit(sim);}}>
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => {e.stopPropagation(); setSimulationToDelete(sim);}}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                    </div>
                                     <AccordionContent className="px-4 pb-4 bg-muted/50">
                                         <Table>
                                             <TableHeader>
@@ -197,7 +182,7 @@ export function PricingSimulator() {
                                 </AccordionItem>
                             );
                         })
-                    )}
+                    }
                 </Accordion>
             </div>
         )
