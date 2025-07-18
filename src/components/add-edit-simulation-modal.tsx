@@ -23,7 +23,9 @@ import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { CategoryManagementModal } from './category-management-modal';
-import { getUnitsForCategory, unitCategories, type UnitCategory } from '@/lib/conversion';
+import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
+import { useProducts } from '@/hooks/use-products';
+
 
 const simulationItemSchema = z.object({
   baseProductId: z.string().min(1, 'Selecione um insumo.'),
@@ -71,12 +73,15 @@ interface AddEditSimulationModalProps {
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const isNegative = value < 0;
+    const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return isNegative ? `- ${formatted}` : formatted;
 };
 
 export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }: AddEditSimulationModalProps) {
   const { addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
+  const { products } = useProducts();
   const { categories } = useProductSimulationCategories();
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -133,18 +138,17 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
         return;
       }
       try {
-        const pricePerUnit = item.useDefault 
-          ? (baseProduct.lastEffectivePrice?.pricePerUnit || 0)
-          : (item.overrideCostPerUnit || 0);
-          
-        const unit = item.useDefault ? baseProduct.unit : item.overrideUnit;
+        let partialCost = 0;
+        const linkedProductsOfBase = products.filter(p => p.baseProductId === item.baseProductId);
 
-        if (!unit) {
-             partials[index] = 0;
-             return;
+        if (item.useDefault && baseProduct.lastEffectivePrice) {
+            const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit || 0;
+            partialCost = item.quantity * pricePerBaseUnit;
+        } else if (!item.useDefault && item.overrideCostPerUnit) {
+            // Se não está usando o padrão, o custo é direto (quantidade * custo/unidade manual)
+            partialCost = item.quantity * item.overrideCostPerUnit;
         }
-
-        const partialCost = item.quantity * pricePerUnit;
+         
         partials[index] = partialCost;
         totalCmv += partialCost;
       } catch (e) {
@@ -154,7 +158,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
     });
 
     return { cmv: totalCmv, partialCosts: partials };
-  }, [watchedItems, baseProducts]);
+  }, [watchedItems, baseProducts, products]);
+
 
   const grossCost = useMemo(() => {
     const percentage = watchedOperationPercentage || 0;
@@ -187,7 +192,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
 
   const onSubmit = async (values: SimulationFormValues) => {
     if (simulationToEdit) {
-      const simulationData = { ...simulationToEdit, ...values };
+      const simulationData = { 
+        ...simulationToEdit, 
+        ...values,
+        totalCmv: cmv,
+        grossCost,
+        profitValue,
+        profitPercentage,
+      };
       const items = values.items;
       await updateSimulation(simulationData, items);
     } else {
