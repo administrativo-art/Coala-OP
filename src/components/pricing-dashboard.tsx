@@ -3,10 +3,10 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { type ProductSimulation, type PricingParameters } from '@/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, PieChart, Pie, Legend, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle, Gauge, SlidersHorizontal, PackageCheck, FileQuestion } from 'lucide-react';
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Target, ArrowUpCircle, Gauge, SlidersHorizontal, PackageCheck, FileQuestion, Star } from 'lucide-react';
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
@@ -90,7 +90,7 @@ function WhatIfSimulator({ item }: { item: ProductSimulation | null }) {
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
                 <FileQuestion className="h-10 w-10 mb-2" />
                 <p className="font-semibold">Selecione uma mercadoria</p>
-                <p className="text-sm">Clique em uma mercadoria na tabela de "Análise de Custo" para simular cenários aqui.</p>
+                <p className="text-sm">Clique em uma mercadoria na tabela ou no gráfico para simular cenários aqui.</p>
             </div>
         )
     }
@@ -142,13 +142,17 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
     useEffect(() => {
         if (simulations.length > 0) {
-            onSelectItem(simulations[0]);
-            setSelectedItemForCharts(simulations[0]);
+            // If the current selection is no longer in the filtered list, select the first one.
+            const currentSelectionExists = simulations.some(s => s.id === selectedItemForCharts?.id);
+            if (!currentSelectionExists) {
+                onSelectItem(simulations[0]);
+                setSelectedItemForCharts(simulations[0]);
+            }
         } else {
             onSelectItem(null);
             setSelectedItemForCharts(null);
         }
-    }, [simulations, onSelectItem]);
+    }, [simulations, onSelectItem, selectedItemForCharts]);
 
     const { kpis, profitChartData, costCompositionData } = useMemo(() => {
         if (!simulations || simulations.length === 0) {
@@ -203,6 +207,14 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult, costCompositionData: costCompData };
     }, [simulations, selectedItemForCharts]);
+    
+    const handleSelectionChange = (id: string) => {
+        const item = simulations.find(s => s.id === id);
+        if (item) {
+            setSelectedItemForCharts(item);
+            onSelectItem(item);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -229,7 +241,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens OK</CardTitle>
@@ -270,6 +282,26 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                         <p className="text-xs text-muted-foreground">Necessário para atingir a meta</p>
                     </CardContent>
                 </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Maior Margem</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.highestMarginItem?.profitPercentage.toFixed(2)}%</div>
+                         <p className="text-xs text-muted-foreground truncate">{kpis.highestMarginItem?.name}</p>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Menor Margem</CardTitle>
+                        <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.lowestMarginItem?.profitPercentage.toFixed(2)}%</div>
+                         <p className="text-xs text-muted-foreground truncate">{kpis.lowestMarginItem?.name}</p>
+                    </CardContent>
+                </Card>
             </div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
@@ -284,8 +316,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                     const selectedName = data.activePayload[0].payload.name;
                                     const item = simulations.find(s => s.name === selectedName);
                                     if(item) {
-                                      setSelectedItemForCharts(item);
-                                      onSelectItem(item);
+                                      handleSelectionChange(item.id);
                                     }
                                 }
                             }}>
@@ -328,25 +359,39 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                     </CardContent>
                 </Card>
             </div>
-             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><SlidersHorizontal/> Simulador "What-If"</CardTitle>
-                        <CardDescription>Arraste o slider de preço e veja o impacto na margem em tempo real.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <WhatIfSimulator item={selectedItemForCharts} />
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Tabela de Cenários</CardTitle>
-                        <CardDescription>Preços sugeridos para atingir as principais metas de margem.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                       <ScenarioTable selectedItem={selectedItemForCharts} pricingParameters={pricingParameters} />
-                    </CardContent>
-                </Card>
+            
+            <div className="border-t pt-4">
+                 <div className="mb-4">
+                    <Label>Selecionar Mercadoria para Análise</Label>
+                    <Select value={selectedItemForCharts?.id} onValueChange={handleSelectionChange}>
+                        <SelectTrigger><SelectValue placeholder="Selecione uma mercadoria..."/></SelectTrigger>
+                        <SelectContent>
+                            {simulations.map(sim => (
+                                <SelectItem key={sim.id} value={sim.id}>{sim.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><SlidersHorizontal/> Simulador "What-If"</CardTitle>
+                            <CardDescription>Arraste o slider de preço e veja o impacto na margem em tempo real.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <WhatIfSimulator item={selectedItemForCharts} />
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Tabela de Cenários</CardTitle>
+                            <CardDescription>Preços sugeridos para atingir as principais metas de margem.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                        <ScenarioTable selectedItem={selectedItemForCharts} pricingParameters={pricingParameters} />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </div>
     );
