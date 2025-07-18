@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, HelpCircle, Table as TableIcon } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, HelpCircle, Table as TableIcon, Edit, Trash2 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation } from "@/types";
@@ -29,53 +29,6 @@ const formatCurrency = (value: number) => {
     const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     return isNegative ? `- ${formatted}` : formatted;
 };
-
-const ManualPanel = () => {
-    const manualItems = [
-        { secao: 'Fórmulas', descricao: 'Cálculo de Custo de Mercadoria Vendida (CMV) e Lucro.', localizacao: 'Colunas de resultado', exemplo: 'CMV + (CMV * % op.)' },
-        { secao: 'Simbologia', descricao: 'Unidades de medida padrão utilizadas nos cálculos.', localizacao: 'Cadastro de insumos', exemplo: 'g, ml, un' },
-        { secao: 'Cores', descricao: 'Formatação condicional baseada na lucratividade.', localizacao: 'Coluna "Lucro %"', exemplo: '≥ 50% → Verde' },
-        { secao: 'Meta de Lucro', descricao: 'Sugestão de preço com base na margem de lucro desejada.', localizacao: 'Análise com IA', exemplo: 'Sugerir com 55%' },
-        { secao: 'Atualização', descricao: 'Quando revisar os custos para manter a precisão.', localizacao: 'Módulo de compras', exemplo: 'Efetivar novos preços' },
-    ];
-
-    return (
-        <Card>
-            <CardHeader className="bg-muted/50">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    <HelpCircle className="h-5 w-5" />
-                    Manual de uso & legenda
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[120px]">Seção</TableHead>
-                            <TableHead>Descrição</TableHead>
-                            <TableHead>Exemplo</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {manualItems.map((item) => (
-                            <TableRow key={item.secao}>
-                                <TableCell className="font-semibold">{item.secao}</TableCell>
-                                <TableCell>
-                                    <p>{item.descricao}</p>
-                                    <p className="text-xs text-muted-foreground">Em: {item.localizacao}</p>
-                                </TableCell>
-                                <TableCell>
-                                    <code className="bg-muted text-foreground font-mono p-1 rounded-sm text-xs">{item.exemplo}</code>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
-    )
-}
-
 
 export function PricingSimulator() {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices } = useProductSimulation();
@@ -176,7 +129,7 @@ export function PricingSimulator() {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
-                    <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise criada</h3>
+                    <h3 className="mt-4 text-lg font-semibold text-foreground">nenhuma análise criada</h3>
                     <p className="mt-1 text-sm">Clique no botão abaixo para criar sua primeira análise de custo.</p>
                 </div>
             );
@@ -208,8 +161,8 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className={cn("flex items-center pr-4", gridClass)}>
-                                        <AccordionTrigger className={cn("p-4 hover:no-underline flex-1", gridClass, "grid-cols-5")}>
+                                    <div className="flex items-center pr-4">
+                                        <AccordionTrigger className={cn("p-4 hover:no-underline flex-1 grid items-center gap-4 text-sm", gridClass)}>
                                             <div
                                                 className="font-semibold text-left hover:underline cursor-pointer"
                                                 onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
@@ -258,7 +211,7 @@ export function PricingSimulator() {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+        <div className="space-y-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -269,7 +222,7 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                     <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
+                    <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
                         <Button onClick={handleAddNew}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Nova análise
@@ -326,10 +279,6 @@ export function PricingSimulator() {
                     )}
                 </CardFooter>
             </Card>
-
-            <div className="space-y-6">
-                <ManualPanel />
-            </div>
 
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}

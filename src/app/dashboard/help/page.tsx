@@ -3,8 +3,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { LifeBuoy, Package, Users, LayoutDashboard, ClipboardCheck, BarChart3, ShoppingCart, ShieldAlert, Truck, Users2, ListPlus } from 'lucide-react';
+import { LifeBuoy, Package, Users, LayoutDashboard, ClipboardCheck, BarChart3, ShoppingCart, ShieldAlert, Truck, Users2, ListPlus, DollarSign } from 'lucide-react';
 import Image from 'next/image';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const helpTopics = [
     {
@@ -76,6 +77,18 @@ const helpTopics = [
         ]
     },
     {
+        icon: DollarSign,
+        title: "Análise de custo",
+        isTable: true,
+        content: [
+            { secao: 'Fórmulas', descricao: 'Cálculo de Custo de Mercadoria Vendida (CMV) e Lucro.', localizacao: 'Colunas de resultado', exemplo: 'CMV + (CMV * % op.)' },
+            { secao: 'Simbologia', descricao: 'Unidades de medida padrão utilizadas nos cálculos.', localizacao: 'Cadastro de insumos', exemplo: 'g, ml, un' },
+            { secao: 'Cores', descricao: 'Formatação condicional baseada na lucratividade.', localizacao: 'Coluna "Lucro %"', exemplo: '≥ 50% → Verde' },
+            { secao: 'Meta de Lucro', descricao: 'Sugestão de preço com base na margem de lucro desejada.', localizacao: 'Análise com IA', exemplo: 'Sugerir com 55%' },
+            { secao: 'Atualização', descricao: 'Quando revisar os custos para manter a precisão.', localizacao: 'Módulo de compras', exemplo: 'Efetivar novos preços' },
+        ]
+    },
+    {
         icon: ShieldAlert,
         title: "Gestão de avarias",
         content: [
@@ -116,16 +129,46 @@ export default function HelpPage() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="pt-2 pb-4 space-y-4">
-                                {topic.content.map((item, index) => (
-                                    <Card key={index}>
-                                        <CardHeader>
-                                            <CardTitle className="text-lg">{item.question}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p className="text-muted-foreground">{item.answer}</p>
+                                {topic.isTable ? (
+                                     <Card>
+                                        <CardContent className="p-0">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-[120px]">Seção</TableHead>
+                                                        <TableHead>Descrição</TableHead>
+                                                        <TableHead>Exemplo</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {(topic.content as {secao: string; descricao: string; localizacao: string; exemplo: string}[]).map((item) => (
+                                                        <TableRow key={item.secao}>
+                                                            <TableCell className="font-semibold">{item.secao}</TableCell>
+                                                            <TableCell>
+                                                                <p>{item.descricao}</p>
+                                                                <p className="text-xs text-muted-foreground">Em: {item.localizacao}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <code className="bg-muted text-foreground font-mono p-1 rounded-sm text-xs">{item.exemplo}</code>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
                                         </CardContent>
                                     </Card>
-                                ))}
+                                ) : (
+                                    (topic.content as {question: string; answer: string}[]).map((item, index) => (
+                                        <Card key={index}>
+                                            <CardHeader>
+                                                <CardTitle className="text-lg">{item.question}</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <p className="text-muted-foreground">{item.answer}</p>
+                                            </CardContent>
+                                        </Card>
+                                    ))
+                                )}
                             </AccordionContent>
                         </AccordionItem>
                     );
