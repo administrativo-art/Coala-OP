@@ -12,7 +12,7 @@ import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { CategoryManagementModal } from "./category-management-modal";
@@ -116,6 +116,19 @@ export function PricingSimulator() {
     }, [categoryFilter, lineFilter, categoryMap]);
 
     const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
+    
+    const handleFilterChange = (value: string) => {
+        if (value === 'all') {
+            setCategoryFilter('all');
+            setLineFilter('all');
+        } else if (value.startsWith('cat-')) {
+            setCategoryFilter(value.replace('cat-', ''));
+            setLineFilter('all');
+        } else if (value.startsWith('line-')) {
+            setCategoryFilter('all');
+            setLineFilter(value.replace('line-', ''));
+        }
+    };
     
     const renderTable = () => {
         if (isLoading) {
@@ -224,19 +237,31 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                     <div className="flex flex-wrap items-center gap-2 mb-4">
-                        <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova análise
-                        </Button>
-                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                        </Button>
-                    </div>
+                    <Tabs defaultValue="dashboard" className="w-full">
+                         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                            <TabsList>
+                                <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
+                                <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
+                            </TabsList>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button onClick={handleAddNew}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Nova análise
+                                </Button>
+                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                </Button>
+                                 {permissions.pricing.manageParameters && (
+                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        Parâmetros
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
 
-                     <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
-                        <div className="flex flex-col sm:flex-row gap-2 w-full">
-                            <div className="relative flex-grow">
+                         <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
+                            <div className="relative flex-grow w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input 
                                     placeholder="Buscar por nome da mercadoria..."
@@ -245,39 +270,33 @@ export function PricingSimulator() {
                                     className="pl-10"
                                 />
                             </div>
-                            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                                <SelectTrigger className="w-full sm:w-[200px]">
-                                    <SelectValue placeholder="Filtrar por categoria" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas as categorias</SelectItem>
-                                    {mainCategories.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Select value={lineFilter} onValueChange={setLineFilter}>
-                                <SelectTrigger className="w-full sm:w-[200px]">
-                                    <SelectValue placeholder="Filtrar por linha" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas as linhas</SelectItem>
-                                    {lines.map(l => (
-                                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
-                                <Eraser className="mr-2 h-4 w-4" />
-                                Limpar
-                            </Button>
+                             <div className="flex gap-2 w-full md:w-auto">
+                                <Select onValueChange={handleFilterChange}>
+                                    <SelectTrigger className="w-full md:w-[250px]">
+                                        <SelectValue placeholder="Filtrar por categoria ou linha" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todas</SelectItem>
+                                        <SelectGroup>
+                                            <SelectLabel>Categorias</SelectLabel>
+                                            {mainCategories.map(c => (
+                                                <SelectItem key={c.id} value={`cat-${c.id}`}>{c.name}</SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                        <SelectGroup>
+                                            <SelectLabel>Linhas</SelectLabel>
+                                            {lines.map(l => (
+                                                <SelectItem key={l.id} value={`line-${l.id}`}>{l.name}</SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                                <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
+                                    <Eraser className="mr-2 h-4 w-4" />
+                                    Limpar
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                     <Tabs defaultValue="dashboard" className="w-full">
-                        <TabsList>
-                            <TabsTrigger value="dashboard"><BarChart3 />Dashboard Gerencial</TabsTrigger>
-                            <TabsTrigger value="table"><TableIcon />Análise Detalhada</TabsTrigger>
-                        </TabsList>
                         <TabsContent value="dashboard" className="mt-4">
                             <PricingDashboard 
                                 simulations={simulationsByCategory} 
@@ -293,14 +312,6 @@ export function PricingSimulator() {
                     </Tabs>
 
                 </CardContent>
-                 <CardFooter className="border-t px-6 py-4">
-                    {permissions.pricing.manageParameters && (
-                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                            <Settings className="mr-2 h-4 w-4" />
-                            Configurar parâmetros
-                        </Button>
-                    )}
-                </CardFooter>
             </Card>
 
             <AddEditSimulationModal 
