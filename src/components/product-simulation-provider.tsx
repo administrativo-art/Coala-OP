@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -114,25 +113,28 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         if (!user) return;
         
         const now = new Date().toISOString();
-        const { items, id, ...simulationData } = data;
-        const simulationRef = doc(db, "productSimulations", id);
+        const { items, id: simulationId, ...simulationData } = data;
+        const simulationRef = doc(db, "productSimulations", simulationId);
         
         try {
             const batch = writeBatch(db);
             
-            // Update simulation document
-            batch.update(simulationRef, { ...simulationData, updatedAt: now });
+            const { createdAt, userId, status, ...restOfData } = simulationData;
+            const updatePayload = {
+              ...restOfData,
+              updatedAt: now
+            };
 
-            // Delete old items
-            const oldItemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", id));
+            batch.update(simulationRef, updatePayload);
+
+            const oldItemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
             const oldItemsSnapshot = await getDocs(oldItemsQuery);
             oldItemsSnapshot.forEach(doc => batch.delete(doc.ref));
 
-            // Add new items
             items.forEach(item => {
                 const itemRef = doc(collection(db, "productSimulationItems"));
                  const newItem: Omit<ProductSimulationItem, 'id'> = {
-                    simulationId: id,
+                    simulationId: simulationId,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
                     useDefault: item.useDefault,
@@ -152,10 +154,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         try {
             const batch = writeBatch(db);
             
-            // Delete simulation
             batch.delete(doc(db, "productSimulations", simulationId));
 
-            // Delete associated items
             const itemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
             const itemsSnapshot = await getDocs(itemsQuery);
             itemsSnapshot.forEach(doc => batch.delete(doc.ref));
