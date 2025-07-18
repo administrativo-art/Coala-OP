@@ -7,7 +7,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder, Settings } from "lucide-react";
+import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Folder } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation, type SimulationCategory } from "@/types";
@@ -37,6 +37,7 @@ export function PricingSimulator() {
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
+    const [lineFilter, setLineFilter] = useState('all');
 
 
     const handleAddNew = () => {
@@ -68,11 +69,15 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
     
+    const mainCategories = useMemo(() => categories.filter(c => c.parentId === null), [categories]);
+    const lines = useMemo(() => categories.filter(c => c.parentId !== null), [categories]);
+    
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = sim.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter || sim.lineId === categoryFilter;
-            return searchMatch && categoryMatch;
+            const categoryMatch = categoryFilter === 'all' || sim.categoryId === categoryFilter;
+            const lineMatch = lineFilter === 'all' || sim.lineId === lineFilter;
+            return searchMatch && categoryMatch && lineMatch;
         });
 
         const grouped: Record<string, ProductSimulation[]> = {};
@@ -84,13 +89,14 @@ export function PricingSimulator() {
             }
             grouped[categoryName].push(sim);
         });
+        
         return Object.entries(grouped).sort(([catA], [catB]) => {
             if (catA === 'Sem Categoria') return 1;
             if (catB === 'Sem Categoria') return -1;
             return catA.localeCompare(catB);
         });
 
-    }, [simulations, searchTerm, categoryFilter, categoryMap]);
+    }, [simulations, searchTerm, categoryFilter, lineFilter, categoryMap]);
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
 
@@ -138,15 +144,20 @@ export function PricingSimulator() {
                     const category = categories.find(c => c.name === categoryName);
                     return (
                         <div key={categoryName}>
-                            {categoryName !== 'Sem Categoria' && (
+                            {categoryName !== 'Sem Categoria' && category?.color && (
                                 <h3 className="font-semibold text-lg flex items-center gap-2 text-primary my-3">
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category.color }}></div>
+                                  {categoryName}
                                 </h3>
                             )}
                             <Accordion type="multiple" className="w-full space-y-3">
                                 {sims.map(sim => {
                                     const items = simulationItems.filter(item => item.simulationId === sim.id);
+                                    const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+                                    const shadowColor = category?.color ? `${category.color}99` : 'rgba(0,0,0,0.1)';
+                                    
                                     return (
-                                        <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: category?.color ? `0 4px 12px -1px ${category.color}50` : 'none', transition: 'box-shadow 0.3s' }}>
+                                        <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ boxShadow: `0 4px 14px -1px ${shadowColor}`, transition: 'box-shadow 0.3s' }}>
                                             <div className="flex items-center">
                                             <AccordionTrigger className="p-4 flex-1 hover:no-underline">
                                                 <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
@@ -239,16 +250,23 @@ export function PricingSimulator() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Todas as Categorias</SelectItem>
-                                {categories.filter(c => c.parentId === null).map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                                <SelectItem value="lines" disabled>--- Linhas ---</SelectItem>
-                                {categories.filter(c => c.parentId !== null).map(c => (
+                                {mainCategories.map(c => (
                                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); }}>
+                         <Select value={lineFilter} onValueChange={setLineFilter}>
+                            <SelectTrigger className="w-full sm:w-[250px]">
+                                <SelectValue placeholder="Filtrar por linha" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas as Linhas</SelectItem>
+                                {lines.map(l => (
+                                    <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
                             <Eraser className="mr-2 h-4 w-4" />
                             Limpar
                         </Button>
