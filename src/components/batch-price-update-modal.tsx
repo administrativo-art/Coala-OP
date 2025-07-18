@@ -18,8 +18,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { type ProductSimulation } from '@/types';
+import { Loader2, ArrowUp, ArrowDown, Filter } from 'lucide-react';
+import { type ProductSimulation, type SimulationCategory } from '@/types';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 import { Label } from './ui/label';
 
@@ -41,6 +41,10 @@ interface BatchPriceUpdateModalProps {
     valueType: 'percentage' | 'fixed',
     value: number
   ) => Promise<void>;
+  activeFilters: {
+    categoryName: string | null;
+    lineName: string | null;
+  }
 }
 
 export function BatchPriceUpdateModal({
@@ -48,6 +52,7 @@ export function BatchPriceUpdateModal({
   onOpenChange,
   simulationsToUpdate,
   onConfirm,
+  activeFilters
 }: BatchPriceUpdateModalProps) {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -76,11 +81,23 @@ export function BatchPriceUpdateModal({
         <DialogHeader>
           <DialogTitle>Alteração de Preço em Lote</DialogTitle>
           <DialogDescription>
-            Aplique um reajuste de preço a todos os {simulationsToUpdate.length} itens que correspondem aos seus filtros atuais.
+            Aplique um reajuste de preço a todos os {simulationsToUpdate.length} itens que correspondem aos filtros atuais.
           </DialogDescription>
         </DialogHeader>
+        <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
+            <h4 className="flex items-center gap-2 text-sm font-semibold">
+                <Filter className="h-4 w-4" />
+                Filtros Ativos
+            </h4>
+            <p className="text-xs text-muted-foreground">
+                <strong>Categoria:</strong> {activeFilters.categoryName || 'Todas'}
+            </p>
+             <p className="text-xs text-muted-foreground">
+                <strong>Linha:</strong> {activeFilters.lineName || 'Todas'}
+            </p>
+        </div>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 pt-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             <FormField
               control={form.control}
               name="adjustmentType"

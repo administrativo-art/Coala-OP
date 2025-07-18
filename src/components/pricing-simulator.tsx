@@ -97,7 +97,7 @@ export function PricingSimulator() {
         const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
         
         for (const range of sortedRanges) {
-            if (percentage >= range.from && percentage <= range.to) {
+            if (percentage >= range.from && percentage < range.to) {
                 return range.color;
             }
         }
@@ -106,6 +106,12 @@ export function PricingSimulator() {
     };
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
+    
+    const activeFilters = useMemo(() => {
+        const categoryName = categoryFilter === 'all' ? null : categoryMap.get(categoryFilter)?.name || null;
+        const lineName = lineFilter === 'all' ? null : categoryMap.get(lineFilter)?.name || null;
+        return { categoryName, lineName };
+    }, [categoryFilter, lineFilter, categoryMap]);
 
     const renderContent = () => {
         if (isLoading) {
@@ -139,7 +145,7 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(120px,auto)] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(100px,auto)] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -154,15 +160,15 @@ export function PricingSimulator() {
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_120px] items-center gap-4 px-4 py-2 text-sm w-full">
-                                        <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left col-span-1">
-                                            {sim.name}
+                                    <div className="flex items-center gap-4 px-4 py-2 text-sm w-full">
+                                        <AccordionTrigger className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] flex-1 items-center gap-4 p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left">
+                                            <span>{sim.name}</span>
+                                            <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                            <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                            <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                            <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
                                         </AccordionTrigger>
-                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                        <div className="flex items-center gap-1 shrink-0 justify-center">
+                                        <div className="flex items-center gap-1 shrink-0 justify-center w-[100px]">
                                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                                 <Edit className="h-4 w-4" />
                                             </Button>
@@ -297,6 +303,7 @@ export function PricingSimulator() {
                 onOpenChange={setIsBatchUpdateModalOpen}
                 simulationsToUpdate={simulationsByCategory}
                 onConfirm={bulkUpdatePrices}
+                activeFilters={activeFilters}
             />
 
             {simulationToDelete && (
