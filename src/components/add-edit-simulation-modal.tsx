@@ -186,19 +186,20 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
   };
 
   const onSubmit = async (values: SimulationFormValues) => {
-    const finalData = {
-      ...values,
-      lineId: values.lineId || null,
-      categoryId: values.categoryId || null,
-      totalCmv: cmv,
-      grossCost,
-      profitValue,
-      profitPercentage,
-    };
-
     if (simulationToEdit) {
-      await updateSimulation({ ...simulationToEdit, ...finalData });
+      const simulationData = { ...simulationToEdit, ...values };
+      const items = values.items;
+      await updateSimulation(simulationData, items);
     } else {
+       const finalData = {
+        ...values,
+        lineId: values.lineId || null,
+        categoryId: values.categoryId || null,
+        totalCmv: cmv,
+        grossCost,
+        profitValue,
+        profitPercentage,
+      };
       await addSimulation(finalData);
     }
     onOpenChange(false);
@@ -282,7 +283,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                         <span className="w-8"></span>
                     </div>
                     {fields.map((field, index) => {
-                        if (!watchedItems[index]) return null;
+                        if (!watchedItems || !watchedItems[index]) return null;
                         const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                         const useDefault = watchedItems[index].useDefault;
                         const hasDefaultCost = !!baseProduct?.lastEffectivePrice;
