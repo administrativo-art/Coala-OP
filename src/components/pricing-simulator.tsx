@@ -226,6 +226,15 @@ export function PricingSimulator() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="flex justify-end gap-2 mb-4">
+                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                        </Button>
+                         <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nova Análise
+                        </Button>
+                    </div>
                     <div className="flex flex-col sm:flex-row gap-2 p-3 border rounded-lg bg-muted/50 mb-4">
                         <div className="relative flex-grow">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -261,13 +270,6 @@ export function PricingSimulator() {
                         <Button variant="ghost" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setLineFilter("all"); }}>
                             <Eraser className="mr-2 h-4 w-4" />
                             Limpar
-                        </Button>
-                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                        </Button>
-                         <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Nova Análise
                         </Button>
                     </div>
                    {renderContent()}
