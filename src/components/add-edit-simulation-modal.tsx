@@ -241,6 +241,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit }:
                                             {subCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
+                                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-5 w-5" /></Button>
                                 </div>
                                 <FormMessage />
                             </FormItem>
