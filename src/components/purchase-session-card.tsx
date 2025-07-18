@@ -87,6 +87,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                             baseProductId={bp.id}
                                             items={sessionItems}
                                             sessionId={session.id}
+                                            isSessionClosed={isSessionClosed}
                                         />
                                     </AccordionContent>
                                 </Card>

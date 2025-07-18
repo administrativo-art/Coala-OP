@@ -23,6 +23,7 @@ interface PriceComparisonTableProps {
     baseProductId: string;
     items: PurchaseItem[];
     sessionId: string;
+    isSessionClosed: boolean;
 }
 
 interface PriceRow {
@@ -34,7 +35,7 @@ interface PriceRow {
     purchaseItem?: PurchaseItem;
 }
 
-export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceComparisonTableProps) {
+export function PriceComparisonTable({ baseProductId, items, sessionId, isSessionClosed }: PriceComparisonTableProps) {
     const { getProductFullName, products } = useProducts();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
@@ -61,7 +62,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
     }, [linkedProducts, items]);
 
     useEffect(() => {
-        if (!sessionId) return;
+        if (!sessionId || isSessionClosed) return;
         
         Object.entries(debouncedPrices).forEach(([productId, priceStr]) => {
             const price = parseFloat(priceStr);
@@ -72,7 +73,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                 }
             }
         });
-    }, [debouncedPrices, sessionId, savePrice, items]);
+    }, [debouncedPrices, sessionId, savePrice, items, isSessionClosed]);
 
     const handlePriceChange = (productId: string, value: string) => {
         setPrices(prev => ({ ...prev, [productId]: value }));
@@ -178,7 +179,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                     placeholder="0,00"
                                     value={row.price}
                                     onChange={e => handlePriceChange(row.product.id, e.target.value)}
-                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed}
+                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed || isSessionClosed}
                                 />
                             </TableCell>
                             <TableCell>
@@ -212,7 +213,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId }: PriceC
                                                 <Button 
                                                     size="sm" 
                                                     onClick={() => handleConfirm(row.product.id, row.pricePerUnit)}
-                                                    disabled={!canApprove || !row.purchaseItem || row.purchaseItem.isConfirmed || !row.pricePerUnit}
+                                                    disabled={!canApprove || !row.purchaseItem || row.purchaseItem.isConfirmed || !row.pricePerUnit || isSessionClosed}
                                                 >
                                                     Efetivar
                                                 </Button>
