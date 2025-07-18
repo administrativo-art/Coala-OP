@@ -68,12 +68,6 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
         }
     }, [editingLine, lineForm]);
 
-
-    const handleCancelEdit = () => {
-        setEditingCategory(null);
-        setEditingLine(null);
-    };
-    
     const handleDeleteClick = (category: SimulationCategory) => {
         const isUsed = simulations.some(s => s.categoryId === category.id || s.lineId === category.id);
         if (isUsed) {
@@ -90,15 +84,17 @@ export function CategoryManagementModal({ open, onOpenChange }: { open: boolean,
             await addCategory({ ...values, type: 'category' });
         }
         setEditingCategory(null);
+        categoryForm.reset({ name: '', color: '#F87171' });
     };
     
     const onLineSubmit = async (values: LineFormValues) => {
         if (editingLine) {
             await updateCategory({ ...editingLine, name: values.name });
+            setEditingLine(null);
         } else {
             await addCategory({ name: values.name, color: '', type: 'line' });
         }
-        setEditingLine(null);
+        lineForm.reset({ name: '' });
     };
 
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
