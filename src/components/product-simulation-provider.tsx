@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,11 +22,13 @@ interface SimulationData {
     }[];
     operationPercentage?: number;
     salePrice?: number;
+    profitGoal?: number;
     notes?: string;
     totalCmv: number;
     grossCost: number;
     profitValue: number;
     profitPercentage: number;
+    markup: number;
 }
 
 export interface ProductSimulationContextType {
@@ -192,12 +195,14 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
             const newProfitValue = newSalePrice - sim.grossCost;
             const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
+            const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
 
             const simRef = doc(db, "productSimulations", sim.id);
             batch.update(simRef, {
                 salePrice: newSalePrice,
                 profitValue: newProfitValue,
                 profitPercentage: newProfitPercentage,
+                markup: newMarkup,
                 updatedAt: now,
             });
         });

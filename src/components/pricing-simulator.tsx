@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -6,7 +7,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulation } from "@/types";
 import { Skeleton } from "./ui/skeleton";
@@ -22,7 +23,6 @@ import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "./pricing-dashboard";
-import { BarChart3, Table as TableIcon } from "lucide-react";
 
 
 const formatCurrency = (value: number) => {
@@ -93,9 +93,12 @@ export function PricingSimulator() {
 
     }, [simulations, searchTerm, categoryFilter, lineFilter]);
 
-    const getProfitColorClass = (percentage: number) => {
+    const getProfitColorClass = (percentage: number, goal?: number) => {
+        if (goal !== undefined && goal !== null) {
+            return percentage >= goal ? 'text-green-600' : 'text-destructive';
+        }
+        
         if (!pricingParameters?.profitRanges) return 'text-primary';
-
         const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
         
         for (const range of sortedRanges) {
@@ -104,7 +107,7 @@ export function PricingSimulator() {
             }
         }
         
-        return 'text-primary'; // Default color if no range matches
+        return 'text-primary';
     };
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
@@ -115,7 +118,7 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
+    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
     
     const handleFilterChange = (value: string) => {
         if (value === 'all') {
@@ -125,7 +128,6 @@ export function PricingSimulator() {
             setCategoryFilter(value.replace('cat-', ''));
             setLineFilter('all');
         } else if (value.startsWith('line-')) {
-            // Se uma linha é selecionada, a categoria principal é inferida ou pode ser resetada
             const line = lines.find(l => l.id === value.replace('line-', ''));
             setCategoryFilter(line?.parentId || 'all');
             setLineFilter(value.replace('line-', ''));
@@ -167,14 +169,17 @@ export function PricingSimulator() {
                 <div className={cn("py-2 font-semibold text-muted-foreground", gridClass)}>
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
-                    <div className="text-right">CMV</div>
-                    <div className="text-right">Lucro</div>
+                    <div className="text-right">CMV Total</div>
+                    <div className="text-right">Markup</div>
+                    <div className="text-right">Meta Lucro</div>
                     <div className="text-right">Lucro %</div>
+                    <div className="text-center">Status</div>
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
+                        const profitColorClass = getProfitColorClass(sim.profitPercentage, sim.profitGoal);
+                        const meetsGoal = sim.profitGoal !== undefined && sim.profitPercentage >= sim.profitGoal;
                         
                         return (
                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
@@ -186,9 +191,19 @@ export function PricingSimulator() {
                                         {sim.name}
                                     </div>
                                     <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                    <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                    <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                    <div className="text-right">{formatCurrency(sim.grossCost)}</div>
+                                    <div className="text-right">{(sim.markup * 100).toFixed(1)}%</div>
+                                    <div className="text-right font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</div>
                                     <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
+                                    <div className="text-center">
+                                        {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
+                                            meetsGoal ? (
+                                                <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
+                                            ) : (
+                                                <AlertTriangle className="h-5 w-5 text-orange-500 mx-auto" />
+                                            )
+                                        ) : null}
+                                    </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-4 pb-4 bg-background">
                                     <div className="overflow-x-auto pt-2">
@@ -250,14 +265,14 @@ export function PricingSimulator() {
                             <PricingDashboard 
                                 simulations={simulationsByCategory} 
                                 isLoading={isLoading}
-                                getProfitColorClass={getProfitColorClass}
+                                getProfitColorClass={(p) => getProfitColorClass(p)}
                                 formatCurrency={formatCurrency}
                                 pricingParameters={pricingParameters}
                             />
                         </TabsContent>
                         <TabsContent value="table" className="mt-4">
                             <div className="space-y-4">
-                                <div className="flex flex-wrap items-center gap-2">
+                               <div className="flex flex-wrap items-center gap-2">
                                     <Button onClick={handleAddNew}>
                                         <PlusCircle className="mr-2 h-4 w-4" />
                                         Nova análise
@@ -274,7 +289,7 @@ export function PricingSimulator() {
                                 </div>
                                 
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                                    <div className="relative flex-grow w-full">
+                                     <div className="relative flex-grow w-full">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                         <Input 
                                             placeholder="Buscar por nome da mercadoria..."

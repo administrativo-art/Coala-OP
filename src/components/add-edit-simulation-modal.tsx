@@ -46,6 +46,7 @@ const simulationSchema = z.object({
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
+  profitGoal: z.coerce.number().optional(),
   notes: z.string().optional(),
 }).superRefine((data, ctx) => {
     data.items.forEach((item, index) => {
@@ -101,7 +102,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, notes: '' },
+    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -129,10 +130,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 items: itemsForForm,
                 operationPercentage: simulationToEdit.operationPercentage,
                 salePrice: simulationToEdit.salePrice,
+                profitGoal: simulationToEdit.profitGoal,
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, notes: '' });
+            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' });
         }
         setAiAnalysis(null);
         setSensitivityQuestion('');
@@ -197,6 +199,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     if (price === 0) return 0;
     return (profitValue / price) * 100;
   }, [profitValue, watchedSalePrice]);
+
+  const markup = useMemo(() => {
+    if (grossCost === 0) return 0;
+    return (watchedSalePrice || 0) / grossCost -1;
+  }, [grossCost, watchedSalePrice]);
 
   const handleAddItem = (baseProductId: string) => {
     const product = baseProducts.find(bp => bp.id === baseProductId);
@@ -272,6 +279,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         grossCost,
         profitValue,
         profitPercentage,
+        markup
       };
       const items = values.items;
       await updateSimulation(simulationData, items);
@@ -284,6 +292,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         grossCost,
         profitValue,
         profitPercentage,
+        markup,
       };
       await addSimulation(finalData);
     }
@@ -510,6 +519,23 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                         </FormControl>
                       </FormItem>
                     )}/>
+                      <FormField control={form.control} name="profitGoal" render={({ field }) => (
+                        <FormItem className="flex justify-between items-center">
+                            <FormLabel>Meta de Lucro</FormLabel>
+                             <FormControl>
+                                 <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value || '')}>
+                                    <SelectTrigger className="w-32">
+                                        <SelectValue placeholder="Meta..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(pricingParameters?.profitGoals || []).map(goal => (
+                                            <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </FormControl>
+                        </FormItem>
+                      )}/>
                       <div className="flex justify-between items-center text-green-600 font-bold">
                         <span>= Lucro bruto</span>
                         <div className="text-right">

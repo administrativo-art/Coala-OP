@@ -182,10 +182,12 @@ export type ProductSimulation = {
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;
   operationPercentage: number;
+  profitGoal?: number;
   totalCmv: number;
   grossCost: number;
   profitValue: number;
   profitPercentage: number;
+  markup: number;
   notes?: string;
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
@@ -499,6 +501,7 @@ export type ProfitRange = {
 export type PricingParameters = {
   defaultOperationPercentage: number;
   profitRanges: ProfitRange[];
+  profitGoals: number[];
 };
 
 export const defaultGuestPermissions: PermissionSet = {

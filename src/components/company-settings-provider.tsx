@@ -30,6 +30,7 @@ const defaultPricingParameters: PricingParameters = {
     { id: '3', from: 30, to: 50, color: 'text-yellow-500' },
     { id: '4', from: 50, to: Infinity, color: 'text-green-600' },
   ],
+  profitGoals: [45, 50, 55, 60, 65]
 };
 
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -26,6 +27,7 @@ const profitRangeSchema = z.object({
 const parametersSchema = z.object({
   defaultOperationPercentage: z.coerce.number().min(0, "Deve ser um valor positivo."),
   profitRanges: z.array(profitRangeSchema),
+  profitGoals: z.array(z.coerce.number().min(0).max(100)),
 });
 
 type ParametersFormValues = z.infer<typeof parametersSchema>;
@@ -56,17 +58,24 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
     name: 'profitRanges',
   });
 
+  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({
+    control: form.control,
+    name: 'profitGoals',
+  });
+
   useEffect(() => {
     if (open && pricingParameters) {
       form.reset({
         defaultOperationPercentage: pricingParameters.defaultOperationPercentage,
         profitRanges: pricingParameters.profitRanges,
+        profitGoals: pricingParameters.profitGoals || [45, 50, 55, 60],
       });
     }
   }, [open, pricingParameters, form]);
 
   const onSubmit = (values: ParametersFormValues) => {
-    updatePricingParameters(values);
+    const sortedGoals = [...values.profitGoals].sort((a,b) => a - b);
+    updatePricingParameters({...values, profitGoals: sortedGoals });
     onOpenChange(false);
   };
 
@@ -97,6 +106,37 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                     </FormItem>
                   )}
                 />
+                
+                <div>
+                  <FormLabel>Metas de Lucro Disponíveis (%)</FormLabel>
+                   <div className="space-y-2 mt-2 p-3 border rounded-lg">
+                      {goalFields.map((field, index) => (
+                          <div key={field.id} className="flex items-center gap-2">
+                            <FormField
+                                control={form.control}
+                                name={`profitGoals.${index}`}
+                                render={({ field }) => (
+                                    <FormItem className="flex-grow">
+                                    <FormControl>
+                                      <div className="relative">
+                                        <Input type="number" className="pr-8" {...field} />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeGoal(index)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                      ))}
+                      <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendGoal(50)}>
+                          <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta
+                      </Button>
+                   </div>
+                </div>
 
                 <div>
                   <FormLabel>Faixas de lucratividade</FormLabel>
