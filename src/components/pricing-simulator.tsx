@@ -149,66 +149,66 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className={cn("hidden md:grid gap-4 px-4 py-2 font-semibold text-muted-foreground", gridClass)}>
+                <div className={cn("px-4 py-2 font-semibold text-muted-foreground", gridClass)}>
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
                     <div className="text-right">Lucro</div>
                     <div className="text-right">Lucro %</div>
                 </div>
-                 <Accordion type="multiple" className="w-full space-y-3">
-                    {simulationsByCategory.map(sim => {
-                            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                            const profitColorClass = getProfitColorClass(sim.profitPercentage);
-                            
-                            return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
-                                        <div
-                                            className="font-semibold text-left hover:underline cursor-pointer"
-                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
-                                        >
-                                            {sim.name}
-                                        </div>
-                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
-                                        <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="px-4 pb-4 bg-muted/50">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full">
-                                                <thead>
-                                                    <tr className="border-b">
-                                                        <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
-                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
-                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
-                                                        <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo do item</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
-                                                        const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                        const cost = (item.overrideCostPerUnit || 0) * item.quantity;
-                                                        return (
-                                                            <tr key={item.id} className="border-b">
-                                                                <td className="p-2">{baseProductInfo?.name || 'Insumo não encontrado'}</td>
-                                                                <td className="p-2 text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</td>
-                                                                <td className="p-2 text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</td>
-                                                                <td className="p-2 text-right font-semibold text-primary">{formatCurrency(cost)}</td>
-                                                            </tr>
-                                                        )
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            );
-                        })
-                    }
-                </Accordion>
-            </div>
+                <Accordion type="multiple" className="w-full space-y-3">
+                {simulationsByCategory.map(sim => {
+                        const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
+                        
+                        return (
+                            <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
+                                <AccordionTrigger className={cn("p-4 hover:no-underline", gridClass)}>
+                                    <div
+                                        className="font-semibold text-left hover:underline cursor-pointer"
+                                        onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                    >
+                                        {sim.name}
+                                    </div>
+                                    <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                    <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                    <div className={cn("text-right font-bold", profitColorClass)}>{formatCurrency(sim.profitValue)}</div>
+                                    <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-4 bg-background">
+                                    <div className="overflow-x-auto pt-2">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="border-b">
+                                                    <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
+                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
+                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
+                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo do item</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
+                                                    const baseProductInfo = baseProductMap.get(item.baseProductId);
+                                                    const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                                                    return (
+                                                        <tr key={item.id} className="border-b">
+                                                            <td className="p-2">{baseProductInfo?.name || 'Insumo não encontrado'}</td>
+                                                            <td className="p-2 text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</td>
+                                                            <td className="p-2 text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</td>
+                                                            <td className="p-2 text-right font-semibold text-primary">{formatCurrency(cost)}</td>
+                                                        </tr>
+                                                    )
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        );
+                    })
+                }
+            </Accordion>
+        </div>
         )
     };
 
