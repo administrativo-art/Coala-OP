@@ -6,6 +6,7 @@ import { usePurchase } from '@/hooks/use-purchase';
 import { useProducts } from '@/hooks/use-products';
 import { useEntities } from '@/hooks/use-entities';
 import { useAuth } from '@/hooks/use-auth';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -15,12 +16,14 @@ import { Inbox, Search, Package, Building, Eraser } from 'lucide-react';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Button } from './ui/button';
+import { convertValue } from '@/lib/conversion';
 
 export function PriceHistoryDashboard() {
     const { priceHistory, loading } = usePurchase();
     const { getProductFullName, products } = useProducts();
     const { users } = useAuth();
     const { entities } = useEntities();
+    const { baseProducts } = useBaseProducts();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [productFilter, setProductFilter] = useState('all');
@@ -29,16 +32,27 @@ export function PriceHistoryDashboard() {
     const enrichedHistory = useMemo(() => {
         return priceHistory.map(entry => {
             const product = products.find(p => p.id === entry.productId);
+            const baseProduct = baseProducts.find(bp => bp.id === entry.baseProductId);
             const entity = entities.find(e => e.id === entry.entityId);
             const user = users.find(u => u.id === entry.confirmedBy);
+
+            let packagePrice = null;
+            if (product && baseProduct && entry.pricePerUnit) {
+                const packageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                if (packageSizeInBase > 0) {
+                    packagePrice = entry.pricePerUnit * packageSizeInBase;
+                }
+            }
+
             return {
                 ...entry,
                 productName: product ? getProductFullName(product) : 'Insumo não encontrado',
                 entityName: entity?.name || 'Fornecedor não encontrado',
                 confirmedByUsername: user?.username || 'Usuário desconhecido',
+                packagePrice,
             };
         });
-    }, [priceHistory, products, entities, users, getProductFullName]);
+    }, [priceHistory, products, entities, users, baseProducts, getProductFullName]);
 
     const filteredHistory = useMemo(() => {
         return enrichedHistory.filter(entry => {
@@ -122,7 +136,10 @@ export function PriceHistoryDashboard() {
                                         <TableCell className="font-medium">{entry.productName}</TableCell>
                                         <TableCell>{entry.entityName}</TableCell>
                                         <TableCell className="font-semibold text-primary">
-                                            {entry.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                            {entry.packagePrice !== null 
+                                                ? entry.packagePrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'N/A'
+                                            }
                                         </TableCell>
                                         <TableCell>{entry.confirmedByUsername}</TableCell>
                                         <TableCell className="text-right">
