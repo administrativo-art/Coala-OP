@@ -135,18 +135,16 @@ export function PricingSimulator() {
                             const borderColor = category?.color || 'hsl(var(--border))';
                             
                             return (
-                                <AccordionItem value={sim.id} key={sim.id} className="border-none rounded-lg" style={{ border: `2px solid ${borderColor}`, transition: 'border-color 0.3s' }}>
-                                    <div className="flex items-center p-4">
-                                        <AccordionTrigger className="p-0 flex-1 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                                            <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 text-sm w-full">
-                                                <div className="font-semibold text-left">{sim.name}</div>
-                                                <div className="text-right">{formatCurrency(sim.salePrice)}</div>
-                                                <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
-                                                <div className={cn("text-right font-bold", sim.profitValue >= 0 ? 'text-green-600' : 'text-destructive')}>{formatCurrency(sim.profitValue)}</div>
-                                                <div className={cn("text-right font-bold", sim.profitPercentage >= 0 ? 'text-primary' : 'text-destructive')}>{sim.profitPercentage.toFixed(2)}%</div>
-                                            </div>
+                                <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg" style={{ borderColor: borderColor }}>
+                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 px-4 py-2 text-sm w-full">
+                                        <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left col-span-1">
+                                            {sim.name}
                                         </AccordionTrigger>
-                                        <div className="flex items-center gap-1 shrink-0 justify-center pl-2">
+                                        <div className="text-right">{formatCurrency(sim.salePrice)}</div>
+                                        <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
+                                        <div className={cn("text-right font-bold", sim.profitValue >= 0 ? 'text-green-600' : 'text-destructive')}>{formatCurrency(sim.profitValue)}</div>
+                                        <div className={cn("text-right font-bold", sim.profitPercentage >= 0 ? 'text-primary' : 'text-destructive')}>{sim.profitPercentage.toFixed(2)}%</div>
+                                        <div className="flex items-center gap-1 shrink-0 justify-center">
                                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                                 <Edit className="h-4 w-4" />
                                             </Button>
