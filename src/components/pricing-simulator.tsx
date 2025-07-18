@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Settings } from "lucide-react";
+import { PlusCircle, Inbox, Trash2, Edit, Search, Eraser, Settings, Layers } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type ProductSimulation, type SimulationCategory } from "@/types";
@@ -20,6 +20,7 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { CategoryManagementModal } from "./category-management-modal";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
+import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 
 const formatCurrency = (value: number) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -30,7 +31,7 @@ const formatCurrency = (value: number) => {
 
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation } = useProductSimulation();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters } = useCompanySettings();
@@ -38,6 +39,7 @@ export function PricingSimulator() {
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
+    const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToDelete, setSimulationToDelete] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -147,13 +149,12 @@ export function PricingSimulator() {
                 </div>
                  <Accordion type="multiple" className="w-full space-y-3">
                     {simulationsByCategory.map(sim => {
-                            const items = simulationItems.filter(item => item.simulationId === sim.id);
                             const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
                             const profitColorClass = getProfitColorClass(sim.profitPercentage);
                             
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(120px,auto)] items-center gap-4 px-4 py-2 text-sm w-full">
+                                    <div className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_120px] items-center gap-4 px-4 py-2 text-sm w-full">
                                         <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left col-span-1">
                                             {sim.name}
                                         </AccordionTrigger>
@@ -181,7 +182,7 @@ export function PricingSimulator() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {items.map(item => {
+                                                {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                                                     const baseProductInfo = baseProductMap.get(item.baseProductId);
                                                     const cost = (item.overrideCostPerUnit || 0) * item.quantity;
                                                     return (
@@ -261,6 +262,9 @@ export function PricingSimulator() {
                             <Eraser className="mr-2 h-4 w-4" />
                             Limpar
                         </Button>
+                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                        </Button>
                     </div>
                    {renderContent()}
                 </CardContent>
@@ -286,6 +290,13 @@ export function PricingSimulator() {
             <PricingParametersModal
                 open={isParamsModalOpen}
                 onOpenChange={setIsParamsModalOpen}
+            />
+
+            <BatchPriceUpdateModal
+                open={isBatchUpdateModalOpen}
+                onOpenChange={setIsBatchUpdateModalOpen}
+                simulationsToUpdate={simulationsByCategory}
+                onConfirm={bulkUpdatePrices}
             />
 
             {simulationToDelete && (

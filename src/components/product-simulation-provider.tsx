@@ -35,6 +35,7 @@ export interface ProductSimulationContextType {
   addSimulation: (data: SimulationData) => Promise<void>;
   updateSimulation: (data: ProductSimulation & { items: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
+  bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
 }
 
 export const ProductSimulationContext = createContext<ProductSimulationContextType | undefined>(undefined);
@@ -165,6 +166,48 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error deleting simulation:", error);
         }
     }, []);
+    
+    const bulkUpdatePrices = useCallback(async (
+        simulationsToUpdate: ProductSimulation[],
+        adjustmentType: 'increase' | 'decrease',
+        valueType: 'percentage' | 'fixed',
+        value: number
+    ) => {
+        if (value <= 0) return;
+
+        const batch = writeBatch(db);
+        const now = new Date().toISOString();
+
+        simulationsToUpdate.forEach(sim => {
+            let newSalePrice = sim.salePrice;
+            const multiplier = adjustmentType === 'increase' ? 1 : -1;
+
+            if (valueType === 'percentage') {
+                newSalePrice = sim.salePrice * (1 + (value / 100) * multiplier);
+            } else { // fixed
+                newSalePrice = sim.salePrice + (value * multiplier);
+            }
+            
+            newSalePrice = Math.max(0, newSalePrice); // Ensure price doesn't go below zero
+
+            const newProfitValue = newSalePrice - sim.grossCost;
+            const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
+
+            const simRef = doc(db, "productSimulations", sim.id);
+            batch.update(simRef, {
+                salePrice: newSalePrice,
+                profitValue: newProfitValue,
+                profitPercentage: newProfitPercentage,
+                updatedAt: now,
+            });
+        });
+
+        try {
+            await batch.commit();
+        } catch (error) {
+            console.error("Error performing bulk price update:", error);
+        }
+    }, []);
 
 
     const value = useMemo(() => {
@@ -175,8 +218,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             addSimulation,
             updateSimulation,
             deleteSimulation,
+            bulkUpdatePrices,
         }
-    }, [simulations, simulationItems, loading, addSimulation, updateSimulation, deleteSimulation, baseProducts]);
+    }, [simulations, simulationItems, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
