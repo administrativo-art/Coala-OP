@@ -365,7 +365,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                   
                   <div className="rounded-md border p-2 space-y-2">
                     <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                        <span>Insumo base</span>
+                        <span className="col-span-1">Insumo base</span>
                         <span className="text-center">Qtd.</span>
                         <span className="text-center">Unid.</span>
                         <span className="text-right">Custo/unid.</span>
@@ -381,7 +381,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                         return (
                             <div key={field.id} className="p-2 rounded bg-muted/50">
                             <div className="grid grid-cols-[1fr_80px_100px_100px_100px_auto] items-center gap-x-2">
-                                <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
+                                <p className="font-medium truncate text-sm col-span-1" title={baseProduct?.name}>{baseProduct?.name}</p>
                                 <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                 <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                 )}/>
