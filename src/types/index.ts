@@ -195,10 +195,10 @@ export type ProductSimulation = {
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean; };
     lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-    users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean };
-    kiosks: { add: boolean; delete: boolean };
-    predefinedLists: { add: boolean; edit: boolean; delete: boolean };
-    forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean };
+    users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
+    kiosks: { add: boolean; delete: boolean; };
+    predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
+    forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean; };
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
