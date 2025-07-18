@@ -113,7 +113,7 @@ export function PricingSimulator() {
         return { categoryName, lineName };
     }, [categoryFilter, lineFilter, categoryMap]);
 
-    const gridClass = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 text-sm px-4";
+    const gridClass = "grid grid-cols-[minmax(0,2.5fr)_repeat(6,minmax(0,1fr))] items-center gap-4 text-sm px-4";
     
     const handleFilterChange = (value: string) => {
         if (value === 'all') {
@@ -178,27 +178,28 @@ export function PricingSimulator() {
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
                         
                         return (
-                            <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
+                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                 <AccordionTrigger className={cn("py-4 hover:no-underline", gridClass)}>
                                      <div
-                                        className="font-semibold text-left hover:underline cursor-pointer"
+                                        className="font-semibold text-left hover:underline cursor-pointer flex items-center"
                                         onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
                                     >
+                                        <Edit className="h-4 w-4 mr-2 text-muted-foreground invisible group-hover:visible" />
                                         {sim.name}
                                     </div>
                                     <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                     <div className="text-right">{formatCurrency(sim.grossCost)}</div>
-                                    <div className="text-right">{(sim.markup * 100).toFixed(1)}%</div>
+                                    <div className="text-right">{sim.markup.toFixed(1)}x</div>
                                     <div className="text-right font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</div>
                                     <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                    <div className="text-center">
+                                    <div className="flex justify-center">
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
                                             meetsGoal ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
+                                                <CheckCircle2 className="h-5 w-5 text-green-600" />
                                             ) : (
-                                                <AlertTriangle className="h-5 w-5 text-orange-500 mx-auto" />
+                                                <AlertTriangle className="h-5 w-5 text-orange-500" />
                                             )
-                                        ) : null}
+                                        ) : <div className="h-5 w-5" />}
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-4 pb-4 bg-background">
@@ -268,23 +269,23 @@ export function PricingSimulator() {
                         </TabsContent>
 
                         <TabsContent value="table" className="mt-4">
-                            <div className="space-y-4">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                      <Button onClick={handleAddNew}>
-                                          <PlusCircle className="mr-2 h-4 w-4" />
-                                          Nova análise
-                                      </Button>
-                                      <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                          <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                      </Button>
-                                      {permissions.pricing.manageParameters && (
-                                          <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                              <Settings className="mr-2 h-4 w-4" />
-                                              Parâmetros
-                                          </Button>
-                                      )}
-                                  </div>
+                             <div className="space-y-4">
+                                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button onClick={handleAddNew}>
+                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                            Nova análise
+                                        </Button>
+                                        <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                        </Button>
+                                        {permissions.pricing.manageParameters && (
+                                            <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                                <Settings className="mr-2 h-4 w-4" />
+                                                Parâmetros
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
                                      <div className="relative flex-grow w-full">
