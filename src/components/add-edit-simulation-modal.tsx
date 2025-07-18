@@ -561,14 +561,16 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             <DialogFooter className="pt-4 border-t mt-auto flex justify-between w-full">
               <div>
                 {simulationToEdit && (
-                    <Button type="button" variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir
-                    </Button>
+                  <Button type="button" variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir
+                  </Button>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  Cancelar
+                </Button>
                 <Button type="submit">Salvar análise</Button>
               </div>
             </DialogFooter>
