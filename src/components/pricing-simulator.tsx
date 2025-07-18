@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -7,13 +6,13 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, BadgePercent, History } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type SimulationCategory } from "@/types";
 import { Skeleton } from "./ui/skeleton";
 import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { useBaseProducts } from "@/hooks/use-base-products";
@@ -47,7 +46,6 @@ export function PricingSimulator() {
     const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
-    const [simulationForHistory, setSimulationForHistory] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [lineFilter, setLineFilter] = useState('all');
@@ -70,11 +68,6 @@ export function PricingSimulator() {
         await deleteSimulation(simulationId);
         setIsAddEditModalOpen(false); 
         setSimulationToEdit(null);
-    };
-    
-    const handleViewHistory = (simulation: ProductSimulation) => {
-        setSimulationForHistory(simulation);
-        setIsHistoryModalOpen(true);
     };
 
     const baseProductMap = useMemo(() => {
@@ -231,7 +224,7 @@ export function PricingSimulator() {
                                             </tbody>
                                             <tfoot>
                                                 <tr className="border-t font-bold">
-                                                    <td colSpan={3} className="p-2 text-right">Total CMV (Custo de Mercadoria Vendida)</td>
+                                                    <td colSpan={3} className="p-2 text-right">Total</td>
                                                     <td className="p-2 text-right text-primary">{formatCurrency(sim.totalCmv)}</td>
                                                 </tr>
                                             </tfoot>
