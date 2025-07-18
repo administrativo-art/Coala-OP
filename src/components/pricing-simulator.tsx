@@ -147,7 +147,7 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_minmax(100px,auto)] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                 <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_100px] gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                     <div className="text-left">Mercadoria</div>
                     <div className="text-right">Venda</div>
                     <div className="text-right">CMV</div>
@@ -163,7 +163,7 @@ export function PricingSimulator() {
                             return (
                                 <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                     <div className="flex items-center gap-4 px-4 py-2 text-sm w-full">
-                                        <AccordionTrigger className="grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr] flex-1 items-center gap-4 p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left">
+                                        <AccordionTrigger className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] flex-1 items-center gap-4 p-0 hover:no-underline [&>svg]:ml-2 font-semibold text-left">
                                             <span>{sim.name}</span>
                                             <div className="text-right">{formatCurrency(sim.salePrice)}</div>
                                             <div className="text-right">{formatCurrency(sim.totalCmv)}</div>
