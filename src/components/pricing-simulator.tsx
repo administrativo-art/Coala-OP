@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
+import { useBaseProducts } from "@/hooks/use-base-products";
 import { CategoryManagementModal } from "./category-management-modal";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
