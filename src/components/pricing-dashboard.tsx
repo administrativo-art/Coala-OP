@@ -45,32 +45,12 @@ interface PricingDashboardProps {
 export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, onSelectItem, activeFilters }: PricingDashboardProps) {
     const [selectedItemForCharts, setSelectedItemForCharts] = useState<ProductSimulation | null>(null);
     const { categories } = useProductSimulationCategories();
-    const [searchFilter, setSearchFilter] = useState('');
-    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-
-    const categoryMap = useMemo(() => {
-        return new Map(categories.map(c => [c.id, c]));
-    }, [categories]);
-
-    const filteredSimulations = useMemo(() => {
-        if (!searchFilter) return simulations;
-        const lowerCaseFilter = searchFilter.toLowerCase();
-        return simulations.filter(s => {
-            const category = s.categoryId ? categoryMap.get(s.categoryId) : null;
-            const line = s.lineId ? categoryMap.get(s.lineId) : null;
-            return (
-                s.name.toLowerCase().includes(lowerCaseFilter) ||
-                (category && category.name.toLowerCase().includes(lowerCaseFilter)) ||
-                (line && line.name.toLowerCase().includes(lowerCaseFilter))
-            );
-        });
-    }, [simulations, searchFilter, categoryMap]);
     
     useEffect(() => {
-        if (filteredSimulations.length > 0) {
-            const currentSelectionExists = filteredSimulations.some(s => s.id === selectedItemForCharts?.id);
+        if (simulations.length > 0) {
+            const currentSelectionExists = simulations.some(s => s.id === selectedItemForCharts?.id);
             if (!currentSelectionExists) {
-                const newSelection = filteredSimulations[0];
+                const newSelection = simulations[0];
                 onSelectItem(newSelection);
                 setSelectedItemForCharts(newSelection);
             }
@@ -78,29 +58,27 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             onSelectItem(null);
             setSelectedItemForCharts(null);
         }
-    }, [filteredSimulations, onSelectItem, selectedItemForCharts]);
+    }, [simulations, onSelectItem, selectedItemForCharts]);
 
     const { kpis, profitChartData, costCompositionData } = useMemo(() => {
-        const simsToProcess = filteredSimulations.length > 0 ? filteredSimulations : simulations;
-
-        if (!simsToProcess || simsToProcess.length === 0) {
+        if (!simulations || simulations.length === 0) {
             return { kpis: {}, profitChartData: [], costCompositionData: [] };
         }
 
-        const totalSimulations = simsToProcess.length;
-        const itemsWithGoal = simsToProcess.filter(s => s.profitGoal != null && s.profitGoal > 0);
+        const totalSimulations = simulations.length;
+        const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
         const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
         const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
 
-        let highestMarginItem = simsToProcess[0];
-        let lowestMarginItem = simsToProcess[0];
+        let highestMarginItem = simulations[0];
+        let lowestMarginItem = simulations[0];
 
-        for (const s of simsToProcess) {
+        for (const s of simulations) {
             if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
             if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
         }
 
-        const totalMarkup = simsToProcess.reduce((acc, s) => acc + s.markup, 0);
+        const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
 
         const priceDeltas = itemsBelowGoal.map(s => {
             const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
@@ -118,7 +96,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             averagePriceDelta: averagePriceDelta,
         };
 
-        const profitChartDataResult = simsToProcess
+        const profitChartDataResult = simulations
             .map(s => ({
                 id: s.id,
                 name: s.name,
@@ -135,7 +113,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         }
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult, costCompositionData: costCompData };
-    }, [simulations, filteredSimulations, selectedItemForCharts]);
+    }, [simulations, selectedItemForCharts]);
     
     const handleSelectionChange = (id: string | null) => {
         const item = simulations.find(s => s.id === id);
@@ -143,7 +121,6 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             setSelectedItemForCharts(item);
             onSelectItem(item);
         }
-        setIsPopoverOpen(false);
     };
 
     if (isLoading) {
@@ -241,33 +218,6 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
                                 <CardDescription>Clique em um ponto para selecionar o item e ver mais detalhes.</CardDescription>
                             </div>
-                            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-[300px]" role="combobox">
-                                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50"/>
-                                        {selectedItemForCharts ? selectedItemForCharts.name : "Buscar mercadoria, categoria ou linha..."}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0">
-                                    <Command>
-                                        <CommandInput placeholder="Buscar..." onValueChange={setSearchFilter} />
-                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                                        <CommandList>
-                                            <CommandGroup>
-                                            {filteredSimulations.map((sim) => (
-                                                <CommandItem
-                                                    key={sim.id}
-                                                    value={sim.name}
-                                                    onSelect={() => handleSelectionChange(sim.id)}
-                                                >
-                                                {sim.name}
-                                                </CommandItem>
-                                            ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
                         </div>
                     </CardHeader>
                     <CardContent>

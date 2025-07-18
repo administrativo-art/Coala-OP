@@ -205,7 +205,7 @@ export function PricingSimulator() {
                                                     <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
                                                     <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
                                                     <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
-                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo do item</th>
+                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Total</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
