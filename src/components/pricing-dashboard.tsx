@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -105,19 +106,15 @@ function WhatIfSimulator({ item }: { item: ProductSimulation | null }) {
     return (
         <div className="p-4 space-y-4">
             <h4 className="font-semibold">{item.name}</h4>
-            <div className="grid grid-cols-2 gap-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardDescription>Margem Simulada</CardDescription>
-                        <CardTitle className="text-2xl">{simulatedMargin.toFixed(2)}%</CardTitle>
-                    </CardHeader>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardDescription>Preço Simulado</CardDescription>
-                        <CardTitle className="text-2xl">{formatCurrency(simulatedPrice)}</CardTitle>
-                    </CardHeader>
-                </Card>
+             <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                    <p className="text-sm text-muted-foreground">Margem Simulada</p>
+                    <p className="text-3xl font-bold">{simulatedMargin.toFixed(1)}<span className="text-lg">%</span></p>
+                </div>
+                <div>
+                    <p className="text-sm text-muted-foreground">Preço Simulado</p>
+                    <p className="text-3xl font-bold">{formatCurrency(simulatedPrice)}</p>
+                </div>
             </div>
             <div>
                 <Label>Ajustar Preço de Venda</Label>
@@ -396,3 +393,4 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         </div>
     );
 }
+
