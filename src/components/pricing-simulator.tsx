@@ -92,21 +92,19 @@ export function PricingSimulator() {
 
     }, [simulations, searchTerm, categoryFilter, lineFilter]);
 
-    const getProfitColorClass = (percentage: number, goal?: number | null) => {
-        if (goal !== undefined && goal !== null) {
-            return percentage >= goal ? 'text-green-600' : 'text-destructive';
-        }
-        
+    const getProfitColorClass = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'text-primary';
         const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
         
         for (const range of sortedRanges) {
-            if (percentage >= range.from && percentage < range.to) {
+            // Check if the percentage falls within the range (inclusive of 'from', exclusive of 'to')
+            // For the last range, we can assume 'to' is Infinity.
+            if (percentage >= range.from && (range.to === Infinity || percentage < range.to)) {
                 return range.color;
             }
         }
         
-        return 'text-primary';
+        return 'text-primary'; // Default color if no range matches
     };
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories;
@@ -177,7 +175,7 @@ export function PricingSimulator() {
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-                        const profitColorClass = getProfitColorClass(sim.profitPercentage, sim.profitGoal);
+                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         
                         return (
@@ -261,32 +259,33 @@ export function PricingSimulator() {
                             </TabsList>
                          </div>
                         <TabsContent value="dashboard" className="mt-4">
-                            <PricingDashboard 
-                                simulations={simulationsByCategory} 
-                                isLoading={isLoading}
-                                getProfitColorClass={(p) => getProfitColorClass(p)}
-                                formatCurrency={formatCurrency}
-                                pricingParameters={pricingParameters}
-                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button onClick={handleAddNew}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Nova análise
+                                </Button>
+                                <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                    <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                                </Button>
+                                {permissions.pricing.manageParameters && (
+                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        Parâmetros
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="mt-4">
+                                <PricingDashboard 
+                                    simulations={simulationsByCategory} 
+                                    isLoading={isLoading}
+                                    getProfitColorClass={(p) => getProfitColorClass(p)}
+                                    formatCurrency={formatCurrency}
+                                    pricingParameters={pricingParameters}
+                                />
+                            </div>
                         </TabsContent>
                         <TabsContent value="table" className="mt-4">
                             <div className="space-y-4">
-                               <div className="flex flex-wrap items-center gap-2">
-                                    <Button onClick={handleAddNew}>
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        Nova análise
-                                    </Button>
-                                    <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                        <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                    </Button>
-                                    {permissions.pricing.manageParameters && (
-                                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                            <Settings className="mr-2 h-4 w-4" />
-                                            Parâmetros
-                                        </Button>
-                                    )}
-                                </div>
-                                
                                 <div className="flex flex-col md:flex-row items-center justify-between gap-2">
                                      <div className="relative flex-grow w-full">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
