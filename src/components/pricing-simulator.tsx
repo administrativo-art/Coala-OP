@@ -229,6 +229,12 @@ export function PricingSimulator() {
                                                     )
                                                 })}
                                             </tbody>
+                                            <tfoot>
+                                                <tr className="border-t font-bold">
+                                                    <td colSpan={3} className="p-2 text-right">Total CMV (Custo de Mercadoria Vendida)</td>
+                                                    <td className="p-2 text-right text-primary">{formatCurrency(sim.totalCmv)}</td>
+                                                </tr>
+                                            </tfoot>
                                         </table>
                                     </div>
                                 </AccordionContent>
