@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useMemo, useEffect, useState, useRef } from 'react';
@@ -18,7 +19,7 @@ import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAns
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { uploadFile } from '@/lib/storage';
-import { Camera, File as FileIcon, Loader2, Paperclip, Trash2 } from 'lucide-react';
+import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIcon, Video as VideoIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoCaptureModal } from './photo-capture-modal';
 
@@ -207,17 +208,21 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                             )}
                                             <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileChange(e.target.files)} multiple={question.attachmentConfig?.allowMultiple} />
                                         </div>
-                                        {(field.value || []).map((file: {name: string, url: string, type: string}, index: number) => (
+                                        {(field.value || []).map((file: {name: string, url: string, type: string}, index: number) => {
+                                              let Icon = FileIcon;
+                                              if (file.type?.startsWith('image')) Icon = ImageIcon;
+                                              if (file.type?.startsWith('video')) Icon = VideoIcon;
+                                            return (
                                             <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted">
                                                 <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline text-primary">
-                                                    <FileIcon className="h-4 w-4" />
+                                                    <Icon className="h-4 w-4" />
                                                     <span className="truncate">{file.name}</span>
                                                 </a>
                                                 <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeFile(index)}>
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                     {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={handlePhotoCaptured} />}
                                     <FormMessage />
