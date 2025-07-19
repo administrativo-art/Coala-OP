@@ -546,10 +546,30 @@ export type TaskHistoryItem = {
     details?: string; // e.g., justification for reopening
 };
 
+export type TaskProject = {
+  id: string;
+  name: string;
+  memberIds: string[];
+  sections: { id: string; name: string }[];
+};
+
+export type TaskType = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type Task = {
     id: string;
     title: string;
     description?: string;
+    
+    // New Hierarchy & Categorization
+    projectId: string;
+    taskTypeId: string;
+    sectionId: string; // Replaces 'status' for Kanban columns
+    parentId?: string; // For subtasks
+
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
     
     // Assignment
@@ -560,7 +580,6 @@ export type Task = {
     requiresApproval: boolean;
     approverType?: 'user' | 'profile';
     approverId?: string; // userId or profileId
-    approvalTaskId?: string; // Link to the approval task
     
     // Context
     origin: {
