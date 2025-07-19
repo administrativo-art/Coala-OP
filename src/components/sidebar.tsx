@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link"
@@ -31,6 +30,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
   const canViewReports = !loading && permissions.reports.view;
+
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
