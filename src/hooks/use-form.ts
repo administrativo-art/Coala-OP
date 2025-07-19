@@ -1,11 +1,10 @@
-
 "use client";
 
 import { useContext } from 'react';
 import { FormContext, type FormContextType } from '@/components/form-provider';
 import { useAuth } from './use-auth';
 import { useTasks } from './use-tasks';
-import { type FormSubmission, type FormTemplate, type TaskHistoryItem } from '@/types';
+import { type FormSubmission, type FormTemplate, type TaskHistoryItem, type FormQuestion } from '@/types';
 
 type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
     addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<void>;
@@ -28,19 +27,15 @@ export const useForm = (): EnrichedFormContextType => {
     
     let submissionStatus: 'completed' | 'in_progress' = 'completed';
     const tasksToCreate: any[] = [];
-    const allQuestions = template.sections.flatMap(s => s.questions);
+    const allQuestions: FormQuestion[] = template.sections.flatMap(s => {
+      const getQuestions = (q_list: FormQuestion[]): FormQuestion[] => {
+          return q_list.flatMap(q => [q, ...(q.options ? q.options.flatMap(opt => getQuestions(opt.subQuestions || [])) : [])]);
+      };
+      return getQuestions(s.questions);
+    });
 
-    const findQuestion = (id: string, questions: typeof allQuestions): (typeof allQuestions[0] | undefined) => {
-        for (const q of questions) {
-            if (q.id === id) return q;
-            if (q.options) {
-                for (const opt of q.options) {
-                    const subQ = findQuestion(id, opt.subQuestions || []);
-                    if (subQ) return subQ;
-                }
-            }
-        }
-        return undefined;
+    const findQuestion = (id: string, questions: FormQuestion[]): (FormQuestion | undefined) => {
+        return questions.find(q => q.id === id);
     };
 
     submission.answers.forEach(answer => {

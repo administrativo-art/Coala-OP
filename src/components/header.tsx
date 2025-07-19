@@ -1,8 +1,7 @@
-
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -14,10 +13,10 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { UserProfile } from "./user-profile"
 import { ThemeToggle } from "./theme-toggle"
-import { type Task, NotificationCenter } from "./notification-center"
+import { type LegacyTask, NotificationCenter } from "./notification-center"
 
 
-export function Header({ tasks }: { tasks: Task[] }) {
+export function Header({ tasks }: { tasks: LegacyTask[] }) {
     const { permissions, loading, user } = useAuth()
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
@@ -31,10 +30,12 @@ export function Header({ tasks }: { tasks: Task[] }) {
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
     const canSimulatePricing = !loading && permissions.pricing.simulate;
+    const canViewTasks = !loading && permissions.tasks.view;
 
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+        { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: canViewTasks },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
