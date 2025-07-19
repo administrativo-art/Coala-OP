@@ -2,7 +2,7 @@
 
 "use client"
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm, useFieldArray, Control, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,13 +13,38 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
+import { PlusCircle, Trash2, ArrowUp, ArrowDown, Wand2 } from 'lucide-react';
+import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection, type FormTaskAction } from '@/types';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { useAuth } from '@/hooks/use-auth';
+import { useProfiles } from '@/hooks/use-profiles';
 
 // Zod schema for a question, defined recursively
+const baseTaskActionSchema = z.object({
+  title: z.string().min(1, "O título da tarefa é obrigatório."),
+  assigneeType: z.enum(['user', 'profile']),
+  assigneeId: z.string().min(1, "Selecione um responsável."),
+  requiresApproval: z.boolean(),
+  approverType: z.enum(['user', 'profile']).optional(),
+  approverId: z.string().optional(),
+  description: z.string().optional(),
+  dueInDays: z.coerce.number().optional(),
+});
+
+const taskActionSchema: z.ZodType<FormTaskAction> = baseTaskActionSchema.superRefine((data, ctx) => {
+    if (data.requiresApproval) {
+        if (!data.approverType) {
+            ctx.addIssue({ code: 'custom', message: 'Tipo de aprovador é obrigatório.', path: ['approverType'] });
+        }
+        if (!data.approverId) {
+            ctx.addIssue({ code: 'custom', message: 'Selecione um aprovador.', path: ['approverId'] });
+        }
+    }
+});
+
 const baseQuestionSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "A pergunta não pode estar em branco."),
@@ -37,7 +62,8 @@ const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() =>
     options: z.array(z.object({
       id: z.string(),
       value: z.string().min(1, "O texto da opção é obrigatório."),
-      subQuestions: z.array(questionSchema)
+      subQuestions: z.array(questionSchema),
+      action: taskActionSchema.optional(),
     })).optional()
   })
 );
@@ -76,6 +102,75 @@ const createNewSection = (): FormSection => ({
   name: '',
   questions: [createNewQuestion()]
 });
+
+// ==================== Task Action Form Component ====================
+type TaskActionFormProps = {
+  control: Control<TemplateFormValues>;
+  namePrefix: string;
+};
+
+const TaskActionForm: React.FC<TaskActionFormProps> = ({ control, namePrefix }) => {
+    const { users } = useAuth();
+    const { profiles } = useProfiles();
+    const action = useWatch({ control, name: namePrefix as any });
+    const isApprovalRequired = useWatch({ control, name: `${namePrefix}.requiresApproval` as any });
+
+    return (
+        <div className="space-y-3">
+            <FormField control={control} name={`${namePrefix}.title` as any} render={({ field }) => (
+                <FormItem><FormLabel>Título da tarefa</FormLabel><FormControl><Input placeholder="Ex: Verificar problema" {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={control} name={`${namePrefix}.description` as any} render={({ field }) => (
+                <FormItem><FormLabel>Descrição (opcional)</FormLabel><FormControl><Textarea placeholder="Descreva a tarefa..." {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <FormField control={control} name={`${namePrefix}.dueInDays` as any} render={({ field }) => (
+                <FormItem><FormLabel>Prazo em dias (opcional)</FormLabel><FormControl><Input type="number" placeholder="Ex: 3" {...field} /></FormControl><FormMessage /></FormItem>
+            )}/>
+            <div className="grid grid-cols-2 gap-2">
+                 <FormField control={control} name={`${namePrefix}.assigneeType` as any} render={({ field }) => (
+                    <FormItem><FormLabel>Atribuir para</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger></FormControl>
+                        <SelectContent><SelectItem value="user">Usuário</SelectItem><SelectItem value="profile">Perfil</SelectItem></SelectContent>
+                        </Select><FormMessage /></FormItem>
+                )}/>
+                <FormField control={control} name={`${namePrefix}.assigneeId` as any} render={({ field }) => (
+                    <FormItem><FormLabel>&nbsp;</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                            {(action?.assigneeType === 'user' ? users : profiles).map(u => <SelectItem key={u.id} value={u.id}>{u.name || u.username}</SelectItem>)}
+                        </SelectContent>
+                        </Select><FormMessage /></FormItem>
+                )}/>
+            </div>
+             <FormField control={control} name={`${namePrefix}.requiresApproval` as any} render={({ field }) => (
+                <FormItem className="flex items-center space-x-2"><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel>Exigir aprovação?</FormLabel></FormItem>
+             )}/>
+             {isApprovalRequired && (
+                <div className="grid grid-cols-2 gap-2 p-3 border rounded-lg bg-muted/50">
+                    <FormField control={control} name={`${namePrefix}.approverType` as any} render={({ field }) => (
+                        <FormItem><FormLabel>Aprovador</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger></FormControl>
+                            <SelectContent><SelectItem value="user">Usuário</SelectItem><SelectItem value="profile">Perfil</SelectItem></SelectContent>
+                            </Select><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={control} name={`${namePrefix}.approverId` as any} render={({ field }) => (
+                        <FormItem><FormLabel>&nbsp;</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                {(action?.approverType === 'user' ? users : profiles).map(u => <SelectItem key={u.id} value={u.id}>{u.name || u.username}</SelectItem>)}
+                            </SelectContent>
+                            </Select><FormMessage /></FormItem>
+                    )}/>
+                </div>
+             )}
+        </div>
+    )
+};
+
 
 // ==================== Question List Component (Recursive) ====================
 type QuestionListProps = {
@@ -138,10 +233,10 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
   useEffect(() => {
     if (hasOptions && options.length === 0) {
       if(questionType === 'yes-no') {
-        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Sim', subQuestions: [] });
-        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Não', subQuestions: [] });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Sim', subQuestions: [], action: undefined });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Não', subQuestions: [], action: undefined });
       } else {
-         appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [] });
+         appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [], action: undefined });
       }
     }
   }, [hasOptions, questionType, options.length, appendOption]);
@@ -222,6 +317,18 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
                             </FormItem>
                         )}
                         />
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon">
+                                <Wand2 className="h-4 w-4" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-96">
+                            <h4 className="font-semibold mb-2">Ação Automática</h4>
+                            <p className="text-sm text-muted-foreground mb-4">Crie uma tarefa se esta opção for selecionada.</p>
+                            <TaskActionForm control={control} namePrefix={`${namePrefix}.options.${optionIndex}.action`} />
+                        </PopoverContent>
+                    </Popover>
                     {questionType !== 'yes-no' && (
                        <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeOption(optionIndex)}>
                            <Trash2 className="h-4 w-4" />
@@ -234,7 +341,7 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
              </div>
            ))}
            {['single-choice', 'multiple-choice'].includes(questionType) && (
-              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [] })}>
+              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [], action: undefined })}>
                 Adicionar opção
               </Button>
            )}
