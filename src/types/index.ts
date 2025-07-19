@@ -1,5 +1,3 @@
-
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -222,6 +220,7 @@ export type PermissionSet = {
     itemRequests: { manage: boolean; };
     pricing: { simulate: boolean; manageParameters: boolean; };
     help: { view: boolean; };
+    tasks: { view: boolean; manage: boolean; };
 };
 
 export type Profile = {
@@ -289,7 +288,6 @@ export type StockCount = {
 };
 
 
-// Form Module Types
 export type FormTaskAction = {
     title: string;
     assigneeType: 'user' | 'profile';
@@ -534,9 +532,50 @@ export type PricingParameters = {
   profitGoals: number[];
 };
 
+export type TaskHistoryItem = {
+    timestamp: string; // ISO date string
+    author: {
+        id: string;
+        name: string;
+    };
+    action: string; // e.g., 'created', 'reopened', 'completed'
+    details?: string; // e.g., justification for reopening
+};
+
+export type Task = {
+    id: string;
+    title: string;
+    description?: string;
+    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
+    
+    // Assignment
+    assigneeType: 'user' | 'profile';
+    assigneeId: string; // userId or profileId
+    
+    // Approval
+    requiresApproval: boolean;
+    approverType?: 'user' | 'profile';
+    approverId?: string; // userId or profileId
+    approvalTaskId?: string; // Link to the approval task
+    
+    // Context
+    origin: {
+        type: 'form_submission';
+        submissionId: string;
+        questionId: string;
+        optionId: string;
+    };
+    
+    // Timestamps and History
+    createdAt: string;
+    updatedAt: string;
+    history: TaskHistoryItem[];
+};
+
+
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    lots: { add: false, edit: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
@@ -550,6 +589,7 @@ export const defaultGuestPermissions: PermissionSet = {
     itemRequests: { manage: false },
     pricing: { simulate: false, manageParameters: false },
     help: { view: true },
+    tasks: { view: true, manage: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -583,4 +623,5 @@ export const defaultAdminPermissions: PermissionSet = {
     itemRequests: { manage: true },
     pricing: { simulate: true, manageParameters: true },
     help: { view: true },
+    tasks: { view: true, manage: true },
 };

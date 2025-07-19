@@ -1,5 +1,4 @@
 
-
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -26,6 +25,7 @@ import { RepositionProvider } from '@/components/reposition-provider';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
+import { TaskProvider } from '@/components/task-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -62,30 +62,32 @@ export default function RootLayout({
                         <ProductSimulationProvider>
                           <ExpiryProductsProvider>
                             <PredefinedListsProvider>
-                              <FormProvider>
-                                <EntitiesProvider>
-                                    <ConsumptionAnalysisProvider>
-                                      <MovementHistoryProvider>
-                                        <ReturnsProvider>
-                                          <ScheduleProvider>
-                                            <MonthlyScheduleProvider>
-                                              <StockCountProvider>
-                                                <PurchaseProvider>
-                                                  <ItemAdditionProvider>
-                                                    <RepositionProvider>
-                                                      {children}
-                                                      <Toaster />
-                                                    </RepositionProvider>
-                                                  </ItemAdditionProvider>
-                                                </PurchaseProvider>
-                                              </StockCountProvider>
-                                            </MonthlyScheduleProvider>
-                                          </ScheduleProvider>
-                                        </ReturnsProvider>
-                                      </MovementHistoryProvider>
-                                    </ConsumptionAnalysisProvider>
-                                </EntitiesProvider>
-                              </FormProvider>
+                                <TaskProvider>
+                                    <FormProvider>
+                                        <EntitiesProvider>
+                                            <ConsumptionAnalysisProvider>
+                                            <MovementHistoryProvider>
+                                                <ReturnsProvider>
+                                                <ScheduleProvider>
+                                                    <MonthlyScheduleProvider>
+                                                    <StockCountProvider>
+                                                        <PurchaseProvider>
+                                                        <ItemAdditionProvider>
+                                                            <RepositionProvider>
+                                                            {children}
+                                                            <Toaster />
+                                                            </RepositionProvider>
+                                                        </ItemAdditionProvider>
+                                                        </PurchaseProvider>
+                                                    </StockCountProvider>
+                                                    </MonthlyScheduleProvider>
+                                                </ScheduleProvider>
+                                                </ReturnsProvider>
+                                            </MovementHistoryProvider>
+                                            </ConsumptionAnalysisProvider>
+                                        </EntitiesProvider>
+                                    </FormProvider>
+                                </TaskProvider>
                             </PredefinedListsProvider>
                           </ExpiryProductsProvider>
                         </ProductSimulationProvider>

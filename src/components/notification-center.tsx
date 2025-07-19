@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from './ui/separator';
 
-export interface Task {
+export interface LegacyTask {
   id: string;
   type: string;
   title: string;
@@ -19,10 +19,12 @@ export interface Task {
 }
 
 interface NotificationCenterProps {
-  tasks: Task[];
+  tasks: LegacyTask[]; // Still accepting legacy tasks for now
 }
 
 export function NotificationCenter({ tasks }: NotificationCenterProps) {
+  // We will get the new tasks from the TaskProvider in the future.
+  // For now, we continue using the tasks passed via props.
   const notificationCount = tasks.length;
 
   return (

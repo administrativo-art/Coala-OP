@@ -1,8 +1,6 @@
-
-
 "use client"
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { useForm, useWatch, Control, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,6 +17,10 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAnswer, type FormSection } from '@/types';
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
+import { uploadFile } from '@/lib/storage';
+import { Camera, File as FileIcon, Loader2, Paperclip, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { PhotoCaptureModal } from './photo-capture-modal';
 
 
 const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
@@ -89,6 +91,10 @@ const generateSchema = (allQuestions: FormQuestion[]) => {
 
 function RenderedQuestion({ question, control }: { question: FormQuestion; control: Control<any> }) {
     const answer = useWatch({ control, name: question.id });
+    const { toast } = useToast();
+    const [isUploading, setIsUploading] = useState(false);
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const subQuestions = useMemo(() => {
         if (!question.options || !answer) return [];
@@ -97,6 +103,46 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
             .filter(opt => selectedValues.includes(opt.value))
             .flatMap(opt => opt.subQuestions || []);
     }, [answer, question.options]);
+    
+    const handleFileChange = async (files: FileList | null) => {
+        if (!files) return;
+        setIsUploading(true);
+        try {
+            const uploadedFiles = await Promise.all(
+                Array.from(files).map(async file => {
+                    const url = await uploadFile(file, `form-attachments/${new Date().getTime()}-${file.name}`);
+                    return { name: file.name, url, type: file.type };
+                })
+            );
+            const currentFiles = control.getValues(question.id) || [];
+            control.setValue(question.id, [...currentFiles, ...uploadedFiles], { shouldValidate: true });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro de Upload', description: 'Não foi possível enviar o arquivo.' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+    
+    const handlePhotoCaptured = async (dataUrl: string) => {
+        setIsUploading(true);
+        try {
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], `captura-${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
+            const url = await uploadFile(file, `form-attachments/${file.name}`);
+            const currentFiles = control.getValues(question.id) || [];
+            control.setValue(question.id, [...currentFiles, { name: file.name, url, type: file.type }], { shouldValidate: true });
+        } catch (error) {
+             toast({ variant: 'destructive', title: 'Erro de Upload', description: 'Não foi possível enviar a foto.' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        const currentFiles = control.getValues(question.id) || [];
+        const newFiles = currentFiles.filter((_: any, i: number) => i !== index);
+        control.setValue(question.id, newFiles, { shouldValidate: true });
+    };
 
     return (
         <div className="space-y-6">
@@ -143,6 +189,41 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                 ))}
                                 <FormMessage />
                             </FormItem>
+                        case 'file-attachment':
+                            return (
+                                <FormItem>
+                                    <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                                    <div className="p-3 border rounded-lg space-y-3">
+                                        <div className="flex gap-2">
+                                            <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                                                {isUploading ? <Loader2 className="mr-2 animate-spin"/> : <Paperclip className="mr-2" />}
+                                                Anexar
+                                            </Button>
+                                            {question.attachmentConfig?.allowCamera && (
+                                                <Button type="button" variant="outline" size="sm" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploading}>
+                                                    <Camera className="mr-2" />
+                                                    Tirar Foto
+                                                </Button>
+                                            )}
+                                            <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileChange(e.target.files)} multiple={question.attachmentConfig?.allowMultiple} />
+                                        </div>
+                                        {(field.value || []).map((file: {name: string, url: string, type: string}, index: number) => (
+                                            <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted">
+                                                <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline text-primary">
+                                                    <FileIcon className="h-4 w-4" />
+                                                    <span className="truncate">{file.name}</span>
+                                                </a>
+                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeFile(index)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={handlePhotoCaptured} />}
+                                    <FormMessage />
+                                </FormItem>
+                            );
+
                         default: return null;
                     }
                 }}
@@ -166,7 +247,7 @@ type FillFormModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: FormTemplate;
-  addSubmission: (submission: Omit<FormSubmission, 'id'>) => Promise<void>;
+  addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<void>;
 };
 
 const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>): FormAnswer[] => {
@@ -204,6 +285,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const { user } = useAuth();
     const { kiosks } = useKiosks();
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const allQuestions = useMemo(() => getAllQuestions(template.sections), [template]);
 
@@ -245,6 +327,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         if (open) {
             form.reset(defaultValues);
             setCurrentSectionIndex(0);
+            setIsSubmitting(false);
         }
     }, [open, form, defaultValues]);
 
@@ -262,8 +345,9 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         setCurrentSectionIndex(prev => prev - 1);
     };
 
-    const onSubmit = (values: Record<string, any>) => {
+    const onSubmit = async (values: Record<string, any>) => {
         if (!user) return;
+        setIsSubmitting(true);
         
         const primaryKioskId = user.assignedKioskIds?.[0] || 'N/A';
         const kiosk = kiosks.find(k => k.id === primaryKioskId);
@@ -288,7 +372,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             templateId: template.id,
             templateName: template.name,
             title,
-            status: 'completed', // Will be changed later based on actions
+            status: 'completed',
             userId: user.id,
             username: user.username,
             kioskId: kiosk?.id || 'N/A',
@@ -297,7 +381,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             answers: template.sections.flatMap(section => buildAnswers(section.questions, values))
         };
 
-        addSubmission(submission);
+        await addSubmission(submission, template);
         onOpenChange(false);
     };
   
@@ -343,14 +427,17 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             <DialogFooter className="pt-6 border-t flex justify-between w-full">
               <div>
                 {template.layout === 'stepped' && currentSectionIndex > 0 && (
-                    <Button type="button" variant="outline" onClick={handlePrevStep}>Voltar</Button>
+                    <Button type="button" variant="outline" onClick={handlePrevStep} disabled={isSubmitting}>Voltar</Button>
                 )}
               </div>
               <div className="flex-grow flex justify-end">
                 {template.layout === 'stepped' && currentSectionIndex < template.sections.length - 1 ? (
-                    <Button type="button" onClick={handleNextStep}>Próxima</Button>
+                    <Button type="button" onClick={handleNextStep} disabled={isSubmitting}>Próxima</Button>
                 ) : (
-                    <Button type="submit">Enviar formulário</Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
+                        {isSubmitting ? 'Enviando...' : 'Enviar formulário'}
+                    </Button>
                 )}
               </div>
             </DialogFooter>

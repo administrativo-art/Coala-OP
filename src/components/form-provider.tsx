@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -14,7 +13,7 @@ export interface FormContextType {
   addTemplate: (template: Omit<FormTemplate, 'id'>) => Promise<void>;
   updateTemplate: (template: FormTemplate) => Promise<void>;
   deleteTemplate: (templateId: string) => Promise<void>;
-  addSubmission: (submission: Omit<FormSubmission, 'id'>) => Promise<void>;
+  addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<string | null>;
   deleteSubmission: (submissionId: string) => Promise<void>;
   updateSubmission: (submissionId: string, updates: Partial<FormSubmission>) => Promise<void>;
 }
@@ -78,11 +77,13 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   
-  const addSubmission = useCallback(async (submission: Omit<FormSubmission, 'id'>) => {
+  const addSubmission = useCallback(async (submission: Omit<FormSubmission, 'id'>, template: FormTemplate): Promise<string | null> => {
     try {
-      await addDoc(collection(db, "formSubmissions"), submission);
+      const docRef = await addDoc(collection(db, "formSubmissions"), submission);
+      return docRef.id;
     } catch (error) {
       console.error("Error adding submission:", error);
+      return null;
     }
   }, []);
 
