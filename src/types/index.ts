@@ -289,15 +289,32 @@ export type StockCount = {
 };
 
 
+// Form Module Types
+export type FormTaskAction = {
+    title: string;
+    assigneeType: 'user' | 'profile';
+    assigneeId: string; // userId or profileId
+    requiresApproval: boolean;
+    approverType?: 'user' | 'profile';
+    approverId?: string; // userId or profileId
+    description?: string;
+};
+
 export type FormQuestion = {
     id: string;
     label: string;
-    type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice';
+    type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice' | 'file-attachment';
     isRequired: boolean;
+    attachmentConfig?: {
+        allowMultiple: boolean;
+        allowedFileTypes: ('image' | 'pdf' | 'video')[];
+        allowCamera: boolean;
+    };
     options?: {
         id: string;
         value: string;
         subQuestions: FormQuestion[];
+        action?: FormTaskAction;
     }[];
 };
 
@@ -318,7 +335,7 @@ export type FormTemplate = {
 export type FormAnswer = {
     questionId: string;
     questionLabel: string;
-    value: string | number | string[];
+    value: string | number | string[] | { name: string; url: string; type: string }[];
     subAnswers?: FormAnswer[];
 };
 
@@ -327,6 +344,7 @@ export type FormSubmission = {
     templateId: string;
     templateName: string;
     title: string;
+    status: 'completed' | 'in_progress';
     userId: string;
     username: string;
     kioskId: string;

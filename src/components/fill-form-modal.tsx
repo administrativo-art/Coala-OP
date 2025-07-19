@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useMemo, useEffect, useState } from 'react';
@@ -73,6 +74,13 @@ const generateSchema = (allQuestions: FormQuestion[]) => {
                 break;
             case 'multiple-choice':
                 schemaObject[question.id] = z.array(z.string()).optional();
+                break;
+            case 'file-attachment':
+                schemaObject[question.id] = z.array(z.object({
+                    name: z.string(),
+                    url: z.string(),
+                    type: z.string(),
+                })).optional();
                 break;
         }
     });
@@ -202,7 +210,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const defaultValues = useMemo(() => {
         const values: Record<string, any> = {};
         allQuestions.forEach(q => {
-            values[q.id] = q.type === 'multiple-choice' ? [] : '';
+            values[q.id] = q.type === 'multiple-choice' || q.type === 'file-attachment' ? [] : '';
         });
         return values;
     }, [allQuestions]);
@@ -280,6 +288,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             templateId: template.id,
             templateName: template.name,
             title,
+            status: 'completed', // Will be changed later based on actions
             userId: user.id,
             username: user.username,
             kioskId: kiosk?.id || 'N/A',

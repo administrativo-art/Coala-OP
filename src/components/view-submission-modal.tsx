@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React from 'react';
@@ -18,16 +19,50 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Download } from 'lucide-react';
+import { Download, File as FileIcon, Image as ImageIcon, Video as VideoIcon } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { CheckCircle2, CircleDashed } from 'lucide-react';
 
 interface ViewSubmissionModalProps {
   submission: FormSubmission | null;
   onOpenChange: (open: boolean) => void;
 }
 
-const formatAnswerValue = (value: string | number | string[]): string => {
+const formatAnswerValue = (value: FormAnswer['value']): React.ReactNode => {
     if (Array.isArray(value)) {
-        return value.join(', ');
+      if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && 'url' in value[0]) {
+        // It's an array of file attachments
+        return (
+          <div className="flex flex-wrap gap-2">
+            {(value as { name: string; url: string; type: string }[]).map((file, index) => {
+              let Icon = FileIcon;
+              if (file.type.startsWith('image')) Icon = ImageIcon;
+              if (file.type.startsWith('video')) Icon = VideoIcon;
+              
+              return (
+                <a key={index} href={file.url} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm" className="h-auto py-1">
+                    <Icon className="mr-2 h-4 w-4" />
+                    {file.name}
+                  </Button>
+                </a>
+              );
+            })}
+          </div>
+        );
+      }
+      // It's an array of strings (e.g., from multiple-choice)
+      return (value as string[]).join(', ');
+    }
+    return String(value);
+};
+
+const getAnswerValueForPdf = (value: FormAnswer['value']): string => {
+    if (Array.isArray(value)) {
+        if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && 'url' in value[0]) {
+            return (value as { name: string }[]).map(f => f.name).join(', ');
+        }
+        return (value as string[]).join(', ');
     }
     return String(value);
 };
@@ -39,7 +74,7 @@ const AnswerRow: React.FC<{ answer: FormAnswer; level: number }> = ({ answer, le
     return (
         <>
             <TableRow>
-                <TableCell className="font-medium" style={indentation}>
+                <TableCell className="font-medium align-top" style={indentation}>
                     {level > 0 && <span className="mr-2 text-muted-foreground">↳</span>}
                     {answer.questionLabel}
                 </TableCell>
@@ -60,7 +95,7 @@ export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmission
     let rows: string[][] = [];
     answers.forEach(answer => {
         const prefix = ' '.repeat(level * 2) + (level > 0 ? '↳ ' : '');
-        rows.push([`${prefix}${answer.questionLabel}`, formatAnswerValue(answer.value)]);
+        rows.push([`${prefix}${answer.questionLabel}`, getAnswerValueForPdf(answer.value)]);
         if (answer.subAnswers && answer.subAnswers.length > 0) {
             rows = rows.concat(buildPdfBody(answer.subAnswers, level + 1));
         }
@@ -92,12 +127,26 @@ export function ViewSubmissionModal({ submission, onOpenChange }: ViewSubmission
 
     doc.save(`resposta_${submission.title.replace(/\\/g, "").replace(/\//g, "").replace(/ /g,"_")}.pdf`);
   };
+  
+  const StatusBadge = () => {
+    switch (submission.status) {
+        case 'completed':
+            return <Badge variant="secondary" className="bg-green-100 text-green-800"><CheckCircle2 className="mr-1 h-3 w-3" />Concluído</Badge>;
+        case 'in_progress':
+            return <Badge variant="outline" className="border-orange-500/50 text-orange-600"><CircleDashed className="mr-1 h-3 w-3 animate-spin" />Em Andamento</Badge>;
+        default:
+            return <Badge variant="secondary">Concluído</Badge>;
+    }
+  };
 
   return (
     <Dialog open={!!submission} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{submission.title}</DialogTitle>
+          <div className="flex justify-between items-center">
+            <DialogTitle>{submission.title}</DialogTitle>
+            <StatusBadge />
+          </div>
           <DialogDescription>
             Enviado por {submission.username} em {submission.kioskName} em {format(new Date(submission.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
           </DialogDescription>

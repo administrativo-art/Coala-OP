@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useEffect } from 'react';
@@ -22,8 +23,13 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 const baseQuestionSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "A pergunta não pode estar em branco."),
-  type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice']),
+  type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice', 'file-attachment']),
   isRequired: z.boolean(),
+  attachmentConfig: z.object({
+      allowMultiple: z.boolean(),
+      allowedFileTypes: z.array(z.enum(['image', 'pdf', 'video'])),
+      allowCamera: z.boolean(),
+  }).optional(),
 });
 
 const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() => 
@@ -57,7 +63,12 @@ const createNewQuestion = (): FormQuestionType => ({
   label: '',
   type: 'text',
   isRequired: true,
-  options: []
+  options: [],
+  attachmentConfig: {
+      allowMultiple: false,
+      allowedFileTypes: ['image'],
+      allowCamera: true,
+  }
 });
 
 const createNewSection = (): FormSection => ({
@@ -160,6 +171,7 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
                 <SelectItem value="yes-no">Sim / não</SelectItem>
                 <SelectItem value="single-choice">Escolha única</SelectItem>
                 <SelectItem value="multiple-choice">Múltipla escolha</SelectItem>
+                 <SelectItem value="file-attachment">Anexo de arquivo</SelectItem>
               </SelectContent>
             </Select><FormMessage /></FormItem>
           )}/>

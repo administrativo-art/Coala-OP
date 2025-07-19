@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -15,6 +16,7 @@ export interface FormContextType {
   deleteTemplate: (templateId: string) => Promise<void>;
   addSubmission: (submission: Omit<FormSubmission, 'id'>) => Promise<void>;
   deleteSubmission: (submissionId: string) => Promise<void>;
+  updateSubmission: (submissionId: string, updates: Partial<FormSubmission>) => Promise<void>;
 }
 
 export const FormContext = createContext<FormContextType | undefined>(undefined);
@@ -84,6 +86,16 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateSubmission = useCallback(async (submissionId: string, updates: Partial<FormSubmission>) => {
+    const submissionRef = doc(db, "formSubmissions", submissionId);
+    try {
+        await updateDoc(submissionRef, updates);
+    } catch(error) {
+        console.error("Error updating submission:", error);
+    }
+  }, []);
+
+
   const deleteSubmission = useCallback(async (submissionId: string) => {
     try {
         await deleteDoc(doc(db, "formSubmissions", submissionId));
@@ -102,7 +114,8 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     deleteTemplate,
     addSubmission,
     deleteSubmission,
-  }), [templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission]);
+    updateSubmission,
+  }), [templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission, updateSubmission]);
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
