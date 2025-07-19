@@ -1,7 +1,7 @@
+
 "use client"
 
-import { ReportsDashboard } from "@/components/reports-dashboard";
-
+// This page's content has been moved to the main dashboard page.
 export default function ReportsPage() {
-    return <ReportsDashboard />;
+    return null;
 }

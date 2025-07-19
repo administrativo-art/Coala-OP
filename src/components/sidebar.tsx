@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -34,7 +35,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: canViewTasks },
-    { href: '/dashboard/reports', label: 'Relatórios', icon: AreaChart, show: canViewReports },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
