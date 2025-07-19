@@ -21,8 +21,6 @@ import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
 import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PricingDashboard } from "./pricing-dashboard";
 import { PriceHistoryModal } from "./price-history-modal";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
@@ -283,149 +281,120 @@ export function PricingSimulator() {
 
     return (
         <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        Custo e preço
-                    </CardTitle>
-                    <CardDescription>
-                        Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Tabs defaultValue="dashboard" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 max-w-sm">
-                            <TabsTrigger value="dashboard"><BarChart3 className="mr-2" />Painel de análise</TabsTrigger>
-                            <TabsTrigger value="table"><TableIcon className="mr-2" />Análise de custo</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="dashboard" className="mt-4">
-                             <PricingDashboard 
-                                simulations={simulationsByCategory} 
-                                isLoading={isLoading}
-                                getProfitColorClass={getProfitColorClass}
-                                pricingParameters={pricingParameters}
-                                activeFilters={activeFilters}
-                            />
-                        </TabsContent>
-                        <TabsContent value="table" className="mt-4">
-                             <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <Button onClick={handleAddNew}>
-                                                <PlusCircle className="mr-2 h-4 w-4" />
-                                                Mercadoria
-                                            </Button>
-                                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                                            </Button>
-                                             <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
-                                                <History className="mr-2 h-4 w-4" /> Histórico de ajustes
-                                            </Button>
-                                            {permissions.pricing.manageParameters && (
-                                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                                    <Settings className="mr-2 h-4 w-4" />
-                                                    Parâmetros
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                     <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                                         <div className="flex-grow w-full md:w-auto">
-                                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                                                <PopoverTrigger asChild>
-                                                <Button
-                                                    variant="outline"
-                                                    role="combobox"
-                                                    aria-expanded={popoverOpen}
-                                                    className="w-full justify-between font-normal"
-                                                >
-                                                    {filterValue
-                                                    ? filterOptions.find(option => option.value === filterValue)?.label || "Filtrar..."
-                                                    : "Filtrar mercadoria, categoria..."}
-                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                                <Command>
-                                                    <CommandInput placeholder="Buscar..." />
-                                                    <CommandList>
-                                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                                                        <CommandGroup heading="Mercadorias">
-                                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
-                                                            <CommandItem
-                                                            key={option.value}
-                                                            value={option.value}
-                                                            onSelect={(currentValue) => {
-                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                                setPopoverOpen(false)
-                                                            }}
-                                                            >
-                                                            <Check
-                                                                className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            {option.label}
-                                                            </CommandItem>
-                                                        ))}
-                                                        </CommandGroup>
-                                                        <CommandGroup heading="Categorias">
-                                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
-                                                            <CommandItem
-                                                            key={option.value}
-                                                            value={option.value}
-                                                            onSelect={(currentValue) => {
-                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                                setPopoverOpen(false)
-                                                            }}
-                                                            >
-                                                            <Check
-                                                                className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            {option.label}
-                                                            </CommandItem>
-                                                        ))}
-                                                        </CommandGroup>
-                                                        <CommandGroup heading="Linhas">
-                                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
-                                                            <CommandItem
-                                                            key={option.value}
-                                                            value={option.value}
-                                                            onSelect={(currentValue) => {
-                                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                                setPopoverOpen(false)
-                                                            }}
-                                                            >
-                                                            <Check
-                                                                className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            {option.label}
-                                                            </CommandItem>
-                                                        ))}
-                                                        </CommandGroup>
-                                                    </CommandList>
-                                                </Command>
-                                                </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-4">
-                                  {renderTable()}
-                                </div>
-                            </div>
-                        </TabsContent>
-                    </Tabs>
-                </CardContent>
-            </Card>
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button onClick={handleAddNew}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Mercadoria
+                            </Button>
+                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
+                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
+                            </Button>
+                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                                <History className="mr-2 h-4 w-4" /> Histórico de ajustes
+                            </Button>
+                            {permissions.pricing.manageParameters && (
+                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    Parâmetros
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-2">
+                            <div className="flex-grow w-full md:w-auto">
+                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={popoverOpen}
+                                    className="w-full justify-between font-normal"
+                                >
+                                    {filterValue
+                                    ? filterOptions.find(option => option.value === filterValue)?.label || "Filtrar..."
+                                    : "Filtrar mercadoria, categoria..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Buscar..." />
+                                    <CommandList>
+                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                        <CommandGroup heading="Mercadorias">
+                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                        <CommandGroup heading="Categorias">
+                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                        <CommandGroup heading="Linhas">
+                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
+                                            <CommandItem
+                                            key={option.value}
+                                            value={option.value}
+                                            onSelect={(currentValue) => {
+                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
+                                                setPopoverOpen(false)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                filterValue === option.value ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {option.label}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-4">
+                    {renderTable()}
+                </div>
+            </div>
 
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}

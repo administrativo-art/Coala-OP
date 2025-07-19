@@ -9,23 +9,26 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, ListFilter, Truck, Users, Download, Inbox, ListTodo, ClipboardCheck, PackagePlus, ShieldAlert, TruckForward, Edit } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { type ReturnRequest, returnRequestStatuses, type DailySchedule } from "@/types"
+import { type DailySchedule } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { EditScheduleModal } from "@/components/edit-schedule-modal"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ReportsDashboard } from "@/components/reports-dashboard"
+import { PricingDashboard } from "@/components/pricing-dashboard"
+import { useProductSimulation } from "@/hooks/use-product-simulation"
+import { useCompanySettings } from "@/hooks/use-company-settings"
 
-
-export default function DashboardPage() {
+function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -59,7 +62,6 @@ export default function DashboardPage() {
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
 
-
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
@@ -80,9 +82,7 @@ export default function DashboardPage() {
 
   if (initialLoading) {
     return (
-        <div>
-            <Skeleton className="h-8 w-64 mb-2" />
-            <Skeleton className="h-5 w-96 mb-6" />
+        <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-32 w-full" />
@@ -94,20 +94,8 @@ export default function DashboardPage() {
     )
   }
 
-  const sortedKiosks = kiosks.sort((a,b) => {
-    if (a.id === 'matriz') return -1;
-    if (b.id === 'matriz') return 1;
-    return a.name.localeCompare(b.name);
-  });
-
   return (
     <>
-    <div className="space-y-6">
-       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Bem-vindo, {user?.username}!</h1>
-        <p className="text-muted-foreground">Aqui está um resumo das suas atividades e alertas.</p>
-      </div>
-      
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/dashboard/stock/inventory-control">
         <Card className="hover:bg-muted/50 transition-colors">
@@ -251,7 +239,6 @@ export default function DashboardPage() {
         </AccordionItem>
       </Accordion>
 
-    </div>
       <EditScheduleModal 
           dayData={dayToEdit}
           kioskId={kioskToEdit}
@@ -262,4 +249,66 @@ export default function DashboardPage() {
   )
 }
 
-    
+function PricingReportDashboard() {
+  const { simulations, loading: loadingSimulations } = useProductSimulation();
+  const { pricingParameters, loading: loadingParams } = useCompanySettings();
+
+  const getProfitColorClass = (percentage: number) => {
+    if (!pricingParameters?.profitRanges) return 'text-primary';
+    const sortedRanges = [...pricingParameters.profitRanges].sort((a, b) => a.from - b.from);
+    for (const range of sortedRanges) {
+      if (percentage >= range.from && (range.to === Infinity || percentage < range.to)) {
+        return range.color;
+      }
+    }
+    return 'text-primary';
+  };
+
+  const activeFilters = {
+    categoryName: null,
+    lineName: null,
+    profitGoalFilter: 'all',
+    statusFilter: 'all'
+  };
+
+  return (
+    <PricingDashboard 
+      simulations={simulations} 
+      isLoading={loadingSimulations || loadingParams}
+      getProfitColorClass={getProfitColorClass}
+      pricingParameters={pricingParameters}
+      activeFilters={activeFilters}
+    />
+  );
+}
+
+
+export default function DashboardPage() {
+    const { user } = useAuth();
+
+    return (
+        <div className="space-y-6">
+            <div className="mb-6">
+                <h1 className="text-3xl font-bold">Bem-vindo, {user?.username}!</h1>
+                <p className="text-muted-foreground">Aqui está um resumo das suas atividades e alertas.</p>
+            </div>
+            
+            <Tabs defaultValue="operational" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>
+                    <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>
+                    <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>
+                </TabsList>
+                <TabsContent value="operational" className="mt-6 space-y-6">
+                    <OperationalDashboard />
+                </TabsContent>
+                <TabsContent value="pricing" className="mt-6">
+                    <PricingReportDashboard />
+                </TabsContent>
+                <TabsContent value="tasks" className="mt-6">
+                    <ReportsDashboard />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
+}
