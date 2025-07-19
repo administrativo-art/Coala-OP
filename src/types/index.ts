@@ -535,21 +535,18 @@ export const defaultGuestPermissions: PermissionSet = {
 };
 
 export const defaultUserPermissions: PermissionSet = {
+    ...defaultGuestPermissions,
     products: { add: true, edit: false, delete: false },
     lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
-    users: { add: false, edit: false, delete: false, impersonate: false },
-    kiosks: { add: false, delete: false },
     predefinedLists: { add: true, edit: true, delete: false },
     forms: { manage: false, fill: true, viewHistory: true, deleteHistory: false },
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
-    team: { manage: false, view: true },
+    team: { view: true, manage: false },
     purchasing: { suggest: true, approve: false, viewHistory: true },
     stockCount: { perform: true, approve: false },
-    itemRequests: { manage: false },
-    pricing: { simulate: false, manageParameters: false },
-    help: { view: true },
+    pricing: { simulate: true, manageParameters: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {

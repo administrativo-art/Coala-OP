@@ -22,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -40,6 +40,7 @@ const permissionsSchema = z.object({
     purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
     itemRequests: z.object({ manage: z.boolean() }),
+    pricing: z.object({ simulate: z.boolean(), manageParameters: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -101,6 +102,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       purchasing: { ...defaultGuestPermissions.purchasing, ...profile.permissions?.purchasing },
       stockCount: { ...defaultGuestPermissions.stockCount, ...profile.permissions?.stockCount },
       itemRequests: { ...defaultGuestPermissions.itemRequests, ...profile.permissions?.itemRequests },
+      pricing: { ...defaultGuestPermissions.pricing, ...profile.permissions?.pricing },
     };
 
     form.reset({
@@ -176,7 +178,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'purchasing']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests']} className="w-full">
+                            <AccordionItem value="pricing">
+                                <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.pricing.simulate", "Simular custo e preço", "Permite criar e editar composições de mercadorias e analisar preços.")}
+                                    {renderPermissionSwitch("permissions.pricing.manageParameters", "Gerenciar parâmetros", "Permite alterar o percentual operacional e as faixas de lucro.")}
+                                </AccordionContent>
+                            </AccordionItem>
                             <AccordionItem value="purchasing">
                                 <AccordionTrigger className="text-lg font-semibold"><ShoppingCart className="mr-2 h-5 w-5" /> Gestão de compras</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
