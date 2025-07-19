@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -296,6 +297,7 @@ export type FormTaskAction = {
     approverType?: 'user' | 'profile';
     approverId?: string; // userId or profileId
     description?: string;
+    dueInDays?: number;
 };
 
 export type FormQuestion = {
@@ -569,13 +571,15 @@ export type Task = {
     // Timestamps and History
     createdAt: string;
     updatedAt: string;
+    dueDate?: string; // ISO string
+    completedAt?: string; // ISO string
     history: TaskHistoryItem[];
 };
 
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, delete: false, viewMovementHistory: false },
+    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },

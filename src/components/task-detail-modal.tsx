@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -8,7 +9,7 @@ import { type Task, type TaskHistoryItem } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText } from 'lucide-react';
+import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
 import { useForm as useSubmissionHook } from '@/hooks/use-form';
@@ -90,21 +91,24 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   });
   
   const handleMarkAsComplete = async () => {
+      const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('completed')];
       const newStatus = task.requiresApproval ? 'awaiting_approval' : 'completed';
       
-      await updateTask(task.id, { status: newStatus, history: newHistory });
-
+      const updatePayload: Partial<Task> = { status: newStatus, history: newHistory };
       if (newStatus === 'completed') {
+        updatePayload.completedAt = now;
         await updateSubmission(task.origin.submissionId, { status: 'completed' });
       }
 
+      await updateTask(task.id, updatePayload);
       handleClose();
   };
 
   const handleApprove = async () => {
+      const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('approved')];
-      await updateTask(task.id, { status: 'completed', history: newHistory });
+      await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now });
       await updateSubmission(task.origin.submissionId, { status: 'completed' });
       handleClose();
   };
@@ -115,7 +119,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
           return;
       }
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
-      await updateTask(task.id, { status: 'reopened', history: newHistory });
+      await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined });
       handleClose();
   };
   
@@ -128,7 +132,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
             <div>
               <DialogTitle className="flex items-center gap-2"><ListTodo/> {task.title}</DialogTitle>
               <DialogDescription>
-                  <p>Criada em {format(parseISO(task.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                   <p>Última atualização: {format(parseISO(task.updatedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
               </DialogDescription>
             </div>
@@ -147,6 +150,19 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                       <h4 className="text-sm font-semibold flex items-center gap-2"><UserCheck /> Aprovador</h4>
                       <p>{task.requiresApproval ? getAssigneeName(task.approverType!, task.approverId!) : 'Não requer aprovação'}</p>
                   </div>
+              </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 border rounded-lg space-y-1">
+                      <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarIcon /> Prazo de Conclusão</h4>
+                      <p>{task.dueDate ? format(parseISO(task.dueDate), 'dd/MM/yyyy') : 'Não definido'}</p>
+                  </div>
+                  {task.completedAt &&
+                    <div className="p-3 border rounded-lg space-y-1">
+                        <h4 className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 /> Data de Conclusão</h4>
+                        <p>{format(parseISO(task.completedAt), "dd/MM/yyyy 'às' HH:mm")}</p>
+                    </div>
+                  }
               </div>
 
               {task.description && 

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -5,6 +6,7 @@ import { FormContext, type FormContextType } from '@/components/form-provider';
 import { useAuth } from './use-auth';
 import { useTasks } from './use-tasks';
 import { type FormSubmission, type FormTemplate, type TaskHistoryItem, type FormQuestion } from '@/types';
+import { addDays } from 'date-fns';
 
 type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
     addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<void>;
@@ -45,13 +47,15 @@ export const useForm = (): EnrichedFormContextType => {
             question.options.forEach(option => {
                 if (selectedValues.includes(option.value) && option.action) {
                     submissionStatus = 'in_progress';
+                    const now = new Date();
                     const historyItem: TaskHistoryItem = {
-                        timestamp: new Date().toISOString(),
+                        timestamp: now.toISOString(),
                         author: { id: user.id, name: user.username },
                         action: 'created',
                         details: `Criada a partir do formulário "${template.name}"`
                     };
-                    tasksToCreate.push({
+                    
+                    const taskPayload: any = {
                         ...option.action,
                         status: 'pending',
                         origin: {
@@ -60,10 +64,16 @@ export const useForm = (): EnrichedFormContextType => {
                             questionId: question.id,
                             optionId: option.id,
                         },
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
+                        createdAt: now.toISOString(),
+                        updatedAt: now.toISOString(),
                         history: [historyItem]
-                    });
+                    };
+
+                    if (option.action.dueInDays && option.action.dueInDays > 0) {
+                        taskPayload.dueDate = addDays(now, option.action.dueInDays).toISOString();
+                    }
+
+                    tasksToCreate.push(taskPayload);
                 }
             });
         }
