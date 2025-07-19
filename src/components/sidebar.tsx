@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo } from 'lucide-react'
+import { LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo, AreaChart } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -29,11 +29,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
-
+  const canViewReports = !loading && permissions.reports.view;
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: canViewTasks },
+    { href: '/dashboard/reports', label: 'Relatórios', icon: AreaChart, show: canViewReports },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
     { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },

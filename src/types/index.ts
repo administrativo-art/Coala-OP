@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -220,6 +221,7 @@ export type PermissionSet = {
     stockCount: { perform: boolean; approve: boolean; };
     itemRequests: { manage: boolean; };
     pricing: { simulate: boolean; manageParameters: boolean; };
+    reports: { view: boolean; };
     help: { view: boolean; };
     tasks: { view: boolean; manage: boolean; };
 };
@@ -592,6 +594,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stockCount: { perform: false, approve: false },
     itemRequests: { manage: false },
     pricing: { simulate: false, manageParameters: false },
+    reports: { view: false },
     help: { view: true },
     tasks: { view: true, manage: false },
 };
@@ -626,6 +629,7 @@ export const defaultAdminPermissions: PermissionSet = {
     stockCount: { perform: true, approve: true },
     itemRequests: { manage: true },
     pricing: { simulate: true, manageParameters: true },
+    reports: { view: true },
     help: { view: true },
     tasks: { view: true, manage: true },
 };

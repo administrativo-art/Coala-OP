@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo, AreaChart } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -31,11 +31,13 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
     const canSimulatePricing = !loading && permissions.pricing.simulate;
     const canViewTasks = !loading && permissions.tasks.view;
+    const canViewReports = !loading && permissions.reports.view;
 
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
         { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: canViewTasks },
+        { href: '/dashboard/reports', label: 'Relatórios', icon: AreaChart, show: canViewReports },
         { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
