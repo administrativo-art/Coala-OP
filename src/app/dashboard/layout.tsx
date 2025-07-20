@@ -87,7 +87,7 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
-        <div className={cn("grid min-h-screen w-full", isCollapsed ? "md:grid-cols-[80px_1fr]" : "md:grid-cols-[280px_1fr]")}>
+        <div className={cn("grid min-h-screen w-full", isCollapsed ? "md:grid-cols-[100px_1fr]" : "md:grid-cols-[280px_1fr]")}>
           <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
           <div className="flex flex-col min-w-0">
             <Header tasks={legacyTasks} />
