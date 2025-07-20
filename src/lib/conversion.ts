@@ -57,3 +57,19 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
   
   return convertedValue;
 }
+
+export function formatQuantity(quantity: number, unit: string): string {
+    if (unit.toLowerCase() === 'un' || unit.toLowerCase() === 'pacote(s)') {
+        return quantity.toLocaleString();
+    }
+    
+    // Mostra decimais se não for um número inteiro
+    if (quantity % 1 !== 0) {
+        return quantity.toLocaleString(undefined, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 3
+        });
+    }
+
+    return quantity.toLocaleString();
+}
