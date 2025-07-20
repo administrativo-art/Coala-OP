@@ -1,4 +1,3 @@
-
 // src/hooks/useValidatedConsumptionData.ts
 import { useMemo } from 'react';
 import { useConsumptionAnalysis } from './use-consumption-analysis';
