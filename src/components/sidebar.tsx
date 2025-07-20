@@ -59,22 +59,23 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canViewReports = !loading && permissions.reports.view;
 
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main' },
-    { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length },
-    { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, group: 'operacao' },
-    { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, group: 'operacao' },
-    { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao' },
-    { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin' },
-    { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin' },
-    { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin' },
-    { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte' },
-  ];
+    { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length, show: canViewTasks },
+    { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, group: 'operacao', show: canViewForms },
+    { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, group: 'operacao', show: canManageStock },
+    { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
+    { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin', show: canRegister },
+    { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
+    { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
+    { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
+  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp]);
   
   const filteredNavItems = useMemo(() => {
-    if (!searchTerm) return navItems;
+    const visibleItems = navItems.filter(item => item.show);
+    if (!searchTerm) return visibleItems;
     const lowerCaseSearch = searchTerm.toLowerCase();
-    return navItems.filter(item => item.label.toLowerCase().includes(lowerCaseSearch));
+    return visibleItems.filter(item => item.label.toLowerCase().includes(lowerCaseSearch));
   }, [navItems, searchTerm]);
 
   const navGroups = {
@@ -83,6 +84,11 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     admin: { label: 'Administração', items: filteredNavItems.filter(i => i.group === 'admin') },
     suporte: { label: 'Suporte', items: filteredNavItems.filter(i => i.group === 'suporte') },
   };
+
+  const activeGroup = useMemo(() => {
+    const activeItem = navItems.find(item => pathname.startsWith(item.href) && item.href !== '/dashboard');
+    return activeItem ? activeItem.group : null;
+  }, [pathname, navItems]);
   
   const renderNavItem = (item: typeof navItems[0]) => (
     <li key={item.href}>
@@ -94,16 +100,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 onClick={() => setLastVisited(item.href)}
                 onMouseEnter={() => prefetch(item.href)}
                 onMouseLeave={clearPrefetch}
-                data-active={pathname === item.href}
+                data-active={pathname.startsWith(item.href)}
                 data-last-visited={lastVisited === item.href}
                 className={cn(
                     "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[last-visited=true]:animate-pulse-once",
                     isCollapsed ? "justify-center" : "justify-start",
-                    pathname.startsWith(item.href) && item.href !== '/dashboard' && "bg-secondary text-secondary-foreground",
-                    pathname === item.href && item.href === '/dashboard' && "bg-secondary text-secondary-foreground"
+                    pathname.startsWith(item.href) && "bg-secondary text-secondary-foreground"
                 )}
             >
-                <div className={cn("absolute left-0 top-0 h-full w-[3px] rounded-r bg-primary opacity-0 transition-opacity", pathname === item.href && "opacity-100")} />
+                <div className={cn("absolute left-0 top-0 h-full w-[3px] rounded-r bg-primary opacity-0 transition-opacity", pathname.startsWith(item.href) && "opacity-100")} />
                 <item.icon className="h-5 w-5 shrink-0" />
                 {!isCollapsed && <span className={cn("whitespace-nowrap flex-grow transition-opacity duration-150", isCollapsed && "opacity-0")}>{item.label}</span>}
                 {!isCollapsed && item.notificationCount && item.notificationCount > 0 && (
@@ -161,28 +166,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
         {isCollapsed ? (
             <ul className="space-y-1 mt-2 border-t pt-2">
-                {filteredNavItems.filter(i => i.group !== 'main').map(renderNavItem)}
+                {filteredNavItems.filter(i => i.group !== 'main' && i.show).map(renderNavItem)}
             </ul>
         ) : (
-            <Accordion type="multiple" defaultValue={['operacao', 'admin', 'suporte']} className="w-full">
+            <Accordion type="multiple" defaultValue={activeGroup ? [activeGroup] : []} className="w-full">
                 {Object.entries(navGroups).map(([key, group]) => {
                     if (key === 'main' || group.items.length === 0) return null;
-                    
-                    const visibleItems = group.items.filter(item => {
-                        if (item.href === '/dashboard/tasks') return canViewTasks;
-                        if (item.href === '/dashboard/forms') return canViewForms;
-                        if (item.href === '/dashboard/stock') return canManageStock;
-                        if (item.href === '/dashboard/team') return canManageTeam;
-                        if (item.href === '/dashboard/registration') return canRegister;
-                        if (item.href === '/dashboard/pricing') return canSimulatePricing;
-                        if (item.href === '/dashboard/settings') return canManageUsers;
-                        if (item.href === '/dashboard/help') return canUseHelp;
-                        return false;
-                    });
-
-                    if (visibleItems.length === 0 && !searchTerm) return null;
-                    if (visibleItems.length === 0 && searchTerm) return null;
-
 
                     return (
                         <AccordionItem value={key} key={key} className="border-none">
@@ -191,7 +180,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                             </AccordionTrigger>
                             <AccordionContent className="pb-1">
                                 <ul className="space-y-1">
-                                    {visibleItems.map(renderNavItem)}
+                                    {group.items.map(renderNavItem)}
                                 </ul>
                             </AccordionContent>
                         </AccordionItem>
@@ -214,6 +203,3 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     </div>
   )
 }
-
-
-    
