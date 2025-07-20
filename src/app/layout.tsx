@@ -59,13 +59,14 @@ export default function RootLayout({
               <LocationsProvider>
                 <CompanySettingsProvider>
                   <EntitiesProvider>
-                    <PurchaseProvider>
-                      <BaseProductsProvider>
+                    <BaseProductsProvider>
+                      <PurchaseProvider>
                         <ProductsProvider>
                           <ProductSimulationCategoryProvider>
                             <ProductSimulationProvider>
                               <ExpiryProductsProvider>
                                 <PredefinedListsProvider>
+                                  <TaskProvider>
                                     <FormProvider>
                                       <ConsumptionAnalysisProvider>
                                         <MovementHistoryProvider>
@@ -87,13 +88,14 @@ export default function RootLayout({
                                         </MovementHistoryProvider>
                                       </ConsumptionAnalysisProvider>
                                     </FormProvider>
+                                  </TaskProvider>
                                 </PredefinedListsProvider>
                               </ExpiryProductsProvider>
                             </ProductSimulationProvider>
                           </ProductSimulationCategoryProvider>
                         </ProductsProvider>
-                      </BaseProductsProvider>
-                    </PurchaseProvider>
+                      </PurchaseProvider>
+                    </BaseProductsProvider>
                   </EntitiesProvider>
                 </CompanySettingsProvider>
               </LocationsProvider>
