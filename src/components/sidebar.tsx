@@ -5,12 +5,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "./ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
+import { ThemeToggle } from "./theme-toggle"
 
 interface SidebarProps {
     isCollapsed: boolean;
@@ -24,8 +25,8 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
-
-  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform || permissions.stockCount.approve);
+  
+  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
@@ -33,6 +34,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
   const canViewReports = !loading && permissions.reports.view;
+
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main' },
