@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -31,6 +31,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const navRef = useRef<HTMLElement>(null);
   const [isScrolling, setIsScrolling] = React.useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
 
   React.useEffect(() => {
     const nav = navRef.current;
@@ -60,7 +61,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
 
   const navItems = useMemo(() => [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main' },
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length, show: canViewTasks },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, group: 'operacao', show: canViewForms },
     { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, group: 'operacao', show: canManageStock },
@@ -72,23 +73,34 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp]);
   
   const filteredNavItems = useMemo(() => {
-    const visibleItems = navItems.filter(item => item.show);
+    const visibleItems = navItems.filter(item => item.show !== false);
     if (!searchTerm) return visibleItems;
     const lowerCaseSearch = searchTerm.toLowerCase();
     return visibleItems.filter(item => item.label.toLowerCase().includes(lowerCaseSearch));
   }, [navItems, searchTerm]);
 
-  const navGroups = {
+  const navGroups = useMemo(() => ({
     main: { items: filteredNavItems.filter(i => i.group === 'main') },
     operacao: { label: 'Operação', items: filteredNavItems.filter(i => i.group === 'operacao') },
     admin: { label: 'Administração', items: filteredNavItems.filter(i => i.group === 'admin') },
     suporte: { label: 'Suporte', items: filteredNavItems.filter(i => i.group === 'suporte') },
-  };
-
+  }), [filteredNavItems]);
+  
   const activeGroup = useMemo(() => {
     const activeItem = navItems.find(item => pathname.startsWith(item.href) && item.href !== '/dashboard');
     return activeItem ? activeItem.group : null;
   }, [pathname, navItems]);
+
+  useEffect(() => {
+    if (searchTerm) {
+        const groupsWithResults = Object.entries(navGroups)
+            .filter(([, group]) => group.items.length > 0)
+            .map(([key]) => key);
+        setOpenAccordionItems(groupsWithResults);
+    } else {
+        setOpenAccordionItems(activeGroup ? [activeGroup] : []);
+    }
+  }, [searchTerm, navGroups, activeGroup]);
   
   const renderNavItem = (item: typeof navItems[0]) => (
     <li key={item.href}>
@@ -166,10 +178,10 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
         {isCollapsed ? (
             <ul className="space-y-1 mt-2 border-t pt-2">
-                {filteredNavItems.filter(i => i.group !== 'main' && i.show).map(renderNavItem)}
+                {filteredNavItems.filter(i => i.group !== 'main' && i.show !== false).map(renderNavItem)}
             </ul>
         ) : (
-            <Accordion type="multiple" defaultValue={activeGroup ? [activeGroup] : []} className="w-full">
+            <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
                 {Object.entries(navGroups).map(([key, group]) => {
                     if (key === 'main' || group.items.length === 0) return null;
 
