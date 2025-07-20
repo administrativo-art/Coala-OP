@@ -64,32 +64,31 @@ export default function RootLayout({
                         <ProductSimulationProvider>
                           <ExpiryProductsProvider>
                             <PredefinedListsProvider>
-                              <ItemAdditionProvider>
-                                <TaskProvider>
-                                  <FormProvider>
-                                    <AllTasksProvider>
-                                      <ConsumptionAnalysisProvider>
-                                        <MovementHistoryProvider>
-                                          <ReturnsProvider>
-                                            <ScheduleProvider>
-                                              <MonthlyScheduleProvider>
-                                                <StockCountProvider>
-                                                  <PurchaseProvider>
-                                                    <RepositionProvider>
+                                <FormProvider>
+                                  <ConsumptionAnalysisProvider>
+                                    <MovementHistoryProvider>
+                                      <ReturnsProvider>
+                                        <ScheduleProvider>
+                                          <MonthlyScheduleProvider>
+                                            <PurchaseProvider>
+                                              <RepositionProvider>
+                                                <ItemAdditionProvider>
+                                                  <StockCountProvider>
+                                                    <TaskProvider>
+                                                      <AllTasksProvider>
                                                         {children}
-                                                      <Toaster />
-                                                    </RepositionProvider>
-                                                  </PurchaseProvider>
-                                                </StockCountProvider>
-                                              </MonthlyScheduleProvider>
-                                            </ScheduleProvider>
-                                          </ReturnsProvider>
-                                        </MovementHistoryProvider>
-                                      </ConsumptionAnalysisProvider>
-                                    </AllTasksProvider>
-                                  </FormProvider>
-                                </TaskProvider>
-                              </ItemAdditionProvider>
+                                                      </AllTasksProvider>
+                                                    </TaskProvider>
+                                                  </StockCountProvider>
+                                                </ItemAdditionProvider>
+                                              </RepositionProvider>
+                                            </PurchaseProvider>
+                                          </MonthlyScheduleProvider>
+                                        </ScheduleProvider>
+                                      </ReturnsProvider>
+                                    </MovementHistoryProvider>
+                                  </ConsumptionAnalysisProvider>
+                                </FormProvider>
                             </PredefinedListsProvider>
                           </ExpiryProductsProvider>
                         </ProductSimulationProvider>
@@ -101,6 +100,7 @@ export default function RootLayout({
             </KiosksProvider>
           </AuthProvider>
         </ProfilesProvider>
+        <Toaster />
         </ThemeProvider>
       </body>
     </html>
