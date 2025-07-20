@@ -42,6 +42,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const [isScrolling, setIsScrolling] = React.useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
+  const [openSubAccordionItems, setOpenSubAccordionItems] = useState<string[]>([]);
 
   React.useEffect(() => {
     const nav = navRef.current;
@@ -78,12 +79,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         group: 'operacao', 
         show: canManageStock,
         subItems: [
-            { href: '/dashboard/stock/inventory-control', label: 'Controle de Estoque', icon: ClipboardCheck },
-            { href: '/dashboard/stock/count', label: 'Contagem de Estoque', icon: ListOrdered },
-            { href: '/dashboard/stock/analysis', label: 'Análise de Estoque', icon: BarChart2 },
-            { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign },
-            { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert },
-            { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat },
+            { href: '/dashboard/stock/inventory-control', label: 'Controle de Estoque', icon: ClipboardCheck, show: true },
+            { href: '/dashboard/stock/count', label: 'Contagem de Estoque', icon: ListOrdered, show: true },
+            { href: '/dashboard/stock/analysis', label: 'Análise de Estoque', icon: BarChart2, show: true },
+            { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
+            { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
+            { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
         ]
     },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
@@ -127,18 +128,29 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     return activeItem ? activeItem.group : null;
   }, [pathname, navItems]);
 
+  const activeSubAccordion = useMemo(() => {
+    const activeItem = navItems.find(item => item.subItems?.some(sub => pathname.startsWith(sub.href)));
+    return activeItem ? activeItem.href : null;
+  }, [pathname, navItems]);
+
   useEffect(() => {
     if (searchTerm) {
-        const groupsWithResults = Object.entries(navGroups)
-            .filter(([, group]) => group.items.length > 0)
-            .map(([key]) => key);
+        const groupsWithResults = Object.keys(navGroups).filter(key => navGroups[key as keyof typeof navGroups].items.length > 0);
         setOpenAccordionItems(groupsWithResults);
+
+        const subAccordionsWithResults = filteredNavItems
+            .filter(item => item.subItems && item.subItems.length < (navItems.find(i => i.href === item.href)?.subItems?.length || 0))
+            .map(item => item.href);
+        setOpenSubAccordionItems(prev => [...new Set([...prev, ...subAccordionsWithResults])]);
+
     } else {
         setOpenAccordionItems(activeGroup ? [activeGroup] : []);
+        setOpenSubAccordionItems(activeSubAccordion ? [activeSubAccordion] : []);
     }
-  }, [searchTerm, navGroups, activeGroup]);
+  }, [searchTerm, navGroups, activeGroup, activeSubAccordion, filteredNavItems, navItems]);
 
-  const renderLink = (item: NavItem, isSubItem = false) => (
+
+  const renderLink = (item: Pick<NavItem, 'href'|'label'|'icon'>, isSubItem = false) => (
      <Link
         href={item.href}
         onClick={() => setLastVisited(item.href)}
@@ -154,18 +166,39 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             isSubItem && "pl-8 text-sm h-8"
         )}
     >
-        <div className={cn("absolute left-0 top-0 h-full w-[3px] rounded-r bg-primary opacity-0 transition-opacity", (pathname.startsWith(item.href) && !isSubItem) && "opacity-100")} />
+        {isSubItem && <div className={cn("absolute left-4 top-0 h-full w-[2px] rounded-r transition-colors", pathname.startsWith(item.href) ? "bg-primary" : "bg-border/70 group-hover:bg-border")} />}
         <item.icon className={cn("shrink-0", isSubItem ? "h-4 w-4" : "h-5 w-5")} />
         {!isCollapsed && <span className={cn("whitespace-nowrap flex-grow transition-opacity duration-150", isCollapsed && "opacity-0")}>{item.label}</span>}
-        {!isCollapsed && !isSubItem && item.notificationCount && item.notificationCount > 0 && (
-            <Badge variant="destructive" className="ml-auto">{item.notificationCount}</Badge>
-        )}
         <span className="sr-only">{item.label}</span>
     </Link>
   )
   
-  const renderNavItem = (item: NavItem) => (
-    <li key={item.href}>
+  const renderNavItem = (item: NavItem) => {
+    const hasSubItems = !isCollapsed && item.subItems && item.subItems.length > 0;
+    
+    if (hasSubItems) {
+        return (
+            <Accordion type="single" collapsible value={openSubAccordionItems.includes(item.href) ? item.href : undefined} onValueChange={(value) => setOpenSubAccordionItems(value ? [value] : [])}>
+                <AccordionItem value={item.href} className="border-none">
+                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">
+                        <div className="flex items-center gap-3 flex-grow">
+                            <item.icon className="h-5 w-5 shrink-0" />
+                            <span className="whitespace-nowrap flex-grow text-left">{item.label}</span>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-1 pl-4">
+                        <ul className="space-y-1">
+                            {item.subItems!.map(subItem => (
+                                <li key={subItem.href}>{renderLink(subItem, true)}</li>
+                            ))}
+                        </ul>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
+        )
+    }
+    
+    return (
         <TooltipProvider delayDuration={0}>
         <Tooltip>
             <TooltipTrigger asChild>
@@ -179,17 +212,8 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             )}
         </Tooltip>
         </TooltipProvider>
-        {!isCollapsed && item.subItems && (
-            <ul className="pl-4 pt-1 space-y-1">
-                {item.subItems.map(subItem => (
-                    <li key={subItem.href}>
-                        {renderLink(subItem, true)}
-                    </li>
-                ))}
-            </ul>
-        )}
-    </li>
-  );
+    );
+  };
 
   return (
     <div className={cn("hidden border-r bg-card text-foreground md:flex flex-col dark transition-[width] duration-300", isCollapsed ? "w-[80px]" : "w-[280px]")}>
@@ -224,12 +248,16 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
        <nav ref={navRef} className={cn("flex-1 overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
         <ul>
-            {navGroups.main.items.map(renderNavItem)}
+            {navGroups.main.items.map(item => (
+                <li key={item.href}>{renderNavItem(item)}</li>
+            ))}
         </ul>
 
         {isCollapsed ? (
             <ul className="space-y-1 mt-2 border-t pt-2">
-                {filteredNavItems.filter(i => i.group !== 'main').map(renderNavItem)}
+                {filteredNavItems.filter(i => i.group !== 'main').map(item => (
+                    <li key={item.href}>{renderNavItem(item)}</li>
+                ))}
             </ul>
         ) : (
             <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
@@ -243,7 +271,9 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                             </AccordionTrigger>
                             <AccordionContent className="pb-1">
                                 <ul className="space-y-1">
-                                    {group.items.map(renderNavItem)}
+                                    {group.items.map(item => (
+                                        <li key={item.href}>{renderNavItem(item)}</li>
+                                    ))}
                                 </ul>
                             </AccordionContent>
                         </AccordionItem>
