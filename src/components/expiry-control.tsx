@@ -362,26 +362,22 @@ export function ExpiryControl() {
                          <span className="text-sm font-semibold text-muted-foreground">{displayQuantity} {displayUnit}</span>
                      </div>
                      <div className="space-y-4">
-                        {baseGroup.brands.map(brandGroup => (
-                            <div key={brandGroup.brandName} className="space-y-4">
-                                {brandGroup.products.map(productGroup => (
-                                    <LotCard
-                                        key={productGroup.product.id}
-                                        productGroup={productGroup}
-                                        getProductFullName={getProductFullName}
-                                        kiosks={kiosks}
-                                        locations={locations}
-                                        onEdit={handleEditClick}
-                                        onMove={handleMoveClick}
-                                        onDelete={handleDeleteClick}
-                                        onViewHistory={handleViewHistoryClick}
-                                        canEdit={permissions.lots.edit}
-                                        canMove={permissions.lots.move}
-                                        canDelete={permissions.lots.delete}
-                                        canViewHistory={permissions.lots.viewMovementHistory}
-                                    />
-                                ))}
-                            </div>
+                        {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(productGroup => (
+                            <LotCard
+                                key={productGroup.product.id}
+                                productGroup={productGroup}
+                                getProductFullName={getProductFullName}
+                                kiosks={kiosks}
+                                locations={locations}
+                                onEdit={handleEditClick}
+                                onMove={handleMoveClick}
+                                onDelete={handleDeleteClick}
+                                onViewHistory={handleViewHistoryClick}
+                                canEdit={permissions.lots.edit}
+                                canMove={permissions.lots.move}
+                                canDelete={permissions.lots.delete}
+                                canViewHistory={permissions.lots.viewMovementHistory}
+                            />
                         ))}
                      </div>
                  </div>

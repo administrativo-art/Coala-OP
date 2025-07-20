@@ -46,7 +46,6 @@
     "genkit": "^1.8.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
     "next-themes": "^0.3.0",
