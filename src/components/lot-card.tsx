@@ -27,6 +27,7 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
+import { formatQuantity } from '@/lib/conversion';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -274,7 +275,8 @@ export function LotCard({
                                     {productGroup.lots.slice(0, 4).map(lot => (
                                         <div key={lot.id} className="p-2 border rounded-md text-sm">
                                             <p className="font-semibold">Lote: {lot.lotNumber}</p>
-                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                            <p className="text-muted-foreground">Qtd: {formatQuantity(lot.quantity, product.unit)} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                            <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -282,7 +284,7 @@ export function LotCard({
                         </PopoverContent>
                     </Popover>
                 </div>
-                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {product.packageSize}{product.unit}</p>
+                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {formatQuantity(product.packageSize, product.unit)}</p>
             </div>
         </div>
 
@@ -305,7 +307,7 @@ export function LotCard({
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="text-center p-2 rounded-md bg-background w-24">
-                                <div className="text-2xl font-bold">{lot.quantity}</div>
+                                <div className="text-2xl font-bold">{formatQuantity(lot.quantity, product.unit)}</div>
                                 <div className="text-xs text-muted-foreground">unidades</div>
                             </div>
                             <div className="flex flex-col gap-0.5 border-l pl-1">
