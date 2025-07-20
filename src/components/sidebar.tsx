@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -124,7 +124,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   );
 
   return (
-    <div className={cn("hidden border-r bg-card text-foreground md:flex flex-col dark transition-[width] duration-300", isCollapsed ? "w-[80px]" : "w-[100px]")}>
+    <div className={cn("hidden border-r bg-card text-foreground md:flex flex-col dark transition-[width] duration-300", isCollapsed ? "w-[80px]" : "w-[280px]")}>
       <div className="flex h-[60px] shrink-0 items-center justify-center border-b px-4">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
             {isCollapsed ? (
@@ -214,3 +214,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     </div>
   )
 }
+
+
+    
