@@ -12,15 +12,21 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "./ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
-import { ThemeToggle } from "./theme-toggle"
 import { useSidebar } from '@/hooks/use-sidebar-state';
 import { Input } from './ui/input';
+import { ThemeToggle } from './theme-toggle';
 
 
 interface SidebarProps {
     isCollapsed: boolean;
     setIsCollapsed: (isCollapsed: boolean) => void;
 }
+
+const submodules: Record<string, string[]> = {
+    '/dashboard/stock': ['Controle de estoque', 'Contagem de estoque', 'Análise de estoque', 'Compras', 'Avarias', 'Conversão de medidas', 'Reposição', 'Análise financeira', 'Consumo médio'],
+    '/dashboard/registration': ['Insumos', 'Produto Base', 'Pessoas e Empresas'],
+    '/dashboard/settings': ['Usuários', 'Perfis', 'Etiquetas'],
+};
 
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
@@ -57,7 +63,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
-  const canViewReports = !loading && permissions.reports.view;
 
 
   const navItems = useMemo(() => [
@@ -76,7 +81,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     const visibleItems = navItems.filter(item => item.show !== false);
     if (!searchTerm) return visibleItems;
     const lowerCaseSearch = searchTerm.toLowerCase();
-    return visibleItems.filter(item => item.label.toLowerCase().includes(lowerCaseSearch));
+
+    return visibleItems.filter(item => {
+        const hasMatchingSubmodule = (submodules[item.href] || []).some(sub => sub.toLowerCase().includes(lowerCaseSearch));
+        return item.label.toLowerCase().includes(lowerCaseSearch) || hasMatchingSubmodule;
+    });
+
   }, [navItems, searchTerm]);
 
   const navGroups = useMemo(() => ({
