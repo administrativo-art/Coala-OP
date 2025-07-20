@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "./ui/badge"
@@ -22,11 +22,15 @@ interface SidebarProps {
     setIsCollapsed: (isCollapsed: boolean) => void;
 }
 
-const submodules: Record<string, string[]> = {
-    '/dashboard/stock': ['Controle de estoque', 'Contagem de estoque', 'Análise de estoque', 'Compras', 'Avarias', 'Conversão de medidas', 'Reposição', 'Análise financeira', 'Consumo médio'],
-    '/dashboard/registration': ['Insumos', 'Produto Base', 'Pessoas e Empresas'],
-    '/dashboard/settings': ['Usuários', 'Perfis', 'Etiquetas'],
-};
+interface NavItem {
+    href: string;
+    label: string;
+    icon: React.ElementType;
+    group: string;
+    show?: boolean;
+    notificationCount?: number;
+    subItems?: Omit<NavItem, 'group' | 'subItems' | 'notificationCount'>[];
+}
 
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
@@ -55,8 +59,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
-  
-  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve);
+  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
@@ -64,12 +67,25 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
 
-
-  const navItems = useMemo(() => [
+  const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length, show: canViewTasks },
     { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, group: 'operacao', show: canViewForms },
-    { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, group: 'operacao', show: canManageStock },
+    { 
+        href: '/dashboard/stock', 
+        label: 'Gestão de estoque', 
+        icon: ClipboardCheck, 
+        group: 'operacao', 
+        show: canManageStock,
+        subItems: [
+            { href: '/dashboard/stock/inventory-control', label: 'Controle de Estoque', icon: ClipboardCheck },
+            { href: '/dashboard/stock/count', label: 'Contagem de Estoque', icon: ListOrdered },
+            { href: '/dashboard/stock/analysis', label: 'Análise de Estoque', icon: BarChart2 },
+            { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign },
+            { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert },
+            { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat },
+        ]
+    },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin', show: canRegister },
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
@@ -78,14 +94,24 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp]);
   
   const filteredNavItems = useMemo(() => {
-    const visibleItems = navItems.filter(item => item.show !== false);
-    if (!searchTerm) return visibleItems;
+    if (!searchTerm) return navItems.filter(item => item.show !== false);
+
     const lowerCaseSearch = searchTerm.toLowerCase();
 
-    return visibleItems.filter(item => {
-        const hasMatchingSubmodule = (submodules[item.href] || []).some(sub => sub.toLowerCase().includes(lowerCaseSearch));
-        return item.label.toLowerCase().includes(lowerCaseSearch) || hasMatchingSubmodule;
-    });
+    return navItems.map(item => {
+        if (item.show === false) return null;
+
+        const mainLabelMatch = item.label.toLowerCase().includes(lowerCaseSearch);
+        const matchingSubItems = item.subItems?.filter(sub => sub.label.toLowerCase().includes(lowerCaseSearch));
+
+        if (mainLabelMatch || (matchingSubItems && matchingSubItems.length > 0)) {
+            return {
+                ...item,
+                subItems: mainLabelMatch ? item.subItems : matchingSubItems
+            };
+        }
+        return null;
+    }).filter((item): item is NavItem => item !== null);
 
   }, [navItems, searchTerm]);
 
@@ -111,33 +137,39 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         setOpenAccordionItems(activeGroup ? [activeGroup] : []);
     }
   }, [searchTerm, navGroups, activeGroup]);
+
+  const renderLink = (item: NavItem, isSubItem = false) => (
+     <Link
+        href={item.href}
+        onClick={() => setLastVisited(item.href)}
+        onMouseEnter={() => prefetch(item.href)}
+        onMouseLeave={clearPrefetch}
+        data-active={pathname.startsWith(item.href)}
+        data-last-visited={lastVisited === item.href}
+        className={cn(
+            "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative",
+            isCollapsed ? "justify-center" : "justify-start",
+            pathname.startsWith(item.href) && !isSubItem && "bg-secondary text-secondary-foreground",
+            pathname === item.href && isSubItem && "bg-muted text-foreground",
+            isSubItem && "pl-8 text-sm h-8"
+        )}
+    >
+        <div className={cn("absolute left-0 top-0 h-full w-[3px] rounded-r bg-primary opacity-0 transition-opacity", (pathname.startsWith(item.href) && !isSubItem) && "opacity-100")} />
+        <item.icon className={cn("shrink-0", isSubItem ? "h-4 w-4" : "h-5 w-5")} />
+        {!isCollapsed && <span className={cn("whitespace-nowrap flex-grow transition-opacity duration-150", isCollapsed && "opacity-0")}>{item.label}</span>}
+        {!isCollapsed && !isSubItem && item.notificationCount && item.notificationCount > 0 && (
+            <Badge variant="destructive" className="ml-auto">{item.notificationCount}</Badge>
+        )}
+        <span className="sr-only">{item.label}</span>
+    </Link>
+  )
   
-  const renderNavItem = (item: typeof navItems[0]) => (
+  const renderNavItem = (item: NavItem) => (
     <li key={item.href}>
         <TooltipProvider delayDuration={0}>
         <Tooltip>
             <TooltipTrigger asChild>
-            <Link
-                href={item.href}
-                onClick={() => setLastVisited(item.href)}
-                onMouseEnter={() => prefetch(item.href)}
-                onMouseLeave={clearPrefetch}
-                data-active={pathname.startsWith(item.href)}
-                data-last-visited={lastVisited === item.href}
-                className={cn(
-                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[last-visited=true]:animate-pulse-once",
-                    isCollapsed ? "justify-center" : "justify-start",
-                    pathname.startsWith(item.href) && "bg-secondary text-secondary-foreground"
-                )}
-            >
-                <div className={cn("absolute left-0 top-0 h-full w-[3px] rounded-r bg-primary opacity-0 transition-opacity", pathname.startsWith(item.href) && "opacity-100")} />
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!isCollapsed && <span className={cn("whitespace-nowrap flex-grow transition-opacity duration-150", isCollapsed && "opacity-0")}>{item.label}</span>}
-                {!isCollapsed && item.notificationCount && item.notificationCount > 0 && (
-                <Badge variant="destructive" className="ml-auto">{item.notificationCount}</Badge>
-                )}
-                <span className="sr-only">{item.label}</span>
-            </Link>
+                {renderLink(item)}
             </TooltipTrigger>
             {isCollapsed && (
             <TooltipContent side="right">
@@ -147,6 +179,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             )}
         </Tooltip>
         </TooltipProvider>
+        {!isCollapsed && item.subItems && (
+            <ul className="pl-4 pt-1 space-y-1">
+                {item.subItems.map(subItem => (
+                    <li key={subItem.href}>
+                        {renderLink(subItem, true)}
+                    </li>
+                ))}
+            </ul>
+        )}
     </li>
   );
 
@@ -188,7 +229,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
         {isCollapsed ? (
             <ul className="space-y-1 mt-2 border-t pt-2">
-                {filteredNavItems.filter(i => i.group !== 'main' && i.show !== false).map(renderNavItem)}
+                {filteredNavItems.filter(i => i.group !== 'main').map(renderNavItem)}
             </ul>
         ) : (
             <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
