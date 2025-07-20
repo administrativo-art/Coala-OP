@@ -1,8 +1,9 @@
 
 "use client"
 
+import React, { useRef } from 'react';
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart } from 'lucide-react'
@@ -12,6 +13,8 @@ import { Badge } from "./ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
 import { ThemeToggle } from "./theme-toggle"
+import { useSidebar } from '@/hooks/use-sidebar-state';
+
 
 interface SidebarProps {
     isCollapsed: boolean;
@@ -20,8 +23,26 @@ interface SidebarProps {
 
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter();
   const { permissions, loading, user } = useAuth()
   const { legacyTasks } = useAllTasks();
+  const { lastVisited, setLastVisited, prefetch, clearPrefetch } = useSidebar();
+  const navRef = useRef<HTMLElement>(null);
+  const [isScrolling, setIsScrolling] = React.useState(false);
+
+  React.useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const handleScroll = () => {
+        setIsScrolling(nav.scrollTop > 0);
+    };
+
+    nav.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+        nav.removeEventListener('scroll', handleScroll);
+    };
+}, []);
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
@@ -62,9 +83,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             <TooltipTrigger asChild>
             <Link
                 href={item.href}
+                onClick={() => setLastVisited(item.href)}
+                onMouseEnter={() => prefetch(item.href)}
+                onMouseLeave={clearPrefetch}
                 data-active={pathname === item.href}
+                data-last-visited={lastVisited === item.href}
                 className={cn(
-                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative",
+                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[last-visited=true]:animate-pulse-once",
                     isCollapsed ? "justify-center" : "justify-start",
                     pathname.startsWith(item.href) && item.href !== '/dashboard' && "bg-secondary text-secondary-foreground",
                     pathname === item.href && item.href === '/dashboard' && "bg-secondary text-secondary-foreground"
@@ -106,7 +131,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </Link>
         </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-4">
+       <nav ref={navRef} className={cn("flex-1 overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
         <ul>
             {navGroups.main.items.map(renderNavItem)}
         </ul>
