@@ -40,7 +40,7 @@ export function TaskManager() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <ListTodo />
-                        Central de Tarefas e Pendências
+                        Central de tarefas e pendências
                     </CardTitle>
                     <CardDescription>
                         Visualize e gerencie todas as suas tarefas e pendências do sistema em um só lugar.
@@ -53,7 +53,7 @@ export function TaskManager() {
                                 <AlertCircle className="mr-2 h-4 w-4" /> Pendentes ({taskLists.pending.length})
                             </TabsTrigger>
                             <TabsTrigger value="awaiting_approval">
-                                <History className="mr-2 h-4 w-4" /> Aguardando Aprovação ({taskLists.awaiting_approval.length})
+                                <History className="mr-2 h-4 w-4" /> Aguardando aprovação ({taskLists.awaiting_approval.length})
                             </TabsTrigger>
                             <TabsTrigger value="completed">
                                 <CheckCircle2 className="mr-2 h-4 w-4" /> Concluídas

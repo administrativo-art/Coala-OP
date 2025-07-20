@@ -20,9 +20,9 @@ const getStatusInfo = (status: Task['status']) => {
         case 'reopened':
             return { icon: AlertCircle, color: 'text-orange-500', label: status === 'reopened' ? 'Reaberta' : 'Pendente' };
         case 'in_progress':
-            return { icon: AlertCircle, color: 'text-blue-500', label: 'Em Progresso' };
+            return { icon: AlertCircle, color: 'text-blue-500', label: 'Em progresso' };
         case 'awaiting_approval':
-            return { icon: History, color: 'text-purple-500', label: 'Aguardando Aprovação' };
+            return { icon: History, color: 'text-purple-500', label: 'Aguardando aprovação' };
         case 'completed':
             return { icon: CheckCircle2, color: 'text-green-600', label: 'Concluída' };
         case 'rejected':

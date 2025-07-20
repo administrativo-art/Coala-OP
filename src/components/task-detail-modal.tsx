@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -28,9 +29,9 @@ const getStatusInfo = (status: Task['status']) => {
         case 'reopened':
             return { label: 'Reaberta', color: 'bg-orange-600 text-white' };
         case 'in_progress':
-            return { label: 'Em Progresso', color: 'bg-blue-500 text-white' };
+            return { label: 'Em progresso', color: 'bg-blue-500 text-white' };
         case 'awaiting_approval':
-            return { label: 'Aguardando Aprovação', color: 'bg-purple-500 text-white' };
+            return { label: 'Aguardando aprovação', color: 'bg-purple-500 text-white' };
         case 'completed':
             return { label: 'Concluída', color: 'bg-green-600 text-white' };
         case 'rejected':
@@ -153,12 +154,12 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-3 border rounded-lg space-y-1">
-                      <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarIcon /> Prazo de Conclusão</h4>
+                      <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarIcon /> Prazo de conclusão</h4>
                       <p>{task.dueDate ? format(parseISO(task.dueDate), 'dd/MM/yyyy') : 'Não definido'}</p>
                   </div>
                   {task.completedAt &&
                     <div className="p-3 border rounded-lg space-y-1">
-                        <h4 className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 /> Data de Conclusão</h4>
+                        <h4 className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 /> Data de conclusão</h4>
                         <p>{format(parseISO(task.completedAt), "dd/MM/yyyy 'às' HH:mm")}</p>
                     </div>
                   }
@@ -174,10 +175,10 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
               {submission &&
                 <div className="p-3 border rounded-lg flex items-center justify-between">
                     <div>
-                        <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Origem do Formulário</h4>
+                        <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Origem do formulário</h4>
                         <p className="text-sm mt-1 text-muted-foreground">{submission.templateName}</p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setIsSubmissionModalOpen(true)}>Visualizar Resposta</Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsSubmissionModalOpen(true)}>Visualizar resposta</Button>
                 </div>
               }
 
@@ -221,7 +222,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
               ) : (
                 <Button onClick={handleMarkAsComplete}>
                   <Send className="mr-2" />
-                  {task.requiresApproval ? 'Enviar para Aprovação' : 'Marcar como Concluída'}
+                  {task.requiresApproval ? 'Enviar para aprovação' : 'Marcar como concluída'}
                 </Button>
               )}
             </div>

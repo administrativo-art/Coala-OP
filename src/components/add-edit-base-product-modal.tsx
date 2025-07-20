@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useEffect, useMemo } from 'react';
@@ -118,7 +119,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{productToEdit ? 'Editar produto base' : 'Adicionar produto base'}</DialogTitle>
+          <DialogTitle>{productToEdit ? 'Editar produto base' : 'Novo produto base'}</DialogTitle>
           <DialogDescription>
             {productToEdit ? 'Edite as informações do produto base.' : 'Crie um novo produto base para agrupar insumos.'}
           </DialogDescription>

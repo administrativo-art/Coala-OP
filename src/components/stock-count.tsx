@@ -121,8 +121,8 @@ function PendingApprovals() {
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead>Lote</TableHead>
-                    <TableHead className="text-center">Qtd. Sistema</TableHead>
-                    <TableHead className="text-center">Qtd. Contada</TableHead>
+                    <TableHead className="text-center">Qtd. sistema</TableHead>
+                    <TableHead className="text-center">Qtd. contada</TableHead>
                     <TableHead className="text-center">Diferença</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -257,7 +257,7 @@ export function StockCount() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de Estoque</CardTitle>
+          <CardTitle className="flex items-center gap-2"><ListOrdered /> Contagem de estoque</CardTitle>
           <CardDescription>
             Realize a contagem de estoque e gerencie solicitações de cadastro e aprovações de ajuste.
           </CardDescription>
@@ -265,7 +265,7 @@ export function StockCount() {
         <CardContent>
            <Tabs defaultValue="count" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="count"><ListOrdered className="mr-2 h-4 w-4" /> Realizar Contagem</TabsTrigger>
+                    <TabsTrigger value="count"><ListOrdered className="mr-2 h-4 w-4" /> Realizar contagem</TabsTrigger>
                     {showManagementTab && <TabsTrigger value="management"><ShieldCheck className="mr-2 h-4 w-4" /> Gerenciamento</TabsTrigger>}
                 </TabsList>
                 <TabsContent value="count" className="mt-4">
@@ -283,7 +283,7 @@ export function StockCount() {
                                 disabled={!selectedKioskId}
                             >
                                 <PlusCircle className="mr-2 h-4 w-4" />
-                                Solicitar Cadastro de Insumo
+                                Solicitar cadastro de insumo
                             </Button>
                         </div>
                         {selectedKioskId && (
@@ -333,7 +333,7 @@ export function StockCount() {
                                                         name={`items.${index}.countedQuantity`}
                                                         render={({ field }) => (
                                                             <FormItem>
-                                                            <FormLabel className="text-xs">Qtd. Contada</FormLabel>
+                                                            <FormLabel className="text-xs">Qtd. contada</FormLabel>
                                                             <FormControl>
                                                                 <Input
                                                                 type="number"
@@ -370,7 +370,7 @@ export function StockCount() {
                                     <div className="flex justify-end pt-4 mt-4 border-t">
                                     <Button type="submit" disabled={submitting}>
                                         <Save className="mr-2 h-4 w-4" />
-                                        {submitting ? 'Salvando...' : 'Salvar Contagem para Aprovação'}
+                                        {submitting ? 'Salvando...' : 'Salvar contagem para aprovação'}
                                     </Button>
                                     </div>
                                 </form>
@@ -383,8 +383,8 @@ export function StockCount() {
                      <TabsContent value="management" className="mt-4">
                         <Tabs defaultValue="approvals" className="w-full">
                             <TabsList className="grid w-full grid-cols-2">
-                                {canApproveCounts && <TabsTrigger value="approvals">Aprovações de Contagem</TabsTrigger>}
-                                {canManageRequests && <TabsTrigger value="requests">Solicitações de Cadastro</TabsTrigger>}
+                                {canApproveCounts && <TabsTrigger value="approvals">Aprovações de contagem</TabsTrigger>}
+                                {canManageRequests && <TabsTrigger value="requests">Solicitações de cadastro</TabsTrigger>}
                             </TabsList>
                             {canApproveCounts && (
                                 <TabsContent value="approvals" className="mt-4">

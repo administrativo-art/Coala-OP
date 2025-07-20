@@ -85,7 +85,7 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Registrar Baixa do Lote</DialogTitle>
+          <DialogTitle>Registrar baixa do lote</DialogTitle>
           <DialogDescription>
             Registrando baixa para {lot.productName} (lote: {lot.lotNumber}). Disponível: {lot.quantity}.
           </DialogDescription>
@@ -103,7 +103,7 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
             {/* Add more fields for type and notes here */}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit">Confirmar Baixa</Button>
+              <Button type="submit">Confirmar baixa</Button>
             </DialogFooter>
           </form>
         </Form>
@@ -247,7 +247,7 @@ export function LotCard({
                 {getProductFullName(product)}
             </CardTitle>
             <CardDescription className="mt-1">
-                Quantidade Total em Estoque: <span className="font-bold text-foreground">{totalQuantity}</span>
+                Quantidade total em estoque: <span className="font-bold text-foreground">{totalQuantity}</span>
             </CardDescription>
         </div>
       </CardHeader>
@@ -295,7 +295,7 @@ export function LotCard({
                                                         {canEdit && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleConsumeClick(lotInstance)}><MinusCircle className="h-4 w-4" /></Button>
-                                                            </TooltipTrigger><TooltipContent><p>Registrar Baixa / Consumo</p></TooltipContent></Tooltip></TooltipProvider>
+                                                            </TooltipTrigger><TooltipContent><p>Registrar baixa / consumo</p></TooltipContent></Tooltip></TooltipProvider>
                                                         )}
                                                         {canViewHistory && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
@@ -304,7 +304,7 @@ export function LotCard({
                                                         )}
                                                          <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handlePrintLabel(lotInstance, product)}><QrCode className="h-4 w-4" /></Button>
-                                                        </TooltipTrigger><TooltipContent><p>Imprimir Etiqueta com QR Code</p></TooltipContent></Tooltip></TooltipProvider>
+                                                        </TooltipTrigger><TooltipContent><p>Imprimir etiqueta com QR Code</p></TooltipContent></Tooltip></TooltipProvider>
                                                         {canMove && lotInstance.quantity > 0 && (
                                                             <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onMove(lotInstance.id)}><Truck className="h-4 w-4" /></Button>

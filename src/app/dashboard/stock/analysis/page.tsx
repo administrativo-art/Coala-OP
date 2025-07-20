@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from 'next/link';
@@ -49,7 +50,7 @@ export default function AnalysisPage() {
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><DollarSign /> Avaliação financeira</CardTitle>
-                        <CardDescription>Calcule o valor financeiro do seu estoque com base nos preços médios de compra.</CardDescription>
+                        <CardDescription>Calcule o valor financeiro do seu estoque com base nos preços de compra.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end">
                         <Link href="/dashboard/stock/analysis/valuation" className="w-full">

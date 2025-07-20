@@ -120,7 +120,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{listToEdit ? 'Editar modelo de contagem' : 'Criar novo modelo de contagem'}</DialogTitle>
+          <DialogTitle>{listToEdit ? 'Editar modelo de contagem' : 'Novo modelo de contagem'}</DialogTitle>
           <DialogDescription>
             {listToEdit ? 'Atualize o nome e os itens do modelo.' : 'Crie um modelo com conversões rápidas para usar no dia a dia.'}
           </DialogDescription>

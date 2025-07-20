@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { PricingSimulator } from '@/components/pricing-simulator';
@@ -11,7 +12,7 @@ export default function PricingPage() {
       <CardHeader>
           <CardTitle className="flex items-center gap-2">
               <DollarSign />
-              Análise de Custo
+              Análise de custo
           </CardTitle>
           <CardDescription>
               Crie composições, analise o CMV e simule preços de venda para entender a lucratividade. Use a tabela abaixo para uma visão detalhada e ações.

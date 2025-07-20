@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState } from 'react';
@@ -29,7 +30,7 @@ export function ItemAdditionRequestManagement() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gerenciar Solicitações de Cadastro</CardTitle>
+        <CardTitle>Gerenciar solicitações de cadastro</CardTitle>
         <CardDescription>
           Revise as solicitações de novos insumos enviadas pelos colaboradores.
         </CardDescription>
@@ -70,7 +71,7 @@ export function ItemAdditionRequestManagement() {
                 </AccordionTrigger>
                 <AccordionContent className="p-4 pt-0">
                    <div className="space-y-2 text-sm">
-                        <p><strong>Data da Solicitação:</strong> {format(new Date(req.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
+                        <p><strong>Data da solicitação:</strong> {format(new Date(req.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
                         {req.notes && <p><strong>Observações:</strong> {req.notes}</p>}
                         {req.reviewedAt && req.reviewedBy && (
                             <p><strong>Revisado por:</strong> {req.reviewedBy.username} em {format(new Date(req.reviewedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
@@ -79,7 +80,7 @@ export function ItemAdditionRequestManagement() {
                    {req.status === 'pending' && (
                        <div className="flex gap-2 mt-4 border-t pt-4">
                            <Button size="sm" onClick={() => handleUpdateStatus(req.id, 'completed')}>
-                                <Check className="mr-2 h-4 w-4" /> Marcar como Concluído
+                                <Check className="mr-2 h-4 w-4" /> Marcar como concluído
                            </Button>
                            <Button size="sm" variant="destructive" onClick={() => handleUpdateStatus(req.id, 'rejected')}>
                                 <X className="mr-2 h-4 w-4" /> Rejeitar

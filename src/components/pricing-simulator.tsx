@@ -174,7 +174,7 @@ export function PricingSimulator() {
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
                     <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma análise criada</h3>
-                    <p className="mt-1 text-sm">Clique no botão "Nova Mercadoria" para começar.</p>
+                    <p className="mt-1 text-sm">Clique no botão "Nova mercadoria" para começar.</p>
                 </div>
             );
         }
@@ -198,9 +198,9 @@ export function PricingSimulator() {
                     </Button>
                     <div className="w-6"></div> {/* Spacer for trigger */}
                     {renderSortableHeader("Preço atual", "salePrice")}
-                    {renderSortableHeader("Custo Total", "grossCost")}
+                    {renderSortableHeader("Custo total", "grossCost")}
                     {renderSortableHeader("Markup", "markup")}
-                    {renderSortableHeader("Meta Lucro", "profitGoal")}
+                    {renderSortableHeader("Meta lucro", "profitGoal")}
                     {renderSortableHeader("Lucro %", "profitPercentage")}
                     <div className="text-center">Status</div>
                 </div>
@@ -344,7 +344,7 @@ export function PricingSimulator() {
                                             </CommandItem>
                                         ))}
                                         </CommandGroup>
-                                        <CommandGroup heading="Categorias">
+                                         <CommandGroup heading="Categorias">
                                         {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
                                             <CommandItem
                                             key={option.value}
@@ -364,7 +364,7 @@ export function PricingSimulator() {
                                             </CommandItem>
                                         ))}
                                         </CommandGroup>
-                                        <CommandGroup heading="Linhas">
+                                         <CommandGroup heading="Linhas">
                                         {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
                                             <CommandItem
                                             key={option.value}
