@@ -27,7 +27,6 @@ import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Badge } from './ui/badge';
 import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -74,7 +73,6 @@ export function ExpiryControl() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [lotForHistory, setLotForHistory] = useState<LotEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -310,96 +308,85 @@ export function ExpiryControl() {
     }
     
     return (
-      <div className="space-y-4">
-         <Accordion type="multiple" className="w-full space-y-4">
-            {groupedData.map(baseGroup => {
-                const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
-                let totalGroupQuantity = 0;
-                let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
+      <div className="space-y-6">
+         {groupedData.map(baseGroup => {
+             const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
+             let totalGroupQuantity = 0;
+             let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
 
-                if (baseGroup.isBaseProduct && baseProductConfig) {
-                    displayUnit = baseProductConfig.unit;
-                    
-                    const lotTotalValues = baseGroup.brands.flatMap(brand => 
-                        brand.products.flatMap(prodGroup => {
-                            const productConfig = prodGroup.product;
-                            return prodGroup.lots.map(lot => {
-                                // Cenário 1: Conversão avançada com unidade secundária
+             if (baseGroup.isBaseProduct && baseProductConfig) {
+                 displayUnit = baseProductConfig.unit;
+                 
+                 const lotTotalValues = baseGroup.brands.flatMap(brand => 
+                     brand.products.flatMap(prodGroup => {
+                         const productConfig = prodGroup.product;
+                         return prodGroup.lots.map(lot => {
+                             try {
                                 if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
                                     const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
-                                    const valueInBase = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
-                                    return lot.quantity * valueInBase;
+                                    return lot.quantity * convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
                                 } 
-                                // Cenário 2: Conversão padrão para categorias iguais
-                                else if (productConfig.category === baseProductConfig.category) {
-                                     const valueInBase = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                     return lot.quantity * valueInBase;
+                                if (productConfig.category === baseProductConfig.category) {
+                                     return lot.quantity * convertValue(productConfig.packageSize, product.unit, baseProductConfig.unit, product.category);
                                 }
-                                return -1; // Flag for non-convertible
-                            });
-                        })
-                    );
-                    
-                    const totalConverted = lotTotalValues.reduce((sum, val) => sum + val, 0);
+                             } catch { /* empty */ }
+                             return -1; // Flag for non-convertible
+                         });
+                     })
+                 );
+                 
+                 const totalConverted = lotTotalValues.reduce((sum, val) => sum + (val >= 0 ? val : 0), 0);
 
-                    if (lotTotalValues.includes(-1)) {
-                        displayUnit = "pacotes";
-                        totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
-                            total + brand.products.reduce((prodTotal, prod) => 
-                                prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
-                    } else {
-                        totalGroupQuantity = totalConverted;
-                    }
-                } else {
-                     totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
-                        brandAcc + brand.products.reduce((prodAcc, prod) => 
-                            prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
-                        , 0)
-                    , 0);
-                }
-                
-                const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                 if (lotTotalValues.some(v => v === -1)) {
+                     displayUnit = "pacotes";
+                     totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
+                         total + brand.products.reduce((prodTotal, prod) => 
+                             prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
+                 } else {
+                     totalGroupQuantity = totalConverted;
+                 }
+             } else {
+                  totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
+                     brandAcc + brand.products.reduce((prodAcc, prod) => 
+                         prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
+                     , 0)
+                 , 0);
+             }
+             
+             const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
-                return (
-                    <AccordionItem value={baseGroup.baseProductId || baseGroup.name} key={baseGroup.baseProductId || baseGroup.name} className="border-none">
-                        <Card className="bg-muted/30">
-                            <AccordionTrigger className="p-4 hover:no-underline rounded-lg text-xl font-semibold [&[data-state=open]]:bg-muted [&[data-state=open]]:rounded-b-none">
-                                <div className="flex justify-between items-center w-full">
-                                    <span>{baseGroup.name}</span>
-                                    <Badge variant="secondary" className="ml-4">{displayQuantity} {displayUnit}</Badge>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4 space-y-3">
-                            {baseGroup.brands.map(brandGroup => (
-                                <div key={brandGroup.brandName}>
-                                    <h3 className="font-semibold text-lg text-muted-foreground mb-2 pl-1">{brandGroup.brandName}</h3>
-                                    <div className="space-y-4">
-                                        {brandGroup.products.map(productGroup => (
-                                            <LotCard
-                                                key={productGroup.product.id}
-                                                productGroup={productGroup}
-                                                getProductFullName={getProductFullName}
-                                                kiosks={kiosks}
-                                                locations={locations}
-                                                onEdit={handleEditClick}
-                                                onMove={handleMoveClick}
-                                                onDelete={handleDeleteClick}
-                                                onViewHistory={handleViewHistoryClick}
-                                                canEdit={permissions.lots.edit}
-                                                canMove={permissions.lots.move}
-                                                canDelete={permissions.lots.delete}
-                                                canViewHistory={permissions.lots.viewMovementHistory}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                            </AccordionContent>
-                        </Card>
-                    </AccordionItem>
-                )
-            })}
-        </Accordion>
+             return (
+                 <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
+                     <div className="flex items-baseline justify-between border-b pb-2">
+                         <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
+                         <span className="text-sm font-semibold text-muted-foreground">{displayQuantity} {displayUnit}</span>
+                     </div>
+                     <div className="space-y-4">
+                        {baseGroup.brands.map(brandGroup => (
+                            <div key={brandGroup.brandName} className="space-y-4">
+                                {brandGroup.products.map(productGroup => (
+                                    <LotCard
+                                        key={productGroup.product.id}
+                                        productGroup={productGroup}
+                                        getProductFullName={getProductFullName}
+                                        kiosks={kiosks}
+                                        locations={locations}
+                                        onEdit={handleEditClick}
+                                        onMove={handleMoveClick}
+                                        onDelete={handleDeleteClick}
+                                        onViewHistory={handleViewHistoryClick}
+                                        canEdit={permissions.lots.edit}
+                                        canMove={permissions.lots.move}
+                                        canDelete={permissions.lots.delete}
+                                        canViewHistory={permissions.lots.viewMovementHistory}
+                                    />
+                                ))}
+                            </div>
+                        ))}
+                     </div>
+                 </div>
+             )
+         })}
       </div>
     );
   };
@@ -572,5 +559,3 @@ export function ExpiryControl() {
     </>
   );
 }
-
-    

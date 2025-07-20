@@ -223,7 +223,7 @@ export type PermissionSet = {
     pricing: { simulate: boolean; manageParameters: boolean; };
     reports: { view: boolean; };
     help: { view: boolean; };
-    tasks: { view: boolean; manage: boolean; };
+    tasks: { view: true, manage: boolean; };
 };
 
 export type Profile = {
