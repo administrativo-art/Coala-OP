@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "./ui/badge"
@@ -118,9 +118,9 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   const navGroups = useMemo(() => ({
     main: { items: filteredNavItems.filter(i => i.group === 'main') },
-    operacao: { label: 'Operação', items: filteredNavItems.filter(i => i.group === 'operacao') },
-    admin: { label: 'Administração', items: filteredNavItems.filter(i => i.group === 'admin') },
-    suporte: { label: 'Suporte', items: filteredNavItems.filter(i => i.group === 'suporte') },
+    operacao: { label: 'Operação', icon: Briefcase, items: filteredNavItems.filter(i => i.group === 'operacao') },
+    admin: { label: 'Administração', icon: UserCog, items: filteredNavItems.filter(i => i.group === 'admin') },
+    suporte: { label: 'Suporte', icon: LifeBuoy, items: filteredNavItems.filter(i => i.group === 'suporte') },
   }), [filteredNavItems]);
   
   const activeGroup = useMemo(() => {
@@ -263,11 +263,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
                 {Object.entries(navGroups).map(([key, group]) => {
                     if (key === 'main' || group.items.length === 0) return null;
+                    const GroupIcon = group.icon;
 
                     return (
                         <AccordionItem value={key} key={key} className="border-none">
-                            <AccordionTrigger className="py-2 px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:no-underline hover:text-foreground">
-                                {group.label}
+                            <AccordionTrigger className="p-3 text-base text-muted-foreground hover:no-underline hover:text-foreground data-[state=open]:bg-secondary/20">
+                                <div className="flex items-center gap-3">
+                                  <GroupIcon className="h-5 w-5" />
+                                  <span>{group.label}</span>
+                                </div>
                             </AccordionTrigger>
                             <AccordionContent className="pb-1">
                                 <ul className="space-y-1">
