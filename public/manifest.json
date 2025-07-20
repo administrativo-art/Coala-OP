@@ -5,16 +5,16 @@
     "description": "Sua ferramenta para conversões e gestão de estoque.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#F5F7FA",
-    "theme_color": "#F43F5E",
+    "background_color": "#F0F2F5",
+    "theme_color": "#3F51B5",
     "icons": [
         {
-            "src": "/icon-192x192.png",
+            "src": "/icons/icon-192x192.png",
             "sizes": "192x192",
             "type": "image/png"
         },
         {
-            "src": "/icon-512x512.png",
+            "src": "/icons/icon-512x512.png",
             "sizes": "512x512",
             "type": "image/png"
         }
