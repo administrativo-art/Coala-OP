@@ -1,0 +1,22 @@
+
+{
+    "name": "Coala Shakes",
+    "short_name": "Coala",
+    "description": "Sua ferramenta para conversões e gestão de estoque.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#F5F7FA",
+    "theme_color": "#F43F5E",
+    "icons": [
+        {
+            "src": "/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

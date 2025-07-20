@@ -32,6 +32,7 @@ import { SidebarProvider } from '@/hooks/use-sidebar-state';
 export const metadata: Metadata = {
   title: 'Coala Shakes',
   description: 'Sua ferramenta para conversões e gestão de estoque.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -45,6 +46,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Coala Shakes" />
       </head>
       <body className="font-body antialiased">
         <ThemeProvider
@@ -66,29 +70,29 @@ export default function RootLayout({
                             <ProductSimulationProvider>
                               <ExpiryProductsProvider>
                                 <PredefinedListsProvider>
-                                  <TaskProvider>
-                                    <FormProvider>
-                                      <ConsumptionAnalysisProvider>
-                                        <MovementHistoryProvider>
-                                          <ReturnsProvider>
-                                            <ScheduleProvider>
-                                              <MonthlyScheduleProvider>
-                                                  <RepositionProvider>
-                                                    <ItemAdditionProvider>
-                                                      <StockCountProvider>
-                                                        <AllTasksProvider>
-                                                          {children}
-                                                        </AllTasksProvider>
-                                                      </StockCountProvider>
-                                                    </ItemAdditionProvider>
-                                                  </RepositionProvider>
-                                              </MonthlyScheduleProvider>
-                                            </ScheduleProvider>
-                                          </ReturnsProvider>
-                                        </MovementHistoryProvider>
-                                      </ConsumptionAnalysisProvider>
-                                    </FormProvider>
-                                  </TaskProvider>
+                                  <FormProvider>
+                                      <TaskProvider>
+                                          <ConsumptionAnalysisProvider>
+                                            <MovementHistoryProvider>
+                                              <ReturnsProvider>
+                                                <ScheduleProvider>
+                                                  <MonthlyScheduleProvider>
+                                                      <RepositionProvider>
+                                                        <ItemAdditionProvider>
+                                                          <StockCountProvider>
+                                                            <AllTasksProvider>
+                                                              {children}
+                                                            </AllTasksProvider>
+                                                          </StockCountProvider>
+                                                        </ItemAdditionProvider>
+                                                      </RepositionProvider>
+                                                  </MonthlyScheduleProvider>
+                                                </ScheduleProvider>
+                                              </ReturnsProvider>
+                                            </MovementHistoryProvider>
+                                          </ConsumptionAnalysisProvider>
+                                      </TaskProvider>
+                                  </FormProvider>
                                 </PredefinedListsProvider>
                               </ExpiryProductsProvider>
                             </ProductSimulationProvider>
