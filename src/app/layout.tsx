@@ -26,6 +26,7 @@ import { ProductSimulationProvider } from '@/components/product-simulation-provi
 import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
 import { TaskProvider } from '@/components/task-provider';
+import { AllTasksProvider } from '@/hooks/use-all-tasks';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -74,8 +75,10 @@ export default function RootLayout({
                                                         <PurchaseProvider>
                                                         <ItemAdditionProvider>
                                                             <RepositionProvider>
-                                                            {children}
-                                                            <Toaster />
+                                                              <AllTasksProvider>
+                                                                {children}
+                                                              </AllTasksProvider>
+                                                              <Toaster />
                                                             </RepositionProvider>
                                                         </ItemAdditionProvider>
                                                         </PurchaseProvider>

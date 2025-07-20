@@ -1,14 +1,16 @@
+
 "use client"
 
 import { type Task } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Inbox, FileText, AlertCircle, History, CheckCircle2 } from 'lucide-react';
+import { Inbox, FileText, AlertCircle, History, CheckCircle2, ClipboardCheck, Truck, ShieldAlert, PackagePlus } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { useForm } from '@/hooks/use-form';
+import { useRouter } from 'next/navigation';
 
 interface TaskListProps {
-  tasks: Task[];
+  tasks: (Task | any)[]; // Using any to accommodate legacy tasks
   onTaskSelect: (task: Task) => void;
 }
 
@@ -30,8 +32,20 @@ const getStatusInfo = (status: Task['status']) => {
     }
 }
 
+const getLegacyIcon = (type: string) => {
+    switch (type) {
+        case 'Cadastro de Insumo': return PackagePlus;
+        case 'Aprovação de contagem': return ClipboardCheck;
+        case 'Chamado de avaria': return ShieldAlert;
+        case 'Reposição de estoque': return Truck;
+        default: return AlertCircle;
+    }
+}
+
+
 export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   const { submissions } = useForm();
+  const router = useRouter();
   
   if (tasks.length === 0) {
     return (
@@ -45,30 +59,60 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   return (
     <div className="space-y-3">
       {tasks.map(task => {
-        const StatusIcon = getStatusInfo(task.status).icon;
-        const statusColor = getStatusInfo(task.status).color;
-        const statusLabel = getStatusInfo(task.status).label;
-        const submission = submissions.find(s => s.id === task.origin.submissionId);
+        // This is a type guard to check if it's a new Task object
+        const isNewTask = 'origin' in task;
+        
+        const handleClick = () => {
+            if (isNewTask) {
+                onTaskSelect(task);
+            } else {
+                router.push(task.link);
+            }
+        };
+
+        let StatusIcon, statusColor, statusLabel, createdAt;
+
+        if (isNewTask) {
+            const statusInfo = getStatusInfo(task.status);
+            StatusIcon = statusInfo.icon;
+            statusColor = statusInfo.color;
+            statusLabel = statusInfo.label;
+            createdAt = task.createdAt;
+        } else {
+            // Legacy task handling
+            StatusIcon = getLegacyIcon(task.type);
+            statusColor = 'text-orange-500';
+            statusLabel = 'Pendente';
+            createdAt = new Date().toISOString(); // Placeholder as legacy tasks don't have a consistent createdAt
+        }
+
+        const submission = isNewTask ? submissions.find(s => s.id === task.origin.submissionId) : null;
 
         return (
           <div
             key={task.id}
             className="border rounded-lg p-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50"
-            onClick={() => onTaskSelect(task)}
+            onClick={handleClick}
           >
             <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusColor}`} />
             <div className="flex-grow">
               <p className="font-semibold">{task.title}</p>
               <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                  <span>Criada em: {format(parseISO(task.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
-                  {submission && 
-                    <span className="flex items-center gap-1">
-                        <FileText className="h-3 w-3"/> Origem: {submission.templateName}
-                    </span>
-                  }
+                  {isNewTask ? (
+                      <>
+                        <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
+                        {submission && 
+                            <span className="flex items-center gap-1">
+                                <FileText className="h-3 w-3"/> Origem: {submission.templateName}
+                            </span>
+                        }
+                      </>
+                  ) : (
+                    <span>{task.description}</span>
+                  )}
               </div>
             </div>
-            <Badge variant="outline">{statusLabel}</Badge>
+            <Badge variant="outline">{isNewTask ? statusLabel : task.type}</Badge>
           </div>
         )
       })}

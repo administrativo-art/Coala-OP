@@ -1,42 +1,34 @@
+
 "use client"
 
 import { useState, useMemo } from 'react';
-import { useTasks } from '@/hooks/use-tasks';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ListTodo, CheckCircle2, History, AlertCircle, XCircle } from 'lucide-react';
+import { ListTodo, CheckCircle2, History, AlertCircle } from 'lucide-react';
 import { TaskList } from './task-list';
 import { TaskDetailModal } from './task-detail-modal';
 import { type Task } from '@/types';
+import { useAllTasks } from '@/hooks/use-all-tasks';
 
 export function TaskManager() {
-    const { tasks, loading, updateTask } = useTasks();
-    const { user, users, profiles } = useAuth();
+    const { allTasks, formTasks, legacyTasks, loading } = useAllTasks();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-    const myTasks = useMemo(() => {
-        if (!user) return [];
-        return tasks.filter(task => {
-            if (task.assigneeType === 'user' && task.assigneeId === user.id) return true;
-            if (task.assigneeType === 'profile' && user.profileId === task.assigneeId) return true;
-            if (task.status === 'awaiting_approval') {
-                if (task.approverType === 'user' && task.approverId === user.id) return true;
-                if (task.approverType === 'profile' && user.profileId === task.approverId) return true;
-            }
-            return false;
-        });
-    }, [tasks, user]);
-
-    const taskLists = useMemo(() => ({
-        pending: myTasks.filter(t => t.status === 'pending' || t.status === 'reopened'),
-        in_progress: myTasks.filter(t => t.status === 'in_progress'),
-        awaiting_approval: myTasks.filter(t => t.status === 'awaiting_approval'),
-        completed: myTasks.filter(t => t.status === 'completed'),
-        rejected: myTasks.filter(t => t.status === 'rejected'),
-    }), [myTasks]);
-
+    const taskLists = useMemo(() => {
+        const pendingLegacyIds = new Set(legacyTasks.map(t => t.id));
+        const pending = formTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
+        
+        return {
+            pending: [...pending, ...legacyTasks].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()),
+            awaiting_approval: formTasks.filter(t => t.status === 'awaiting_approval'),
+            completed: formTasks.filter(t => t.status === 'completed'),
+            // Filter out legacy tasks from the main list to avoid duplicates if they were ever included
+            all: allTasks.filter(t => !pendingLegacyIds.has(t.id)),
+        }
+    }, [allTasks, formTasks, legacyTasks]);
+    
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -48,10 +40,10 @@ export function TaskManager() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <ListTodo />
-                        Central de Tarefas
+                        Central de Tarefas e Pendências
                     </CardTitle>
                     <CardDescription>
-                        Visualize e gerencie todas as suas tarefas pendentes e concluídas.
+                        Visualize e gerencie todas as suas tarefas e pendências do sistema em um só lugar.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
