@@ -260,21 +260,22 @@ export function LotCard({
                 <h3 className="font-semibold text-lg">{product.baseName}</h3>
                 <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {product.packageSize}{product.unit}</p>
             </div>
-            {productGroup.lots.length > 0 && (
-                <Badge variant={getStatus(productGroup.lots[0], product).variant as any} className={getStatus(productGroup.lots[0], product).className}>
-                    {getStatus(productGroup.lots[0], product).text}
-                </Badge>
-            )}
         </div>
 
         {/* Lots Details */}
         <div className="px-4 pb-4 space-y-2">
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
+                const status = getStatus(lot, product);
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
                         <div>
-                            <p className="font-semibold">Lote: {lot.lotNumber}</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <p className="font-semibold">Lote: {lot.lotNumber}</p>
+                                <Badge variant={status.variant as any} className={status.className}>
+                                    {status.text}
+                                </Badge>
+                            </div>
                             <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                             <p className="text-xs text-muted-foreground">Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
                         </div>
@@ -307,3 +308,4 @@ export function LotCard({
     </>
   );
 }
+
