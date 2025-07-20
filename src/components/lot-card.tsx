@@ -10,7 +10,7 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, QrCode, MinusCircle } from 'lucide-react';
+import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
@@ -25,6 +25,8 @@ import * as z from 'zod';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { ScrollArea } from './ui/scroll-area';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -257,7 +259,29 @@ export function LotCard({
                 </div>
             )}
             <div className="flex-grow">
-                <h3 className="font-semibold text-lg">{product.baseName}</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-lg">{product.baseName}</h3>
+                     <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
+                                <Eye className="h-4 w-4" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                            <h4 className="font-medium text-center mb-2">Próximos Lotes</h4>
+                            <ScrollArea className="h-48">
+                                <div className="space-y-2">
+                                    {productGroup.lots.slice(0, 4).map(lot => (
+                                        <div key={lot.id} className="p-2 border rounded-md text-sm">
+                                            <p className="font-semibold">Lote: {lot.lotNumber}</p>
+                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </PopoverContent>
+                    </Popover>
+                </div>
                 <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {product.packageSize}{product.unit}</p>
             </div>
         </div>
@@ -308,4 +332,3 @@ export function LotCard({
     </>
   );
 }
-
