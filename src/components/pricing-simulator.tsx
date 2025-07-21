@@ -337,7 +337,7 @@ export function PricingSimulator() {
                             />
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
-                            <DropdownMenu>
+                           <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="w-full justify-between">
                                         <Filter className="mr-2 h-4 w-4" />
@@ -353,10 +353,12 @@ export function PricingSimulator() {
                                             key={cat.id}
                                             checked={categoryFilters.has(cat.id)}
                                             onCheckedChange={() => handleFilterChange(cat.id, 'category')}
+                                            onSelect={(e) => e.preventDefault()}
                                         >
                                             {cat.name}
                                         </DropdownMenuCheckboxItem>
                                     ))}
+                                    <DropdownMenuSeparator />
                                      <DropdownMenuLabel>Linhas</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                      {lines.map(line => (
@@ -364,6 +366,7 @@ export function PricingSimulator() {
                                             key={line.id}
                                             checked={lineFilters.has(line.id)}
                                             onCheckedChange={() => handleFilterChange(line.id, 'line')}
+                                            onSelect={(e) => e.preventDefault()}
                                         >
                                             {line.name}
                                         </DropdownMenuCheckboxItem>
