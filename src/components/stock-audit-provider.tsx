@@ -24,7 +24,18 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const q = query(collection(db, "stockAuditSessions"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const sessionsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockAuditSession));
+      const sessionsData = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return { 
+              id: doc.id,
+              ...data,
+              items: data.items.map((item: any) => ({
+                ...item,
+                countedQuantity: item.countedQuantity ?? item.systemQuantity,
+                divergences: item.divergences || []
+              }))
+          } as StockAuditSession
+      });
       setAuditSessions(sessionsData.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()));
       setLoading(false);
     }, (error) => {

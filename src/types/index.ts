@@ -305,6 +305,7 @@ export type StockAuditItem = {
     lotNumber: string;
     expiryDate: string; // ISO String
     systemQuantity: number;
+    countedQuantity: number;
     divergences: StockAuditDivergence[];
 };
 

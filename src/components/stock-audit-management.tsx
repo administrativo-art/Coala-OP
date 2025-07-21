@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -58,11 +58,27 @@ const auditItemSchema = z.object({
     productId: z.string(),
     lotId: z.string(),
     systemQuantity: z.number(),
+    countedQuantity: z.coerce.number().min(0, "A contagem não pode ser negativa."),
     divergences: z.array(divergenceSchema),
 });
 
 const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
+}).refine(data => {
+    // Check each item
+    for (const item of data.items) {
+        const difference = item.systemQuantity - item.countedQuantity;
+        if (difference > 0) { // Only require justification if there's a shortfall
+            const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (div.quantity || 0), 0);
+            if (Math.abs(totalDivergenceQty - difference) > 0.001) { // Use a tolerance for float comparison
+                return false; // The sum of divergences must match the total difference
+            }
+        }
+    }
+    return true;
+}, {
+    message: 'A soma das justificativas deve ser igual à diferença total.',
+    // We can't specify a path here easily, so we'll handle showing a global error.
 });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
@@ -71,7 +87,7 @@ function DivergenceItem({ itemIndex, divIndex, control, onRemove }: { itemIndex:
     const watchedReason = useWatch({ control, name: `items.${itemIndex}.divergences.${divIndex}.reason` });
   
     return (
-      <div className="p-3 border rounded-md space-y-2">
+      <div className="p-3 border rounded-md space-y-2 bg-background">
         <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
           <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
             <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
@@ -97,7 +113,7 @@ function DivergenceItem({ itemIndex, divIndex, control, onRemove }: { itemIndex:
     );
 }
 
-function DivergenceSubForm({ itemIndex, control }: { itemIndex: number, control: any }) {
+function JustificationSection({ itemIndex, control, difference }: { itemIndex: number, control: any, difference: number }) {
   const { fields, append, remove } = useFieldArray({
     control,
     name: `items.${itemIndex}.divergences`,
@@ -106,26 +122,39 @@ function DivergenceSubForm({ itemIndex, control }: { itemIndex: number, control:
   const addNewDivergence = () => {
     append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' });
   };
+  
+  const totalJustified = useWatch({ control, name: `items.${itemIndex}.divergences` }).reduce((sum: number, div: any) => sum + (div.quantity || 0), 0);
+  const remainingToJustify = difference - totalJustified;
 
   return (
-    <div className="space-y-2">
-      <Label>Contagem</Label>
-      {fields.map((field, divIndex) => (
-        <DivergenceItem
-          key={field.id}
-          itemIndex={itemIndex}
-          divIndex={divIndex}
-          control={control}
-          onRemove={() => remove(divIndex)}
-        />
-      ))}
+    <div className="mt-3 p-3 space-y-3 bg-red-500/10 rounded-lg border border-red-500/20">
+      <div className="flex justify-between items-center">
+        <div>
+            <h4 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle className="h-4 w-4"/>Justificar divergência</h4>
+            <p className="text-sm text-destructive/80">A soma das quantidades deve ser igual à diferença de {difference}.</p>
+        </div>
+        <div className="text-right">
+            <p className="font-bold text-destructive">{remainingToJustify.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+            <p className="text-xs text-destructive/80">restante</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {fields.map((field, divIndex) => (
+          <DivergenceItem
+            key={field.id}
+            itemIndex={itemIndex}
+            divIndex={divIndex}
+            control={control}
+            onRemove={() => remove(divIndex)}
+          />
+        ))}
+      </div>
       <Button type="button" variant="outline" size="sm" onClick={addNewDivergence} className="w-full">
-        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar contagem
+        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar justificativa
       </Button>
     </div>
   );
 }
-
 
 function AuditForm({
   session,
@@ -151,6 +180,7 @@ function AuditForm({
         productId: i.productId,
         lotId: i.lotId,
         systemQuantity: i.systemQuantity,
+        countedQuantity: i.countedQuantity,
         divergences: i.divergences || [],
       })),
     },
@@ -161,6 +191,7 @@ function AuditForm({
   const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
     return session.items.map((originalItem, index) => ({
       ...originalItem,
+      countedQuantity: values.items[index].countedQuantity,
       divergences: values.items[index].divergences,
     }));
   };
@@ -176,8 +207,8 @@ function AuditForm({
     if (!isValid) {
       toast({
           variant: "destructive",
-          title: "Campos obrigatórios",
-          description: "Por favor, preencha o motivo e a quantidade de todas as divergências."
+          title: "Dados inválidos",
+          description: "Verifique os campos. A soma das justificativas deve ser igual à diferença total para cada item divergente."
       });
       return;
     }
@@ -209,9 +240,11 @@ function AuditForm({
                             {fields.map((field, index) => {
                                 const item = session.items[index];
                                 const product = products.find(p => p.id === item.productId);
-                                const watchedDivergences = watchedItems[index]?.divergences || [];
-                                const totalDivergenceQty = watchedDivergences.reduce((sum, div) => sum + (div.quantity || 0), 0);
-                                const finalQuantity = item.systemQuantity - totalDivergenceQty;
+                                const watchedItem = watchedItems[index];
+                                const systemQty = item.systemQuantity;
+                                const countedQty = watchedItem?.countedQuantity;
+                                const difference = systemQty - countedQty;
+                                const hasDivergence = Math.abs(difference) > 0.001;
 
                                 return (
                                     <Card key={item.lotId} className="flex flex-col">
@@ -231,20 +264,36 @@ function AuditForm({
                                         </div>
                                         <Separator />
                                         <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                                            <div className="flex justify-between items-center bg-muted p-2 rounded-md">
-                                                <span className="font-medium">Quantidade no sistema:</span>
-                                                <span className="text-lg font-bold">{item.systemQuantity}</span>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-2 border rounded-md">
+                                                    <Label className="text-xs text-muted-foreground">Sistema</Label>
+                                                    <p className="text-lg font-bold">{systemQty}</p>
+                                                </div>
+                                                <FormField
+                                                  control={form.control}
+                                                  name={`items.${index}.countedQuantity`}
+                                                  render={({ field }) => (
+                                                    <FormItem>
+                                                      <Label className="text-xs">Contado</Label>
+                                                      <FormControl>
+                                                        <Input
+                                                          type="number"
+                                                          {...field}
+                                                        />
+                                                      </FormControl>
+                                                      <FormMessage />
+                                                    </FormItem>
+                                                  )}
+                                                />
                                             </div>
                                             
-                                            <DivergenceSubForm
-                                                itemIndex={index}
-                                                control={form.control}
-                                            />
-                                            
-                                            <div className="flex justify-between items-center bg-primary/10 text-primary font-bold p-2 rounded-md">
-                                                <span>Saldo Final:</span>
-                                                <span className="text-lg">{finalQuantity}</span>
-                                            </div>
+                                            {hasDivergence ? (
+                                                <JustificationSection itemIndex={index} control={form.control} difference={difference} />
+                                            ) : (
+                                                <div className="p-3 text-center rounded-lg bg-green-500/10 text-green-700 font-medium flex items-center justify-center gap-2">
+                                                    <Check className="h-4 w-4"/> Quantidade OK
+                                                </div>
+                                            )}
                                         </div>
                                     </Card>
                                 );
@@ -323,6 +372,7 @@ export function StockAuditManagement() {
       lotNumber: lot.lotNumber,
       expiryDate: lot.expiryDate,
       systemQuantity: lot.quantity,
+      countedQuantity: lot.quantity, // Default to system quantity
       divergences: [],
     }));
 
@@ -360,10 +410,8 @@ export function StockAuditManagement() {
     if(!activeSession) return;
 
     for (const item of items) {
-        const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + div.quantity, 0);
-        const finalQuantity = item.systemQuantity - totalDivergenceQty;
-        if (item.systemQuantity !== finalQuantity) {
-            await adjustLotQuantity(item.lotId, finalQuantity, activeSession.auditedBy);
+        if (item.systemQuantity !== item.countedQuantity) {
+            await adjustLotQuantity(item.lotId, item.countedQuantity, activeSession.auditedBy);
         }
     }
     
