@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -21,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, X } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
@@ -143,6 +144,7 @@ export function StockAuditManagement() {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
+  const { products } = useProducts();
   const { addAuditSession, auditSessions, updateAuditSession } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
@@ -155,7 +157,12 @@ export function StockAuditManagement() {
     const kiosk = kiosks.find(k => k.id === kioskId);
     if(!kiosk) return;
     
-    const kioskLots = lots.filter(l => l.kioskId === kioskId && l.quantity > 0);
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    const kioskLots = lots.filter(l => {
+        const product = productMap.get(l.productId);
+        return l.kioskId === kioskId && l.quantity > 0 && product && !product.isArchived;
+    });
 
     const auditItems: StockAuditItem[] = kioskLots.map(lot => ({
       productId: lot.productId,
