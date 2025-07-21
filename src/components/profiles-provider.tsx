@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type Profile, defaultAdminPermissions, defaultUserPermissions } from '@/types';
+import { type Profile, defaultAdminPermissions, defaultUserPermissions, defaultGuestPermissions } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
 
@@ -61,9 +62,8 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             needsUpdate = true;
           } else if (typeof (defaultAdminPerms as any)[typedKey] === 'object') {
             for (const subKey in (defaultAdminPerms as any)[typedKey]) {
-              const typedSubKey = subKey as keyof typeof defaultAdminPerms[typedKey];
-              if ((adminPerms[typedKey] as any)[typedSubKey] === undefined) {
-                 (adminPerms[typedKey] as any)[typedSubKey] = (defaultAdminPerms[typedKey] as any)[typedSubKey];
+              if ((adminPerms[typedKey] as any)[subKey as keyof typeof adminPerms[typeof typedKey]] === undefined) {
+                 (adminPerms[typedKey] as any)[subKey] = (defaultAdminPerms[typedKey] as any)[subKey];
                  needsUpdate = true;
               }
             }
