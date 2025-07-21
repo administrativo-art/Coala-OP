@@ -683,4 +683,10 @@ export const defaultAdminPermissions: PermissionSet = {
 };
 
 
-
+export interface StockAuditContextType {
+  auditSessions: StockAuditSession[];
+  loading: boolean;
+  addAuditSession: (session: Omit<StockAuditSession, 'id'>) => Promise<string | null>;
+  updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
+  deleteAuditSession: (sessionId: string) => Promise<void>;
+}

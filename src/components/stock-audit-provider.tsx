@@ -1,16 +1,18 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type StockAuditSession } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, deleteDoc } from 'firebase/firestore';
 
 export interface StockAuditContextType {
   auditSessions: StockAuditSession[];
   loading: boolean;
   addAuditSession: (session: Omit<StockAuditSession, 'id'>) => Promise<string | null>;
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
+  deleteAuditSession: (sessionId: string) => Promise<void>;
 }
 
 export const StockAuditContext = createContext<StockAuditContextType | undefined>(undefined);
@@ -52,12 +54,22 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  const deleteAuditSession = useCallback(async (sessionId: string) => {
+    const sessionRef = doc(db, "stockAuditSessions", sessionId);
+    try {
+      await deleteDoc(sessionRef);
+    } catch (error) {
+      console.error("Error deleting audit session:", error);
+    }
+  }, []);
+
   const value: StockAuditContextType = useMemo(() => ({
     auditSessions,
     loading,
     addAuditSession,
     updateAuditSession,
-  }), [auditSessions, loading, addAuditSession, updateAuditSession]);
+    deleteAuditSession,
+  }), [auditSessions, loading, addAuditSession, updateAuditSession, deleteAuditSession]);
 
   return <StockAuditContext.Provider value={value}>{children}</StockAuditContext.Provider>;
 }

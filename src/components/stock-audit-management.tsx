@@ -22,10 +22,12 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, X } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
+import { Label } from './ui/label';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -41,13 +43,16 @@ type AuditFormValues = z.infer<typeof auditFormSchema>;
 function AuditForm({
   session,
   onSave,
-  onFinalize
+  onFinalize,
+  onCancel,
 }: {
   session: StockAuditSession,
   onSave: (items: StockAuditItem[]) => Promise<void>,
-  onFinalize: (items: StockAuditItem[]) => Promise<void>
+  onFinalize: (items: StockAuditItem[]) => Promise<void>,
+  onCancel: () => Promise<void>,
 }) {
   const { getProductFullName } = useProducts();
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -76,6 +81,12 @@ function AuditForm({
     }));
     await onFinalize(updatedItems);
   };
+
+  const handleCancelClick = async () => {
+      setIsDeleting(true);
+      await onCancel();
+      setIsDeleting(false);
+  }
 
   return (
     <Card>
@@ -121,17 +132,29 @@ function AuditForm({
             </ScrollArea>
           </CardContent>
           <CardContent>
-            <div className="flex justify-end gap-2">
-              <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
-              <DeleteConfirmationDialog 
+            <div className="flex justify-between items-center">
+               <DeleteConfirmationDialog 
                 open={false}
                 onOpenChange={() => {}}
-                onConfirm={handleFinalizeClick}
-                title="Efetivar Auditoria?"
-                description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
-                confirmButtonText="Sim, efetivar auditoria"
-                triggerButton={<Button><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
+                onConfirm={handleCancelClick}
+                isDeleting={isDeleting}
+                title="Cancelar e excluir auditoria?"
+                description="Esta ação removerá esta sessão de auditoria. Nenhum dado será salvo. Deseja continuar?"
+                confirmButtonText="Sim, excluir"
+                triggerButton={<Button variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Cancelar Auditoria</Button>}
               />
+              <div className="flex gap-2">
+                <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
+                <DeleteConfirmationDialog 
+                  open={false}
+                  onOpenChange={() => {}}
+                  onConfirm={handleFinalizeClick}
+                  title="Efetivar Auditoria?"
+                  description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
+                  confirmButtonText="Sim, efetivar auditoria"
+                  triggerButton={<Button><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
+                />
+              </div>
             </div>
           </CardContent>
         </form>
@@ -145,7 +168,7 @@ export function StockAuditManagement() {
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products } = useProducts();
-  const { addAuditSession, auditSessions, updateAuditSession } = useStockAudit();
+  const { addAuditSession, auditSessions, updateAuditSession, deleteAuditSession } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
   
@@ -226,6 +249,13 @@ export function StockAuditManagement() {
     toast({ title: 'Auditoria efetivada!', description: 'O estoque foi ajustado com sucesso.' });
     setActiveSession(null);
   };
+  
+  const handleCancelAudit = async () => {
+    if (!activeSession) return;
+    await deleteAuditSession(activeSession.id);
+    toast({ variant: 'destructive', title: 'Auditoria cancelada', description: 'A sessão de auditoria pendente foi removida.' });
+    setActiveSession(null);
+  }
 
   if (!activeSession) {
     return (
@@ -266,5 +296,5 @@ export function StockAuditManagement() {
     );
   }
   
-  return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} />;
+  return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
 }
