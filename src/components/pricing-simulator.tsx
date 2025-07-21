@@ -148,7 +148,12 @@ export function PricingSimulator() {
         const mercadorias = simulations.map(s => ({ value: s.name.toLowerCase(), label: s.name, group: 'Mercadorias' }));
         const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: c.name.toLowerCase(), label: c.name, group: 'Categorias' }));
         const lines = categories.filter(c => c.type === 'line').map(l => ({ value: l.name.toLowerCase(), label: l.name, group: 'Linhas' }));
-        return [...mercadorias, ...mainCategories, ...lines];
+        
+        return {
+            'Mercadorias': mercadorias,
+            'Categorias': mainCategories,
+            'Linhas': lines
+        };
     }, [simulations, categories]);
     
     const renderSortableHeader = (label: string, key: SortKey) => (
@@ -278,11 +283,6 @@ export function PricingSimulator() {
         )
     };
 
-    const handleFilterSelect = (currentValue: string) => {
-        setFilterValue(currentValue === filterValue ? "" : currentValue);
-        setPopoverOpen(false);
-    };
-
     return (
         <div className="space-y-6">
             <div className="space-y-4">
@@ -318,7 +318,7 @@ export function PricingSimulator() {
                                     className="w-full justify-between font-normal"
                                 >
                                     {filterValue
-                                    ? filterOptions.find(option => option.value === filterValue)?.label || "Filtrar..."
+                                    ? Object.values(filterOptions).flat().find(option => option.value === filterValue)?.label || "Filtrar..."
                                     : "Filtrar mercadoria, categoria..."}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -329,19 +329,17 @@ export function PricingSimulator() {
                                     <CommandList>
                                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                                         
-                                        {Object.entries(
-                                            filterOptions.reduce((acc, option) => {
-                                                if (!acc[option.group]) acc[option.group] = [];
-                                                acc[option.group].push(option);
-                                                return acc;
-                                            }, {} as Record<string, typeof filterOptions>)
-                                        ).map(([group, options]) => (
-                                            <CommandGroup key={group} heading={group}>
+                                        {Object.entries(filterOptions).map(([groupName, options]) => (
+                                          options.length > 0 && (
+                                            <CommandGroup key={groupName} heading={groupName}>
                                                 {options.map((option) => (
                                                     <CommandItem
                                                         key={option.value}
                                                         value={option.value}
-                                                        onSelect={handleFilterSelect}
+                                                        onSelect={(currentValue) => {
+                                                            setFilterValue(currentValue === filterValue ? "" : currentValue);
+                                                            setPopoverOpen(false);
+                                                        }}
                                                     >
                                                         <Check
                                                             className={cn("mr-2 h-4 w-4", filterValue === option.value ? "opacity-100" : "opacity-0")}
@@ -350,8 +348,8 @@ export function PricingSimulator() {
                                                     </CommandItem>
                                                 ))}
                                             </CommandGroup>
+                                          )
                                         ))}
-
                                     </CommandList>
                                 </Command>
                                 </PopoverContent>
