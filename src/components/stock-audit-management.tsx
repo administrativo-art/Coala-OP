@@ -29,7 +29,7 @@ import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -492,17 +492,9 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
             <TabsContent value="active" className="mt-4">
                 <Card>
                     <CardHeader>
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria</CardTitle>
-                                <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
-                            </div>
-                            {showExportButton && (
-                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
-                                    <Download className="mr-2" />
-                                    Relatório detalhado
-                                </Button>
-                            )}
+                        <div>
+                            <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria de estoque</CardTitle>
+                            <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -535,6 +527,16 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
                             )}
                         </div>
                     </CardContent>
+                    {showExportButton && (
+                         <CardContent>
+                             <div className="pt-4 border-t flex justify-end">
+                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                                    <Download className="mr-2" />
+                                    Relatório detalhado
+                                </Button>
+                             </div>
+                        </CardContent>
+                    )}
                 </Card>
             </TabsContent>
             <TabsContent value="history" className="mt-4">
