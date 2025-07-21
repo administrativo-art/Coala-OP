@@ -178,10 +178,11 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
         try {
             let partialCost = 0;
+            const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
             
             if (item.useDefault) {
-                if(baseProduct.lastEffectivePrice) {
-                    partialCost = item.quantity * baseProduct.lastEffectivePrice.pricePerUnit;
+                if(costSource > 0) {
+                    partialCost = item.quantity * costSource;
                 }
             } else if (item.overrideCostPerUnit && item.overrideUnit) {
                 const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
@@ -231,8 +232,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       append({ 
           baseProductId: product.id,
           quantity: 1,
-          useDefault: !!product.lastEffectivePrice,
-          overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit || 0,
+          useDefault: !!(product.lastEffectivePrice || product.initialCostPerUnit),
+          overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0,
           overrideUnit: product.unit,
         });
     }
@@ -376,7 +377,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                         if (!watchedItems || !watchedItems[index]) return null;
                         const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                         const useDefault = watchedItems[index].useDefault;
-                        const hasDefaultCost = !!baseProduct?.lastEffectivePrice;
+                        const hasDefaultCost = !!(baseProduct?.lastEffectivePrice || baseProduct?.initialCostPerUnit);
 
                         return (
                             <div key={field.id} className="p-2 rounded bg-muted/50">
@@ -420,7 +421,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             <Input
                                                 type="number"
                                                 step="any"
-                                                value={useDefault ? baseProduct?.lastEffectivePrice?.pricePerUnit?.toFixed(4) ?? '' : costField.value ?? ''}
+                                                value={useDefault ? (baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit)?.toFixed(4) ?? '' : costField.value ?? ''}
                                                 onChange={costField.onChange}
                                                 disabled={useDefault}
                                                 className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}

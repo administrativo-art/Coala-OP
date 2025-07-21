@@ -18,12 +18,14 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
+import { DollarSign } from 'lucide-react';
 
 
 const baseProductSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
+  initialCostPerUnit: z.coerce.number().optional(),
   stockLevels: z.array(z.object({
       kioskId: z.string(),
       min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
@@ -52,7 +54,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', category: 'Massa', unit: 'g', stockLevels: [] }
+    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [] }
   });
 
   const { fields } = useFieldArray({
@@ -76,6 +78,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
           name: productToEdit.name,
           category: productToEdit.category,
           unit: productToEdit.unit,
+          initialCostPerUnit: productToEdit.lastEffectivePrice?.pricePerUnit ?? productToEdit.initialCostPerUnit ?? 0,
           stockLevels: sortedKiosks.map(kiosk => ({
             kioskId: kiosk.id,
             min: productToEdit.stockLevels?.[kiosk.id]?.min ?? 0
@@ -86,6 +89,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
           name: '',
           category: 'Massa',
           unit: 'g',
+          initialCostPerUnit: 0,
           stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0 }))
         });
       }
@@ -104,6 +108,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
       name: values.name,
       category: values.category,
       unit: values.unit,
+      initialCostPerUnit: values.initialCostPerUnit,
       stockLevels: stockLevelsObject
     };
 
@@ -115,6 +120,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
     onOpenChange(false);
   };
   
+  const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
@@ -161,6 +168,37 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
                       </FormItem>
                   )}/>
                 </div>
+
+                <FormField
+                    control={form.control}
+                    name="initialCostPerUnit"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Custo Inicial por Unidade (R$)</FormLabel>
+                            <FormControl>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0,00"
+                                        className="pl-8"
+                                        {...field}
+                                        value={field.value ?? ''}
+                                        disabled={hasEffectivePrice}
+                                    />
+                                </div>
+                            </FormControl>
+                            <FormMessage />
+                            <p className="text-xs text-muted-foreground pt-1">
+                                {hasEffectivePrice 
+                                    ? "Este campo está desabilitado pois já existe um preço efetivado para este insumo." 
+                                    : "Este custo é usado como fallback até que uma compra seja efetivada."
+                                }
+                            </p>
+                        </FormItem>
+                    )}
+                />
                 
                 <h3 className="text-md font-medium border-t pt-4">Níveis de estoque mínimo (opcional)</h3>
 
@@ -184,7 +222,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
                                         name={`stockLevels.${index}.min`}
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormControl><Input type="number" className="text-right" {...field} /></FormControl>
+                                                <FormControl><Input type="number" className="text-right" {...field} value={field.value ?? ''} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
