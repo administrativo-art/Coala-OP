@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -21,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -31,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from './ui/separator';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 
 
 const DIVERGENCE_REASONS = [
@@ -331,8 +333,68 @@ function AuditForm({
   )
 }
 
+function AuditHistory() {
+    const { auditSessions, deleteAuditSession, loading } = useStockAudit();
+    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
+    const { permissions } = useAuth();
+
+    const completedAudits = useMemo(() => {
+        return auditSessions.filter(s => s.status === 'completed');
+    }, [auditSessions]);
+    
+    const handleDeleteConfirm = () => {
+        if(sessionToDelete) {
+            deleteAuditSession(sessionToDelete.id);
+            setSessionToDelete(null);
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Histórico de auditorias</CardTitle>
+                <CardDescription>Visualize todas as auditorias que foram concluídas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
+                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                        <Inbox className="h-12 w-12 mx-auto mb-4" />
+                        <p className="font-semibold">Nenhuma auditoria concluída.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {completedAudits.map(session => (
+                            <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
+                                <div>
+                                    <p className="font-medium">{session.kioskName}</p>
+                                    <p className="text-xs text-muted-foreground">Concluída por {session.auditedBy.username} em {session.completedAt ? format(parseISO(session.completedAt), 'dd/MM/yy HH:mm') : '-'}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Badge>Concluída</Badge>
+                                    {permissions.audit.approve && (
+                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setSessionToDelete(session)}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+            <DeleteConfirmationDialog 
+                open={!!sessionToDelete}
+                onOpenChange={() => setSessionToDelete(null)}
+                onConfirm={handleDeleteConfirm}
+                itemName="esta auditoria"
+                description="Esta ação é irreversível e excluirá permanentemente o registro da auditoria."
+            />
+        </Card>
+    );
+}
+
 export function StockAuditManagement({ showExportButton = false }: { showExportButton?: boolean }) {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products } = useProducts();
@@ -341,18 +403,6 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-
-
-  useEffect(() => {
-    // If there's an active session from the context, use it.
-    const pendingReview = auditSessions.find(s => s.status === 'pending_review');
-    if (pendingReview && !activeSession) {
-        // This is a bit of an assumption, might need refinement if multiple pending are possible.
-        // For now, it auto-loads the first pending one if no session is active.
-        // setActiveSession(pendingReview);
-    }
-  }, [auditSessions, activeSession, setActiveSession]);
-
 
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -374,7 +424,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
       lotNumber: lot.lotNumber,
       expiryDate: lot.expiryDate,
       systemQuantity: lot.quantity,
-      countedQuantity: lot.quantity, // Default to system quantity
+      countedQuantity: lot.quantity,
       divergences: [],
     }));
 
@@ -434,52 +484,63 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
 
   return (
     <>
-      <Card>
-          <CardHeader>
-              <div className="flex justify-between items-start">
-                  <div>
-                      <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria</CardTitle>
-                      <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
-                  </div>
-                  {showExportButton && (
-                    <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
-                        <Download className="mr-2" />
-                        Relatório detalhado
-                    </Button>
-                  )}
-              </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-              <div>
-                  <h3 className="font-semibold mb-2">Iniciar nova auditoria</h3>
-                  <div className="flex gap-2">
-                      <Select onValueChange={handleStartSession}>
-                          <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
-                          <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                  </div>
-              </div>
+        <Tabs defaultValue="active">
+            <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="active">Auditoria Ativa</TabsTrigger>
+                <TabsTrigger value="history">Histórico</TabsTrigger>
+            </TabsList>
+            <TabsContent value="active" className="mt-4">
+                <Card>
+                    <CardHeader>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria</CardTitle>
+                                <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+                            </div>
+                            {showExportButton && (
+                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                                    <Download className="mr-2" />
+                                    Relatório detalhado
+                                </Button>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <h3 className="font-semibold mb-2">Iniciar nova auditoria</h3>
+                            <div className="flex gap-2">
+                                <Select onValueChange={handleStartSession}>
+                                    <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
+                                    <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                        </div>
 
-              <div className="space-y-2 pt-4 border-t">
-                  <h3 className="font-semibold">Auditorias salvas para revisão</h3>
-                  {loading ? (
-                       <Skeleton className="h-24 w-full" />
-                  ) : pendingAudits.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
-                  ) : (
-                      pendingAudits.map(session => (
-                          <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
-                              <div>
-                                  <p className="font-medium">Auditoria em {session.kioskName}</p>
-                                  <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
-                              </div>
-                              <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar auditoria</Button>
-                          </div>
-                      ))
-                  )}
-              </div>
-          </CardContent>
-      </Card>
+                        <div className="space-y-2 pt-4 border-t">
+                            <h3 className="font-semibold">Auditorias salvas para revisão</h3>
+                            {loading ? (
+                                <Skeleton className="h-24 w-full" />
+                            ) : pendingAudits.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
+                            ) : (
+                                pendingAudits.map(session => (
+                                    <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
+                                        <div>
+                                            <p className="font-medium">Auditoria em {session.kioskName}</p>
+                                            <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
+                                        </div>
+                                        <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar auditoria</Button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+            <TabsContent value="history" className="mt-4">
+                <AuditHistory />
+            </TabsContent>
+        </Tabs>
       <ZeroedLotsAuditModal
         open={isHistoryModalOpen}
         onOpenChange={setIsHistoryModalOpen}
