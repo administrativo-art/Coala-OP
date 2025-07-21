@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -27,6 +28,11 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
+import { ItemAdditionRequestManagement } from './item-addition-request-management';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -207,7 +213,7 @@ export function StockAuditManagement() {
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products } = useProducts();
-  const { addAuditSession, auditSessions, updateAuditSession, deleteAuditSession } = useStockAudit();
+  const { addAuditSession, auditSessions, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
   
@@ -329,7 +335,9 @@ export function StockAuditManagement() {
 
               <div className="space-y-2 pt-4 border-t">
                   <h3 className="font-semibold">Auditorias Salvas para Revisão</h3>
-                  {auditSessions.filter(s => s.status === 'pending_review').length === 0 ? (
+                  {loading ? (
+                       <Skeleton className="h-24 w-full" />
+                  ) : auditSessions.filter(s => s.status === 'pending_review').length === 0 ? (
                       <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
                   ) : (
                       auditSessions.filter(s => s.status === 'pending_review').map(session => (
