@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -14,7 +14,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
-import { type LotEntry, type StockAuditItem, type StockAuditSession } from '@/types';
+import { type StockAuditItem, type StockAuditSession, type StockAuditDivergence } from '@/types';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2, Loader2 } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -33,50 +33,40 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from './ui/separator';
 
-const auditItemSchema = z.object({
-  countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
-  divergenceReason: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-const auditFormSchema = z.object({
-  items: z.array(auditItemSchema)
-}).refine((data) => {
-    return data.items.every(item => {
-        // This is a bit of a hack to get around the fact that we can't easily
-        // pass the systemQuantity into the refine function.
-        // We add it to the object before parsing.
-        const itemSchema = z.object({
-            countedQuantity: z.number(),
-            systemQuantity: z.number(),
-            divergenceReason: z.string().optional(),
-            notes: z.string().optional(),
-        }).passthrough();
-        
-        const parsed = itemSchema.safeParse(item);
-        if(!parsed.data) return true;
-
-        const { countedQuantity, systemQuantity, divergenceReason, notes } = parsed.data;
-        if(countedQuantity === systemQuantity) return true;
-        
-        if(!divergenceReason) return false;
-        if(divergenceReason === 'Outros' && (!notes || notes.trim() === '')) return false;
-        
-        return true;
-    });
-}, {
-    message: "Motivo ou observação obrigatória para divergências.",
-});
-
-
-type AuditFormValues = z.infer<typeof auditFormSchema>;
-
 const DIVERGENCE_REASONS = [
     "Contagem errada",
     "Avariado",
     "Vencido",
     "Outros"
 ];
+
+const divergenceSchema = z.object({
+    id: z.string(),
+    reason: z.string().min(1, "Selecione um motivo."),
+    quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0."),
+    notes: z.string().optional(),
+}).refine(data => {
+    if (data.reason === 'Outros' && (!data.notes || data.notes.trim() === '')) {
+        return false;
+    }
+    return true;
+}, {
+    message: "A observação é obrigatória para 'Outros'.",
+    path: ["notes"],
+});
+
+const auditItemSchema = z.object({
+    productId: z.string(),
+    lotId: z.string(),
+    systemQuantity: z.number(),
+    divergences: z.array(divergenceSchema),
+});
+
+const auditFormSchema = z.object({
+  items: z.array(auditItemSchema)
+});
+
+type AuditFormValues = z.infer<typeof auditFormSchema>;
 
 function AuditForm({
   session,
@@ -93,66 +83,48 @@ function AuditForm({
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const { toast } = useToast();
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
     defaultValues: {
       items: session.items.map(i => ({
-        countedQuantity: i.countedQuantity,
-        divergenceReason: i.divergenceReason || '',
-        notes: i.notes || '',
+        productId: i.productId,
+        lotId: i.lotId,
+        systemQuantity: i.systemQuantity,
+        divergences: i.divergences || [],
       })),
     },
   });
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
 
+  const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
+    return session.items.map((originalItem, index) => ({
+      ...originalItem,
+      divergences: values.items[index].divergences,
+    }));
+  };
+
   const handleSave = async (values: AuditFormValues) => {
     setIsSaving(true);
-    const updatedItems = session.items.map((item, index) => ({
-      ...item,
-      countedQuantity: values.items[index].countedQuantity,
-      divergenceReason: values.items[index].divergenceReason,
-      notes: values.items[index].notes,
-      difference: values.items[index].countedQuantity - item.systemQuantity,
-    }));
-    await onSave(updatedItems);
+    await onSave(getUpdatedItems(values));
     setIsSaving(false);
   };
   
   const handleFinalizeClick = async () => {
-    // Manually add systemQuantity to each item for validation
-    const valuesWithSystemQuantity = form.getValues().items.map((item, index) => ({
-      ...item,
-      systemQuantity: session.items[index].systemQuantity,
-    }));
-
-    const validationResult = auditFormSchema.safeParse({ items: valuesWithSystemQuantity });
-    
-    if (!validationResult.success) {
-      // Map Zod errors to react-hook-form errors
-      validationResult.error.errors.forEach(err => {
-        const path = err.path.join('.') as any;
-        form.setError(path, { type: 'manual', message: err.message });
-      });
+    const isValid = await form.trigger();
+    if (!isValid) {
       toast({
           variant: "destructive",
           title: "Campos obrigatórios",
-          description: "Por favor, preencha o motivo de todas as divergências antes de efetivar."
+          description: "Por favor, preencha o motivo e a quantidade de todas as divergências."
       });
       return;
     }
     
     setIsFinalizing(true);
-    const values = form.getValues();
-    const updatedItems = session.items.map((item, index) => ({
-      ...item,
-      countedQuantity: values.items[index].countedQuantity,
-      divergenceReason: values.items[index].divergenceReason,
-      notes: values.items[index].notes,
-      difference: values.items[index].countedQuantity - item.systemQuantity,
-    }));
-    await onFinalize(updatedItems);
+    await onFinalize(getUpdatedItems(form.getValues()));
     setIsFinalizing(false);
   };
 
@@ -162,7 +134,6 @@ function AuditForm({
       setIsCancelling(false);
   }
 
-  const { toast } = useToast();
   const watchedItems = form.watch('items');
 
   return (
@@ -179,9 +150,9 @@ function AuditForm({
                             {fields.map((field, index) => {
                                 const item = session.items[index];
                                 const product = products.find(p => p.id === item.productId);
-                                const watchedItem = watchedItems[index];
-                                const hasDivergence = watchedItem && watchedItem.countedQuantity !== undefined ? watchedItem.countedQuantity !== item.systemQuantity : false;
-                                const showOtherNotes = hasDivergence && watchedItem.divergenceReason === 'Outros';
+                                const watchedDivergences = watchedItems[index]?.divergences || [];
+                                const totalDivergenceQty = watchedDivergences.reduce((sum, div) => sum + (div.quantity || 0), 0);
+                                const finalQuantity = item.systemQuantity - totalDivergenceQty;
 
                                 return (
                                     <Card key={item.lotId} className="flex flex-col">
@@ -199,56 +170,21 @@ function AuditForm({
                                                 <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
                                             </div>
                                         </div>
-
                                         <Separator />
-
                                         <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <Label>Sistema</Label>
-                                                    <p className="text-2xl font-bold p-2 h-11 flex items-center">{item.systemQuantity}</p>
-                                                </div>
-                                                <div>
-                                                    <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
-                                                        <FormItem>
-                                                            <Label>Contado</Label>
-                                                            <FormControl><Input type="number" {...field} className="text-lg font-bold h-11" /></FormControl>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}/>
-                                                </div>
+                                            <div className="flex justify-between items-center bg-muted p-2 rounded-md">
+                                                <span className="font-medium">Quantidade no sistema:</span>
+                                                <span className="text-lg font-bold">{item.systemQuantity}</span>
                                             </div>
                                             
-                                            <div>
-                                                {hasDivergence ? (
-                                                    <div className="space-y-2">
-                                                        <FormField control={form.control} name={`items.${index}.divergenceReason`} render={({ field }) => (
-                                                            <FormItem>
-                                                                <Label>Motivo da divergência (Obrigatório)</Label>
-                                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um motivo..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>
-                                                                        {DIVERGENCE_REASONS.map(reason => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                        {showOtherNotes && (
-                                                            <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
-                                                                <FormItem>
-                                                                    <Label>Observação para "Outros"</Label>
-                                                                    <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
-                                                                    <FormMessage />
-                                                                </FormItem>
-                                                            )}/>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-2 text-green-600 font-semibold text-sm p-2 bg-green-50 rounded-md">
-                                                        <Check/> Quantidade OK
-                                                    </div>
-                                                )}
+                                            <DivergenceSubForm
+                                                itemIndex={index}
+                                                control={form.control}
+                                            />
+                                            
+                                            <div className="flex justify-between items-center bg-primary/10 text-primary font-bold p-2 rounded-md">
+                                                <span>Saldo Final:</span>
+                                                <span className="text-lg">{finalQuantity}</span>
                                             </div>
                                         </div>
                                     </Card>
@@ -285,6 +221,54 @@ function AuditForm({
   )
 }
 
+function DivergenceSubForm({ itemIndex, control }: { itemIndex: number, control: any }) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `items.${itemIndex}.divergences`,
+  });
+
+  const addNewDivergence = () => {
+    append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>Contagens / Divergências</Label>
+      {fields.map((field, divIndex) => {
+        const watchedReason = useWatch({ control, name: `items.${itemIndex}.divergences.${divIndex}.reason` });
+        return (
+          <div key={field.id} className="p-3 border rounded-md space-y-2">
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
+                <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
+              )}/>
+              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
+                <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
+                    <Select onValueChange={reasonField.onChange} value={reasonField.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                        <SelectContent>{DIVERGENCE_REASONS.map(reason => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                </FormItem>
+              )}/>
+              <div className="pt-7">
+                <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
+              </div>
+            </div>
+            {watchedReason === 'Outros' && (
+              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
+                <FormItem><FormLabel className="text-xs">Observação para "Outros"</FormLabel><FormControl><Textarea {...notesField} /></FormControl><FormMessage /></FormItem>
+              )}/>
+            )}
+          </div>
+        )
+      })}
+      <Button type="button" variant="outline" size="sm" onClick={addNewDivergence} className="w-full">
+        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar contagem/divergência
+      </Button>
+    </div>
+  );
+}
+
 export function StockAuditManagement() {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
@@ -302,7 +286,6 @@ export function StockAuditManagement() {
       if (updatedSession) {
         setActiveSession(updatedSession);
       } else {
-        // This might happen if the session was deleted in another tab, for example.
         setActiveSession(null);
       }
     }
@@ -329,9 +312,7 @@ export function StockAuditManagement() {
       lotNumber: lot.lotNumber,
       expiryDate: lot.expiryDate,
       systemQuantity: lot.quantity,
-      countedQuantity: lot.quantity,
-      difference: 0,
-      notes: '',
+      divergences: [],
     }));
 
     const newSessionId = await addAuditSession({
@@ -368,8 +349,10 @@ export function StockAuditManagement() {
     if(!activeSession) return;
 
     for (const item of items) {
-        if (item.difference !== 0) {
-            await adjustLotQuantity(item.lotId, item.countedQuantity, activeSession.auditedBy);
+        const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + div.quantity, 0);
+        const finalQuantity = item.systemQuantity - totalDivergenceQty;
+        if (item.systemQuantity !== finalQuantity) {
+            await adjustLotQuantity(item.lotId, finalQuantity, activeSession.auditedBy);
         }
     }
     

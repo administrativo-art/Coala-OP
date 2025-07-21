@@ -291,6 +291,13 @@ export type StockCount = {
     items: StockCountItem[];
 };
 
+export type StockAuditDivergence = {
+    id: string;
+    reason: string;
+    quantity: number;
+    notes?: string;
+};
+
 export type StockAuditItem = {
     productId: string;
     productName: string;
@@ -298,10 +305,7 @@ export type StockAuditItem = {
     lotNumber: string;
     expiryDate: string; // ISO String
     systemQuantity: number;
-    countedQuantity: number;
-    difference: number;
-    divergenceReason?: string;
-    notes?: string;
+    divergences: StockAuditDivergence[];
 };
 
 export type StockAuditSession = {
