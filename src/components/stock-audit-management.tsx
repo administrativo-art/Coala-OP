@@ -22,8 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2 } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2, Loader2 } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 
@@ -52,6 +51,7 @@ function AuditForm({
   const { products } = useProducts();
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -60,7 +60,7 @@ function AuditForm({
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
 
-  const onSubmit = async (values: AuditFormValues) => {
+  const handleSave = async (values: AuditFormValues) => {
     setIsSaving(true);
     const updatedItems = session.items.map((item, index) => ({
       ...item,
@@ -73,6 +73,7 @@ function AuditForm({
   };
   
   const handleFinalizeClick = async () => {
+    setIsFinalizing(true);
     const values = form.getValues();
     const updatedItems = session.items.map((item, index) => ({
       ...item,
@@ -81,6 +82,7 @@ function AuditForm({
       difference: values.items[index].countedQuantity - item.systemQuantity,
     }));
     await onFinalize(updatedItems);
+    setIsFinalizing(false);
   };
 
   const handleCancelClick = async () => {
@@ -96,7 +98,7 @@ function AuditForm({
         <CardDescription>Auditoria iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form>
           <CardContent>
              <div className="hidden md:grid grid-cols-[1fr_100px_120px_150px] items-center gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
                 <span>Produto/Lote</span>
@@ -150,20 +152,21 @@ function AuditForm({
           </CardContent>
           <CardContent>
             <div className="flex justify-between items-center">
-              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving}>
+              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
                 <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
               </Button>
               <div className="flex gap-2">
-                <Button type="submit" variant="outline" disabled={isSaving || isCancelling}>
+                <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
                     <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar para revisão'}
                 </Button>
                 <DeleteConfirmationDialog 
                   open={false}
                   onOpenChange={() => {}}
                   onConfirm={handleFinalizeClick}
+                  isDeleting={isFinalizing}
                   title="Efetivar Auditoria?"
                   description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
-                  confirmButtonText="Sim, efetivar auditoria"
+                  confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
                   triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
                 />
               </div>
@@ -221,8 +224,6 @@ export function StockAuditManagement() {
     });
 
     if (newSessionId) {
-        // This is a bit of a hack to get the session object immediately.
-        // A better solution would be for addAuditSession to return the full object.
         const createdSession = {
             id: newSessionId,
             kioskId: kiosk.id,
