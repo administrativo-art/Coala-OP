@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
@@ -21,8 +21,7 @@ import { PricingParametersModal } from "./pricing-parameters-modal";
 import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
-import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 
 
@@ -49,9 +48,10 @@ export function PricingSimulator() {
     const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
-    const [filterValue, setFilterValue] = useState("");
-    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
+    const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
+    const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
 
 
     const handleAddNew = () => {
@@ -84,15 +84,11 @@ export function PricingSimulator() {
     
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
-            if (!filterValue) return true;
-
-            const filterLower = filterValue.toLowerCase();
-            const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
-            const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
+            const searchMatch = searchTerm ? sim.name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
+            const categoryMatch = categoryFilters.size === 0 || (sim.categoryId && categoryFilters.has(sim.categoryId));
+            const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             
-            return sim.name.toLowerCase().includes(filterLower) ||
-                   (category && category.name.toLowerCase().includes(filterLower)) ||
-                   (line && line.name.toLowerCase().includes(filterLower));
+            return searchMatch && categoryMatch && lineMatch;
         });
         
         return filtered.sort((a, b) => {
@@ -112,7 +108,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, filterValue, categoryMap, sortConfig]);
+    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -145,18 +141,29 @@ export function PricingSimulator() {
       };
     }, []);
 
-    const filterOptions = useMemo(() => {
-        const mercadorias = simulations.map(s => ({ value: s.name.toLowerCase(), label: s.name, group: 'Mercadorias' }));
-        const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: c.name.toLowerCase(), label: c.name, group: 'Categorias' }));
-        const lines = categories.filter(c => c.type === 'line').map(l => ({ value: l.name.toLowerCase(), label: l.name, group: 'Linhas' }));
-        
-        return {
-            'Mercadorias': mercadorias,
-            'Categorias': mainCategories,
-            'Linhas': lines
-        };
-    }, [simulations, categories]);
+    const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
+    const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
+    const totalActiveFilters = categoryFilters.size + lineFilters.size;
     
+    const handleFilterChange = (id: string, type: 'category' | 'line') => {
+        const setter = type === 'category' ? setCategoryFilters : setLineFilters;
+        setter(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const clearFilters = () => {
+        setCategoryFilters(new Set());
+        setLineFilters(new Set());
+        setSearchTerm('');
+    };
+
     const renderSortableHeader = (label: string, key: SortKey) => (
         <Button variant="ghost" onClick={() => handleSort(key)} className="justify-end w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
             {label}
@@ -319,53 +326,56 @@ export function PricingSimulator() {
                             )}
                         </div>
                     </div>
-                        <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                            <div className="flex-grow w-full md:w-auto">
-                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={popoverOpen}
-                                    className="w-full justify-between font-normal"
-                                >
-                                    {filterValue
-                                    ? Object.values(filterOptions).flat().find(option => option.value === filterValue)?.label || "Filtrar..."
-                                    : "Filtrar mercadoria, categoria..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-2">
+                         <div className="relative flex-grow w-full md:w-auto">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Buscar por mercadoria..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10 w-full"
+                            />
+                        </div>
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between">
+                                        <Filter className="mr-2 h-4 w-4" />
+                                        Filtros
+                                        {totalActiveFilters > 0 && <Badge variant="secondary" className="ml-2 rounded-full px-1.5">{totalActiveFilters}</Badge>}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-56">
+                                    <DropdownMenuLabel>Categorias</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {mainCategories.map(cat => (
+                                        <DropdownMenuCheckboxItem
+                                            key={cat.id}
+                                            checked={categoryFilters.has(cat.id)}
+                                            onCheckedChange={() => handleFilterChange(cat.id, 'category')}
+                                        >
+                                            {cat.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                     <DropdownMenuLabel>Linhas</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                     {lines.map(line => (
+                                        <DropdownMenuCheckboxItem
+                                            key={line.id}
+                                            checked={lineFilters.has(line.id)}
+                                            onCheckedChange={() => handleFilterChange(line.id, 'line')}
+                                        >
+                                            {line.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            {totalActiveFilters > 0 && (
+                                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                                    <Eraser className="mr-2 h-4 w-4" />
+                                    Limpar
                                 </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar..." />
-                                    <CommandList>
-                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                                        
-                                        {Object.entries(filterOptions).map(([groupName, options]) => (
-                                          options.length > 0 && (
-                                            <CommandGroup key={groupName} heading={groupName}>
-                                                {options.map((option) => (
-                                                    <CommandItem
-                                                        key={option.value}
-                                                        value={option.value}
-                                                        onSelect={(currentValue) => {
-                                                            setFilterValue(currentValue === filterValue ? "" : currentValue);
-                                                            setPopoverOpen(false);
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={cn("mr-2 h-4 w-4", filterValue === option.value ? "opacity-100" : "opacity-0")}
-                                                        />
-                                                        {option.label}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                          )
-                                        ))}
-                                    </CommandList>
-                                </Command>
-                                </PopoverContent>
-                            </Popover>
+                            )}
                         </div>
                     </div>
                 </div>
