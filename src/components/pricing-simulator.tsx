@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -23,6 +24,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { Badge } from "./ui/badge";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -211,6 +213,7 @@ export function PricingSimulator() {
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
                         const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+                        const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
 
@@ -218,11 +221,21 @@ export function PricingSimulator() {
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
                                 <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
                                      <div
-                                        className="font-semibold text-left hover:underline cursor-pointer flex items-center gap-2"
-                                        onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                        className="font-semibold text-left"
                                     >
-                                        <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible" />
-                                        <span>{sim.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                            className="hover:underline cursor-pointer"
+                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
+                                            >
+                                                {sim.name}
+                                            </div>
+                                            <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible cursor-pointer" onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}/>
+                                        </div>
+                                        <div className="flex items-center gap-1 mt-1">
+                                            {category && <Badge style={{backgroundColor: `${category.color}20`, color: category.color, borderColor: `${category.color}80`}} variant="outline">{category.name}</Badge>}
+                                            {line && <Badge variant="secondary">{line.name}</Badge>}
+                                        </div>
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2" />
                                     <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
@@ -396,4 +409,3 @@ export function PricingSimulator() {
         </div>
     );
 }
-
