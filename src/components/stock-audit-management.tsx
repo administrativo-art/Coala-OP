@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,9 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2 } from 'lucide-react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 
@@ -132,16 +131,9 @@ function AuditForm({
           </CardContent>
           <CardContent>
             <div className="flex justify-between items-center">
-               <DeleteConfirmationDialog 
-                open={false}
-                onOpenChange={() => {}}
-                onConfirm={handleCancelClick}
-                isDeleting={isCancelling}
-                title="Cancelar e excluir auditoria?"
-                description="Esta ação removerá esta sessão de auditoria. Nenhum dado será salvo. Deseja continuar?"
-                confirmButtonText="Sim, excluir"
-                triggerButton={<Button type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Cancelar Auditoria</Button>}
-              />
+              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling}>
+                <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
+              </Button>
               <div className="flex gap-2">
                 <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
                 <DeleteConfirmationDialog 
