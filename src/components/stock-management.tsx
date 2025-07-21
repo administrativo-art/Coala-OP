@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import Link from 'next/link';
@@ -69,7 +68,7 @@ export function StockManagement() {
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                             <Link href="/dashboard/stock/audit" className="w-full">
                                 <Button className="w-full text-lg py-6">
-                                    Iniciar auditoria <ArrowRight className="ml-2" />
+                                    Acessar auditorias <ArrowRight className="ml-2" />
                                 </Button>
                             </Link>
                         </CardContent>
