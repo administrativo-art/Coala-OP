@@ -8,9 +8,10 @@ import { useItemAddition } from './use-item-addition';
 import { useStockCount } from './use-stock-count';
 import { useReturnRequests } from './use-return-requests';
 import { useReposition } from './use-reposition';
+import { useStockAudit } from './use-stock-audit'; // Importar o hook de auditoria
 import { format, parseISO } from 'date-fns';
 import { returnRequestStatuses, type ReturnRequest, type Task } from '@/types';
-import { PackagePlus, ClipboardCheck, ShieldAlert, Truck } from 'lucide-react';
+import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck } from 'lucide-react';
 
 export interface LegacyTask {
   id: string;
@@ -45,13 +46,30 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
+  const { auditSessions, loading: auditLoading } = useStockAudit(); // Obter sessões de auditoria
 
-  const loading = authLoading || formTasksLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading;
+  const loading = authLoading || formTasksLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading;
 
   const legacyTasks = useMemo((): LegacyTask[] => {
     if (!user || !permissions || loading) return [];
 
     const tasks: LegacyTask[] = [];
+
+    // Tarefa para auditorias pendentes
+    if (permissions.audit.approve) {
+        auditSessions.filter(s => s.status === 'pending_review').forEach(s => {
+            tasks.push({
+                id: `audit-${s.id}`,
+                type: 'Auditoria pendente',
+                title: `Auditoria em ${s.kioskName}`,
+                description: `Iniciada por ${s.auditedBy.username} em ${format(parseISO(s.startedAt), 'dd/MM/yyyy HH:mm')}`,
+                link: '/dashboard/stock/audit/stock-audit',
+                icon: ShieldCheck,
+                createdAt: s.startedAt
+            })
+        })
+    }
+
 
     if (permissions.itemRequests.manage) {
       itemAdditionRequests.filter(req => req.status === 'pending').forEach(req => {
@@ -141,7 +159,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
     return tasks.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
 
-  }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities, loading]);
+  }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities, auditSessions, loading]);
   
   const allTasks = useMemo(() => {
     return [...formTasks, ...legacyTasks].sort((a,b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
