@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -221,6 +221,37 @@ function AuditForm({
   )
 }
 
+function DivergenceItem({ itemIndex, divIndex, control, onRemove }: { itemIndex: number; divIndex: number; control: any; onRemove: () => void; }) {
+    const watchedReason = useWatch({ control, name: `items.${itemIndex}.divergences.${divIndex}.reason` });
+  
+    return (
+      <div className="p-3 border rounded-md space-y-2">
+        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+          <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
+            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
+          )}/>
+          <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
+            <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
+                <Select onValueChange={reasonField.onChange} value={reasonField.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                    <SelectContent>{DIVERGENCE_REASONS.map(reason => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectContent>
+                </Select><FormMessage />
+            </FormItem>
+          )}/>
+          <div className="pt-7">
+            <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={onRemove}><Trash2 className="h-4 w-4"/></Button>
+          </div>
+        </div>
+        {watchedReason === 'Outros' && (
+          <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
+            <FormItem><FormLabel className="text-xs">Observação para "Outros"</FormLabel><FormControl><Textarea {...notesField} /></FormControl><FormMessage /></FormItem>
+          )}/>
+        )}
+      </div>
+    );
+}
+  
+
 function DivergenceSubForm({ itemIndex, control }: { itemIndex: number, control: any }) {
   const { fields, append, remove } = useFieldArray({
     control,
@@ -234,34 +265,15 @@ function DivergenceSubForm({ itemIndex, control }: { itemIndex: number, control:
   return (
     <div className="space-y-2">
       <Label>Contagens / Divergências</Label>
-      {fields.map((field, divIndex) => {
-        const watchedReason = useWatch({ control, name: `items.${itemIndex}.divergences.${divIndex}.reason` });
-        return (
-          <div key={field.id} className="p-3 border rounded-md space-y-2">
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
-              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
-                <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
-              )}/>
-              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
-                <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
-                    <Select onValueChange={reasonField.onChange} value={reasonField.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                        <SelectContent>{DIVERGENCE_REASONS.map(reason => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                </FormItem>
-              )}/>
-              <div className="pt-7">
-                <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
-              </div>
-            </div>
-            {watchedReason === 'Outros' && (
-              <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
-                <FormItem><FormLabel className="text-xs">Observação para "Outros"</FormLabel><FormControl><Textarea {...notesField} /></FormControl><FormMessage /></FormItem>
-              )}/>
-            )}
-          </div>
-        )
-      })}
+      {fields.map((field, divIndex) => (
+        <DivergenceItem
+          key={field.id}
+          itemIndex={itemIndex}
+          divIndex={divIndex}
+          control={control}
+          onRemove={() => remove(divIndex)}
+        />
+      ))}
       <Button type="button" variant="outline" size="sm" onClick={addNewDivergence} className="w-full">
         <PlusCircle className="mr-2 h-4 w-4"/> Adicionar contagem/divergência
       </Button>
