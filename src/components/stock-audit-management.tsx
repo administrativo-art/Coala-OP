@@ -52,7 +52,7 @@ function AuditForm({
   onCancel: () => Promise<void>,
 }) {
   const { getProductFullName } = useProducts();
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -83,9 +83,9 @@ function AuditForm({
   };
 
   const handleCancelClick = async () => {
-      setIsDeleting(true);
+      setIsCancelling(true);
       await onCancel();
-      setIsDeleting(false);
+      setIsCancelling(false);
   }
 
   return (
@@ -137,11 +137,11 @@ function AuditForm({
                 open={false}
                 onOpenChange={() => {}}
                 onConfirm={handleCancelClick}
-                isDeleting={isDeleting}
+                isDeleting={isCancelling}
                 title="Cancelar e excluir auditoria?"
                 description="Esta ação removerá esta sessão de auditoria. Nenhum dado será salvo. Deseja continuar?"
                 confirmButtonText="Sim, excluir"
-                triggerButton={<Button variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Cancelar Auditoria</Button>}
+                triggerButton={<Button type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Cancelar Auditoria</Button>}
               />
               <div className="flex gap-2">
                 <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
@@ -152,7 +152,7 @@ function AuditForm({
                   title="Efetivar Auditoria?"
                   description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
                   confirmButtonText="Sim, efetivar auditoria"
-                  triggerButton={<Button><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
+                  triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
                 />
               </div>
             </div>
