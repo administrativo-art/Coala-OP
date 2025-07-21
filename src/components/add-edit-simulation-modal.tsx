@@ -229,12 +229,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const handleAddItem = (baseProductId: string) => {
     const product = baseProducts.find(bp => bp.id === baseProductId);
     if (product) {
-      append({ 
-          baseProductId: product.id,
-          quantity: 1,
-          useDefault: !!(product.lastEffectivePrice || product.initialCostPerUnit),
-          overrideCostPerUnit: product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0,
-          overrideUnit: product.unit,
+        const costSource = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
+        append({ 
+            baseProductId: product.id,
+            quantity: 1,
+            useDefault: !!costSource,
+            overrideCostPerUnit: costSource,
+            overrideUnit: product.unit,
         });
     }
   };
