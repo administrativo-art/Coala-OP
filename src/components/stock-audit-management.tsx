@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -308,7 +306,7 @@ function AuditForm({
                 <CardContent>
                     <div className="flex justify-between items-center pt-4 border-t">
                     <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
-                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
+                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar auditoria'}
                     </Button>
                     <div className="flex gap-2">
                         <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
@@ -322,7 +320,7 @@ function AuditForm({
                         title="Tem certeza que quer efetivar?"
                         description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
                         confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
-                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
+                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar auditoria</Button>}
                         />
                     </div>
                     </div>
@@ -338,24 +336,22 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products } = useProducts();
-  const { addAuditSession, auditSessions, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
+  const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
   
-  const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
 
   useEffect(() => {
-    if (activeSession) {
-      const updatedSession = auditSessions.find(s => s.id === activeSession.id);
-      if (updatedSession) {
-        setActiveSession(updatedSession);
-      } else {
-        setActiveSession(null);
-      }
+    // If there's an active session from the context, use it.
+    const pendingReview = auditSessions.find(s => s.status === 'pending_review');
+    if (pendingReview && !activeSession) {
+        // This is a bit of an assumption, might need refinement if multiple pending are possible.
+        // For now, it auto-loads the first pending one if no session is active.
+        // setActiveSession(pendingReview);
     }
-  }, [auditSessions, activeSession]);
+  }, [auditSessions, activeSession, setActiveSession]);
 
 
   const handleStartSession = async (kioskId: string) => {
@@ -392,16 +388,8 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     });
 
     if (newSessionId) {
-        const createdSession = {
-            id: newSessionId,
-            kioskId: kiosk.id,
-            kioskName: kiosk.name,
-            status: 'pending_review' as const,
-            auditedBy: { userId: user.id, username: user.username },
-            startedAt: new Date().toISOString(),
-            items: auditItems,
-        };
-        setActiveSession(createdSession);
+        const createdSession = auditSessions.find(s => s.id === newSessionId)
+        if (createdSession) setActiveSession(createdSession);
     }
   };
 
@@ -441,6 +429,8 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   if (activeSession) {
     return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
+  
+  const pendingAudits = auditSessions.filter(s => s.status === 'pending_review');
 
   return (
     <>
@@ -461,7 +451,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
           </CardHeader>
           <CardContent className="space-y-4">
               <div>
-                  <h3 className="font-semibold mb-2">Iniciar Nova Auditoria</h3>
+                  <h3 className="font-semibold mb-2">Iniciar nova auditoria</h3>
                   <div className="flex gap-2">
                       <Select onValueChange={handleStartSession}>
                           <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
@@ -471,19 +461,19 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
               </div>
 
               <div className="space-y-2 pt-4 border-t">
-                  <h3 className="font-semibold">Auditorias Salvas para Revisão</h3>
+                  <h3 className="font-semibold">Auditorias salvas para revisão</h3>
                   {loading ? (
                        <Skeleton className="h-24 w-full" />
-                  ) : auditSessions.filter(s => s.status === 'pending_review').length === 0 ? (
+                  ) : pendingAudits.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
                   ) : (
-                      auditSessions.filter(s => s.status === 'pending_review').map(session => (
+                      pendingAudits.map(session => (
                           <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
                               <div>
                                   <p className="font-medium">Auditoria em {session.kioskName}</p>
                                   <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
                               </div>
-                              <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar Auditoria</Button>
+                              <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar auditoria</Button>
                           </div>
                       ))
                   )}

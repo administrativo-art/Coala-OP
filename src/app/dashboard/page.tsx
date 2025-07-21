@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -29,6 +27,9 @@ import { PricingDashboard } from "@/components/pricing-dashboard"
 import { useProductSimulation } from "@/hooks/use-product-simulation"
 import { useCompanySettings } from "@/hooks/use-company-settings"
 import { StockAuditManagement } from "@/components/stock-audit-management"
+import { useStockAudit } from "@/hooks/use-stock-audit"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useRouter } from "next/navigation"
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
@@ -280,6 +281,110 @@ function PricingReportDashboard() {
   );
 }
 
+function AuditDashboard() {
+    const { auditSessions, loading: auditLoading, addAuditSession, setActiveSession: setActiveAuditSession } = useStockAudit();
+    const { kiosks, loading: kiosksLoading } = useKiosks();
+    const { user } = useAuth();
+    const { lots, products } = useExpiryProducts();
+    const router = useRouter();
+
+    const pendingAudits = useMemo(() => {
+        return auditSessions.filter(s => s.status === 'pending_review');
+    }, [auditSessions]);
+    
+    const handleStartAudit = async (kioskId: string) => {
+        if (!kioskId || !user) return;
+        
+        // This logic should ideally be inside the provider/hook
+        const kiosk = kiosks.find(k => k.id === kioskId);
+        if (!kiosk) return;
+        
+        const kioskLots = lots.filter(l => l.kioskId === kioskId && l.quantity > 0);
+
+        const auditItems = kioskLots.map(lot => {
+            const product = products.find(p => p.id === lot.productId);
+            return {
+                productId: lot.productId,
+                productName: product?.baseName || lot.productName,
+                lotId: lot.id,
+                lotNumber: lot.lotNumber,
+                expiryDate: lot.expiryDate,
+                systemQuantity: lot.quantity,
+                countedQuantity: lot.quantity,
+                divergences: [],
+            };
+        });
+
+        const newSessionId = await addAuditSession({
+            kioskId: kiosk.id,
+            kioskName: kiosk.name,
+            status: 'pending_review',
+            auditedBy: { userId: user.id, username: user.username },
+            startedAt: new Date().toISOString(),
+            items: auditItems,
+        });
+        
+        if (newSessionId) {
+            router.push('/dashboard/stock/audit/stock-audit');
+        }
+    };
+    
+    const handleContinueAudit = (session) => {
+        // Here we'd need a way to set the active session in the StockAuditManagement component
+        // For now, we just navigate to the page. A more robust solution might use a shared state.
+        router.push('/dashboard/stock/audit/stock-audit');
+    }
+
+    if (auditLoading || kiosksLoading) {
+        return <Skeleton className="h-64 w-full" />
+    }
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center gap-2">
+                <ShieldCheck className="h-6 w-6" />
+                <div>
+                    <CardTitle>Auditoria</CardTitle>
+                    <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div>
+                    <h3 className="text-md font-semibold mb-2">Iniciar nova auditoria</h3>
+                    <Select onValueChange={handleStartAudit}>
+                        <SelectTrigger className="w-full max-w-sm">
+                            <SelectValue placeholder="Selecione um quiosque..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <h3 className="text-md font-semibold">Auditorias salvas para revisão</h3>
+                    {pendingAudits.length > 0 ? (
+                        <div className="space-y-2">
+                            {pendingAudits.map(session => (
+                                <div key={session.id} className="flex items-center justify-between rounded-md border p-3">
+                                    <div>
+                                        <p className="font-semibold">Auditoria em {session.kioskName}</p>
+                                        <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
+                                    </div>
+                                    <Button variant="outline" onClick={() => handleContinueAudit(session)}>
+                                        Continuar auditoria
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
 export default function DashboardPage() {
     const { user, permissions } = useAuth();
@@ -310,7 +415,7 @@ export default function DashboardPage() {
                 </TabsContent>
                 {canAuditStock ? (
                      <TabsContent value="audit" className="mt-6">
-                        <StockAuditManagement />
+                        <AuditDashboard />
                     </TabsContent>
                 ) : (
                     <TabsContent value="tasks" className="mt-6">

@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -9,7 +7,9 @@ import { collection, onSnapshot, addDoc, updateDoc, doc, query, deleteDoc } from
 
 export interface StockAuditContextType {
   auditSessions: StockAuditSession[];
+  activeSession: StockAuditSession | null;
   loading: boolean;
+  setActiveSession: (session: StockAuditSession | null) => void;
   addAuditSession: (session: Omit<StockAuditSession, 'id'>) => Promise<string | null>;
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
@@ -19,6 +19,7 @@ export const StockAuditContext = createContext<StockAuditContextType | undefined
 
 export function StockAuditProvider({ children }: { children: React.ReactNode }) {
   const [auditSessions, setAuditSessions] = useState<StockAuditSession[]>([]);
+  const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +38,13 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
           } as StockAuditSession
       });
       setAuditSessions(sessionsData.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()));
+      
+      // Update active session if it exists in the new data
+      if (activeSession) {
+          const updatedActive = sessionsData.find(s => s.id === activeSession.id);
+          setActiveSession(updatedActive || null);
+      }
+      
       setLoading(false);
     }, (error) => {
         console.error("Error fetching stock audit sessions from Firestore: ", error);
@@ -44,7 +52,7 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeSession]);
 
   const addAuditSession = useCallback(async (session: Omit<StockAuditSession, 'id'>): Promise<string | null> => {
     try {
@@ -76,11 +84,13 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
 
   const value: StockAuditContextType = useMemo(() => ({
     auditSessions,
+    activeSession,
     loading,
+    setActiveSession,
     addAuditSession,
     updateAuditSession,
     deleteAuditSession,
-  }), [auditSessions, loading, addAuditSession, updateAuditSession, deleteAuditSession]);
+  }), [auditSessions, activeSession, loading, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession]);
 
   return <StockAuditContext.Provider value={value}>{children}</StockAuditContext.Provider>;
 }
