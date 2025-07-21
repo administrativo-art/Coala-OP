@@ -45,19 +45,21 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
     const [chartSearchTerm, setChartSearchTerm] = useState('');
     const [popoverOpen, setPopoverOpen] = useState(false);
 
-    const { kpis, profitChartData } = useMemo(() => {
-        const filteredSimulations = chartSearchTerm 
-            ? simulations.filter(s => {
-                const category = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
-                const line = s.lineId ? categories.find(c => c.id === s.lineId) : null;
-                const searchTermLower = chartSearchTerm.toLowerCase();
+    const filteredSimulations = useMemo(() => {
+        if (!chartSearchTerm) return simulations;
+        const searchTermLower = chartSearchTerm.toLowerCase();
+        
+        return simulations.filter(s => {
+            const category = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
+            const line = s.lineId ? categories.find(c => c.id === s.lineId) : null;
 
-                return s.name.toLowerCase().includes(searchTermLower) ||
-                       (category && category.name.toLowerCase().includes(searchTermLower)) ||
-                       (line && line.name.toLowerCase().includes(searchTermLower));
-            })
-            : simulations;
-            
+            return s.name.toLowerCase().includes(searchTermLower) ||
+                   (category && category.name.toLowerCase() === searchTermLower) ||
+                   (line && line.name.toLowerCase() === searchTermLower);
+        });
+    }, [simulations, chartSearchTerm, categories]);
+
+    const { kpis, profitChartData } = useMemo(() => {
         if (!filteredSimulations || filteredSimulations.length === 0) {
             return { kpis: {}, profitChartData: [] };
         }
@@ -102,7 +104,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult };
-    }, [simulations, chartSearchTerm, categories]);
+    }, [filteredSimulations]);
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
