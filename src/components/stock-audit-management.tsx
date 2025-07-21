@@ -164,7 +164,7 @@ function AuditForm({
                   onOpenChange={() => {}}
                   onConfirm={handleFinalizeClick}
                   isDeleting={isFinalizing}
-                  title="Efetivar Auditoria?"
+                  title="Tem certeza que quer efetivar?"
                   description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
                   confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
                   triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
