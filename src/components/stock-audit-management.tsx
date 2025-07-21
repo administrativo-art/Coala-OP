@@ -43,8 +43,9 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine((data) => {
     return data.items.every(item => {
-        // If a divergence reason is selected, it must not be empty.
-        // If the reason is 'Outros', the notes field must not be empty.
+        // This is a bit of a hack to get around the fact that we can't easily
+        // pass the systemQuantity into the refine function.
+        // We add it to the object before parsing.
         const itemSchema = z.object({
             countedQuantity: z.number(),
             systemQuantity: z.number(),
@@ -120,8 +121,20 @@ function AuditForm({
   };
   
   const handleFinalizeClick = async () => {
-    const isValid = await form.trigger();
-    if (!isValid) {
+    // Manually add systemQuantity to each item for validation
+    const valuesWithSystemQuantity = form.getValues().items.map((item, index) => ({
+      ...item,
+      systemQuantity: session.items[index].systemQuantity,
+    }));
+
+    const validationResult = auditFormSchema.safeParse({ items: valuesWithSystemQuantity });
+    
+    if (!validationResult.success) {
+      // Map Zod errors to react-hook-form errors
+      validationResult.error.errors.forEach(err => {
+        const path = err.path.join('.') as any;
+        form.setError(path, { type: 'manual', message: err.message });
+      });
       toast({
           variant: "destructive",
           title: "Campos obrigatórios",
@@ -190,12 +203,12 @@ function AuditForm({
                                         <Separator />
 
                                         <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                                            <div className="flex items-end gap-4">
-                                                <div className="flex-1">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
                                                     <Label>Sistema</Label>
-                                                    <p className="text-2xl font-bold">{item.systemQuantity}</p>
+                                                    <p className="text-2xl font-bold p-2 h-11 flex items-center">{item.systemQuantity}</p>
                                                 </div>
-                                                <div className="flex-1">
+                                                <div>
                                                     <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
                                                         <FormItem>
                                                             <Label>Contado</Label>
@@ -205,6 +218,7 @@ function AuditForm({
                                                     )}/>
                                                 </div>
                                             </div>
+                                            
                                             <div>
                                                 {hasDivergence ? (
                                                     <div className="space-y-2">
