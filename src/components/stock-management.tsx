@@ -5,13 +5,14 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat, ShieldCheck as AuditIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 export function StockManagement() {
     const { permissions } = useAuth();
     const canPurchase = permissions.purchasing.suggest || permissions.purchasing.approve;
     const canCountStock = permissions.stockCount.perform || permissions.stockCount.approve;
+    const canAuditStock = permissions.audit.start || permissions.audit.approve;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -55,6 +56,25 @@ export function StockManagement() {
                         </CardContent>
                     </Card>
                 )}
+
+                {canAuditStock && (
+                    <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                        <CardHeader className="p-0 items-center">
+                            <div className="p-4 bg-primary/10 rounded-full mb-4">
+                                <AuditIcon className="h-10 w-10 text-primary" />
+                            </div>
+                            <CardTitle className="text-2xl mb-2">Auditoria de Estoque</CardTitle>
+                            <CardDescription>Realize auditorias pontuais para garantir a acurácia dos processos de estoque.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                            <Link href="/dashboard/stock/audit" className="w-full">
+                                <Button className="w-full text-lg py-6">
+                                    Iniciar auditoria <ArrowRight className="ml-2" />
+                                </Button>
+                            </Link>
+                        </CardContent>
+                    </Card>
+                )}
                 
                 <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
@@ -64,7 +84,7 @@ export function StockManagement() {
                         <CardTitle className="text-2xl mb-2">Análise de estoque</CardTitle>
                         <CardDescription>Analise relatórios de reposição de estoque e visualize o consumo médio dos produtos.</CardDescription>
                     </CardHeader>
-                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                     <CardContent className="flex-grow flex items-end">
                         <Link href="/dashboard/stock/analysis" className="w-full">
                              <Button className="w-full text-lg py-6">
                                 Acessar análises <ArrowRight className="ml-2" />

@@ -224,6 +224,7 @@ export type PermissionSet = {
     reports: { view: boolean; };
     help: { view: boolean; };
     tasks: { view: true, manage: boolean; };
+    audit: { start: boolean; approve: boolean; viewHistory: boolean; };
 };
 
 export type Profile = {
@@ -288,6 +289,32 @@ export type StockCount = {
     };
     reviewedAt?: string; // ISO String
     items: StockCountItem[];
+};
+
+export type StockAuditItem = {
+    productId: string;
+    productName: string;
+    lotId: string;
+    lotNumber: string;
+    expiryDate: string; // ISO String
+    systemQuantity: number;
+    countedQuantity: number;
+    difference: number;
+    notes?: string;
+};
+
+export type StockAuditSession = {
+    id: string;
+    kioskId: string;
+    kioskName: string;
+    status: 'pending_review' | 'completed';
+    auditedBy: {
+        userId: string;
+        username: string;
+    };
+    startedAt: string; // ISO String
+    completedAt?: string; // ISO String
+    items: StockAuditItem[];
 };
 
 
@@ -616,6 +643,7 @@ export const defaultGuestPermissions: PermissionSet = {
     reports: { view: false },
     help: { view: true },
     tasks: { view: true, manage: false },
+    audit: { start: false, approve: false, viewHistory: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -651,4 +679,5 @@ export const defaultAdminPermissions: PermissionSet = {
     reports: { view: true },
     help: { view: true },
     tasks: { view: true, manage: true },
+    audit: { start: true, approve: true, viewHistory: true },
 };

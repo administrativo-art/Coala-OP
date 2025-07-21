@@ -1,4 +1,5 @@
 
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -28,6 +29,7 @@ import { ProductSimulationCategoryProvider } from '@/components/product-simulati
 import { TaskProvider } from '@/components/task-provider';
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
 import { SidebarProvider } from '@/hooks/use-sidebar-state';
+import { StockAuditProvider } from '@/components/stock-audit-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -47,9 +49,6 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Coala Shakes" />
         <link rel="apple-touch-icon" href="/icons/Icon PWM (192 x 192 px).png" />
       </head>
       <body className="font-body antialiased">
@@ -82,9 +81,11 @@ export default function RootLayout({
                                                   <RepositionProvider>
                                                     <ItemAdditionProvider>
                                                       <StockCountProvider>
-                                                        <AllTasksProvider>
-                                                          {children}
-                                                        </AllTasksProvider>
+                                                        <StockAuditProvider>
+                                                          <AllTasksProvider>
+                                                            {children}
+                                                          </AllTasksProvider>
+                                                        </StockAuditProvider>
                                                       </StockCountProvider>
                                                     </ItemAdditionProvider>
                                                   </RepositionProvider>
