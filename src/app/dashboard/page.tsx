@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -389,6 +390,8 @@ function AuditDashboard() {
 export default function DashboardPage() {
     const { user, permissions } = useAuth();
     const canAuditStock = permissions.audit.start || permissions.audit.approve;
+    const canViewTasks = permissions.tasks.view;
+    const gridCols = `grid-cols-${3 + (canAuditStock ? 1 : 0) + (canViewTasks ? 1 : 0)}`;
 
     return (
         <div className="space-y-6">
@@ -398,14 +401,11 @@ export default function DashboardPage() {
             </div>
             
             <Tabs defaultValue="operational" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
                     <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>
                     <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>
-                    {canAuditStock ? (
-                         <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>
-                    ): (
-                        <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>
-                    )}
+                    {canAuditStock && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>}
+                    {canViewTasks && <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>}
                 </TabsList>
                 <TabsContent value="operational" className="mt-6 space-y-6">
                     <OperationalDashboard />
@@ -413,11 +413,12 @@ export default function DashboardPage() {
                 <TabsContent value="pricing" className="mt-6">
                     <PricingReportDashboard />
                 </TabsContent>
-                {canAuditStock ? (
+                {canAuditStock && (
                      <TabsContent value="audit" className="mt-6">
                         <AuditDashboard />
                     </TabsContent>
-                ) : (
+                )}
+                 {canViewTasks && (
                     <TabsContent value="tasks" className="mt-6">
                         <ReportsDashboard />
                     </TabsContent>
