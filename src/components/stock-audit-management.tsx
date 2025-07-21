@@ -171,7 +171,7 @@ function AuditForm({
   onFinalize: (items: StockAuditItem[]) => Promise<void>,
   onCancel: () => Promise<void>,
 }) {
-  const { products } = useProducts();
+  const { products, getProductFullName } = useProducts();
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -261,7 +261,7 @@ function AuditForm({
                                                 )}
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="font-semibold">{item.productName}</p>
+                                                <p className="font-semibold">{product ? getProductFullName(product) : item.productName}</p>
                                                 <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
                                                 <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
                                             </div>
@@ -397,7 +397,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
-  const { products } = useProducts();
+  const { products, getProductFullName } = useProducts();
   const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
@@ -417,16 +417,19 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
         return l.kioskId === kioskId && l.quantity > 0 && product && !product.isArchived;
     });
 
-    const auditItems: StockAuditItem[] = kioskLots.map(lot => ({
-      productId: lot.productId,
-      productName: lot.productName,
-      lotId: lot.id,
-      lotNumber: lot.lotNumber,
-      expiryDate: lot.expiryDate,
-      systemQuantity: lot.quantity,
-      countedQuantity: lot.quantity,
-      divergences: [],
-    }));
+    const auditItems: StockAuditItem[] = kioskLots.map(lot => {
+        const product = productMap.get(lot.productId)!;
+        return {
+            productId: lot.productId,
+            productName: getProductFullName(product),
+            lotId: lot.id,
+            lotNumber: lot.lotNumber,
+            expiryDate: lot.expiryDate,
+            systemQuantity: lot.quantity,
+            countedQuantity: lot.quantity,
+            divergences: [],
+        }
+    });
 
     const newSessionId = await addAuditSession({
       kioskId: kiosk.id,

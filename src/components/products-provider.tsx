@@ -139,7 +139,11 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const getProductFullName = useCallback((product: Product) => {
     if (!product) return '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
-    const sizePart = product.packageSize && product.unit ? ` - ${product.packageSize} ${product.unit}` : '';
+    let sizePart = '';
+    if (product.packageSize && product.unit) {
+        const unitDisplay = product.unit.toLowerCase() === 'pacote' ? ' pacote' : ` ${product.unit}`;
+        sizePart = ` - ${product.packageSize}${unitDisplay}`;
+    }
     return `${product.baseName}${brandPart}${sizePart}`;
   }, []);
 
