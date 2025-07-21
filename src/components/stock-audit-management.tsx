@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -33,9 +34,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from './ui/separator';
 
 const DIVERGENCE_REASONS = [
-    "Contagem errada",
-    "Avariado",
     "Vencido",
+    "Avariado",
+    "Contagem errada",
     "Outros"
 ];
 
@@ -69,7 +70,7 @@ const auditFormSchema = z.object({
     for (const item of data.items) {
         const difference = item.systemQuantity - item.countedQuantity;
         if (difference > 0) { // Only require justification if there's a shortfall
-            const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (div.quantity || 0), 0);
+            const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
             if (Math.abs(totalDivergenceQty - difference) > 0.001) { // Use a tolerance for float comparison
                 return false; // The sum of divergences must match the total difference
             }
@@ -113,6 +114,7 @@ function DivergenceItem({ itemIndex, divIndex, control, onRemove }: { itemIndex:
     );
 }
 
+
 function JustificationSection({ itemIndex, control, difference }: { itemIndex: number, control: any, difference: number }) {
   const { fields, append, remove } = useFieldArray({
     control,
@@ -123,7 +125,7 @@ function JustificationSection({ itemIndex, control, difference }: { itemIndex: n
     append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' });
   };
   
-  const totalJustified = useWatch({ control, name: `items.${itemIndex}.divergences` }).reduce((sum: number, div: any) => sum + (div.quantity || 0), 0);
+  const totalJustified = useWatch({ control, name: `items.${itemIndex}.divergences` }).reduce((sum: number, div: any) => sum + (Number(div.quantity) || 0), 0);
   const remainingToJustify = difference - totalJustified;
 
   return (
