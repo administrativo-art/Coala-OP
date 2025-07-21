@@ -82,7 +82,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         subItems: [
             { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
             { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
-            { href: '/dashboard/stock/audit', label: 'Auditoria de estoque', icon: AuditIcon, show: permissions.audit.start },
+            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.audit.start },
             { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
             { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
             { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
