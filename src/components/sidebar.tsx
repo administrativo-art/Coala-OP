@@ -67,6 +67,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
   const canSimulatePricing = !loading && permissions.pricing.simulate;
   const canViewTasks = !loading && permissions.tasks.view;
+  const canAudit = !loading && permissions.audit.start;
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
@@ -81,7 +82,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         subItems: [
             { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
             { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
-            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.audit.start },
+            { href: '/dashboard/stock/audit', label: 'Auditoria de estoque', icon: AuditIcon, show: permissions.audit.start },
             { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
             { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
             { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
@@ -89,11 +90,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         ]
     },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
+    { href: '/dashboard/audit', label: 'Auditoria', icon: ShieldCheck, group: 'admin', show: canAudit },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin', show: canRegister },
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
-  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start]);
+  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
   
   const filteredNavItems = useMemo(() => {
     if (!searchTerm) return navItems.filter(item => item.show !== false);
