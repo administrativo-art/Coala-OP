@@ -59,7 +59,7 @@ function AuditForm({
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   const form = useForm<AuditFormValues>({
-    resolver: zodResolver(zod.object({ items: z.array(auditItemSchema) })),
+    resolver: zodResolver(auditFormSchema),
     defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes || '' })) }
   });
 
