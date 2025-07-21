@@ -21,10 +21,9 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, Search } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 
 const auditItemSchema = z.object({
@@ -47,11 +46,11 @@ function AuditForm({
   onSave: (items: StockAuditItem[]) => Promise<void>,
   onFinalize: (items: StockAuditItem[]) => Promise<void>
 }) {
-  const { products, getProductFullName } = useProducts();
+  const { getProductFullName } = useProducts();
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
-    defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes })) }
+    defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes || '' })) }
   });
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
@@ -122,7 +121,7 @@ function AuditForm({
           </CardContent>
           <CardContent>
             <div className="flex justify-end gap-2">
-              <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisar</Button>
+              <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
               <DeleteConfirmationDialog 
                 open={false}
                 onOpenChange={() => {}}
@@ -141,7 +140,7 @@ function AuditForm({
 }
 
 export function StockAuditManagement() {
-  const { user, permissions } = useAuth();
+  const { user } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { addAuditSession, auditSessions, updateAuditSession } = useStockAudit();
