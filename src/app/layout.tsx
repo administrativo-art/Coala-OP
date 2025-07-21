@@ -49,7 +49,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Coala Shakes" />
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" href="/icons/Icon PWM (192 x 192 px).png" />
       </head>
       <body className="font-body antialiased">
         <ThemeProvider
@@ -73,25 +73,25 @@ export default function RootLayout({
                                 <PredefinedListsProvider>
                                   <FormProvider>
                                     <TaskProvider>
-                                      <ItemAdditionProvider>
-                                        <ConsumptionAnalysisProvider>
-                                          <MovementHistoryProvider>
-                                            <ReturnsProvider>
-                                              <ScheduleProvider>
-                                                <MonthlyScheduleProvider>
-                                                    <RepositionProvider>
-                                                        <StockCountProvider>
-                                                          <AllTasksProvider>
-                                                            {children}
-                                                          </AllTasksProvider>
-                                                        </StockCountProvider>
-                                                    </RepositionProvider>
-                                                </MonthlyScheduleProvider>
-                                              </ScheduleProvider>
-                                            </ReturnsProvider>
-                                          </MovementHistoryProvider>
-                                        </ConsumptionAnalysisProvider>
-                                      </ItemAdditionProvider>
+                                      <ConsumptionAnalysisProvider>
+                                        <MovementHistoryProvider>
+                                          <ReturnsProvider>
+                                            <ScheduleProvider>
+                                              <MonthlyScheduleProvider>
+                                                  <RepositionProvider>
+                                                    <ItemAdditionProvider>
+                                                      <StockCountProvider>
+                                                        <AllTasksProvider>
+                                                          {children}
+                                                        </AllTasksProvider>
+                                                      </StockCountProvider>
+                                                    </ItemAdditionProvider>
+                                                  </RepositionProvider>
+                                              </MonthlyScheduleProvider>
+                                            </ScheduleProvider>
+                                          </ReturnsProvider>
+                                        </MovementHistoryProvider>
+                                      </ConsumptionAnalysisProvider>
                                     </TaskProvider>
                                   </FormProvider>
                                 </PredefinedListsProvider>
