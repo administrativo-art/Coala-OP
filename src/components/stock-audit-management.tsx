@@ -426,7 +426,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate,
             systemQuantity: lot.quantity,
-            countedQuantity: lot.quantity,
+            countedQuantity: 0,
             divergences: [],
         }
     });
