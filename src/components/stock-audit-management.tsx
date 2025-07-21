@@ -54,7 +54,7 @@ function AuditForm({
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   const form = useForm<AuditFormValues>({
-    resolver: zodResolver(auditFormSchema),
+    resolver: zodResolver(auditItemSchema),
     defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes || '' })) }
   });
 
@@ -157,7 +157,7 @@ function AuditForm({
               </Button>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
-                    <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar para revisão'}
+                    <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
                 </Button>
                 <DeleteConfirmationDialog 
                   open={false}
