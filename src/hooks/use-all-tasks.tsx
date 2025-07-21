@@ -61,7 +61,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
             tasks.push({
                 id: `audit-${s.id}`,
                 type: 'Auditoria pendente',
-                title: `Auditoria em ${s.kioskName}`,
+                title: `Auditoria de estoque em ${s.kioskName}`,
                 description: `Iniciada por ${s.auditedBy.username} em ${format(parseISO(s.startedAt), 'dd/MM/yyyy HH:mm')}`,
                 link: '/dashboard/stock/audit/stock-audit',
                 icon: ShieldCheck,
