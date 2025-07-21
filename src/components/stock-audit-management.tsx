@@ -25,6 +25,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Save, ListOrdered, Inbox, ShieldCheck, Check, X, Trash2, Loader2 } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { cn } from '@/lib/utils';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -54,7 +56,7 @@ function AuditForm({
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   const form = useForm<AuditFormValues>({
-    resolver: zodResolver(auditItemSchema),
+    resolver: zodResolver(zod.object({ items: z.array(auditItemSchema) })),
     defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes || '' })) }
   });
 
@@ -91,89 +93,108 @@ function AuditForm({
       setIsCancelling(false);
   }
 
+  const watchedItems = form.watch('items');
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Auditoria em {session.kioskName}</CardTitle>
         <CardDescription>Auditoria iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
       </CardHeader>
-      <Form {...form}>
-        <form>
-          <CardContent>
-             <div className="hidden md:grid grid-cols-[1fr_100px_120px_150px] items-center gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
-                <span>Produto/Lote</span>
-                <span className="text-center">Sistema</span>
-                <span className="text-center">Contagem</span>
-                <span>Observações</span>
-            </div>
-            <ScrollArea className="h-[50vh] pr-2">
-                <div className="space-y-4">
-                  {session.items.map((item, index) => {
-                    const product = products.find(p => p.id === item.productId);
-                    return (
-                        <Card key={item.lotId} className="p-4 flex flex-col md:flex-row gap-4 items-center">
-                             <div className="w-20 h-20 shrink-0">
-                                {product?.imageUrl ? (
-                                    <Image
-                                        src={product.imageUrl}
-                                        alt={item.productName}
-                                        width={80}
-                                        height={80}
-                                        className="w-20 h-20 rounded-md object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
-                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+        <Form {...form}>
+            <form>
+                <CardContent>
+                    <ScrollArea className="h-[calc(80vh-250px)] pr-2">
+                        <div className="space-y-4">
+                            {fields.map((field, index) => {
+                                const item = session.items[index];
+                                const product = products.find(p => p.id === item.productId);
+                                const watchedItem = watchedItems[index];
+                                const hasDivergence = watchedItem.countedQuantity !== item.systemQuantity;
+
+                                return (
+                                    <div key={item.lotId} className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Card 1: Product Info */}
+                                            <Card className="p-4 flex gap-4 items-center">
+                                                <div className="w-20 h-20 shrink-0">
+                                                    {product?.imageUrl ? (
+                                                        <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
+                                                    ) : (
+                                                        <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="font-semibold">{item.productName}</p>
+                                                    <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
+                                                    <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
+                                                </div>
+                                            </Card>
+
+                                            {/* Card 2: Count Info */}
+                                            <Card className="p-4 space-y-3">
+                                                <div className="flex items-end gap-4">
+                                                    <div className="flex-1">
+                                                        <Label>Sistema</Label>
+                                                        <p className="text-2xl font-bold">{item.systemQuantity}</p>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
+                                                            <FormItem>
+                                                                <Label>Contado</Label>
+                                                                <FormControl><Input type="number" {...field} className="text-lg font-bold h-11" /></FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    {hasDivergence ? (
+                                                         <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
+                                                            <FormItem>
+                                                                <Label>Observação (Obrigatório)</Label>
+                                                                <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-green-600 font-semibold p-2 bg-green-50 rounded-md">
+                                                            <Check/> Quantidade OK
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </Card>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                             <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-[1fr_100px_120px_150px] items-center gap-4">
-                                <div>
-                                    <p className="font-semibold">{item.productName}</p>
-                                    <p className="text-xs text-muted-foreground">Lote: {item.lotNumber} | Val: {format(parseISO(item.expiryDate), 'dd/MM/yy')}</p>
-                                </div>
-                                <div className="text-center font-bold text-lg">{item.systemQuantity}</div>
-                                <div className="w-full">
-                                    <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
-                                        <FormItem><FormControl><Input type="number" {...field} className="text-center" /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                </div>
-                                <div>
-                                    <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
-                                        <FormItem><FormControl><Input placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                </div>
-                            </div>
-                        </Card>
-                    );
-                  })}
-                </div>
-            </ScrollArea>
-          </CardContent>
-          <CardContent>
-            <div className="flex justify-between items-center">
-              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
-                <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
-              </Button>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
-                    <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
-                </Button>
-                <DeleteConfirmationDialog 
-                  open={false}
-                  onOpenChange={() => {}}
-                  onConfirm={handleFinalizeClick}
-                  isDeleting={isFinalizing}
-                  title="Tem certeza que quer efetivar?"
-                  description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
-                  confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
-                  triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </form>
-      </Form>
+                                );
+                            })}
+                        </div>
+                    </ScrollArea>
+                </CardContent>
+                <CardContent>
+                    <div className="flex justify-between items-center pt-4 border-t">
+                    <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
+                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
+                    </Button>
+                    <div className="flex gap-2">
+                        <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
+                            <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                        <DeleteConfirmationDialog 
+                        open={false}
+                        onOpenChange={() => {}}
+                        onConfirm={handleFinalizeClick}
+                        isDeleting={isFinalizing}
+                        title="Tem certeza que quer efetivar?"
+                        description="Esta ação é irreversível. O estoque será atualizado com as quantidades contadas. Deseja continuar?"
+                        confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
+                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar Auditoria</Button>}
+                        />
+                    </div>
+                    </div>
+                </CardContent>
+            </form>
+        </Form>
     </Card>
   )
 }
@@ -188,6 +209,21 @@ export function StockAuditManagement() {
   const { toast } = useToast();
   
   const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
+
+  useEffect(() => {
+    // Se uma sessão ativa for atualizada em outro lugar (ex: por outro admin),
+    // atualizamos o estado local para refletir as mudanças.
+    if (activeSession) {
+      const updatedSession = auditSessions.find(s => s.id === activeSession.id);
+      if (updatedSession) {
+        setActiveSession(updatedSession);
+      } else {
+        // A sessão foi removida
+        setActiveSession(null);
+      }
+    }
+  }, [auditSessions, activeSession]);
+
 
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -224,6 +260,7 @@ export function StockAuditManagement() {
     });
 
     if (newSessionId) {
+        // Imediatamente define a sessão ativa para renderizar o formulário
         const createdSession = {
             id: newSessionId,
             kioskId: kiosk.id,
@@ -311,3 +348,5 @@ export function StockAuditManagement() {
       </Card>
   );
 }
+
+    
