@@ -1,11 +1,11 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -49,8 +49,9 @@ function AuditForm({
   onFinalize: (items: StockAuditItem[]) => Promise<void>,
   onCancel: () => Promise<void>,
 }) {
-  const { getProductFullName } = useProducts();
+  const { products } = useProducts();
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -60,6 +61,7 @@ function AuditForm({
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
 
   const onSubmit = async (values: AuditFormValues) => {
+    setIsSaving(true);
     const updatedItems = session.items.map((item, index) => ({
       ...item,
       countedQuantity: values.items[index].countedQuantity,
@@ -67,6 +69,7 @@ function AuditForm({
       difference: values.items[index].countedQuantity - item.systemQuantity,
     }));
     await onSave(updatedItems);
+    setIsSaving(false);
   };
   
   const handleFinalizeClick = async () => {
@@ -95,47 +98,65 @@ function AuditForm({
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent>
+             <div className="hidden md:grid grid-cols-[1fr_100px_120px_150px] items-center gap-4 px-4 py-2 text-sm font-semibold text-muted-foreground">
+                <span>Produto/Lote</span>
+                <span className="text-center">Sistema</span>
+                <span className="text-center">Contagem</span>
+                <span>Observações</span>
+            </div>
             <ScrollArea className="h-[50vh] pr-2">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto/Lote</TableHead>
-                    <TableHead className="text-center">Sistema</TableHead>
-                    <TableHead className="w-[120px]">Contagem</TableHead>
-                    <TableHead className="w-[150px]">Observações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {session.items.map((item, index) => (
-                    <TableRow key={item.lotId}>
-                      <TableCell>
-                        <p className="font-semibold">{item.productName}</p>
-                        <p className="text-xs text-muted-foreground">Lote: {item.lotNumber} | Val: {format(parseISO(item.expiryDate), 'dd/MM/yy')}</p>
-                      </TableCell>
-                      <TableCell className="text-center">{item.systemQuantity}</TableCell>
-                      <TableCell>
-                        <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
-                          <FormItem><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                        )}/>
-                      </TableCell>
-                      <TableCell>
-                         <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
-                          <FormItem><FormControl><Input placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
-                        )}/>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                <div className="space-y-4">
+                  {session.items.map((item, index) => {
+                    const product = products.find(p => p.id === item.productId);
+                    return (
+                        <Card key={item.lotId} className="p-4 flex flex-col md:flex-row gap-4 items-center">
+                             <div className="w-20 h-20 shrink-0">
+                                {product?.imageUrl ? (
+                                    <Image
+                                        src={product.imageUrl}
+                                        alt={item.productName}
+                                        width={80}
+                                        height={80}
+                                        className="w-20 h-20 rounded-md object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center">
+                                    <ListOrdered className="h-8 w-8 text-muted-foreground" />
+                                    </div>
+                                )}
+                            </div>
+                             <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-[1fr_100px_120px_150px] items-center gap-4">
+                                <div>
+                                    <p className="font-semibold">{item.productName}</p>
+                                    <p className="text-xs text-muted-foreground">Lote: {item.lotNumber} | Val: {format(parseISO(item.expiryDate), 'dd/MM/yy')}</p>
+                                </div>
+                                <div className="text-center font-bold text-lg">{item.systemQuantity}</div>
+                                <div className="w-full">
+                                    <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
+                                        <FormItem><FormControl><Input type="number" {...field} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                </div>
+                                <div>
+                                    <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
+                                        <FormItem><FormControl><Input placeholder="..." {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                  })}
+                </div>
             </ScrollArea>
           </CardContent>
           <CardContent>
             <div className="flex justify-between items-center">
-              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling}>
+              <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving}>
                 <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar Auditoria'}
               </Button>
               <div className="flex gap-2">
-                <Button type="submit" variant="outline"><Save className="mr-2 h-4 w-4"/> Salvar para revisão</Button>
+                <Button type="submit" variant="outline" disabled={isSaving || isCancelling}>
+                    <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar para revisão'}
+                </Button>
                 <DeleteConfirmationDialog 
                   open={false}
                   onOpenChange={() => {}}
@@ -248,44 +269,44 @@ export function StockAuditManagement() {
     setActiveSession(null);
   }
 
-  if (!activeSession) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria de Estoque</CardTitle>
-                <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div>
-                    <h3 className="font-semibold mb-2">Iniciar Nova Auditoria</h3>
-                    <div className="flex gap-2">
-                        <Select onValueChange={handleStartSession}>
-                            <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
-                            <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                </div>
-
-                <div className="space-y-2 pt-4 border-t">
-                    <h3 className="font-semibold">Auditorias Salvas para Revisão</h3>
-                    {auditSessions.filter(s => s.status === 'pending_review').length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
-                    ) : (
-                        auditSessions.filter(s => s.status === 'pending_review').map(session => (
-                            <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
-                                <div>
-                                    <p className="font-medium">Auditoria em {session.kioskName}</p>
-                                    <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
-                                </div>
-                                <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar Auditoria</Button>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    );
+  if (activeSession) {
+    return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
-  
-  return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
+
+  return (
+      <Card>
+          <CardHeader>
+              <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria de Estoque</CardTitle>
+              <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+              <div>
+                  <h3 className="font-semibold mb-2">Iniciar Nova Auditoria</h3>
+                  <div className="flex gap-2">
+                      <Select onValueChange={handleStartSession}>
+                          <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
+                          <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                  </div>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold">Auditorias Salvas para Revisão</h3>
+                  {auditSessions.filter(s => s.status === 'pending_review').length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
+                  ) : (
+                      auditSessions.filter(s => s.status === 'pending_review').map(session => (
+                          <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
+                              <div>
+                                  <p className="font-medium">Auditoria em {session.kioskName}</p>
+                                  <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
+                              </div>
+                              <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar Auditoria</Button>
+                          </div>
+                      ))
+                  )}
+              </div>
+          </CardContent>
+      </Card>
+  );
 }
