@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from './ui/separator';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -113,7 +114,7 @@ function AuditForm({
             <form>
                 <CardContent>
                     <ScrollArea className="h-[calc(80vh-250px)] pr-2">
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {fields.map((field, index) => {
                                 const item = session.items[index];
                                 const product = products.find(p => p.id === item.productId);
@@ -121,57 +122,59 @@ function AuditForm({
                                 const hasDivergence = watchedItem && watchedItem.countedQuantity !== undefined ? watchedItem.countedQuantity !== item.systemQuantity : false;
 
                                 return (
-                                    <div key={item.lotId} className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <Card className="p-4 flex gap-4 items-center">
-                                                <div className="w-20 h-20 shrink-0">
-                                                    {product?.imageUrl ? (
-                                                        <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
-                                                    ) : (
-                                                        <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
-                                                    )}
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <p className="font-semibold">{item.productName}</p>
-                                                    <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
-                                                    <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
-                                                </div>
-                                            </Card>
-
-                                            <Card className="p-4 space-y-3">
-                                                <div className="flex items-end gap-4">
-                                                    <div className="flex-1">
-                                                        <Label>Sistema</Label>
-                                                        <p className="text-2xl font-bold">{item.systemQuantity}</p>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
-                                                            <FormItem>
-                                                                <Label>Contado</Label>
-                                                                <FormControl><Input type="number" {...field} className="text-lg font-bold h-11" /></FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    {hasDivergence ? (
-                                                         <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
-                                                            <FormItem>
-                                                                <Label>Observação (Obrigatório)</Label>
-                                                                <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-green-600 font-semibold p-2 bg-green-50 rounded-md">
-                                                            <Check/> Quantidade OK
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </Card>
+                                    <Card key={item.lotId} className="flex flex-col">
+                                        {/* Card 1 content */}
+                                        <div className="p-4 flex gap-4 items-center">
+                                            <div className="w-20 h-20 shrink-0">
+                                                {product?.imageUrl ? (
+                                                    <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
+                                                ) : (
+                                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
+                                                )}
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="font-semibold">{item.productName}</p>
+                                                <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
+                                                <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
+                                            </div>
                                         </div>
-                                    </div>
+
+                                        <Separator />
+
+                                        {/* Card 2 content (sub-card) */}
+                                        <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                                            <div className="flex items-end gap-4">
+                                                <div className="flex-1">
+                                                    <Label>Sistema</Label>
+                                                    <p className="text-2xl font-bold">{item.systemQuantity}</p>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <FormField control={form.control} name={`items.${index}.countedQuantity`} render={({ field }) => (
+                                                        <FormItem>
+                                                            <Label>Contado</Label>
+                                                            <FormControl><Input type="number" {...field} className="text-lg font-bold h-11" /></FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                {hasDivergence ? (
+                                                    <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
+                                                        <FormItem>
+                                                            <Label>Observação (Obrigatório)</Label>
+                                                            <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 text-green-600 font-semibold p-2 bg-green-50 rounded-md">
+                                                        <Check/> Quantidade OK
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Card>
                                 );
                             })}
                         </div>
