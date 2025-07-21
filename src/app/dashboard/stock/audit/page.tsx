@@ -12,7 +12,7 @@ export default function AuditHubPage() {
             <Link href="/dashboard/stock" className="inline-block mb-4">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    Voltar para gestão de estoque
+                    voltar para gestão de estoque
                 </Button>
             </Link>
             <div className="mb-6">
@@ -22,7 +22,7 @@ export default function AuditHubPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><ShieldCheck /> Auditoria de Estoque</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><ShieldCheck /> Auditoria de estoque</CardTitle>
                         <CardDescription>Inicie ou continue uma auditoria de contagem de lotes de estoque em um quiosque.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end">
