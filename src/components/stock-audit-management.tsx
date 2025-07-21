@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -18,7 +17,7 @@ import { type LotEntry, type StockAuditItem, type StockAuditSession } from '@/ty
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,6 +26,7 @@ import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialo
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
+import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
@@ -75,6 +75,11 @@ function AuditForm({
   };
   
   const handleFinalizeClick = async () => {
+    const isValid = await form.trigger();
+    if (!isValid) {
+        return;
+    }
+    
     setIsFinalizing(true);
     const values = form.getValues();
     const updatedItems = session.items.map((item, index) => ({
@@ -110,7 +115,7 @@ function AuditForm({
                                 const item = session.items[index];
                                 const product = products.find(p => p.id === item.productId);
                                 const watchedItem = watchedItems[index];
-                                const hasDivergence = watchedItem.countedQuantity !== item.systemQuantity;
+                                const hasDivergence = watchedItem && watchedItem.countedQuantity !== undefined ? watchedItem.countedQuantity !== item.systemQuantity : false;
 
                                 return (
                                     <div key={item.lotId} className="space-y-2 p-3 border rounded-lg bg-muted/30">
