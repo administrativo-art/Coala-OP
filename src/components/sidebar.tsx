@@ -79,13 +79,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         group: 'operacao', 
         show: canManageStock,
         subItems: [
-            { href: '/dashboard/stock/inventory-control', label: 'Controle de Estoque', icon: ClipboardCheck, show: true },
-            { href: '/dashboard/stock/count', label: 'Contagem de Estoque', icon: ListOrdered, show: true },
+            { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
+            { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
             { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.audit.start },
-            { href: '/dashboard/stock/analysis', label: 'Análise de Estoque', icon: BarChart2, show: true },
+            { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
             { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
             { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
-            { href: '/dashboard/conversions', label: 'Conversão de Medidas', icon: Repeat, show: true },
+            { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
         ]
     },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
