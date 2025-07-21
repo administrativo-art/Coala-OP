@@ -63,7 +63,7 @@ export function StockManagement() {
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
                                 <AuditIcon className="h-10 w-10 text-primary" />
                             </div>
-                            <CardTitle className="text-2xl mb-2">Auditoria de Estoque</CardTitle>
+                            <CardTitle className="text-2xl mb-2">Auditoria</CardTitle>
                             <CardDescription>Realize auditorias pontuais para garantir a acurácia dos processos de estoque.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">

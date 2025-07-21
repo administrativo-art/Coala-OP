@@ -23,7 +23,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -32,6 +32,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from './ui/separator';
+import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
+
 
 const DIVERGENCE_REASONS = [
     "Vencido",
@@ -331,7 +333,7 @@ function AuditForm({
   )
 }
 
-export function StockAuditManagement() {
+export function StockAuditManagement({ showExportButton = false }: { showExportButton?: boolean }) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
@@ -341,6 +343,8 @@ export function StockAuditManagement() {
   const { toast } = useToast();
   
   const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
 
   useEffect(() => {
     if (activeSession) {
@@ -439,10 +443,21 @@ export function StockAuditManagement() {
   }
 
   return (
+    <>
       <Card>
           <CardHeader>
-              <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria de Estoque</CardTitle>
-              <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+              <div className="flex justify-between items-start">
+                  <div>
+                      <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria</CardTitle>
+                      <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+                  </div>
+                  {showExportButton && (
+                    <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                        <Download className="mr-2" />
+                        Relatório detalhado
+                    </Button>
+                  )}
+              </div>
           </CardHeader>
           <CardContent className="space-y-4">
               <div>
@@ -475,5 +490,10 @@ export function StockAuditManagement() {
               </div>
           </CardContent>
       </Card>
+      <ZeroedLotsAuditModal
+        open={isHistoryModalOpen}
+        onOpenChange={setIsHistoryModalOpen}
+      />
+    </>
   );
 }

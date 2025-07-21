@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -13,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -27,6 +28,7 @@ import { ReportsDashboard } from "@/components/reports-dashboard"
 import { PricingDashboard } from "@/components/pricing-dashboard"
 import { useProductSimulation } from "@/hooks/use-product-simulation"
 import { useCompanySettings } from "@/hooks/use-company-settings"
+import { StockAuditManagement } from "@/components/stock-audit-management"
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
@@ -233,11 +235,7 @@ function OperationalDashboard() {
         </Card>
       </div>
       
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="consumption-chart">
-            <AverageConsumptionChart />
-        </AccordionItem>
-      </Accordion>
+      <AverageConsumptionChart />
 
       <EditScheduleModal 
           dayData={dayToEdit}
@@ -284,7 +282,8 @@ function PricingReportDashboard() {
 
 
 export default function DashboardPage() {
-    const { user } = useAuth();
+    const { user, permissions } = useAuth();
+    const canAuditStock = permissions.audit.start || permissions.audit.approve;
 
     return (
         <div className="space-y-6">
@@ -297,7 +296,11 @@ export default function DashboardPage() {
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>
                     <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>
-                    <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>
+                    {canAuditStock ? (
+                         <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>
+                    ): (
+                        <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>
+                    )}
                 </TabsList>
                 <TabsContent value="operational" className="mt-6 space-y-6">
                     <OperationalDashboard />
@@ -305,9 +308,15 @@ export default function DashboardPage() {
                 <TabsContent value="pricing" className="mt-6">
                     <PricingReportDashboard />
                 </TabsContent>
-                <TabsContent value="tasks" className="mt-6">
-                    <ReportsDashboard />
-                </TabsContent>
+                {canAuditStock ? (
+                     <TabsContent value="audit" className="mt-6">
+                        <StockAuditManagement />
+                    </TabsContent>
+                ) : (
+                    <TabsContent value="tasks" className="mt-6">
+                        <ReportsDashboard />
+                    </TabsContent>
+                )}
             </Tabs>
         </div>
     );

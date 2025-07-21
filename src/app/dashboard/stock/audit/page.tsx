@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from 'next/link';
@@ -15,7 +16,7 @@ export default function StockAuditPage() {
                     Voltar para gestão de estoque
                 </Button>
             </Link>
-            <StockAuditManagement />
+            <StockAuditManagement showExportButton={true} />
         </div>
     );
 }
