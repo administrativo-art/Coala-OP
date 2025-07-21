@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -279,6 +278,11 @@ export function PricingSimulator() {
         )
     };
 
+    const handleFilterSelect = (currentValue: string) => {
+        setFilterValue(currentValue === filterValue ? "" : currentValue);
+        setPopoverOpen(false);
+    };
+
     return (
         <div className="space-y-6">
             <div className="space-y-4">
@@ -324,66 +328,30 @@ export function PricingSimulator() {
                                     <CommandInput placeholder="Buscar..." />
                                     <CommandList>
                                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                                        <CommandGroup heading="Mercadorias">
-                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
+                                        
+                                        {Object.entries(
+                                            filterOptions.reduce((acc, option) => {
+                                                if (!acc[option.group]) acc[option.group] = [];
+                                                acc[option.group].push(option);
+                                                return acc;
+                                            }, {} as Record<string, typeof filterOptions>)
+                                        ).map(([group, options]) => (
+                                            <CommandGroup key={group} heading={group}>
+                                                {options.map((option) => (
+                                                    <CommandItem
+                                                        key={option.value}
+                                                        value={option.value}
+                                                        onSelect={handleFilterSelect}
+                                                    >
+                                                        <Check
+                                                            className={cn("mr-2 h-4 w-4", filterValue === option.value ? "opacity-100" : "opacity-0")}
+                                                        />
+                                                        {option.label}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
                                         ))}
-                                        </CommandGroup>
-                                         <CommandGroup heading="Categorias">
-                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
-                                         <CommandGroup heading="Linhas">
-                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setFilterValue(currentValue === filterValue ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                filterValue === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
+
                                     </CommandList>
                                 </Command>
                                 </PopoverContent>
@@ -430,6 +398,4 @@ export function PricingSimulator() {
         </div>
     );
 }
-
-
 
