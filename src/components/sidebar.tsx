@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase, ShieldCheck as AuditIcon } from 'lucide-react'
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "./ui/badge"
@@ -60,7 +60,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
   const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
-  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform);
+  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform || permissions.audit.start);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
@@ -81,6 +81,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         subItems: [
             { href: '/dashboard/stock/inventory-control', label: 'Controle de Estoque', icon: ClipboardCheck, show: true },
             { href: '/dashboard/stock/count', label: 'Contagem de Estoque', icon: ListOrdered, show: true },
+            { href: '/dashboard/stock/audit', label: 'Auditoria de Estoque', icon: AuditIcon, show: permissions.audit.start },
             { href: '/dashboard/stock/analysis', label: 'Análise de Estoque', icon: BarChart2, show: true },
             { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
             { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
@@ -92,7 +93,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
-  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp]);
+  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start]);
   
   const filteredNavItems = useMemo(() => {
     if (!searchTerm) return navItems.filter(item => item.show !== false);
@@ -103,12 +104,14 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         if (item.show === false) return null;
 
         const mainLabelMatch = item.label.toLowerCase().includes(lowerCaseSearch);
-        const matchingSubItems = item.subItems?.filter(sub => sub.label.toLowerCase().includes(lowerCaseSearch));
+        
+        const filteredSubItems = item.subItems?.filter(sub => sub.show !== false);
+        const matchingSubItems = filteredSubItems?.filter(sub => sub.label.toLowerCase().includes(lowerCaseSearch));
 
         if (mainLabelMatch || (matchingSubItems && matchingSubItems.length > 0)) {
             return {
                 ...item,
-                subItems: mainLabelMatch ? item.subItems : matchingSubItems
+                subItems: mainLabelMatch ? filteredSubItems : matchingSubItems
             };
         }
         return null;
@@ -188,7 +191,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                     </AccordionTrigger>
                     <AccordionContent className="pt-1 pl-4">
                         <ul className="space-y-1">
-                            {item.subItems!.map(subItem => (
+                            {item.subItems!.filter(sub => sub.show !== false).map(subItem => (
                                 <li key={subItem.href}>{renderLink(subItem, true)}</li>
                             ))}
                         </ul>

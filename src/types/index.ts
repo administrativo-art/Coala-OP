@@ -224,7 +224,7 @@ export type PermissionSet = {
     reports: { view: boolean; };
     help: { view: boolean; };
     tasks: { view: true, manage: boolean; };
-    audit: { start: boolean; approve: boolean; viewHistory: boolean; };
+    audit: { start: boolean; approve: boolean; };
 };
 
 export type Profile = {
@@ -643,7 +643,7 @@ export const defaultGuestPermissions: PermissionSet = {
     reports: { view: false },
     help: { view: true },
     tasks: { view: true, manage: false },
-    audit: { start: false, approve: false, viewHistory: false },
+    audit: { start: false, approve: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -679,7 +679,8 @@ export const defaultAdminPermissions: PermissionSet = {
     reports: { view: true },
     help: { view: true },
     tasks: { view: true, manage: true },
-    audit: { start: true, approve: true, viewHistory: true },
+    audit: { start: true, approve: true },
 };
+
 
 
