@@ -120,7 +120,6 @@ function AuditForm({
                                 return (
                                     <div key={item.lotId} className="space-y-2 p-3 border rounded-lg bg-muted/30">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {/* Card 1: Product Info */}
                                             <Card className="p-4 flex gap-4 items-center">
                                                 <div className="w-20 h-20 shrink-0">
                                                     {product?.imageUrl ? (
@@ -136,7 +135,6 @@ function AuditForm({
                                                 </div>
                                             </Card>
 
-                                            {/* Card 2: Count Info */}
                                             <Card className="p-4 space-y-3">
                                                 <div className="flex items-end gap-4">
                                                     <div className="flex-1">
@@ -216,14 +214,11 @@ export function StockAuditManagement() {
   const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
 
   useEffect(() => {
-    // Se uma sessão ativa for atualizada em outro lugar (ex: por outro admin),
-    // atualizamos o estado local para refletir as mudanças.
     if (activeSession) {
       const updatedSession = auditSessions.find(s => s.id === activeSession.id);
       if (updatedSession) {
         setActiveSession(updatedSession);
       } else {
-        // A sessão foi removida
         setActiveSession(null);
       }
     }
@@ -265,7 +260,6 @@ export function StockAuditManagement() {
     });
 
     if (newSessionId) {
-        // Imediatamente define a sessão ativa para renderizar o formulário
         const createdSession = {
             id: newSessionId,
             kioskId: kiosk.id,
@@ -353,5 +347,3 @@ export function StockAuditManagement() {
       </Card>
   );
 }
-
-    
