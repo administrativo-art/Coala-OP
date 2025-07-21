@@ -681,3 +681,4 @@ export const defaultAdminPermissions: PermissionSet = {
     tasks: { view: true, manage: true },
     audit: { start: true, approve: true, viewHistory: true },
 };
+
