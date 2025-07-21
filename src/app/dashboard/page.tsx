@@ -31,6 +31,7 @@ import { AuditDashboard } from "@/components/audit-dashboard"
 import { useStockAudit } from "@/hooks/use-stock-audit"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
+import { PendingTasksDashboard } from "@/components/pending-tasks-dashboard"
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
@@ -286,8 +287,7 @@ export default function DashboardPage() {
     const { user, permissions } = useAuth();
     const canAuditStock = permissions.audit.start || permissions.audit.approve;
     const canViewTasks = permissions.tasks.view;
-    const gridCols = `grid-cols-${3 + (canAuditStock ? 1 : 0) + (canViewTasks ? 1 : 0)}`;
-
+    
     return (
         <div className="space-y-6">
             <div className="mb-6">
@@ -314,7 +314,8 @@ export default function DashboardPage() {
                     </TabsContent>
                 )}
                  {canViewTasks && (
-                    <TabsContent value="tasks" className="mt-6">
+                    <TabsContent value="tasks" className="mt-6 space-y-6">
+                        <PendingTasksDashboard />
                         <ReportsDashboard />
                     </TabsContent>
                 )}
