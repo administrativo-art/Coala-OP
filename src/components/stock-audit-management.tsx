@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -34,14 +35,47 @@ import { Separator } from './ui/separator';
 
 const auditItemSchema = z.object({
   countedQuantity: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
+  divergenceReason: z.string().optional(),
   notes: z.string().optional(),
 });
 
 const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
+}).refine((data) => {
+    return data.items.every(item => {
+        // If a divergence reason is selected, it must not be empty.
+        // If the reason is 'Outros', the notes field must not be empty.
+        const itemSchema = z.object({
+            countedQuantity: z.number(),
+            systemQuantity: z.number(),
+            divergenceReason: z.string().optional(),
+            notes: z.string().optional(),
+        }).passthrough();
+        
+        const parsed = itemSchema.safeParse(item);
+        if(!parsed.data) return true;
+
+        const { countedQuantity, systemQuantity, divergenceReason, notes } = parsed.data;
+        if(countedQuantity === systemQuantity) return true;
+        
+        if(!divergenceReason) return false;
+        if(divergenceReason === 'Outros' && (!notes || notes.trim() === '')) return false;
+        
+        return true;
+    });
+}, {
+    message: "Motivo ou observação obrigatória para divergências.",
 });
 
+
 type AuditFormValues = z.infer<typeof auditFormSchema>;
+
+const DIVERGENCE_REASONS = [
+    "Contagem errada",
+    "Avariado",
+    "Vencido",
+    "Outros"
+];
 
 function AuditForm({
   session,
@@ -61,7 +95,13 @@ function AuditForm({
   
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
-    defaultValues: { items: session.items.map(i => ({ countedQuantity: i.countedQuantity, notes: i.notes || '' })) }
+    defaultValues: {
+      items: session.items.map(i => ({
+        countedQuantity: i.countedQuantity,
+        divergenceReason: i.divergenceReason || '',
+        notes: i.notes || '',
+      })),
+    },
   });
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
@@ -71,6 +111,7 @@ function AuditForm({
     const updatedItems = session.items.map((item, index) => ({
       ...item,
       countedQuantity: values.items[index].countedQuantity,
+      divergenceReason: values.items[index].divergenceReason,
       notes: values.items[index].notes,
       difference: values.items[index].countedQuantity - item.systemQuantity,
     }));
@@ -81,7 +122,12 @@ function AuditForm({
   const handleFinalizeClick = async () => {
     const isValid = await form.trigger();
     if (!isValid) {
-        return;
+      toast({
+          variant: "destructive",
+          title: "Campos obrigatórios",
+          description: "Por favor, preencha o motivo de todas as divergências antes de efetivar."
+      });
+      return;
     }
     
     setIsFinalizing(true);
@@ -89,6 +135,7 @@ function AuditForm({
     const updatedItems = session.items.map((item, index) => ({
       ...item,
       countedQuantity: values.items[index].countedQuantity,
+      divergenceReason: values.items[index].divergenceReason,
       notes: values.items[index].notes,
       difference: values.items[index].countedQuantity - item.systemQuantity,
     }));
@@ -102,6 +149,7 @@ function AuditForm({
       setIsCancelling(false);
   }
 
+  const { toast } = useToast();
   const watchedItems = form.watch('items');
 
   return (
@@ -120,10 +168,10 @@ function AuditForm({
                                 const product = products.find(p => p.id === item.productId);
                                 const watchedItem = watchedItems[index];
                                 const hasDivergence = watchedItem && watchedItem.countedQuantity !== undefined ? watchedItem.countedQuantity !== item.systemQuantity : false;
+                                const showOtherNotes = hasDivergence && watchedItem.divergenceReason === 'Outros';
 
                                 return (
                                     <Card key={item.lotId} className="flex flex-col">
-                                        {/* Card 1 content */}
                                         <div className="p-4 flex gap-4 items-center">
                                             <div className="w-20 h-20 shrink-0">
                                                 {product?.imageUrl ? (
@@ -141,7 +189,6 @@ function AuditForm({
 
                                         <Separator />
 
-                                        {/* Card 2 content (sub-card) */}
                                         <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                                             <div className="flex items-end gap-4">
                                                 <div className="flex-1">
@@ -160,15 +207,31 @@ function AuditForm({
                                             </div>
                                             <div>
                                                 {hasDivergence ? (
-                                                    <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
-                                                        <FormItem>
-                                                            <Label>Observação (Obrigatório)</Label>
-                                                            <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}/>
+                                                    <div className="space-y-2">
+                                                        <FormField control={form.control} name={`items.${index}.divergenceReason`} render={({ field }) => (
+                                                            <FormItem>
+                                                                <Label>Motivo da divergência (Obrigatório)</Label>
+                                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um motivo..." /></SelectTrigger></FormControl>
+                                                                    <SelectContent>
+                                                                        {DIVERGENCE_REASONS.map(reason => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                        {showOtherNotes && (
+                                                            <FormField control={form.control} name={`items.${index}.notes`} render={({ field }) => (
+                                                                <FormItem>
+                                                                    <Label>Observação para "Outros"</Label>
+                                                                    <FormControl><Textarea placeholder="Descreva o motivo da divergência..." {...field} /></FormControl>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}/>
+                                                        )}
+                                                    </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 text-green-600 font-semibold p-2 bg-green-50 rounded-md">
+                                                    <div className="flex items-center gap-2 text-green-600 font-semibold text-sm p-2 bg-green-50 rounded-md">
                                                         <Check/> Quantidade OK
                                                     </div>
                                                 )}
@@ -225,6 +288,7 @@ export function StockAuditManagement() {
       if (updatedSession) {
         setActiveSession(updatedSession);
       } else {
+        // This might happen if the session was deleted in another tab, for example.
         setActiveSession(null);
       }
     }

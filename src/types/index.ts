@@ -300,6 +300,7 @@ export type StockAuditItem = {
     systemQuantity: number;
     countedQuantity: number;
     difference: number;
+    divergenceReason?: string;
     notes?: string;
 };
 
