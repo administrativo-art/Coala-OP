@@ -317,44 +317,47 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 {!simulationToEdit && (
                   <FormItem>
                       <FormLabel>Copiar de (Opcional)</FormLabel>
-                       <Popover open={copyFromPopoverOpen} onOpenChange={setCopyFromPopoverOpen}>
+                        <Popover open={copyFromPopoverOpen} onOpenChange={setCopyFromPopoverOpen}>
                             <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={copyFromPopoverOpen}
-                                    className="w-full justify-between font-normal"
-                                >
-                                    {copyFromValue
-                                        ? simulations.find((s) => s.id === copyFromValue)?.name
-                                        : "Selecione uma mercadoria para copiar..."
-                                    }
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-full justify-between font-normal"
+                            >
+                                {copyFromValue
+                                ? simulations.find((s) => s.id === copyFromValue)?.name
+                                : "Selecione uma mercadoria para copiar..."}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar mercadoria..." />
-                                    <CommandList>
-                                        <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
-                                        <CommandGroup>
-                                            {simulations.map((sim) => (
-                                                <CommandItem
-                                                    key={sim.id}
-                                                    value={sim.name}
-                                                    onSelect={() => {
-                                                        setCopyFromValue(sim.id)
-                                                        handleCopyFrom(sim.id);
-                                                        setCopyFromPopoverOpen(false);
-                                                    }}
-                                                >
-                                                    <Check className={cn("mr-2 h-4 w-4", copyFromValue === sim.id ? "opacity-100" : "opacity-0")} />
-                                                    {sim.name}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
+                            <Command>
+                                <CommandInput placeholder="Buscar mercadoria..." />
+                                <CommandList>
+                                <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
+                                <CommandGroup>
+                                    {simulations.map((sim) => (
+                                    <CommandItem
+                                        key={sim.id}
+                                        value={sim.id}
+                                        onSelect={(currentValue) => {
+                                            handleCopyFrom(currentValue);
+                                            setCopyFromValue(currentValue);
+                                            setCopyFromPopoverOpen(false);
+                                        }}
+                                    >
+                                        <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            copyFromValue === sim.id ? "opacity-100" : "opacity-0"
+                                        )}
+                                        />
+                                        {sim.name}
+                                    </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                                </CommandList>
+                            </Command>
                             </PopoverContent>
                         </Popover>
                       <FormDescription>
@@ -431,10 +434,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                       <SectionTitle>Composição (CMV)</SectionTitle>
                       
                       <div className="rounded-md border p-2 space-y-2">
-                        <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                        <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                             <span className="col-span-1">Insumo base</span>
                             <span className="text-center">Qtd.</span>
-                            <span className="text-center">Unid.</span>
                             <span className="text-right">Custo/unid.</span>
                             <span className="text-right">Custo total</span>
                             <span className="w-8"></span>
@@ -447,19 +449,21 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
                             return (
                                 <div key={item.id} className="p-2 rounded bg-muted/50">
-                                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2">
-                                    <p className="font-medium text-sm self-center col-span-2 break-words">{baseProduct?.name}</p>
+                                <div className="grid grid-cols-[1fr_auto] items-start gap-x-2">
+                                    <div className="self-center break-words">
+                                      <p className="font-medium text-sm ">{baseProduct?.name}</p>
+                                    </div>
 
-                                    <div className="col-start-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2">
+                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2 w-max">
                                         <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                                        <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                        <FormItem className="min-w-[4rem]"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                         )}/>
                                         
                                         <FormField
                                             control={form.control}
                                             name={`items.${index}.overrideUnit`}
                                             render={({ field: unitField }) => (
-                                                <FormItem>
+                                                <FormItem className="min-w-[6rem]">
                                                     <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
                                                         <FormControl>
                                                             <SelectTrigger className={cn("bg-background/0", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
@@ -485,7 +489,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             control={form.control}
                                             name={`items.${index}.overrideCostPerUnit`}
                                             render={({ field: costField }) => (
-                                                <FormItem>
+                                                <FormItem className="min-w-[6rem]">
                                                     <Input
                                                         type="number"
                                                         step="any"
@@ -499,7 +503,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             )}
                                         />
 
-                                        <div className="font-semibold text-primary text-sm w-full text-right self-center">
+                                        <div className="font-semibold text-primary text-sm w-full text-right self-center min-w-[5rem]">
                                             {formatCurrency(partialCosts[index])}
                                         </div>
                                         <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
@@ -648,5 +652,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
 
 
