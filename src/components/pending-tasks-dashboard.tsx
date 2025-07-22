@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from './ui/skeleton';
 import { Inbox, ListTodo } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from './ui/button';
 
 export function PendingTasksDashboard() {
     const { legacyTasks, loading } = useAllTasks();

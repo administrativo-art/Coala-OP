@@ -230,7 +230,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    {submission && <ViewSubmissionModal submission={submission} onOpenChange={(open) => !open && setIsSubmissionModalOpen(false)} />}
+    {submission && isSubmissionModalOpen && <ViewSubmissionModal submission={submission} onOpenChange={(open) => !open && setIsSubmissionModalOpen(false)} />}
     </>
   );
 }
