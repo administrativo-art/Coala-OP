@@ -4,8 +4,7 @@
 import { useContext } from 'react';
 import { FormContext, type FormContextType } from '@/components/form-provider';
 import { useAuth } from './use-auth';
-import { useTasks } from './use-tasks';
-import { type FormSubmission, type FormTemplate, type TaskHistoryItem, type FormQuestion } from '@/types';
+import { type FormSubmission, type FormTemplate, type TaskHistoryItem, type FormQuestion, type Task } from '@/types';
 import { addDays } from 'date-fns';
 
 type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
@@ -15,8 +14,7 @@ type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
 export const useForm = (): EnrichedFormContextType => {
   const context = useContext(FormContext);
   const { user } = useAuth();
-  const { addTask } = useTasks();
-
+  
   if (context === undefined) {
     throw new Error('useForm must be used within a FormProvider');
   }
@@ -28,7 +26,8 @@ export const useForm = (): EnrichedFormContextType => {
     }
     
     let submissionStatus: 'completed' | 'in_progress' = 'completed';
-    const tasksToCreate: any[] = [];
+    const tasksToCreate: Omit<Task, 'id' | 'origin'>[] = [];
+    
     const allQuestions: FormQuestion[] = template.sections.flatMap(s => {
       const getQuestions = (q_list: FormQuestion[]): FormQuestion[] => {
           return q_list.flatMap(q => [q, ...(q.options ? q.options.flatMap(opt => getQuestions(opt.subQuestions || [])) : [])]);
@@ -36,12 +35,12 @@ export const useForm = (): EnrichedFormContextType => {
       return getQuestions(s.questions);
     });
 
-    const findQuestion = (id: string, questions: FormQuestion[]): (FormQuestion | undefined) => {
-        return questions.find(q => q.id === id);
+    const findQuestion = (id: string): (FormQuestion | undefined) => {
+        return allQuestions.find(q => q.id === id);
     };
 
     submission.answers.forEach(answer => {
-        const question = findQuestion(answer.questionId, allQuestions);
+        const question = findQuestion(answer.questionId);
         if (question && question.options) {
             const selectedValues = Array.isArray(answer.value) ? answer.value : [answer.value];
             question.options.forEach(option => {
@@ -55,12 +54,10 @@ export const useForm = (): EnrichedFormContextType => {
                         details: `Criada a partir do formulário "${template.name}"`
                     };
                     
-                    const taskPayload: any = {
+                    const taskPayload: Omit<Task, 'id' | 'origin'> & { origin: any } = {
                         ...option.action,
                         status: 'pending',
                         origin: {
-                            type: 'form_submission',
-                            submissionId: '', // Will be filled after submission is created
                             questionId: question.id,
                             optionId: option.id,
                         },
@@ -80,14 +77,7 @@ export const useForm = (): EnrichedFormContextType => {
     });
 
     const finalSubmission = { ...submission, status: submissionStatus };
-    const submissionId = await context.addSubmission(finalSubmission, template);
-
-    if (submissionId && tasksToCreate.length > 0) {
-        for (const task of tasksToCreate) {
-            task.origin.submissionId = submissionId;
-            await addTask(task);
-        }
-    }
+    await context.addSubmission(finalSubmission, tasksToCreate);
   };
 
   return {

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type FormTemplate, type FormSubmission } from '@/types';
+import { type FormTemplate, type FormSubmission, type Task } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
 
@@ -13,7 +13,7 @@ export interface FormContextType {
   addTemplate: (template: Omit<FormTemplate, 'id'>) => Promise<void>;
   updateTemplate: (template: FormTemplate) => Promise<void>;
   deleteTemplate: (templateId: string) => Promise<void>;
-  addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<string | null>;
+  addSubmission: (submission: Omit<FormSubmission, 'id'>, tasksToCreate?: Omit<Task, 'id' | 'origin'>[]) => Promise<string | null>;
   deleteSubmission: (submissionId: string) => Promise<void>;
   updateSubmission: (submissionId: string, updates: Partial<FormSubmission>) => Promise<void>;
 }
@@ -77,12 +77,33 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   
-  const addSubmission = useCallback(async (submission: Omit<FormSubmission, 'id'>, template: FormTemplate): Promise<string | null> => {
+  const addSubmission = useCallback(async (submission: Omit<FormSubmission, 'id'>, tasksToCreate?: Omit<Task, 'id' | 'origin'>[]): Promise<string | null> => {
     try {
-      const docRef = await addDoc(collection(db, "formSubmissions"), submission);
-      return docRef.id;
+      const batch = writeBatch(db);
+      
+      const submissionRef = doc(collection(db, "formSubmissions"));
+      batch.set(submissionRef, submission);
+      
+      if (tasksToCreate && tasksToCreate.length > 0) {
+        tasksToCreate.forEach(taskData => {
+          const taskRef = doc(collection(db, "tasks"));
+          const fullTaskData = {
+            ...taskData,
+            origin: { // The origin is now correctly formed here
+              type: 'form_submission',
+              submissionId: submissionRef.id,
+              ...taskData.origin,
+            },
+          };
+          batch.set(taskRef, fullTaskData);
+        });
+      }
+      
+      await batch.commit();
+      return submissionRef.id;
+
     } catch (error) {
-      console.error("Error adding submission:", error);
+      console.error("Error adding submission and tasks:", error);
       return null;
     }
   }, []);
