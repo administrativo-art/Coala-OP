@@ -21,23 +21,6 @@ interface SectionNodeProps {
 
 const colorSwatches = [ '#FEE2E2', '#FEF3C7', '#D1FAE5', '#DBEAFE', '#E0E7FF', '#F3E8FF', '#FCE7F3' ];
 
-// A simple function to determine if a color is light or dark
-// Returns true for light colors, false for dark
-const isColorLight = (color: string): boolean => {
-    // Basic implementation: check brightness
-    // This can be improved with a more sophisticated algorithm (e.g., calculating luminance)
-    try {
-        const hex = color.replace('#', '');
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
-        const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-        return brightness > 155;
-    } catch(e) {
-        return true; // Default to light if color is invalid
-    }
-};
-
 export const SectionNode = memo(({ data }: SectionNodeProps) => {
   const [name, setName] = useState(data.label);
   const [debouncedName] = useDebounce(name, 500);
@@ -47,8 +30,6 @@ export const SectionNode = memo(({ data }: SectionNodeProps) => {
       data.onUpdate({ name: debouncedName });
     }
   }, [debouncedName, data.label, data.onUpdate]);
-
-  const textColorClass = data.color && !isColorLight(data.color) ? 'text-white/90 placeholder:text-white/60' : 'text-foreground';
 
   return (
     <Card 
@@ -61,12 +42,12 @@ export const SectionNode = memo(({ data }: SectionNodeProps) => {
           onChange={(e) => setName(e.target.value)}
           className={cn(
             "text-lg font-semibold border-none bg-transparent focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto",
-            textColorClass
+            "text-foreground placeholder:text-muted-foreground"
           )}
         />
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className={cn("absolute top-2 right-2 h-7 w-7 hover:bg-black/10", textColorClass)}>
+                <Button variant="ghost" size="icon" className={cn("absolute top-2 right-2 h-7 w-7 hover:bg-black/10 text-foreground/70 hover:text-foreground/100")}>
                     <Palette className="h-4 w-4"/>
                 </Button>
             </PopoverTrigger>
