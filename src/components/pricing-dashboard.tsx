@@ -10,6 +10,7 @@ import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTri
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Separator } from "./ui/separator";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
