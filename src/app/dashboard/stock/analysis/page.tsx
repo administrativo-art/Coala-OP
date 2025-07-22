@@ -37,7 +37,7 @@ export default function AnalysisPage() {
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><TrendingUp /> Consumo médio</CardTitle>
-                        <CardDescription>Visualize o consumo médio mensal dos seus produtos para planejar compras futuras.</CardDescription>
+                        <CardDescription>Visualize o consumo médio mensal dos seus insumos para planejar compras futuras.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end">
                         <Link href="/dashboard/stock/analysis/consumption" className="w-full">
