@@ -88,14 +88,14 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="relative my-4">
-      <div className="absolute inset-0 flex items-center" aria-hidden="true">
-        <div className="w-full border-t border-border/40 border-dashed" />
-      </div>
-      <div className="relative flex justify-center">
-        <span className="bg-background px-3 font-semibold text-muted-foreground tracking-wider uppercase text-xs">{children}</span>
-      </div>
+  <div className="relative my-4">
+    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+      <div className="w-full border-t border-border/40 border-dashed" />
     </div>
+    <div className="relative flex justify-center">
+      <span className="bg-background px-3 font-semibold text-muted-foreground tracking-wider uppercase text-xs">{children}</span>
+    </div>
+  </div>
 );
 
 
@@ -109,8 +109,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [copyFromPopoverOpen, setCopyFromPopoverOpen] = useState(false);
-  const [selectedCopyTo, setSelectedCopyTo] = useState<string | null>(null);
-  
+  const [copyFromValue, setCopyFromValue] = useState("");
+
   const { toast } = useToast();
 
   const form = useForm<SimulationFormValues>({
@@ -148,7 +148,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             });
         } else {
             form.reset({ name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
-            setSelectedCopyTo(null);
+            setCopyFromValue("");
         }
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
@@ -177,9 +177,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         profitGoal: sourceSimulation.profitGoal,
         notes: sourceSimulation.notes,
     });
-    
-    setSelectedCopyTo(simulationId);
-    setCopyFromPopoverOpen(false);
   };
   
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
@@ -328,8 +325,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                     aria-expanded={copyFromPopoverOpen}
                                     className="w-full justify-between font-normal"
                                 >
-                                    {selectedCopyTo
-                                        ? simulations.find((s) => s.id === selectedCopyTo)?.name
+                                    {copyFromValue
+                                        ? simulations.find((s) => s.id === copyFromValue)?.name
                                         : "Selecione uma mercadoria para copiar..."
                                     }
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -344,12 +341,14 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             {simulations.map((sim) => (
                                                 <CommandItem
                                                     key={sim.id}
-                                                    value={sim.id}
-                                                    onSelect={(currentValue) => {
-                                                        handleCopyFrom(currentValue);
+                                                    value={sim.name}
+                                                    onSelect={() => {
+                                                        setCopyFromValue(sim.id)
+                                                        handleCopyFrom(sim.id);
+                                                        setCopyFromPopoverOpen(false);
                                                     }}
                                                 >
-                                                    <Check className={cn("mr-2 h-4 w-4", selectedCopyTo === sim.id ? "opacity-100" : "opacity-0")} />
+                                                    <Check className={cn("mr-2 h-4 w-4", copyFromValue === sim.id ? "opacity-100" : "opacity-0")} />
                                                     {sim.name}
                                                 </CommandItem>
                                             ))}
@@ -649,4 +648,5 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
 
