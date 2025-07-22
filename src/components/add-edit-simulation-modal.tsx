@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,8 @@ import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-an
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Separator } from './ui/separator';
+import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
 
 const simulationItemSchema = z.object({
@@ -87,11 +89,13 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="relative text-center my-4">
-        <Separator className="bg-border/60" />
-        <h3 className="absolute -top-3 left-1/2 -translate-x-1/2 bg-background px-2 font-semibold text-muted-foreground tracking-wider uppercase text-xs">
-            {children}
-        </h3>
+    <div className="relative my-4">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-border/60" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span className="bg-background px-2 font-semibold text-muted-foreground tracking-wider">{children}</span>
+      </div>
     </div>
 );
 
@@ -105,6 +109,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isCopyPopoverOpen, setIsCopyPopoverOpen] = useState(false);
   
   const { toast } = useToast();
 
@@ -171,6 +176,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         profitGoal: sourceSimulation.profitGoal,
         notes: sourceSimulation.notes,
     });
+    setIsCopyPopoverOpen(false);
   };
   
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
@@ -311,18 +317,38 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 {!simulationToEdit && (
                   <FormItem>
                       <FormLabel>Copiar de (Opcional)</FormLabel>
-                      <Select onValueChange={handleCopyFrom}>
-                          <SelectTrigger>
-                              <SelectValue placeholder="Selecione uma mercadoria para copiar a composição..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                              {simulations.map(sim => (
-                                  <SelectItem key={sim.id} value={sim.id}>
-                                      {sim.name}
-                                  </SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
+                       <Popover open={isCopyPopoverOpen} onOpenChange={setIsCopyPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={isCopyPopoverOpen}
+                                    className="w-full justify-between font-normal"
+                                >
+                                   Selecione uma mercadoria para copiar...
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Buscar mercadoria..." />
+                                    <CommandList>
+                                        <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
+                                        <CommandGroup>
+                                            {simulations.map((sim) => (
+                                                <CommandItem
+                                                    key={sim.id}
+                                                    value={sim.name}
+                                                    onSelect={() => handleCopyFrom(sim.id)}
+                                                >
+                                                    {sim.name}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
                       <FormDescription>
                           Use uma mercadoria existente como modelo para acelerar o cadastro.
                       </FormDescription>
