@@ -1,10 +1,8 @@
-
 "use client"
 
 import { useState } from "react"
 import { useForm as useFormHook } from "@/hooks/use-form"
 import { useAuth } from "@/hooks/use-auth"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -105,42 +103,32 @@ export function FormModule() {
 
     return (
         <>
-            <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
-                <CardHeader>
-                    <CardTitle className="font-headline flex items-center gap-2">
-                       <ListChecks /> Módulo de formulários
-                    </CardTitle>
-                    <CardDescription>Crie, preencha e gerencie formulários para as operações diárias. Consulte o histórico de respostas.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Tabs defaultValue="available" className="w-full">
-                        <div className="flex justify-between items-center">
-                            <TabsList>
-                                <TabsTrigger value="available">Formulários disponíveis</TabsTrigger>
-                                {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de respostas</TabsTrigger>}
-                            </TabsList>
-                            {permissions.forms.manage && (
-                                <Button onClick={handleAddNew}>
-                                    <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
-                                </Button>
-                            )}
-                        </div>
-                        <TabsContent value="available">
-                            {renderAvailableForms()}
-                        </TabsContent>
-                        {permissions.forms.viewHistory && (
-                            <TabsContent value="history">
-                                <FormSubmissionsHistory 
-                                    submissions={submissions}
-                                    loading={loading}
-                                    deleteSubmission={deleteSubmission}
-                                    canDelete={permissions.forms.deleteHistory}
-                                />
-                            </TabsContent>
-                        )}
-                    </Tabs>
-                </CardContent>
-            </Card>
+            <Tabs defaultValue="available" className="w-full">
+                <div className="flex justify-between items-center">
+                    <TabsList>
+                        <TabsTrigger value="available">Formulários disponíveis</TabsTrigger>
+                        {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de respostas</TabsTrigger>}
+                    </TabsList>
+                    {permissions.forms.manage && (
+                        <Button onClick={handleAddNew}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
+                        </Button>
+                    )}
+                </div>
+                <TabsContent value="available">
+                    {renderAvailableForms()}
+                </TabsContent>
+                {permissions.forms.viewHistory && (
+                    <TabsContent value="history">
+                        <FormSubmissionsHistory 
+                            submissions={submissions}
+                            loading={loading}
+                            deleteSubmission={deleteSubmission}
+                            canDelete={permissions.forms.deleteHistory}
+                        />
+                    </TabsContent>
+                )}
+            </Tabs>
             
             {permissions.forms.manage && <AddEditFormTemplateModal
                 open={isAddEditModalOpen}
