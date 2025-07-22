@@ -6,7 +6,7 @@ import { type ProductSimulation, type PricingParameters, type SimulationCategory
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow } from "lucide-react";
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -38,10 +38,12 @@ interface PricingDashboardProps {
         lineName: string | null;
         profitGoalFilter: string;
         statusFilter: string;
-    }
+    },
+    kpis: any;
+    profitChartData: any[];
 }
 
-export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters }: PricingDashboardProps) {
+export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters, kpis, profitChartData }: PricingDashboardProps) {
     const [chartSearchTerm, setChartSearchTerm] = useState('');
     const [popoverOpen, setPopoverOpen] = useState(false);
 
@@ -58,75 +60,6 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                    (line && line.name.toLowerCase() === searchTermLower);
         });
     }, [simulations, chartSearchTerm, categories]);
-
-    const { kpis, profitChartData } = useMemo(() => {
-        if (!filteredSimulations || filteredSimulations.length === 0) {
-            return { kpis: {}, profitChartData: [] };
-        }
-
-        const totalSimulations = filteredSimulations.length;
-        const itemsWithGoal = filteredSimulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
-        const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
-        const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
-
-        let highestMarginItem = filteredSimulations[0];
-        let lowestMarginItem = filteredSimulations[0];
-
-        for (const s of filteredSimulations) {
-            if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
-            if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
-        }
-
-        const totalMarkup = filteredSimulations.reduce((acc, s) => acc + s.markup, 0);
-
-        const priceDeltas = itemsBelowGoal.map(s => {
-            const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
-            return priceForGoal - s.salePrice;
-        });
-
-        const averagePriceDelta = priceDeltas.length > 0 ? priceDeltas.reduce((acc, delta) => acc + delta, 0) / priceDeltas.length : 0;
-        
-        const categoryCounts: { [name: string]: number } = {};
-        const lineCounts: { [name: string]: number } = {};
-
-        filteredSimulations.forEach(s => {
-            s.categoryIds.forEach(catId => {
-                const category = categories.find(c => c.id === catId);
-                if (category && category.type === 'category') {
-                    categoryCounts[category.name] = (categoryCounts[category.name] || 0) + 1;
-                }
-            });
-            if (s.lineId) {
-                const line = categories.find(c => c.id === s.lineId);
-                if (line && line.type === 'line') {
-                    lineCounts[line.name] = (lineCounts[line.name] || 0) + 1;
-                }
-            }
-        });
-
-
-        const kpisResult = {
-            totalSimulations,
-            okCount: itemsMeetingGoal.length,
-            reviewCount: itemsBelowGoal.length,
-            highestMarginItem,
-            lowestMarginItem,
-            averageMarkup: totalSimulations > 0 ? totalMarkup / totalSimulations : 0,
-            averagePriceDelta: averagePriceDelta,
-            categoryCounts,
-            lineCounts
-        };
-
-        const profitChartDataResult = filteredSimulations
-            .map(s => ({
-                id: s.id,
-                name: s.name,
-                'Lucro %': s.profitPercentage,
-            }))
-            .sort((a, b) => a['Lucro %'] - b['Lucro %']);
-
-        return { kpis: kpisResult, profitChartData: profitChartDataResult };
-    }, [filteredSimulations, categories]);
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
@@ -178,7 +111,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de mercadorias</CardTitle>
@@ -199,7 +132,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                             {Object.entries(kpis.categoryCounts || {}).map(([name, count]) => (
                                 <div key={name} className="flex justify-between items-center text-sm">
                                     <span className="text-muted-foreground">{name}</span>
-                                    <span className="font-bold">{count}</span>
+                                    <span className="font-bold">{count as number}</span>
                                 </div>
                             ))}
                         </div>
@@ -215,10 +148,20 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                             {Object.entries(kpis.lineCounts || {}).map(([name, count]) => (
                                 <div key={name} className="flex justify-between items-center text-sm">
                                     <span className="text-muted-foreground">{name}</span>
-                                    <span className="font-bold">{count}</span>
+                                    <span className="font-bold">{count as number}</span>
                                 </div>
                             ))}
                         </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Média de lucro</CardTitle>
+                        <Percent className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.averageProfitPercentage?.toFixed(2)}%</div>
+                         <p className="text-xs text-muted-foreground">Média da margem de lucro de todas as mercadorias</p>
                     </CardContent>
                 </Card>
                 <Card>

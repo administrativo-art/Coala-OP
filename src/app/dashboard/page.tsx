@@ -267,6 +267,79 @@ function PricingReportDashboard() {
     return 'text-primary';
   };
 
+  const { kpis, profitChartData } = useMemo(() => {
+    if (!simulations || simulations.length === 0) {
+        return { kpis: {}, profitChartData: [] };
+    }
+
+    const totalSimulations = simulations.length;
+    const totalProfitPercentage = simulations.reduce((acc, s) => acc + s.profitPercentage, 0);
+    const averageProfitPercentage = totalSimulations > 0 ? totalProfitPercentage / totalSimulations : 0;
+
+    const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
+    const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
+    const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
+
+    let highestMarginItem = simulations[0];
+    let lowestMarginItem = simulations[0];
+
+    for (const s of simulations) {
+        if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
+        if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
+    }
+
+    const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
+
+    const priceDeltas = itemsBelowGoal.map(s => {
+        const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
+        return priceForGoal - s.salePrice;
+    });
+
+    const averagePriceDelta = priceDeltas.length > 0 ? priceDeltas.reduce((acc, delta) => acc + delta, 0) / priceDeltas.length : 0;
+    
+    const categoryCounts: { [name: string]: number } = {};
+    const lineCounts: { [name: string]: number } = {};
+
+    simulations.forEach(s => {
+        s.categoryIds.forEach(catId => {
+            const category = categories.find(c => c.id === catId);
+            if (category && category.type === 'category') {
+                categoryCounts[category.name] = (categoryCounts[category.name] || 0) + 1;
+            }
+        });
+        if (s.lineId) {
+            const line = categories.find(c => c.id === s.lineId);
+            if (line && line.type === 'line') {
+                lineCounts[line.name] = (lineCounts[line.name] || 0) + 1;
+            }
+        }
+    });
+
+    const kpisResult = {
+        totalSimulations,
+        averageProfitPercentage,
+        okCount: itemsMeetingGoal.length,
+        reviewCount: itemsBelowGoal.length,
+        highestMarginItem,
+        lowestMarginItem,
+        averageMarkup: totalSimulations > 0 ? totalMarkup / totalSimulations : 0,
+        averagePriceDelta: averagePriceDelta,
+        categoryCounts,
+        lineCounts
+    };
+
+    const profitChartDataResult = simulations
+        .map(s => ({
+            id: s.id,
+            name: s.name,
+            'Lucro %': s.profitPercentage,
+        }))
+        .sort((a, b) => a['Lucro %'] - b['Lucro %']);
+
+    return { kpis: kpisResult, profitChartData: profitChartDataResult };
+}, [simulations, categories]);
+
+
   const activeFilters = {
     categoryName: null,
     lineName: null,
@@ -282,6 +355,8 @@ function PricingReportDashboard() {
       getProfitColorClass={getProfitColorClass}
       pricingParameters={pricingParameters}
       activeFilters={activeFilters}
+      kpis={kpis}
+      profitChartData={profitChartData}
     />
   );
 }
