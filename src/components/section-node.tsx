@@ -19,7 +19,7 @@ interface SectionNodeProps {
   };
 }
 
-const colorSwatches = [ '#FEE2E2', '#FEF3C7', '#D1FAE5', '#DBEAFE', '#E0E7FF', '#F3E8FF', '#FCE7F3' ];
+const colorSwatches = [ '#F87171', '#FEF3C7', '#D1FAE5', '#DBEAFE', '#E0E7FF', '#F3E8FF', '#FCE7F3' ];
 
 export const SectionNode = memo(({ data }: SectionNodeProps) => {
   const [name, setName] = useState(data.label);
@@ -33,8 +33,8 @@ export const SectionNode = memo(({ data }: SectionNodeProps) => {
 
   return (
     <Card 
-        className={cn("border-dashed h-full transition-colors")}
-        style={{ backgroundColor: data.color || 'hsl(var(--muted))' }}
+        className={cn("h-full transition-colors border-2")}
+        style={{ borderColor: data.color || 'hsl(var(--border))' }}
     >
       <CardHeader className="relative">
         <Input 
