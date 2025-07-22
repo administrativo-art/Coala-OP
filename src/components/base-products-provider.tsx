@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type BaseProduct, type UnitCategory, unitCategories } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, serverTimestamp, deleteField } from 'firebase/firestore';
 
 export interface BaseProductsContextType {
   baseProducts: BaseProduct[];
@@ -63,8 +64,16 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
   const updateBaseProduct = useCallback(async (product: BaseProduct) => {
     const productRef = doc(db, "baseProducts", product.id);
     const { id, ...dataToUpdate } = product;
+
+    const finalData: Record<string, any> = { ...dataToUpdate };
+
+    // If lastEffectivePrice is explicitly set to null, prepare to delete the field.
+    if (dataToUpdate.lastEffectivePrice === null) {
+        finalData.lastEffectivePrice = deleteField();
+    }
+
     try {
-        await updateDoc(productRef, dataToUpdate);
+        await updateDoc(productRef, finalData);
     } catch (error) {
         console.error("Error updating base product:", error);
         throw error;
