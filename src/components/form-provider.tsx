@@ -89,13 +89,13 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
           const taskRef = doc(collection(db, "tasks"));
           const fullTaskData = {
             ...taskData,
-            origin: { // The origin is now correctly formed here
+            origin: { 
               type: 'form_submission',
               submissionId: submissionRef.id,
               ...taskData.origin,
             },
           };
-          batch.set(taskRef, fullTaskData);
+          batch.set(taskRef, fullTaskData as any);
         });
       }
       

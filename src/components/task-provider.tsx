@@ -46,7 +46,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
         const taskRef = doc(db, "tasks", taskId);
         try {
-            await updateDoc(taskRef, updates);
+            await updateDoc(taskRef, { ...updates, updatedAt: new Date().toISOString() });
         } catch (error) {
             console.error("Error updating task:", error);
         }

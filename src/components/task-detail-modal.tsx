@@ -70,7 +70,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         if (assigneeType === 'profile' && user.profileId === assigneeId) return true;
     }
     return false;
-  }, [task, user]);
+  }, [task, user, users, profiles]);
 
   const submission = useMemo(() => {
       if (!task) return null;
@@ -95,7 +95,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const newHistory = [...task.history, addHistoryItem('completed')];
       const newStatus = task.requiresApproval ? 'awaiting_approval' : 'completed';
       
-      const updatePayload: Partial<Task> = { status: newStatus, history: newHistory };
+      const updatePayload: Partial<Task> = { status: newStatus, history: newHistory, updatedAt: now };
       if (newStatus === 'completed') {
         updatePayload.completedAt = now;
         await updateSubmission(task.origin.submissionId, { status: 'completed' });
@@ -108,7 +108,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const handleApprove = async () => {
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('approved')];
-      await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now });
+      await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
       await updateSubmission(task.origin.submissionId, { status: 'completed' });
       handleClose();
   };
@@ -118,8 +118,9 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
           toast({ variant: 'destructive', title: 'Justificativa obrigatória' });
           return;
       }
+      const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
-      await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined });
+      await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });
       handleClose();
   };
   

@@ -101,7 +101,7 @@ export function FormSubmissionsHistory({ submissions, loading, deleteSubmission,
                                     variant="ghost" 
                                     size="icon" 
                                     className="text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteClick(submission)}
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(submission); }}
                                 >
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
