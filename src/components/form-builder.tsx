@@ -122,7 +122,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         question.ramifications?.forEach(ramification => {
           if (ramification.action === 'show_question' && ramification.targetQuestionId) {
             newEdges.push({
-              id: `e-${question.id}-${ramification.targetQuestionId}`,
+              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.id}`,
               source: question.id,
               target: ramification.targetQuestionId,
               type: 'smoothstep',
