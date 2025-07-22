@@ -18,7 +18,7 @@ import ReactFlow, {
   MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { type FormTemplate, type FormQuestion } from '@/types';
+import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
 import { AddNode } from './add-node';
@@ -75,14 +75,15 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     onTemplateChange(newTemplate);
   };
   
-  const handleSectionNameChange = (sectionId: string, newName: string) => {
+  const handleSectionUpdate = (sectionId: string, updates: Partial<FormSection>) => {
     let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    const section = newTemplate.sections.find((s: any) => s.id === sectionId);
-    if(section) {
-        section.name = newName;
+    const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === sectionId);
+    if(sectionIndex > -1) {
+        newTemplate.sections[sectionIndex] = { ...newTemplate.sections[sectionIndex], ...updates };
         onTemplateChange(newTemplate);
     }
   }
+
 
   useEffect(() => {
     const newNodes: Node[] = [];
@@ -96,7 +97,8 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         type: 'section',
         data: { 
             label: section.name,
-            onNameChange: (newName: string) => handleSectionNameChange(section.id, newName)
+            color: section.color,
+            onUpdate: (updates: Partial<FormSection>) => handleSectionUpdate(section.id, updates),
         },
         position: section.position,
         draggable: false,
@@ -104,7 +106,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
       });
 
       // Add Question Nodes inside the section
-      let currentY = 60; // Initial Y for cards within a section
+      let currentY = 80; // Initial Y for cards within a section
       section.questions.forEach((question) => {
         newNodes.push({
           id: question.id,
