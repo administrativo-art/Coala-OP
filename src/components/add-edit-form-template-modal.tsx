@@ -475,7 +475,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                 <FormLabel>Formato do título da resposta (Opcional)</FormLabel>
                                 <FormControl><Textarea placeholder="ex: Checklist de Abertura - Quiosque {kioskName}" {...field} /></FormControl>
                                 <FormDescription>
-                                    Crie um título dinâmico. Variáveis disponíveis: <code className="bg-muted p-1 rounded-sm text-xs">{'kioskName'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{username}'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{date}'}</code>. Para usar a resposta de uma pergunta, copie o ID dela, que aparece abaixo de cada pergunta criada.
+                                    Crie um título dinâmico. Variáveis disponíveis: <code className="bg-muted p-1 rounded-sm text-xs">{'{kioskName}'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{username}'}</code>, <code className="bg-muted p-1 rounded-sm text-xs">{'{date}'}</code>. Para usar a resposta de uma pergunta, copie o ID dela, que aparece abaixo de cada pergunta criada.
                                 </FormDescription>
                                 <FormMessage />
                                 </FormItem>
