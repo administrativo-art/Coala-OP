@@ -151,26 +151,26 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Itens na meta</CardTitle>
-                        <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Itens na Meta', items: kpis.itemsMeetingGoal })}>
+                        <CardTitle className="text-sm font-medium">Mercadorias na meta</CardTitle>
+                        <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Mercadorias na Meta', items: kpis.itemsMeetingGoal })}>
                             <Eye />
                         </Button>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{kpis.itemsMeetingGoal?.length || 0}</div>
-                         <p className="text-xs text-muted-foreground">Itens que atendem ou superam a meta de lucro</p>
+                         <p className="text-xs text-muted-foreground">Mercadorias que atendem ou superam a meta de lucro</p>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Itens abaixo da meta</CardTitle>
-                         <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Itens Abaixo da Meta', items: kpis.itemsBelowGoal })}>
+                        <CardTitle className="text-sm font-medium">Mercadorias abaixo da meta</CardTitle>
+                         <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Mercadorias Abaixo da Meta', items: kpis.itemsBelowGoal })}>
                             <Eye />
                         </Button>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-orange-500">{kpis.itemsBelowGoal?.length || 0}</div>
-                        <p className="text-xs text-muted-foreground">Itens abaixo da meta de lucro definida</p>
+                        <p className="text-xs text-muted-foreground">Mercadorias abaixo da meta de lucro definida</p>
                     </CardContent>
                 </Card>
                  <Card>
@@ -220,7 +220,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                         <div className="flex justify-between items-start gap-4">
                             <div>
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
-                                <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
+                                <CardDescription>Clique em uma barra para selecionar a mercadoria e ver mais detalhes.</CardDescription>
                             </div>
                              <Select value={chartFilter} onValueChange={setChartFilter}>
                                 <SelectTrigger className="w-[300px]">

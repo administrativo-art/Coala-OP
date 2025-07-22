@@ -75,7 +75,7 @@ export function SimulationItemsModal({ open, onOpenChange, title, items }: Simul
                             )
                         }) : (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">Nenhum item encontrado.</TableCell>
+                                <TableCell colSpan={5} className="h-24 text-center">Nenhuma mercadoria encontrada.</TableCell>
                             </TableRow>
                         )}
                     </TableBody>
@@ -90,4 +90,3 @@ export function SimulationItemsModal({ open, onOpenChange, title, items }: Simul
     </Dialog>
   );
 }
-

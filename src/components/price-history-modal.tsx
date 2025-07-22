@@ -1,5 +1,5 @@
 
-"use client"
+"use client";
 
 import React from 'react';
 import {
@@ -104,4 +104,3 @@ export function PriceHistoryModal({ open, onOpenChange, history, simulations }: 
     </Dialog>
   );
 }
-

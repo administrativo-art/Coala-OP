@@ -82,7 +82,7 @@ export function BatchPriceUpdateModal({
         <DialogHeader>
           <DialogTitle>Alteração de preço em lote</DialogTitle>
           <DialogDescription>
-            Aplique um reajuste de preço a todos os {simulationsToUpdate.length} itens que correspondem aos filtros atuais.
+            Aplique um reajuste de preço a todas as {simulationsToUpdate.length} mercadorias que correspondem aos filtros atuais.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -181,7 +181,7 @@ export function BatchPriceUpdateModal({
                     <Alert>
                         <AlertTitle>Atenção</AlertTitle>
                         <AlertDescription>
-                            Esta ação é irreversível. Os preços de venda dos {simulationsToUpdate.length} itens filtrados serão permanentemente alterados.
+                            Esta ação é irreversível. Os preços de venda das {simulationsToUpdate.length} mercadorias filtradas serão permanentemente alterados.
                         </AlertDescription>
                     </Alert>
                 </div>
