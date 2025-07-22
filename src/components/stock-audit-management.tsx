@@ -33,7 +33,7 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Dialog, DialogClose } from './ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
 
 const DIVERGENCE_REASONS = [
@@ -592,3 +592,5 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
+
+    
