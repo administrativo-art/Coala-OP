@@ -398,6 +398,8 @@ export type FormTemplate = {
     sections: FormSection[];
     layout: 'continuous' | 'stepped';
     submissionTitleFormat?: string;
+    type: 'standard' | 'operational_checklist'; // Nova propriedade
+    moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null; // Novo
 };
 
 export type FormAnswer = {

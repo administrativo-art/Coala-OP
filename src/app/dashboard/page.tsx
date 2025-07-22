@@ -8,6 +8,7 @@ import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
+import { useForm } from "@/hooks/use-form"; // Import the useForm hook
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -39,12 +40,27 @@ function OperationalDashboard() {
   const { lots, loading: lotsLoading } = useExpiryProducts()
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
+  const { generateDailyChecklist } = useForm();
   
   const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
   const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
 
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
+  const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
+  
+  useEffect(() => {
+    if (todaySchedule && kiosks.length > 0 && permissions.forms.fill) {
+        kiosks.forEach(kiosk => {
+            if (kiosk.id !== 'matriz') {
+                // This is the trigger for the automatic form generation
+                // generateDailyChecklist(kiosk.id, kiosk.name, todayISO, todaySchedule);
+            }
+        });
+    }
+  }, [todaySchedule, kiosks, permissions.forms.fill, generateDailyChecklist, todayISO]);
+
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
     if (user.username === 'Tiago Brasil') return lots;
@@ -68,8 +84,6 @@ function OperationalDashboard() {
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
 
-  const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
-  const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
   const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
   
   const handleEditDay = (dayData: DailySchedule, kioskId: string) => {

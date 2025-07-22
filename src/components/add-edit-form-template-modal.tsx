@@ -79,6 +79,16 @@ const templateSchema = z.object({
   sections: z.array(sectionSchema).min(1, "O formulário precisa ter pelo menos uma seção."),
   layout: z.enum(['continuous', 'stepped']),
   submissionTitleFormat: z.string().optional(),
+  type: z.enum(['standard', 'operational_checklist']),
+  moment: z.enum(['PRE_ABERTURA', 'ABERTURA', 'TROCA_FECHAMENTO', 'TROCA_ABERTURA', 'FECHAMENTO_FINAL']).nullable(),
+}).refine((data) => {
+    if(data.type === 'operational_checklist' && !data.moment) {
+        return false;
+    }
+    return true;
+}, {
+    message: "O 'Momento' é obrigatório para checklists operacionais.",
+    path: ["moment"],
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
@@ -369,6 +379,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         sections: [],
         layout: 'continuous',
         submissionTitleFormat: '',
+        type: 'standard',
+        moment: null,
     }
   });
 
@@ -378,6 +390,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     keyName: 'rhfId',
   });
 
+  const formType = useWatch({ control: form.control, name: 'type' });
+
   useEffect(() => {
     if (open) {
       if (templateToEdit) {
@@ -385,6 +399,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
             ...templateToEdit,
             layout: templateToEdit.layout || 'continuous',
             submissionTitleFormat: templateToEdit.submissionTitleFormat || '',
+            type: templateToEdit.type || 'standard',
+            moment: templateToEdit.moment || null,
         });
       } else {
         form.reset({
@@ -392,16 +408,23 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
             sections: [createNewSection()],
             layout: 'continuous',
             submissionTitleFormat: '',
+            type: 'standard',
+            moment: null,
         });
       }
     }
   }, [templateToEdit, open, form]);
 
   const onSubmit = (values: TemplateFormValues) => {
+    const finalValues = { ...values };
+    if (values.type === 'standard') {
+        finalValues.moment = null;
+    }
+
     if (templateToEdit) {
-      updateTemplate({ ...templateToEdit, ...values });
+      updateTemplate({ ...templateToEdit, ...finalValues });
     } else {
-      addTemplate(values);
+      addTemplate(finalValues);
     }
     onOpenChange(false);
   };
@@ -433,6 +456,48 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
 
                     <div className="space-y-4 rounded-lg border p-4">
                         <h3 className="text-md font-medium">Configurações do Formulário</h3>
+                        <FormField
+                            control={form.control}
+                            name="type"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Tipo de Formulário</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="standard">Padrão (On-Demand)</SelectItem>
+                                        <SelectItem value="operational_checklist">Checklist Operacional (Automático)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormDescription>
+                                    Padrão é usado para tarefas avulsas. Checklist operacional é usado para rotinas diárias automáticas.
+                                </FormDescription>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         {formType === 'operational_checklist' && (
+                             <FormField
+                                control={form.control}
+                                name="moment"
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel>Momento do Checklist</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione um momento..." /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="PRE_ABERTURA">Pré-Abertura</SelectItem>
+                                            <SelectItem value="ABERTURA">Abertura</SelectItem>
+                                            <SelectItem value="TROCA_FECHAMENTO">Troca (Fechamento)</SelectItem>
+                                            <SelectItem value="TROCA_ABERTURA">Troca (Abertura)</SelectItem>
+                                            <SelectItem value="FECHAMENTO_FINAL">Fechamento Final</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                         )}
                         <FormField
                             control={form.control}
                             name="layout"
