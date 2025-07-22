@@ -448,8 +448,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             const hasDefaultCost = !!(baseProduct?.lastEffectivePrice || baseProduct?.initialCostPerUnit);
 
                             return (
-                                <div key={item.id} className="p-2 rounded bg-muted/50 grid grid-cols-[1fr_auto] items-start gap-x-2">
-                                <div className="space-y-1 self-center">
+                                <div key={item.id} className="grid grid-cols-[1fr_auto] items-start gap-x-2 rounded bg-muted/50 p-2">
+                                    <div className="space-y-1 self-center">
                                       <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
                                       <div className="flex justify-start">
                                         <FormField
@@ -650,6 +650,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
 
 
 
