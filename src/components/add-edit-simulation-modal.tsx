@@ -434,7 +434,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                       <SectionTitle>Composição (CMV)</SectionTitle>
                       
                       <div className="rounded-md border p-2 space-y-2">
-                        <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)_minmax(0,8rem)_minmax(0,6rem)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                             <span className="col-span-1">Insumo base</span>
                             <span className="text-center">Qtd.</span>
                             <span className="text-right">Custo/unid.</span>
@@ -448,48 +448,67 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             const hasDefaultCost = !!(baseProduct?.lastEffectivePrice || baseProduct?.initialCostPerUnit);
 
                             return (
-                                <div key={item.id} className="p-2 rounded bg-muted/50">
-                                <div className="grid grid-cols-[1fr_auto] items-start gap-x-2">
-                                    <div className="self-center break-words">
-                                      <p className="font-medium text-sm ">{baseProduct?.name}</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2 w-max">
-                                        <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                                        <FormItem className="min-w-[4rem]"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
-                                        )}/>
-                                        
+                                <div key={item.id} className="p-2 rounded bg-muted/50 grid grid-cols-[1fr_auto] items-start gap-x-2">
+                                <div className="space-y-1 self-center">
+                                      <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
+                                      <div className="flex justify-start">
                                         <FormField
                                             control={form.control}
-                                            name={`items.${index}.overrideUnit`}
-                                            render={({ field: unitField }) => (
-                                                <FormItem className="min-w-[6rem]">
-                                                    <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
-                                                        <FormControl>
-                                                            <SelectTrigger className={cn("bg-background/0", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            {unitCategories.map(cat => (
-                                                                <React.Fragment key={cat}>
-                                                                    {getUnitsForCategory(cat as UnitCategory).map(unit => (
-                                                                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                                                                    ))}
-                                                                </React.Fragment>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage/>
+                                            name={`items.${index}.useDefault`}
+                                            render={({ field: switchField }) => (
+                                                <FormItem className="flex items-center gap-2">
+                                                    <FormControl>
+                                                        <Switch 
+                                                            checked={switchField.value} 
+                                                            onCheckedChange={switchField.onChange} 
+                                                            disabled={!hasDefaultCost}
+                                                        />
+                                                    </FormControl>
+                                                    <FormLabel className="text-xs text-muted-foreground">
+                                                        {hasDefaultCost ? 'Usar custo padrão' : 'Sem custo padrão'}
+                                                    </FormLabel>
                                                 </FormItem>
                                             )}
                                         />
-                                        
+                                    </div>
+                                    </div>
+                                    <div className="grid grid-cols-[minmax(0,8rem)_minmax(0,8rem)_minmax(0,6rem)_auto] items-start gap-x-2">
+                                        <div className="flex items-start gap-1">
+                                            <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
+                                            <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                            
+                                            <FormField
+                                                control={form.control}
+                                                name={`items.${index}.overrideUnit`}
+                                                render={({ field: unitField }) => (
+                                                    <FormItem className="w-24">
+                                                        <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
+                                                            <FormControl>
+                                                                <SelectTrigger className={cn("bg-background/0 text-xs", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {unitCategories.map(cat => (
+                                                                    <React.Fragment key={cat}>
+                                                                        {getUnitsForCategory(cat as UnitCategory).map(unit => (
+                                                                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                                        ))}
+                                                                    </React.Fragment>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage/>
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
                                         <FormField
                                             control={form.control}
                                             name={`items.${index}.overrideCostPerUnit`}
                                             render={({ field: costField }) => (
-                                                <FormItem className="min-w-[6rem]">
+                                                <FormItem>
                                                     <Input
                                                         type="number"
                                                         step="any"
@@ -503,34 +522,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             )}
                                         />
 
-                                        <div className="font-semibold text-primary text-sm w-full text-right self-center min-w-[5rem]">
+                                        <div className="font-semibold text-primary text-sm w-full text-right self-center">
                                             {formatCurrency(partialCosts[index])}
                                         </div>
                                         <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
                                         <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                </div>
-                                <div className="flex justify-end mt-1">
-                                    <FormField
-                                        control={form.control}
-                                        name={`items.${index}.useDefault`}
-                                        render={({ field: switchField }) => (
-                                            <FormItem className="flex items-center gap-2">
-                                                <FormControl>
-                                                    <Switch 
-                                                        checked={switchField.value} 
-                                                        onCheckedChange={switchField.onChange} 
-                                                        disabled={!hasDefaultCost}
-                                                    />
-                                                </FormControl>
-                                                <FormLabel className="text-xs text-muted-foreground">
-                                                    {hasDefaultCost ? 'Usar custo/unidade padrão' : 'Sem custo padrão'}
-                                                </FormLabel>
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
                                 </div>
                             )
                         })}
@@ -652,6 +650,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
 
 
 
