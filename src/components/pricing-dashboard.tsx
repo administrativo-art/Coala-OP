@@ -104,7 +104,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{kpis.totalSimulations}</div>
-                         <p className="text-xs text-muted-foreground">Total de itens cadastrados para venda</p>
+                         <p className="text-xs text-muted-foreground">Total de mercadorias cadastradas para venda</p>
                     </CardContent>
                 </Card>
                  <Card>
