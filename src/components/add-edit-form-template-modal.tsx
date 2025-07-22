@@ -1,12 +1,11 @@
 
-
 "use client"
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
-import { Save, Settings, Cloud, CloudCheck, FileUp, Undo2, Loader2 } from 'lucide-react';
+import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, Loader2 } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -161,7 +160,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           </div>
            <div className="flex items-center gap-2">
                 {isSaving === 'auto' && <span className="text-sm text-muted-foreground flex items-center gap-1"><Cloud className="h-4 w-4 animate-pulse"/>Salvando...</span>}
-                {isSaving === false && !hasUnsavedChanges && internalTemplate && 'id' in internalTemplate && <span className="text-sm text-muted-foreground flex items-center gap-1"><CloudCheck className="h-4 w-4"/>Salvo</span>}
+                {isSaving === false && !hasUnsavedChanges && internalTemplate && 'id' in internalTemplate && <span className="text-sm text-muted-foreground flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-green-600"/>Salvo</span>}
            </div>
         </DialogHeader>
         
@@ -237,5 +236,3 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     </Dialog>
   );
 }
-
-    
