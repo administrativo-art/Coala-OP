@@ -14,52 +14,95 @@ import ReactFlow, {
   type OnEdgesChange,
   type OnConnect,
   type NodeTypes,
+  type OnNodeClick,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion } from '@/types';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
 import { AddNode } from './add-node';
+import { nanoid } from 'nanoid';
 
 interface FormBuilderProps {
   initialTemplate: FormTemplate | Omit<FormTemplate, 'id'>;
   onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id'>) => void;
+  onNodeSelect: (nodeId: string | null) => void;
 }
-
-const nodeTypes: NodeTypes = {
-  section: SectionNode,
-  question: QuestionNode,
-  add_node: AddNode,
-};
 
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
 const CARD_HEIGHT = 120;
 const CARD_GAP = 20;
 
-export function FormBuilder({ initialTemplate, onTemplateChange }: FormBuilderProps) {
+export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
+  const nodeTypes: NodeTypes = useMemo(() => ({
+    section: SectionNode,
+    question: QuestionNode,
+    add_node: AddNode,
+  }), []);
+
+  const handleAddNode = (type: 'section' | 'card', parentId?: string) => {
+    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+    
+    if (type === 'section') {
+      const lastSection = newTemplate.sections[newTemplate.sections.length - 1];
+      const newX = lastSection ? lastSection.position.x + SECTION_WIDTH + SECTION_GAP : 0;
+      
+      newTemplate.sections.push({
+        id: `section-${nanoid()}`,
+        name: `Momento ${newTemplate.sections.length + 1}`,
+        questions: [],
+        position: { x: newX, y: 0 },
+      });
+    } else if (type === 'card' && parentId) {
+      const section = newTemplate.sections.find((s: any) => s.id === parentId);
+      if (section) {
+        section.questions.push({
+          id: `question-${nanoid()}`,
+          label: 'Nova Pergunta',
+          type: 'text',
+          isRequired: false,
+          position: { x: 0, y: 0 },
+        });
+      }
+    }
+    
+    onTemplateChange(newTemplate);
+  };
+  
+  const handleSectionNameChange = (sectionId: string, newName: string) => {
+    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+    const section = newTemplate.sections.find((s: any) => s.id === sectionId);
+    if(section) {
+        section.name = newName;
+        onTemplateChange(newTemplate);
+    }
+  }
+
   useEffect(() => {
     const newNodes: Node[] = [];
-    const newEdges: Edge[] = [];
     let currentX = 0;
 
-    initialTemplate.sections.forEach((section, sectionIndex) => {
+    initialTemplate.sections.forEach((section) => {
       // Add Section Node
       newNodes.push({
         id: section.id,
         type: 'section',
-        data: { label: section.name },
-        position: { x: currentX, y: 0 },
+        data: { 
+            label: section.name,
+            onNameChange: (newName: string) => handleSectionNameChange(section.id, newName)
+        },
+        position: section.position,
         draggable: false,
-        style: { width: SECTION_WIDTH, height: '100%' },
+        style: { width: SECTION_WIDTH, height: 'auto', minHeight: '300px' },
       });
 
       // Add Question Nodes inside the section
       let currentY = 60; // Initial Y for cards within a section
-      section.questions.forEach((question, questionIndex) => {
+      section.questions.forEach((question) => {
         newNodes.push({
           id: question.id,
           type: 'question',
@@ -75,26 +118,25 @@ export function FormBuilder({ initialTemplate, onTemplateChange }: FormBuilderPr
       newNodes.push({
         id: `add-card-${section.id}`,
         type: 'add_node',
-        data: { label: 'Adicionar Card', type: 'card', parentId: section.id },
+        data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
         position: { x: 20, y: currentY },
         parentId: section.id,
         extent: 'parent',
       });
       
-      currentX += SECTION_WIDTH + SECTION_GAP;
+      currentX = section.position.x + SECTION_WIDTH + SECTION_GAP;
     });
 
     // Add the "Add Section" node at the end
     newNodes.push({
       id: 'add-section-node',
       type: 'add_node',
-      data: { label: 'Adicionar Momento', type: 'section' },
+      data: { label: 'Adicionar Momento', type: 'section', onAdd: handleAddNode },
       position: { x: currentX, y: 0 },
       draggable: false,
     });
     
     setNodes(newNodes);
-    setEdges(newEdges);
   }, [initialTemplate]);
 
   const onNodesChange: OnNodesChange = useCallback(
@@ -109,6 +151,14 @@ export function FormBuilder({ initialTemplate, onTemplateChange }: FormBuilderPr
     (connection) => setEdges((eds) => addEdge(connection, eds)),
     [setEdges]
   );
+  
+  const onNodeClick: OnNodeClick = useCallback((event, node) => {
+    if (node.type === 'question') {
+        onNodeSelect(node.id);
+    } else {
+        onNodeSelect(null);
+    }
+  }, [onNodeSelect]);
 
   return (
     <div style={{ height: '100%', width: '100%' }}>
@@ -118,6 +168,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange }: FormBuilderPr
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-muted/50"

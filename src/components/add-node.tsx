@@ -11,17 +11,13 @@ interface AddNodeProps {
     label: string;
     type: 'section' | 'card';
     parentId?: string;
+    onAdd: (type: 'section' | 'card', parentId?: string) => void;
   };
 }
 
 export const AddNode = memo(({ data }: AddNodeProps) => {
-  const { label, type, parentId } = data;
+  const { label, type, parentId, onAdd } = data;
   const isSection = type === 'section';
-
-  const handleClick = () => {
-    // Logic to add a new section or card will be implemented here
-    console.log(`Add ${type} clicked. Parent: ${parentId}`);
-  };
 
   return (
     <div
@@ -31,7 +27,7 @@ export const AddNode = memo(({ data }: AddNodeProps) => {
         minWidth: isSection ? 150 : 'auto',
       }}
     >
-      <Button variant="outline" className="w-full h-12 border-dashed" onClick={handleClick}>
+      <Button variant="outline" className="w-full h-12 border-dashed" onClick={() => onAdd(type, parentId)}>
         <PlusCircle className="mr-2 h-4 w-4" />
         {label}
       </Button>

@@ -1,41 +1,14 @@
 
-
 "use client"
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useForm, useFieldArray, Control, useWatch, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Trash2, ArrowUp, ArrowDown, Wand2, Loader2, Save } from 'lucide-react';
-import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection, type FormTaskAction } from '@/types';
-import { Switch } from './ui/switch';
-import { Textarea } from './ui/textarea';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { useAuth } from '@/hooks/use-auth';
-import { useProfiles } from '@/hooks/use-profiles';
+import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
+import { Save } from 'lucide-react';
 import { FormBuilder } from './form-builder';
-
-const formTemplateSchema = z.object({
-  name: z.string().min(1, "O nome do modelo é obrigatório."),
-  type: z.enum(['standard', 'operational_checklist']),
-  layout: z.enum(['continuous', 'stepped']),
-  submissionTitleFormat: z.string().optional(),
-  sections: z.array(z.object({
-    id: z.string(),
-    name: z.string().min(1, "O nome da seção é obrigatório"),
-    questions: z.array(z.any()), // A validação das questões será feita internamente
-  }))
-});
-
-type FormTemplateFormValues = z.infer<typeof formTemplateSchema>;
+import { QuestionSettingsPanel } from './QuestionSettingsPanel';
+import { nanoid } from 'nanoid';
 
 type AddEditFormTemplateModalProps = {
   open: boolean;
@@ -48,29 +21,34 @@ type AddEditFormTemplateModalProps = {
 export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
   
   const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id'> | null>(null);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       if (templateToEdit) {
-        setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit))); // Deep copy
+        setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
       } else {
-        // Create a new, blank template structure
-        const newTemplate: Omit<FormTemplate, 'id'> = {
+        setInternalTemplate({
           name: 'Novo Formulário',
           type: 'standard',
           layout: 'continuous',
+          moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${Date.now()}`, name: 'Seção 1', questions: [] }
+            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 0, y: 0 } }
           ],
-        };
-        setInternalTemplate(newTemplate);
+        });
       }
     } else {
       setInternalTemplate(null);
+      setSelectedQuestionId(null);
     }
   }, [open, templateToEdit]);
-  
+
+  const handleTemplateChange = (newTemplate: FormTemplate | Omit<FormTemplate, 'id'>) => {
+    setInternalTemplate(newTemplate);
+  }
+
   const handleSave = () => {
     if (!internalTemplate) return;
 
@@ -82,27 +60,45 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     onOpenChange(false);
   };
   
+  const selectedQuestion = useMemo(() => {
+    if (!selectedQuestionId || !internalTemplate) return null;
+    for (const section of internalTemplate.sections) {
+        const question = section.questions.find(q => q.id === selectedQuestionId);
+        if (question) return question;
+    }
+    return null;
+  }, [selectedQuestionId, internalTemplate]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] h-[95vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="p-4 border-b">
           <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
           <DialogDescription>
             Construa seu formulário ou processo usando o editor visual abaixo.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 min-h-0 border-t pt-2">
+        <div className="flex-1 min-h-0 flex">
             {internalTemplate && (
                  <FormBuilder 
                     key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
                     initialTemplate={internalTemplate}
-                    onTemplateChange={setInternalTemplate}
+                    onTemplateChange={handleTemplateChange}
+                    onNodeSelect={setSelectedQuestionId}
+                />
+            )}
+            {selectedQuestion && (
+                <QuestionSettingsPanel
+                    key={selectedQuestion.id}
+                    question={selectedQuestion}
+                    onChange={() => {}} // We'll implement this next
+                    onClose={() => setSelectedQuestionId(null)}
                 />
             )}
         </div>
         
-        <DialogFooter className="flex-shrink-0 border-t pt-4">
+        <DialogFooter className="p-4 border-t shrink-0">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button onClick={handleSave}><Save className="mr-2 h-4 w-4" /> Salvar Modelo</Button>
         </DialogFooter>

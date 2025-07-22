@@ -11,13 +11,14 @@ interface QuestionNodeProps {
     label: string;
     description?: string;
   };
+  selected?: boolean;
 }
 
-export const QuestionNode = memo(({ data }: QuestionNodeProps) => {
+export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
   return (
     <>
       <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-primary" />
-      <Card className="w-full shadow-md hover:shadow-lg transition-shadow duration-200">
+      <Card className={`w-full shadow-md hover:shadow-lg transition-shadow duration-200 ${selected ? 'ring-2 ring-primary' : ''}`}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted-foreground" />
