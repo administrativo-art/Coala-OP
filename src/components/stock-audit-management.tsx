@@ -33,6 +33,7 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Dialog, DialogClose } from './ui/dialog';
 
 
 const DIVERGENCE_REASONS = [
@@ -393,6 +394,42 @@ function AuditHistory() {
     );
 }
 
+function KioskSelectionModal({
+  open,
+  onOpenChange,
+  kiosks,
+  onSelectKiosk,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kiosks: any[];
+  onSelectKiosk: (kioskId: string) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Iniciar nova auditoria</DialogTitle>
+          <DialogDescription>Selecione o quiosque que você deseja auditar.</DialogDescription>
+        </DialogHeader>
+        <div className="py-4 space-y-2">
+          {kiosks.map((kiosk) => (
+            <DialogClose key={kiosk.id} asChild>
+                <Button
+                variant="outline"
+                className="w-full justify-start text-base py-6"
+                onClick={() => onSelectKiosk(kiosk.id)}
+                >
+                {kiosk.name}
+                </Button>
+            </DialogClose>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function StockAuditManagement({ showExportButton = false }: { showExportButton?: boolean }) {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
@@ -403,6 +440,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
 
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -489,7 +527,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     <>
         <Tabs defaultValue="active">
             <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="active">Auditoria Ativa</TabsTrigger>
+                <TabsTrigger value="active">Auditoria</TabsTrigger>
                 <TabsTrigger value="history">Histórico</TabsTrigger>
             </TabsList>
             <TabsContent value="active" className="mt-4">
@@ -503,12 +541,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
                     <CardContent className="space-y-4">
                         <div>
                             <h3 className="font-semibold mb-2">Iniciar nova auditoria</h3>
-                            <div className="flex gap-2">
-                                <Select onValueChange={handleStartSession}>
-                                    <SelectTrigger className="w-[250px]"><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
-                                    <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
+                             <Button onClick={() => setIsKioskSelectionOpen(true)}>Iniciar auditoria</Button>
                         </div>
 
                         <div className="space-y-2 pt-4 border-t">
@@ -549,6 +582,12 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
       <ZeroedLotsAuditModal
         open={isHistoryModalOpen}
         onOpenChange={setIsHistoryModalOpen}
+      />
+      <KioskSelectionModal
+        open={isKioskSelectionOpen}
+        onOpenChange={setIsKioskSelectionOpen}
+        kiosks={kiosks}
+        onSelectKiosk={handleStartSession}
       />
     </>
   );
