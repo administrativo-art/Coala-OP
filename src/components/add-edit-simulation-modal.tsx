@@ -439,8 +439,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
                             return (
                                 <div key={item.id} className="p-2 rounded bg-muted/50">
-                                <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2">
-                                    <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
+                                <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2">
+                                    <p className="font-medium text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                                     <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                     <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                     )}/>
