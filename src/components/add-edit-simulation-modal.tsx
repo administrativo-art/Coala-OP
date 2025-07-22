@@ -90,7 +90,7 @@ const formatCurrency = (value: number | undefined | null) => {
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="relative my-4">
     <div className="absolute inset-0 flex items-center" aria-hidden="true">
-      <div className="w-full border-t border-border/60 border-dashed" />
+      <div className="w-full border-t border-border/40 border-dashed" />
     </div>
     <div className="relative flex justify-center">
       <span className="bg-background px-3 font-semibold text-muted-foreground tracking-wider uppercase text-xs">{children}</span>
@@ -165,16 +165,15 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             overrideUnit: item.overrideUnit,
         }));
 
-    form.reset({
-        name: `${sourceSimulation.name} (cópia)`,
-        categoryIds: sourceSimulation.categoryIds || [],
-        lineId: sourceSimulation.lineId,
-        items: sourceItems,
-        operationPercentage: sourceSimulation.operationPercentage,
-        salePrice: sourceSimulation.salePrice,
-        profitGoal: sourceSimulation.profitGoal,
-        notes: sourceSimulation.notes,
-    });
+    form.setValue('name', `${sourceSimulation.name} (cópia)`);
+    form.setValue('categoryIds', sourceSimulation.categoryIds || []);
+    form.setValue('lineId', sourceSimulation.lineId);
+    form.setValue('items', sourceItems);
+    form.setValue('operationPercentage', sourceSimulation.operationPercentage);
+    form.setValue('salePrice', sourceSimulation.salePrice);
+    form.setValue('profitGoal', sourceSimulation.profitGoal);
+    form.setValue('notes', sourceSimulation.notes);
+
     setIsCopyPopoverOpen(false);
   };
   
@@ -324,7 +323,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                     aria-expanded={isCopyPopoverOpen}
                                     className="w-full justify-between font-normal"
                                 >
-                                   Selecione uma mercadoria para copiar...
+                                    {form.getValues('name') ? simulations.find(s => `${s.name} (cópia)` === form.getValues('name'))?.name || "Selecione uma mercadoria..." : "Selecione uma mercadoria..."}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
@@ -337,10 +336,10 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             {simulations.map((sim) => (
                                                 <CommandItem
                                                     key={sim.id}
-                                                    value={sim.id}
-                                                    onSelect={handleCopyFrom}
+                                                    value={sim.name}
+                                                    onSelect={() => handleCopyFrom(sim.id)}
                                                 >
-                                                    <Check className={cn("mr-2 h-4 w-4", form.getValues('name').includes(sim.name) ? "opacity-100" : "opacity-0")} />
+                                                    <Check className={cn("mr-2 h-4 w-4", form.getValues('name').startsWith(sim.name) ? "opacity-100" : "opacity-0")} />
                                                     {sim.name}
                                                 </CommandItem>
                                             ))}
@@ -424,7 +423,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                       
                       <div className="rounded-md border p-2 space-y-2">
                         <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                            <span className="col-span-1">Insumo base</span>
+                            <span>Insumo base</span>
                             <span className="text-center">Qtd.</span>
                             <span className="text-center">Unid.</span>
                             <span className="text-right">Custo/unid.</span>
@@ -439,62 +438,65 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
                             return (
                                 <div key={item.id} className="p-2 rounded bg-muted/50">
-                                <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2">
-                                    <p className="font-medium text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
-                                    <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                                    <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                    
-                                    <FormField
-                                        control={form.control}
-                                        name={`items.${index}.overrideUnit`}
-                                        render={({ field: unitField }) => (
-                                            <FormItem>
-                                                <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
-                                                    <FormControl>
-                                                        <SelectTrigger className={cn(useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {unitCategories.map(cat => (
-                                                            <React.Fragment key={cat}>
-                                                                {getUnitsForCategory(cat as UnitCategory).map(unit => (
-                                                                    <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                                                                ))}
-                                                            </React.Fragment>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage/>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    
-                                    <FormField
-                                        control={form.control}
-                                        name={`items.${index}.overrideCostPerUnit`}
-                                        render={({ field: costField }) => (
-                                            <FormItem>
-                                                <Input
-                                                    type="number"
-                                                    step="any"
-                                                    value={useDefault ? (baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit)?.toFixed(4) ?? '' : costField.value ?? ''}
-                                                    onChange={costField.onChange}
-                                                    disabled={useDefault}
-                                                    className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
-                                                />
-                                                <FormMessage/>
-                                            </FormItem>
-                                        )}
-                                    />
+                                <div className="grid grid-cols-[1fr_auto] items-start gap-x-2">
+                                    <p className="font-medium text-sm self-center">{baseProduct?.name}</p>
 
-                                <div className="font-semibold text-primary text-sm w-full text-right">
-                                    {formatCurrency(partialCosts[index])}
-                                </div>
-                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => remove(index)}>
-                                    <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-start gap-x-2">
+                                        <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
+                                        <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        
+                                        <FormField
+                                            control={form.control}
+                                            name={`items.${index}.overrideUnit`}
+                                            render={({ field: unitField }) => (
+                                                <FormItem>
+                                                    <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
+                                                        <FormControl>
+                                                            <SelectTrigger className={cn(useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {unitCategories.map(cat => (
+                                                                <React.Fragment key={cat}>
+                                                                    {getUnitsForCategory(cat as UnitCategory).map(unit => (
+                                                                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                                    ))}
+                                                                </React.Fragment>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage/>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        
+                                        <FormField
+                                            control={form.control}
+                                            name={`items.${index}.overrideCostPerUnit`}
+                                            render={({ field: costField }) => (
+                                                <FormItem>
+                                                    <Input
+                                                        type="number"
+                                                        step="any"
+                                                        value={useDefault ? (baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit)?.toFixed(4) ?? '' : costField.value ?? ''}
+                                                        onChange={costField.onChange}
+                                                        disabled={useDefault}
+                                                        className={cn("text-right", useDefault && "bg-background border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
+                                                    />
+                                                    <FormMessage/>
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <div className="font-semibold text-primary text-sm w-full text-right self-center">
+                                            {formatCurrency(partialCosts[index])}
+                                        </div>
+                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
+                                        <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="flex justify-end mt-1">
                                     <FormField
@@ -629,7 +631,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     {simulationToEdit && (
         <DeleteConfirmationDialog
             open={isDeleteConfirmOpen}
-            onOpenChange={setIsDeleteConfirmOpen}
+            onOpenChange={() => setIsDeleteConfirmOpen(false)}
             onConfirm={handleDeleteConfirm}
             itemName={`a simulação "${simulationToEdit.name}"`}
         />
