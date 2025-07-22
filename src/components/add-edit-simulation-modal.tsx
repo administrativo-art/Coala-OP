@@ -90,7 +90,7 @@ const formatCurrency = (value: number | undefined | null) => {
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="relative my-4">
     <div className="absolute inset-0 flex items-center" aria-hidden="true">
-      <div className="w-full border-t border-border/40 border-dashed" />
+      <div className="w-full border-t border-border/60 border-dashed" />
     </div>
     <div className="relative flex justify-center">
       <span className="bg-background px-3 font-semibold text-muted-foreground tracking-wider uppercase text-xs">{children}</span>
@@ -332,7 +332,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                             <Command>
-                                <CommandInput placeholder="Buscar mercadoria..." />
                                 <CommandList>
                                 <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
                                 <CommandGroup>
@@ -650,8 +649,3 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
-
-
-
-
-
