@@ -9,6 +9,8 @@ import { Save } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
+import { useAuth } from '@/hooks/use-auth';
+import { useProfiles } from '@/hooks/use-profiles';
 
 type AddEditFormTemplateModalProps = {
   open: boolean;
@@ -22,6 +24,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   
   const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id'> | null>(null);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const { users } = useAuth();
+  const { profiles } = useProfiles();
 
   useEffect(() => {
     if (open) {
@@ -69,6 +73,28 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     return null;
   }, [selectedQuestionId, internalTemplate]);
 
+  const handleQuestionChange = (updatedQuestion: FormQuestionType) => {
+    if (!internalTemplate) return;
+
+    const newSections = internalTemplate.sections.map(section => {
+        const questionIndex = section.questions.findIndex(q => q.id === updatedQuestion.id);
+        if (questionIndex > -1) {
+            const newQuestions = [...section.questions];
+            newQuestions[questionIndex] = updatedQuestion;
+            return { ...section, questions: newQuestions };
+        }
+        return section;
+    });
+
+    handleTemplateChange({ ...internalTemplate, sections: newSections });
+  };
+  
+  const allQuestions = useMemo(() => {
+      if (!internalTemplate) return [];
+      return internalTemplate.sections.flatMap(s => s.questions);
+  }, [internalTemplate]);
+
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0">
@@ -86,14 +112,18 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                     initialTemplate={internalTemplate}
                     onTemplateChange={handleTemplateChange}
                     onNodeSelect={setSelectedQuestionId}
+                    selectedNodeId={selectedQuestionId}
                 />
             )}
             {selectedQuestion && (
                 <QuestionSettingsPanel
                     key={selectedQuestion.id}
                     question={selectedQuestion}
-                    onChange={() => {}} // We'll implement this next
+                    allQuestions={allQuestions}
+                    onChange={handleQuestionChange}
                     onClose={() => setSelectedQuestionId(null)}
+                    users={users}
+                    profiles={profiles}
                 />
             )}
         </div>

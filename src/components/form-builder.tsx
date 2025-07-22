@@ -15,6 +15,7 @@ import ReactFlow, {
   type OnConnect,
   type NodeTypes,
   type OnNodeClick,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion } from '@/types';
@@ -27,14 +28,15 @@ interface FormBuilderProps {
   initialTemplate: FormTemplate | Omit<FormTemplate, 'id'>;
   onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id'>) => void;
   onNodeSelect: (nodeId: string | null) => void;
+  selectedNodeId: string | null;
 }
 
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
-const CARD_HEIGHT = 120;
+const CARD_HEIGHT = 80;
 const CARD_GAP = 20;
 
-export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect }: FormBuilderProps) {
+export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
@@ -84,6 +86,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect }:
 
   useEffect(() => {
     const newNodes: Node[] = [];
+    const newEdges: Edge[] = [];
     let currentX = 0;
 
     initialTemplate.sections.forEach((section) => {
@@ -106,12 +109,26 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect }:
         newNodes.push({
           id: question.id,
           type: 'question',
-          data: { label: question.label },
+          data: { label: question.label, description: question.description },
           position: { x: 20, y: currentY },
           parentId: section.id,
           extent: 'parent',
         });
         currentY += CARD_HEIGHT + CARD_GAP;
+
+        // Add edges for ramifications
+        question.ramifications?.forEach(ramification => {
+          if (ramification.action === 'show_question' && ramification.targetQuestionId) {
+            newEdges.push({
+              id: `e-${question.id}-${ramification.targetQuestionId}`,
+              source: question.id,
+              target: ramification.targetQuestionId,
+              type: 'smoothstep',
+              markerEnd: { type: MarkerType.ArrowClosed },
+              label: ramification.conditions[0]?.value || 'next',
+            });
+          }
+        });
       });
 
       // Add the "Add Card" node at the end of the section
@@ -137,7 +154,19 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect }:
     });
     
     setNodes(newNodes);
+    setEdges(newEdges);
   }, [initialTemplate]);
+
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'question') {
+          node.selected = node.id === selectedNodeId;
+        }
+        return node;
+      })
+    );
+  }, [selectedNodeId]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
