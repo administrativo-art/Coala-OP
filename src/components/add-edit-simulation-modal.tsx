@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-analysis-flow';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 
 const simulationItemSchema = z.object({
@@ -41,7 +42,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  categoryId: z.string().nullable().optional(),
+  categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
@@ -98,7 +99,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' },
+    defaultValues: { name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -121,7 +122,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
             form.reset({
                 name: simulationToEdit.name,
-                categoryId: simulationToEdit.categoryId,
+                categoryIds: simulationToEdit.categoryIds || [],
                 lineId: simulationToEdit.lineId,
                 items: itemsForForm,
                 operationPercentage: simulationToEdit.operationPercentage,
@@ -130,7 +131,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 notes: simulationToEdit.notes,
             });
         } else {
-            form.reset({ name: '', categoryId: null, lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
+            form.reset({ name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
         }
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
@@ -151,7 +152,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
     form.reset({
         name: `${sourceSimulation.name} (cópia)`,
-        categoryId: sourceSimulation.categoryId,
+        categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
         items: sourceItems,
         operationPercentage: sourceSimulation.operationPercentage,
@@ -257,7 +258,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
        const finalData = {
         ...values,
         lineId: values.lineId || null,
-        categoryId: values.categoryId || null,
+        categoryIds: values.categoryIds || [],
         totalCmv: cmv,
         grossCost,
         profitValue,
@@ -320,24 +321,45 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     )}
                     
                     <div className="grid grid-cols-2 gap-2">
-                        <FormField control={form.control} name="categoryId" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Categoria</FormLabel>
-                                <div className="flex items-center gap-1">
-                                    <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={String(field.value ?? 'none')}>
-                                        <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="none">Nenhuma</SelectItem>
-                                            {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-5 w-5" /></Button>
-                                </div>
+                        <FormField
+                            control={form.control}
+                            name="categoryIds"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Categorias</FormLabel>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                    <FormControl>
+                                        <Button variant="outline" className="w-full justify-between font-normal">
+                                            {field.value?.length > 0 ? `${field.value.length} selecionada(s)` : "Selecione categorias"}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                    <DropdownMenuLabel>Categorias disponíveis</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {mainCategories.map((cat) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={cat.id}
+                                            checked={field.value?.includes(cat.id)}
+                                            onCheckedChange={(checked) => {
+                                                const currentSelection = field.value || [];
+                                                return checked
+                                                    ? field.onChange([...currentSelection, cat.id])
+                                                    : field.onChange(currentSelection.filter((id) => id !== cat.id));
+                                            }}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {cat.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                                 <FormMessage />
-                            </FormItem>
-                        )}/>
+                                </FormItem>
+                            )}
+                        />
                         <FormField control={form.control} name="lineId" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Linha</FormLabel>

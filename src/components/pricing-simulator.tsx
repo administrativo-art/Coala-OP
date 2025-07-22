@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -85,7 +86,7 @@ export function PricingSimulator() {
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = searchTerm ? sim.name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
-            const categoryMatch = categoryFilters.size === 0 || (sim.categoryId && categoryFilters.has(sim.categoryId));
+            const categoryMatch = categoryFilters.size === 0 || sim.categoryIds.some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             
             return searchMatch && categoryMatch && lineMatch;
@@ -218,14 +219,23 @@ export function PricingSimulator() {
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
-                        const category = sim.categoryId ? categoryMap.get(sim.categoryId) : null;
+                        const simCategories = sim.categoryIds.map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
 
                         return (
-                             <AccordionItem value={sim.id} key={sim.id} className="border-l-4 rounded-lg overflow-hidden bg-muted/40" style={{ borderColor: category?.color || 'hsl(var(--border))' }}>
-                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 px-4 py-2 group">
+                             <AccordionItem value={sim.id} key={sim.id} className="border-l-0 rounded-lg overflow-hidden bg-muted/40 relative">
+                                <div className="absolute left-0 top-0 bottom-0 w-1.5 flex flex-col">
+                                    {simCategories.length > 0 ? (
+                                        simCategories.map(cat => (
+                                            <div key={cat.id} className="flex-1" style={{ backgroundColor: cat.color || 'hsl(var(--border))' }}></div>
+                                        ))
+                                    ) : (
+                                        <div className="flex-1 bg-border"></div>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 pl-8 pr-4 py-2 group">
                                      <div
                                         className="font-semibold text-left"
                                     >
@@ -238,8 +248,8 @@ export function PricingSimulator() {
                                             </div>
                                             <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible cursor-pointer" onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}/>
                                         </div>
-                                        <div className="flex items-center gap-1 mt-1">
-                                            {category && <Badge style={{backgroundColor: `${category.color}20`, color: category.color, borderColor: `${category.color}80`}} variant="outline">{category.name}</Badge>}
+                                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                            {simCategories.map(cat => <Badge key={cat.id} style={{backgroundColor: `${cat.color}20`, color: cat.color, borderColor: `${cat.color}80`}} variant="outline">{cat.name}</Badge>)}
                                             {line && <Badge variant="secondary">{line.name}</Badge>}
                                         </div>
                                     </div>
@@ -259,7 +269,7 @@ export function PricingSimulator() {
                                         ) : <div className="h-5 w-5" />}
                                     </div>
                                 </div>
-                                <AccordionContent className="px-4 pb-4 bg-background">
+                                <AccordionContent className="pl-8 pr-4 pb-4 bg-background">
                                     <div className="overflow-x-auto pt-2">
                                         <table className="w-full">
                                             <thead>

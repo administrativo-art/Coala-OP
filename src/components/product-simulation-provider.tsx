@@ -11,7 +11,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface SimulationData {
     name: string;
-    categoryId?: string | null;
+    categoryIds: string[];
     lineId?: string | null;
     items: {
         baseProductId: string;
@@ -55,7 +55,17 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     useEffect(() => {
         const qSims = query(collection(db, "productSimulations"));
         const unsubSims = onSnapshot(qSims, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductSimulation));
+            const data = snapshot.docs.map(doc => {
+                const docData = doc.data();
+                // Backward compatibility for old categoryId string
+                if (docData.categoryId && !docData.categoryIds) {
+                    docData.categoryIds = [docData.categoryId];
+                } else if (!docData.categoryIds) {
+                    docData.categoryIds = [];
+                }
+                delete docData.categoryId;
+                return { id: doc.id, ...docData } as ProductSimulation;
+            });
             setSimulations(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
             setLoading(false);
         }, (error) => {
@@ -148,7 +158,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
               ...restOfData,
               updatedAt: now
             };
-            batch.update(simulationRef, updatePayload);
+            batch.update(simulationRef, updatePayload as any);
             
             if (oldPrice !== newPrice) {
                 const historyRef = doc(collection(db, "simulationPriceHistory"));

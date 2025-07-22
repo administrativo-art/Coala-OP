@@ -189,7 +189,7 @@ export type ProductSimulationItem = {
 export type ProductSimulation = {
   id: string;
   name: string;
-  categoryId: string | null;
+  categoryIds: string[];
   lineId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
