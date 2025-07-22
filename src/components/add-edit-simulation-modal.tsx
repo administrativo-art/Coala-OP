@@ -89,14 +89,14 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="relative my-4">
-      <div className="absolute inset-0 flex items-center" aria-hidden="true">
-        <div className="w-full border-t border-border/60" />
-      </div>
-      <div className="relative flex justify-center text-xs uppercase">
-        <span className="bg-background px-2 font-semibold text-muted-foreground tracking-wider">{children}</span>
-      </div>
+  <div className="relative my-4">
+    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+      <div className="w-full border-t border-border/60" />
     </div>
+    <div className="relative flex justify-center text-xs uppercase">
+      <span className="bg-background px-2 font-semibold text-muted-foreground tracking-wider">{children}</span>
+    </div>
+  </div>
 );
 
 
@@ -338,8 +338,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                             {simulations.map((sim) => (
                                                 <CommandItem
                                                     key={sim.id}
-                                                    value={sim.name}
-                                                    onSelect={() => handleCopyFrom(sim.id)}
+                                                    value={sim.id}
+                                                    onSelect={handleCopyFrom}
                                                 >
                                                     {sim.name}
                                                 </CommandItem>
