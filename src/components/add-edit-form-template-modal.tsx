@@ -5,12 +5,15 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
-import { Save } from 'lucide-react';
+import { Save, Settings } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
+import { FormGeneralSettings } from './form-general-settings';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 
 type AddEditFormTemplateModalProps = {
   open: boolean;
@@ -26,6 +29,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const { users } = useAuth();
   const { profiles } = useProfiles();
+  const [activeTab, setActiveTab] = useState("builder");
 
   useEffect(() => {
     if (open) {
@@ -39,10 +43,11 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 0, y: 0 } }
+            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }
           ],
         });
       }
+       setActiveTab("builder");
     } else {
       setInternalTemplate(null);
       setSelectedQuestionId(null);
@@ -101,32 +106,50 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         <DialogHeader className="p-4 border-b">
           <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
           <DialogDescription>
-            Construa seu formulário ou processo usando o editor visual abaixo.
+            Use as abas abaixo para configurar o formulário e construir o fluxo de perguntas.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 min-h-0 flex">
-            {internalTemplate && (
-                 <FormBuilder 
-                    key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
-                    initialTemplate={internalTemplate}
-                    onTemplateChange={handleTemplateChange}
-                    onNodeSelect={setSelectedQuestionId}
-                    selectedNodeId={selectedQuestionId}
-                />
-            )}
-            {selectedQuestion && (
-                <QuestionSettingsPanel
-                    key={selectedQuestion.id}
-                    question={selectedQuestion}
-                    allQuestions={allQuestions}
-                    onChange={handleQuestionChange}
-                    onClose={() => setSelectedQuestionId(null)}
-                    users={users}
-                    profiles={profiles}
-                />
-            )}
-        </div>
+         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
+            <div className="p-4 border-b">
+                <TabsList>
+                    <TabsTrigger value="builder">Builder Visual</TabsTrigger>
+                    <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Configurações Gerais</TabsTrigger>
+                </TabsList>
+            </div>
+            <TabsContent value="builder" className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 flex h-full">
+                    {internalTemplate && (
+                        <FormBuilder 
+                            key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
+                            initialTemplate={internalTemplate}
+                            onTemplateChange={handleTemplateChange}
+                            onNodeSelect={setSelectedQuestionId}
+                            selectedNodeId={selectedQuestionId}
+                        />
+                    )}
+                    {selectedQuestion && (
+                        <QuestionSettingsPanel
+                            key={selectedQuestion.id}
+                            question={selectedQuestion}
+                            allQuestions={allQuestions}
+                            onChange={handleQuestionChange}
+                            onClose={() => setSelectedQuestionId(null)}
+                            users={users}
+                            profiles={profiles}
+                        />
+                    )}
+                </div>
+            </TabsContent>
+            <TabsContent value="settings" className="flex-1 overflow-auto p-6">
+                 {internalTemplate && (
+                    <FormGeneralSettings 
+                        template={internalTemplate} 
+                        onTemplateChange={handleTemplateChange}
+                    />
+                 )}
+            </TabsContent>
+        </Tabs>
         
         <DialogFooter className="p-4 border-t shrink-0">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

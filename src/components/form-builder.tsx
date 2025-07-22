@@ -58,6 +58,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         name: `Momento ${newTemplate.sections.length + 1}`,
         questions: [],
         position: { x: newX, y: 0 },
+        color: '#FEE2E2',
       });
     } else if (type === 'card' && parentId) {
       const section = newTemplate.sections.find((s: any) => s.id === parentId);
