@@ -224,7 +224,7 @@ export type PermissionSet = {
     pricing: { simulate: boolean; manageParameters: boolean; };
     reports: { view: boolean; };
     help: { view: boolean; };
-    tasks: { view: true, manage: boolean; };
+    tasks: { view: boolean, manage: boolean; };
     audit: { start: boolean; approve: boolean; };
 };
 
@@ -324,6 +324,38 @@ export type StockAuditSession = {
     items: StockAuditItem[];
 };
 
+export type TaskHistoryItem = {
+    timestamp: string; // ISO date string
+    author: {
+        id: string;
+        name: string;
+    };
+    action: string; // e.g., 'created', 'reopened', 'completed'
+    details?: string; // e.g., justification for reopening
+};
+
+export type Task = {
+    id: string;
+    title: string;
+    description?: string;
+    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
+    assigneeType: 'user' | 'profile';
+    assigneeId: string;
+    requiresApproval: boolean;
+    approverType?: 'user' | 'profile';
+    approverId?: string;
+    origin: {
+        type: 'form_submission';
+        submissionId: string;
+        questionId: string;
+        optionId: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    dueDate?: string;
+    completedAt?: string;
+    history: TaskHistoryItem[];
+};
 
 export type FormTaskAction = {
     title: string;
@@ -569,68 +601,6 @@ export type PricingParameters = {
   profitRanges: ProfitRange[];
   profitGoals: number[];
 };
-
-export type TaskHistoryItem = {
-    timestamp: string; // ISO date string
-    author: {
-        id: string;
-        name: string;
-    };
-    action: string; // e.g., 'created', 'reopened', 'completed'
-    details?: string; // e.g., justification for reopening
-};
-
-export type TaskProject = {
-  id: string;
-  name: string;
-  memberIds: string[];
-  sections: { id: string; name: string }[];
-};
-
-export type TaskType = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-export type Task = {
-    id: string;
-    title: string;
-    description?: string;
-    
-    // New Hierarchy & Categorization
-    projectId: string;
-    taskTypeId: string;
-    sectionId: string; // Replaces 'status' for Kanban columns
-    parentId?: string; // For subtasks
-
-    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
-    
-    // Assignment
-    assigneeType: 'user' | 'profile';
-    assigneeId: string; // userId or profileId
-    
-    // Approval
-    requiresApproval: boolean;
-    approverType?: 'user' | 'profile';
-    approverId?: string; // userId or profileId
-    
-    // Context
-    origin: {
-        type: 'form_submission';
-        submissionId: string;
-        questionId: string;
-        optionId: string;
-    };
-    
-    // Timestamps and History
-    createdAt: string;
-    updatedAt: string;
-    dueDate?: string; // ISO string
-    completedAt?: string; // ISO string
-    history: TaskHistoryItem[];
-};
-
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
