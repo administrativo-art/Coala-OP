@@ -90,11 +90,10 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         ]
     },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
-    { href: '/dashboard/audit', label: 'Auditoria', icon: AuditIcon, group: 'admin', show: canAudit },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin', show: canRegister },
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
-    { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
+    { href: '/dashboard/help', label: 'Suporte', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
   ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
   
   const filteredNavItems = useMemo(() => {
