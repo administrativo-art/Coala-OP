@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type PurchaseSession, type PurchaseItem, type BaseProduct, type LastEffectivePrice, type PriceHistoryEntry } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 
@@ -20,6 +21,7 @@ export interface PurchaseContextType {
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
+  deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
 
 export const PurchaseContext = createContext<PurchaseContextType | undefined>(undefined);
@@ -233,6 +235,14 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             console.error("Error confirming purchase:", error);
         }
     }, [user, items, baseProducts, sessions]);
+    
+    const deletePriceHistoryEntry = useCallback(async (historyId: string) => {
+        try {
+            await deleteDoc(doc(db, "priceHistory", historyId));
+        } catch (error) {
+            console.error("Error deleting price history entry:", error);
+        }
+    }, []);
 
     const value: PurchaseContextType = useMemo(() => ({
         sessions,
@@ -246,7 +256,8 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         closeSession,
         deleteSession,
         confirmPurchase,
-    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase]);
+        deletePriceHistoryEntry,
+    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

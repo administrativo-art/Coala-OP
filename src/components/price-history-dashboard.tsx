@@ -1,34 +1,42 @@
 
+
 "use client";
 
-import { useMemo, useState } from 'react';
-import { usePurchase } from '@/hooks/use-purchase';
-import { useProducts } from '@/hooks/use-products';
-import { useEntities } from '@/hooks/use-entities';
-import { useAuth } from '@/hooks/use-auth';
-import { useBaseProducts } from '@/hooks/use-base-products';
-import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
-import { format, parseISO } from 'date-fns';
+import { useState, useMemo, useEffect } from "react";
+import { format, parseISO } from "date-fns";
 import { ptBR } from 'date-fns/locale';
-import { ScrollArea } from './ui/scroll-area';
-import { Skeleton } from './ui/skeleton';
-import { Inbox, Search, Package, Building, Eraser } from 'lucide-react';
-import { Input } from './ui/input';
+import { useAuth } from "@/hooks/use-auth";
+import { usePurchase } from "@/hooks/use-purchase";
+import { convertValue } from "@/lib/conversion";
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { type Product, type PurchaseItem, type BaseProduct, type Entity, type PriceHistoryEntry } from "@/types";
+import { Star, CheckCircle, AlertTriangle, Info, Inbox, Search, Package, Building, Eraser, Trash2 } from "lucide-react";
+import { useDebounce } from "use-debounce";
+import { useProducts } from "@/hooks/use-products";
+import { useBaseProducts } from "@/hooks/use-base-products";
+import { useEntities } from "@/hooks/use-entities";
+import { ScrollArea } from "./ui/scroll-area";
+import { Skeleton } from "./ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Button } from './ui/button';
-import { convertValue } from '@/lib/conversion';
+import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+
 
 export function PriceHistoryDashboard() {
-    const { priceHistory, loading } = usePurchase();
+    const { priceHistory, loading, deletePriceHistoryEntry } = usePurchase();
     const { getProductFullName, products } = useProducts();
-    const { users } = useAuth();
+    const { users, permissions } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [productFilter, setProductFilter] = useState('all');
     const [entityFilter, setEntityFilter] = useState('all');
-    
+    const [entryToDelete, setEntryToDelete] = useState<PriceHistoryEntry | null>(null);
+
     const enrichedHistory = useMemo(() => {
         return priceHistory.map(entry => {
             const product = products.find(p => p.id === entry.productId);
@@ -67,6 +75,15 @@ export function PriceHistoryDashboard() {
             return searchMatch && productMatch && entityMatch;
         });
     }, [enrichedHistory, searchTerm, productFilter, entityFilter]);
+    
+    const handleDeleteConfirm = () => {
+        if(entryToDelete) {
+            deletePriceHistoryEntry(entryToDelete.id);
+            setEntryToDelete(null);
+        }
+    }
+    
+    const canDeleteHistory = permissions.purchasing.deleteHistory;
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -128,6 +145,7 @@ export function PriceHistoryDashboard() {
                                     <TableHead>Preço Efetivado</TableHead>
                                     <TableHead>Efetivado por</TableHead>
                                     <TableHead className="text-right">Data</TableHead>
+                                    {canDeleteHistory && <TableHead className="text-right">Ações</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -145,6 +163,13 @@ export function PriceHistoryDashboard() {
                                         <TableCell className="text-right">
                                             {format(parseISO(entry.confirmedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                         </TableCell>
+                                        {canDeleteHistory && (
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setEntryToDelete(entry)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -152,6 +177,12 @@ export function PriceHistoryDashboard() {
                     </div>
                 </ScrollArea>
             )}
+             <DeleteConfirmationDialog 
+                open={!!entryToDelete}
+                onOpenChange={() => setEntryToDelete(null)}
+                onConfirm={handleDeleteConfirm}
+                itemName={`o registro de preço de "${entryToDelete?.productName}"`}
+            />
         </div>
     );
 }
