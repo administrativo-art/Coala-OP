@@ -1,11 +1,12 @@
 
+
 "use client"
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
-import { Save, Settings } from 'lucide-react';
+import { Save, Settings, Cloud, CloudCheck, FileUp, Undo2, Loader2 } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -13,23 +14,30 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { FormGeneralSettings } from './form-general-settings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from '@/hooks/use-toast';
+import { Badge } from './ui/badge';
 
 
 type AddEditFormTemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   templateToEdit: FormTemplate | null;
-  addTemplate: (template: Omit<FormTemplate, 'id'>) => void;
+  addTemplate: (template: Omit<FormTemplate, 'id' | 'status'>) => Promise<string | null>;
   updateTemplate: (template: FormTemplate) => void;
 };
 
 export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
   
-  const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id'> | null>(null);
+  const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const { users } = useAuth();
   const { profiles } = useProfiles();
   const [activeTab, setActiveTab] = useState("builder");
+  const [isSaving, setIsSaving] = useState<'auto' | 'manual' | false>(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const { toast } = useToast();
+  
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -48,26 +56,66 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         });
       }
        setActiveTab("builder");
+       setHasUnsavedChanges(false);
     } else {
       setInternalTemplate(null);
       setSelectedQuestionId(null);
+      if (autoSaveTimer.current) {
+          clearTimeout(autoSaveTimer.current);
+      }
     }
   }, [open, templateToEdit]);
 
-  const handleTemplateChange = (newTemplate: FormTemplate | Omit<FormTemplate, 'id'>) => {
+  const handleTemplateChange = (newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
     setInternalTemplate(newTemplate);
+    setHasUnsavedChanges(true);
+  }
+  
+  const handleManualSave = async (showToast = true) => {
+    if (!internalTemplate || !('id' in internalTemplate)) return;
+    
+    setIsSaving('manual');
+    await updateTemplate(internalTemplate as FormTemplate);
+    if(showToast) {
+        toast({ title: 'Rascunho salvo!', description: 'Suas alterações foram salvas com sucesso.' });
+    }
+    setIsSaving(false);
+    setHasUnsavedChanges(false);
+  }
+  
+  const handlePublish = async () => {
+     if (!internalTemplate || !('id' in internalTemplate)) return;
+     
+     await handleManualSave(false);
+     await updateTemplate({ ...internalTemplate as FormTemplate, status: 'published' });
+     toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
+     onOpenChange(false);
   }
 
-  const handleSave = () => {
-    if (!internalTemplate) return;
+  const handleReopen = async () => {
+    if (!internalTemplate || !('id' in internalTemplate)) return;
+    await updateTemplate({ ...internalTemplate as FormTemplate, status: 'draft' });
+    toast({ title: 'Formulário reaberto!', description: 'Agora você pode editar o formulário novamente.' });
+  }
 
-    if ('id' in internalTemplate && internalTemplate.id) {
-        updateTemplate(internalTemplate as FormTemplate);
-    } else {
-        addTemplate(internalTemplate as Omit<FormTemplate, 'id'>);
+  useEffect(() => {
+    if(hasUnsavedChanges && internalTemplate && 'id' in internalTemplate) {
+        if(autoSaveTimer.current) {
+            clearTimeout(autoSaveTimer.current);
+        }
+        autoSaveTimer.current = setTimeout(async () => {
+            setIsSaving('auto');
+            await updateTemplate(internalTemplate as FormTemplate);
+            setIsSaving(false);
+            setHasUnsavedChanges(false);
+        }, 5000); // Autosave after 5 seconds of inactivity
     }
-    onOpenChange(false);
-  };
+    return () => {
+        if (autoSaveTimer.current) {
+            clearTimeout(autoSaveTimer.current);
+        }
+    }
+  }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
   
   const selectedQuestion = useMemo(() => {
     if (!selectedQuestionId || !internalTemplate) return null;
@@ -99,15 +147,22 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
       return internalTemplate.sections.flatMap(s => s.questions);
   }, [internalTemplate]);
 
+  const isPublished = internalTemplate && 'id' in internalTemplate && internalTemplate.status === 'published';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="p-4 border-b">
-          <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
-          <DialogDescription>
-            Use as abas abaixo para configurar o formulário e construir o fluxo de perguntas.
-          </DialogDescription>
+        <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
+          <div>
+            <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
+            <DialogDescription>
+                Use as abas abaixo para configurar o formulário e construir o fluxo de perguntas.
+            </DialogDescription>
+          </div>
+           <div className="flex items-center gap-2">
+                {isSaving === 'auto' && <span className="text-sm text-muted-foreground flex items-center gap-1"><Cloud className="h-4 w-4 animate-pulse"/>Salvando...</span>}
+                {isSaving === false && !hasUnsavedChanges && internalTemplate && 'id' in internalTemplate && <span className="text-sm text-muted-foreground flex items-center gap-1"><CloudCheck className="h-4 w-4"/>Salvo</span>}
+           </div>
         </DialogHeader>
         
          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
@@ -152,10 +207,35 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         </Tabs>
         
         <DialogFooter className="p-4 border-t shrink-0">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={handleSave}><Save className="mr-2 h-4 w-4" /> Salvar Modelo</Button>
+          <div className="w-full flex justify-between items-center">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+            
+            <div className="flex items-center gap-2">
+                {isPublished ? (
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">Publicado</Badge>
+                        <Button onClick={handleReopen} variant="outline">
+                            <Undo2 className="mr-2 h-4 w-4"/> Reabrir para Edição
+                        </Button>
+                    </div>
+                ) : (
+                    <>
+                        <Button onClick={() => handleManualSave()} variant="secondary" disabled={isSaving !== false || !hasUnsavedChanges}>
+                           {isSaving === 'manual' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />} 
+                           Salvar Rascunho
+                        </Button>
+                        <Button onClick={handlePublish} disabled={isSaving !== false || hasUnsavedChanges}>
+                            <FileUp className="mr-2 h-4 w-4" />
+                            Publicar
+                        </Button>
+                    </>
+                )}
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+    

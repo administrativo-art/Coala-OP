@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -13,6 +14,7 @@ import { AddEditFormTemplateModal } from "./add-edit-form-template-modal"
 import { FillFormModal } from "./fill-form-modal"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { FormSubmissionsHistory } from "./form-submissions-history"
+import { Badge } from "./ui/badge"
 
 export function FormModule() {
     const { templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission } = useFormHook()
@@ -23,9 +25,20 @@ export function FormModule() {
     const [templateToDelete, setTemplateToDelete] = useState<FormTemplate | null>(null)
     const [templateToFill, setTemplateToFill] = useState<FormTemplate | null>(null);
 
-    const handleAddNew = () => {
-        setTemplateToEdit(null)
-        setIsAddEditModalOpen(true)
+    const handleAddNew = async () => {
+        const newTemplateId = await addTemplate({
+            name: 'Novo Formulário (Rascunho)',
+            type: 'standard',
+            layout: 'continuous',
+            moment: null,
+            submissionTitleFormat: '',
+            sections: [{ id: `section-${Date.now()}`, name: 'Seção 1', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }],
+        });
+
+        if (newTemplateId) {
+            const newTemplate = templates.find(t => t.id === newTemplateId) || { id: newTemplateId, name: 'Novo Formulário (Rascunho)', status: 'draft' } as FormTemplate;
+            handleEdit(newTemplate);
+        }
     }
 
     const handleEdit = (template: FormTemplate) => {
@@ -74,17 +87,23 @@ export function FormModule() {
                 <div className="space-y-2 pr-4">
                 {templates.map(template => {
                     const itemCount = template.sections.reduce((acc, section) => acc + section.questions.length, 0);
+                    const isPublished = template.status === 'published';
                     return (
                         <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
                             <div className="flex items-center gap-3">
                                 <FileText className="h-5 w-5 text-primary" />
                                 <div>
                                     <span className="font-medium">{template.name}</span>
-                                    <p className="text-xs text-muted-foreground">{itemCount} itens</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-xs text-muted-foreground">{itemCount} itens</p>
+                                        <Badge variant={isPublished ? 'default' : 'secondary'}>
+                                            {isPublished ? 'Publicado' : 'Rascunho'}
+                                        </Badge>
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                {permissions.forms.fill && <Button variant="outline" size="sm" onClick={() => handleFill(template)}>Preencher</Button>}
+                                {permissions.forms.fill && isPublished && <Button variant="outline" size="sm" onClick={() => handleFill(template)}>Preencher</Button>}
                                 {permissions.forms.manage && (
                                     <>
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(template)}><Edit className="h-4 w-4" /></Button>
@@ -134,7 +153,7 @@ export function FormModule() {
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
                 templateToEdit={templateToEdit}
-                addTemplate={addTemplate}
+                addTemplate={addTemplate as any}
                 updateTemplate={updateTemplate}
             />}
 
@@ -156,3 +175,5 @@ export function FormModule() {
         </>
     )
 }
+
+    

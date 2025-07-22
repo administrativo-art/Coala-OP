@@ -414,6 +414,7 @@ export type FormTemplate = {
     submissionTitleFormat?: string;
     type: 'standard' | 'operational_checklist';
     moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null;
+    status: 'draft' | 'published';
 };
 
 export type FormAnswer = {
@@ -685,3 +686,5 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
+
+    

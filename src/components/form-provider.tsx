@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -10,7 +11,7 @@ export interface FormContextType {
   templates: FormTemplate[];
   submissions: FormSubmission[];
   loading: boolean;
-  addTemplate: (template: Omit<FormTemplate, 'id'>) => Promise<void>;
+  addTemplate: (template: Omit<FormTemplate, 'id' | 'status'>) => Promise<string | null>;
   updateTemplate: (template: FormTemplate) => Promise<void>;
   deleteTemplate: (templateId: string) => Promise<void>;
   addSubmission: (submission: Omit<FormSubmission, 'id'>, tasksToCreate?: Omit<Task, 'id' | 'origin'>[]) => Promise<string | null>;
@@ -28,7 +29,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const qTemplates = query(collection(db, "formTemplates"));
     const unsubscribeTemplates = onSnapshot(qTemplates, async (querySnapshot) => {
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormTemplate));
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), status: doc.data().status || 'draft' } as FormTemplate));
       setTemplates(data);
       setLoading(false);
     }, (error) => {
@@ -50,11 +51,13 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const addTemplate = useCallback(async (template: Omit<FormTemplate, 'id'>) => {
+  const addTemplate = useCallback(async (template: Omit<FormTemplate, 'id' | 'status'>): Promise<string | null> => {
     try {
-      await addDoc(collection(db, "formTemplates"), template);
+      const docRef = await addDoc(collection(db, "formTemplates"), { ...template, status: 'draft' });
+      return docRef.id;
     } catch (error) {
       console.error("Error adding template:", error);
+      return null;
     }
   }, []);
 
@@ -141,3 +144,5 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
+
+    
