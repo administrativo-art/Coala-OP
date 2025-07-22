@@ -6,7 +6,7 @@ import { type ProductSimulation, type PricingParameters, type SimulationCategory
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck } from "lucide-react";
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -29,6 +29,7 @@ const formatCurrency = (value: number | undefined | null, showSign = false) => {
 
 interface PricingDashboardProps {
     simulations: ProductSimulation[];
+    categories: SimulationCategory[];
     isLoading: boolean;
     getProfitColorClass: (percentage: number) => string;
     pricingParameters: PricingParameters | null;
@@ -40,8 +41,7 @@ interface PricingDashboardProps {
     }
 }
 
-export function PricingDashboard({ simulations, isLoading, getProfitColorClass, pricingParameters, activeFilters }: PricingDashboardProps) {
-    const { categories } = useProductSimulationCategories();
+export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters }: PricingDashboardProps) {
     const [chartSearchTerm, setChartSearchTerm] = useState('');
     const [popoverOpen, setPopoverOpen] = useState(false);
 
@@ -85,14 +85,36 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
         });
 
         const averagePriceDelta = priceDeltas.length > 0 ? priceDeltas.reduce((acc, delta) => acc + delta, 0) / priceDeltas.length : 0;
+        
+        const categoryCounts: { [name: string]: number } = {};
+        const lineCounts: { [name: string]: number } = {};
+
+        filteredSimulations.forEach(s => {
+            s.categoryIds.forEach(catId => {
+                const category = categories.find(c => c.id === catId);
+                if (category && category.type === 'category') {
+                    categoryCounts[category.name] = (categoryCounts[category.name] || 0) + 1;
+                }
+            });
+            if (s.lineId) {
+                const line = categories.find(c => c.id === s.lineId);
+                if (line && line.type === 'line') {
+                    lineCounts[line.name] = (lineCounts[line.name] || 0) + 1;
+                }
+            }
+        });
+
 
         const kpisResult = {
+            totalSimulations,
             okCount: itemsMeetingGoal.length,
             reviewCount: itemsBelowGoal.length,
             highestMarginItem,
             lowestMarginItem,
             averageMarkup: totalSimulations > 0 ? totalMarkup / totalSimulations : 0,
             averagePriceDelta: averagePriceDelta,
+            categoryCounts,
+            lineCounts
         };
 
         const profitChartDataResult = filteredSimulations
@@ -104,7 +126,7 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
             .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
         return { kpis: kpisResult, profitChartData: profitChartDataResult };
-    }, [filteredSimulations]);
+    }, [filteredSimulations, categories]);
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
@@ -157,6 +179,48 @@ export function PricingDashboard({ simulations, isLoading, getProfitColorClass, 
     return (
         <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total de mercadorias</CardTitle>
+                        <Layers className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.totalSimulations}</div>
+                         <p className="text-xs text-muted-foreground">Total de itens cadastrados para venda</p>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Qtd. por Categoria</CardTitle>
+                        <Tag className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-1">
+                            {Object.entries(kpis.categoryCounts || {}).map(([name, count]) => (
+                                <div key={name} className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">{name}</span>
+                                    <span className="font-bold">{count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Qtd. por Linha</CardTitle>
+                        <AppWindow className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-1">
+                            {Object.entries(kpis.lineCounts || {}).map(([name, count]) => (
+                                <div key={name} className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">{name}</span>
+                                    <span className="font-bold">{count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens na meta</CardTitle>

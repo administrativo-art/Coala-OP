@@ -32,6 +32,7 @@ import { useStockAudit } from "@/hooks/use-stock-audit"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
 import { PendingTasksDashboard } from "@/components/pending-tasks-dashboard"
+import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories"
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
@@ -252,6 +253,7 @@ function OperationalDashboard() {
 
 function PricingReportDashboard() {
   const { simulations, loading: loadingSimulations } = useProductSimulation();
+  const { categories, loading: loadingCategories } = useProductSimulationCategories();
   const { pricingParameters, loading: loadingParams } = useCompanySettings();
 
   const getProfitColorClass = (percentage: number) => {
@@ -275,7 +277,8 @@ function PricingReportDashboard() {
   return (
     <PricingDashboard 
       simulations={simulations} 
-      isLoading={loadingSimulations || loadingParams}
+      categories={categories}
+      isLoading={loadingSimulations || loadingParams || loadingCategories}
       getProfitColorClass={getProfitColorClass}
       pricingParameters={pricingParameters}
       activeFilters={activeFilters}
