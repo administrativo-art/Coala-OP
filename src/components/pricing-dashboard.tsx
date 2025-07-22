@@ -9,11 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Button } from "./ui/button";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
-import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -41,25 +37,11 @@ interface PricingDashboardProps {
     },
     kpis: any;
     profitChartData: any[];
+    chartFilter: string;
+    setChartFilter: (filter: string) => void;
 }
 
-export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters, kpis, profitChartData }: PricingDashboardProps) {
-    const [chartSearchTerm, setChartSearchTerm] = useState('');
-    const [popoverOpen, setPopoverOpen] = useState(false);
-
-    const filteredSimulations = useMemo(() => {
-        if (!chartSearchTerm) return simulations;
-        const searchTermLower = chartSearchTerm.toLowerCase();
-        
-        return simulations.filter(s => {
-            const category = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
-            const line = s.lineId ? categories.find(c => c.id === s.lineId) : null;
-
-            return s.name.toLowerCase().includes(searchTermLower) ||
-                   (category && category.name.toLowerCase() === searchTermLower) ||
-                   (line && line.name.toLowerCase() === searchTermLower);
-        });
-    }, [simulations, chartSearchTerm, categories]);
+export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters, kpis, profitChartData, chartFilter, setChartFilter }: PricingDashboardProps) {
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
@@ -80,11 +62,10 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
     };
 
     const filterOptions = useMemo(() => {
-        const mercadorias = simulations.map(s => ({ value: s.name.toLowerCase(), label: s.name, group: 'Mercadorias' }));
-        const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: c.name.toLowerCase(), label: c.name, group: 'Categorias' }));
-        const lines = categories.filter(c => c.type === 'line').map(l => ({ value: l.name.toLowerCase(), label: l.name, group: 'Linhas' }));
-        return [...mercadorias, ...mainCategories, ...lines];
-    }, [simulations, categories]);
+        const mainCategories = categories.filter(c => c.type === 'category').map(c => ({ value: `category:${c.id}`, label: c.name, group: 'Categorias' }));
+        const lines = categories.filter(c => c.type === 'line').map(l => ({ value: `line:${l.id}`, label: l.name, group: 'Linhas' }));
+        return [...mainCategories, ...lines];
+    }, [categories]);
     
 
     if (isLoading) {
@@ -233,89 +214,32 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                                 <CardTitle>Lucratividade por mercadoria</CardTitle>
                                 <CardDescription>Clique em uma barra para selecionar o item e ver mais detalhes.</CardDescription>
                             </div>
-                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={popoverOpen}
-                                    className="w-[300px] justify-between"
-                                >
-                                    {chartSearchTerm
-                                    ? filterOptions.find(option => option.value === chartSearchTerm)?.label || "Filtrar..."
-                                    : "Filtrar mercadoria, categoria..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar..." />
-                                    <CommandList>
-                                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                                        <CommandGroup heading="Mercadorias">
-                                        {filterOptions.filter(o => o.group === 'Mercadorias').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
-                                         <CommandGroup heading="Categorias">
-                                        {filterOptions.filter(o => o.group === 'Categorias').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
-                                         <CommandGroup heading="Linhas">
-                                        {filterOptions.filter(o => o.group === 'Linhas').map((option) => (
-                                            <CommandItem
-                                            key={option.value}
-                                            value={option.value}
-                                            onSelect={(currentValue) => {
-                                                setChartSearchTerm(currentValue === chartSearchTerm ? "" : currentValue)
-                                                setPopoverOpen(false)
-                                            }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                chartSearchTerm === option.value ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {option.label}
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                                </PopoverContent>
-                            </Popover>
+                             <Select value={chartFilter} onValueChange={setChartFilter}>
+                                <SelectTrigger className="w-[300px]">
+                                    <SelectValue placeholder="Filtrar por..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas as mercadorias</SelectItem>
+                                    {filterOptions.filter(o => o.group === 'Categorias').length > 0 && (
+                                        <>
+                                            <Separator />
+                                            <p className="px-2 py-1.5 text-xs font-semibold">Categorias</p>
+                                        </>
+                                    )}
+                                    {filterOptions.filter(o => o.group === 'Categorias').map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                    ))}
+                                    {filterOptions.filter(o => o.group === 'Linhas').length > 0 && (
+                                        <>
+                                            <Separator />
+                                            <p className="px-2 py-1.5 text-xs font-semibold">Linhas</p>
+                                        </>
+                                    )}
+                                     {filterOptions.filter(o => o.group === 'Linhas').map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </CardHeader>
                     <CardContent>

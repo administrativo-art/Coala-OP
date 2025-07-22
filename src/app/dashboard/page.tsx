@@ -18,7 +18,7 @@ import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { type DailySchedule } from "@/types"
+import { type DailySchedule, type ProductSimulation } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { EditScheduleModal } from "@/components/edit-schedule-modal"
@@ -255,6 +255,8 @@ function PricingReportDashboard() {
   const { simulations, loading: loadingSimulations } = useProductSimulation();
   const { categories, loading: loadingCategories } = useProductSimulationCategories();
   const { pricingParameters, loading: loadingParams } = useCompanySettings();
+  
+  const [chartFilter, setChartFilter] = useState('all');
 
   const getProfitColorClass = (percentage: number) => {
     if (!pricingParameters?.profitRanges) return 'text-primary';
@@ -272,23 +274,31 @@ function PricingReportDashboard() {
         return { kpis: {}, profitChartData: [] };
     }
 
-    const totalSimulations = simulations.length;
-    const totalProfitPercentage = simulations.reduce((acc, s) => acc + s.profitPercentage, 0);
-    const averageProfitPercentage = totalSimulations > 0 ? totalProfitPercentage / totalSimulations : 0;
+    const filteredSimulations = simulations.filter(s => {
+        if (chartFilter === 'all') return true;
+        const [type, id] = chartFilter.split(':');
+        if (type === 'category') return s.categoryIds.includes(id);
+        if (type === 'line') return s.lineId === id;
+        return false;
+    });
 
-    const itemsWithGoal = simulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
+    const totalSimulations = simulations.length;
+    const totalProfitPercentage = filteredSimulations.reduce((acc, s) => acc + s.profitPercentage, 0);
+    const averageProfitPercentage = filteredSimulations.length > 0 ? totalProfitPercentage / filteredSimulations.length : 0;
+
+    const itemsWithGoal = filteredSimulations.filter(s => s.profitGoal != null && s.profitGoal > 0);
     const itemsMeetingGoal = itemsWithGoal.filter(s => s.profitPercentage >= s.profitGoal!);
     const itemsBelowGoal = itemsWithGoal.filter(s => s.profitPercentage < s.profitGoal!);
 
-    let highestMarginItem = simulations[0];
-    let lowestMarginItem = simulations[0];
+    let highestMarginItem: ProductSimulation | undefined = filteredSimulations[0];
+    let lowestMarginItem: ProductSimulation | undefined = filteredSimulations[0];
 
-    for (const s of simulations) {
-        if (s.profitPercentage > highestMarginItem.profitPercentage) highestMarginItem = s;
-        if (s.profitPercentage < lowestMarginItem.profitPercentage) lowestMarginItem = s;
+    for (const s of filteredSimulations) {
+        if (s.profitPercentage > (highestMarginItem?.profitPercentage || -Infinity)) highestMarginItem = s;
+        if (s.profitPercentage < (lowestMarginItem?.profitPercentage || Infinity)) lowestMarginItem = s;
     }
 
-    const totalMarkup = simulations.reduce((acc, s) => acc + s.markup, 0);
+    const totalMarkup = filteredSimulations.reduce((acc, s) => acc + s.markup, 0);
 
     const priceDeltas = itemsBelowGoal.map(s => {
         const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
@@ -300,7 +310,7 @@ function PricingReportDashboard() {
     const categoryCounts: { [name: string]: number } = {};
     const lineCounts: { [name: string]: number } = {};
 
-    simulations.forEach(s => {
+    simulations.forEach(s => { // Count from all simulations, not just filtered ones
         s.categoryIds.forEach(catId => {
             const category = categories.find(c => c.id === catId);
             if (category && category.type === 'category') {
@@ -322,13 +332,13 @@ function PricingReportDashboard() {
         reviewCount: itemsBelowGoal.length,
         highestMarginItem,
         lowestMarginItem,
-        averageMarkup: totalSimulations > 0 ? totalMarkup / totalSimulations : 0,
+        averageMarkup: filteredSimulations.length > 0 ? totalMarkup / filteredSimulations.length : 0,
         averagePriceDelta: averagePriceDelta,
         categoryCounts,
         lineCounts
     };
 
-    const profitChartDataResult = simulations
+    const profitChartDataResult = filteredSimulations
         .map(s => ({
             id: s.id,
             name: s.name,
@@ -337,7 +347,7 @@ function PricingReportDashboard() {
         .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
     return { kpis: kpisResult, profitChartData: profitChartDataResult };
-}, [simulations, categories]);
+}, [simulations, categories, chartFilter]);
 
 
   const activeFilters = {
@@ -357,6 +367,8 @@ function PricingReportDashboard() {
       activeFilters={activeFilters}
       kpis={kpis}
       profitChartData={profitChartData}
+      chartFilter={chartFilter}
+      setChartFilter={setChartFilter}
     />
   );
 }
