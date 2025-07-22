@@ -328,8 +328,8 @@ function PricingReportDashboard() {
     const kpisResult = {
         totalSimulations,
         averageProfitPercentage,
-        okCount: itemsMeetingGoal.length,
-        reviewCount: itemsBelowGoal.length,
+        itemsMeetingGoal,
+        itemsBelowGoal,
         highestMarginItem,
         lowestMarginItem,
         averageMarkup: filteredSimulations.length > 0 ? totalMarkup / filteredSimulations.length : 0,

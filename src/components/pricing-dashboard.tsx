@@ -6,11 +6,13 @@ import { type ProductSimulation, type PricingParameters, type SimulationCategory
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, ReferenceLine } from 'recharts';
-import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow, Percent } from "lucide-react";
+import { DollarSign, BarChart3, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle, Inbox, Gauge, ArrowUpCircle, Search, PackageCheck, Layers, Tag, AppWindow, Percent, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Separator } from "./ui/separator";
+import { SimulationItemsModal } from "./simulation-items-modal";
+import { Button } from "./ui/button";
 
 
 const formatCurrency = (value: number | undefined | null, showSign = false) => {
@@ -43,6 +45,7 @@ interface PricingDashboardProps {
 }
 
 export function PricingDashboard({ simulations, categories, isLoading, getProfitColorClass, pricingParameters, activeFilters, kpis, profitChartData, chartFilter, setChartFilter }: PricingDashboardProps) {
+    const [modalData, setModalData] = useState<{ open: boolean; title: string; items: ProductSimulation[] }>({ open: false, title: '', items: [] });
     
     const getBarColor = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'hsl(var(--primary))';
@@ -149,20 +152,24 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens na meta</CardTitle>
-                        <PackageCheck className="h-4 w-4 text-muted-foreground" />
+                        <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Itens na Meta', items: kpis.itemsMeetingGoal })}>
+                            <Eye />
+                        </Button>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{kpis.okCount}</div>
+                        <div className="text-2xl font-bold text-green-600">{kpis.itemsMeetingGoal?.length || 0}</div>
                          <p className="text-xs text-muted-foreground">Itens que atendem ou superam a meta de lucro</p>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Itens abaixo da meta</CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                         <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground" onClick={() => setModalData({ open: true, title: 'Itens Abaixo da Meta', items: kpis.itemsBelowGoal })}>
+                            <Eye />
+                        </Button>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-orange-500">{kpis.reviewCount}</div>
+                        <div className="text-2xl font-bold text-orange-500">{kpis.itemsBelowGoal?.length || 0}</div>
                         <p className="text-xs text-muted-foreground">Itens abaixo da meta de lucro definida</p>
                     </CardContent>
                 </Card>
@@ -267,6 +274,12 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                     </CardContent>
                 </Card>
             </div>
+            <SimulationItemsModal 
+                open={modalData.open}
+                onOpenChange={(open) => setModalData(prev => ({ ...prev, open }))}
+                title={modalData.title}
+                items={modalData.items}
+            />
         </div>
     );
 }
