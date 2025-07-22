@@ -90,8 +90,8 @@ const formatCurrency = (value: number | undefined | null) => {
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="relative my-4">
-      <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t border-border/60" />
+      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+        <div className="w-full border-t border-border/60" />
       </div>
       <div className="relative flex justify-center text-xs uppercase">
         <span className="bg-background px-2 font-semibold text-muted-foreground tracking-wider">{children}</span>
@@ -423,7 +423,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                       <SectionTitle>Composição (CMV)</SectionTitle>
                       
                       <div className="rounded-md border p-2 space-y-2">
-                        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                        <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
                             <span className="col-span-1">Insumo base</span>
                             <span className="text-center">Qtd.</span>
                             <span className="text-center">Unid.</span>
@@ -431,15 +431,15 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             <span className="text-right">Custo total</span>
                             <span className="w-8"></span>
                         </div>
-                        {fields.map((field, index) => {
+                        {fields.map((item, index) => {
                             if (!watchedItems || !watchedItems[index]) return null;
                             const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                             const useDefault = watchedItems[index].useDefault;
                             const hasDefaultCost = !!(baseProduct?.lastEffectivePrice || baseProduct?.initialCostPerUnit);
 
                             return (
-                                <div key={field.id} className="p-2 rounded bg-muted/50">
-                                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2">
+                                <div key={item.id} className="p-2 rounded bg-muted/50">
+                                <div className="grid grid-cols-[minmax(0,3.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_auto] items-center gap-x-2">
                                     <p className="font-medium truncate text-sm" title={baseProduct?.name}>{baseProduct?.name}</p>
                                     <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                     <FormItem><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
