@@ -50,11 +50,24 @@ const baseQuestionSchema = z.object({
   label: z.string().min(1, "A pergunta não pode estar em branco."),
   type: z.enum(['yes-no', 'text', 'number', 'single-choice', 'multiple-choice', 'file-attachment']),
   isRequired: z.boolean(),
+  position: z.object({ x: z.number(), y: z.number() }),
   attachmentConfig: z.object({
       allowMultiple: z.boolean(),
       allowedFileTypes: z.array(z.enum(['image', 'pdf', 'video'])),
       allowCamera: z.boolean(),
   }).optional(),
+  description: z.string().optional(),
+  ramifications: z.array(z.object({
+    id: z.string(),
+    conditions: z.array(z.object({
+        id: z.string(),
+        value: z.union([z.string(), z.number()]),
+        operator: z.enum(['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'contains']),
+    })),
+    action: z.enum(['show_question', 'create_task']),
+    targetQuestionId: z.string().optional(),
+    taskAction: taskActionSchema.optional(),
+  })).optional(),
 });
 
 const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() => 
@@ -62,8 +75,6 @@ const questionSchema: z.ZodType<FormQuestionType> = z.lazy(() =>
     options: z.array(z.object({
       id: z.string(),
       value: z.string().min(1, "O texto da opção é obrigatório."),
-      subQuestions: z.array(questionSchema),
-      action: taskActionSchema.optional(),
     })).optional()
   })
 );
@@ -100,6 +111,7 @@ const createNewQuestion = (): FormQuestionType => ({
   type: 'text',
   isRequired: true,
   options: [],
+  position: { x: 0, y: 0 },
   attachmentConfig: {
       allowMultiple: false,
       allowedFileTypes: ['image'],
@@ -113,87 +125,17 @@ const createNewSection = (): FormSection => ({
   questions: [createNewQuestion()]
 });
 
-// ==================== Task Action Form Component ====================
-type TaskActionFormProps = {
-  control: Control<TemplateFormValues>;
-  namePrefix: string;
-};
-
-const TaskActionForm: React.FC<TaskActionFormProps> = ({ control, namePrefix }) => {
-    const { users } = useAuth();
-    const { profiles } = useProfiles();
-    const action = useWatch({ control, name: namePrefix as any });
-    const isApprovalRequired = useWatch({ control, name: `${namePrefix}.requiresApproval` as any });
-
-    return (
-        <div className="space-y-3">
-            <FormField control={control} name={`${namePrefix}.title` as any} render={({ field }) => (
-                <FormItem><FormLabel>Título da tarefa</FormLabel><FormControl><Input placeholder="Ex: Verificar problema" {...field} /></FormControl><FormMessage /></FormItem>
-            )}/>
-            <FormField control={control} name={`${namePrefix}.description` as any} render={({ field }) => (
-                <FormItem><FormLabel>Descrição (opcional)</FormLabel><FormControl><Textarea placeholder="Descreva a tarefa..." {...field} /></FormControl><FormMessage /></FormItem>
-            )}/>
-            <FormField control={control} name={`${namePrefix}.dueInDays` as any} render={({ field }) => (
-                <FormItem><FormLabel>Prazo em dias (opcional)</FormLabel><FormControl><Input type="number" placeholder="Ex: 3" {...field} /></FormControl><FormMessage /></FormItem>
-            )}/>
-            <div className="grid grid-cols-2 gap-2">
-                 <FormField control={control} name={`${namePrefix}.assigneeType` as any} render={({ field }) => (
-                    <FormItem><FormLabel>Atribuir para</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger></FormControl>
-                        <SelectContent><SelectItem value="user">Usuário</SelectItem><SelectItem value="profile">Perfil</SelectItem></SelectContent>
-                        </Select><FormMessage /></FormItem>
-                )}/>
-                <FormField control={control} name={`${namePrefix}.assigneeId` as any} render={({ field }) => (
-                    <FormItem><FormLabel>&nbsp;</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                        <SelectContent>
-                            {(action?.assigneeType === 'user' ? users : profiles).map(u => <SelectItem key={u.id} value={u.id}>{u.name || u.username}</SelectItem>)}
-                        </SelectContent>
-                        </Select><FormMessage /></FormItem>
-                )}/>
-            </div>
-             <FormField control={control} name={`${namePrefix}.requiresApproval` as any} render={({ field }) => (
-                <FormItem className="flex items-center space-x-2"><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel>Exigir aprovação?</FormLabel></FormItem>
-             )}/>
-             {isApprovalRequired && (
-                <div className="grid grid-cols-2 gap-2 p-3 border rounded-lg bg-muted/50">
-                    <FormField control={control} name={`${namePrefix}.approverType` as any} render={({ field }) => (
-                        <FormItem><FormLabel>Aprovador</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger></FormControl>
-                            <SelectContent><SelectItem value="user">Usuário</SelectItem><SelectItem value="profile">Perfil</SelectItem></SelectContent>
-                            </Select><FormMessage /></FormItem>
-                    )}/>
-                    <FormField control={control} name={`${namePrefix}.approverId` as any} render={({ field }) => (
-                        <FormItem><FormLabel>&nbsp;</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                            <SelectContent>
-                                {(action?.approverType === 'user' ? users : profiles).map(u => <SelectItem key={u.id} value={u.id}>{u.name || u.username}</SelectItem>)}
-                            </SelectContent>
-                            </Select><FormMessage /></FormItem>
-                    )}/>
-                </div>
-             )}
-        </div>
-    )
-};
-
-
 // ==================== Question List Component (Recursive) ====================
 type QuestionListProps = {
   control: Control<TemplateFormValues>;
-  namePrefix: `sections.${number}.questions` | `${string}.subQuestions`;
-  level: number;
+  namePrefix: `sections.${number}.questions`;
 }
 
-const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level }) => {
+const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix }) => {
   const { fields, append, remove, move } = useFieldArray({ control, name: namePrefix, keyName: 'rhfId' });
 
   return (
-    <div className={`space-y-4 ${level > 0 ? 'pl-4 border-l-2 border-dashed' : ''}`}>
+    <div className={`space-y-4`}>
       {fields.map((field, index) => (
         <QuestionItem
           key={field.rhfId}
@@ -201,7 +143,6 @@ const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level 
           index={index}
           remove={() => remove(index)}
           namePrefix={`${namePrefix}.${index}`}
-          level={level}
           questionId={field.id}
           onMoveUp={() => move(index, index - 1)}
           onMoveDown={() => move(index, index + 1)}
@@ -210,7 +151,7 @@ const QuestionList: React.FC<QuestionListProps> = ({ control, namePrefix, level 
         />
       ))}
       <Button type="button" variant="outline" className="w-full" onClick={() => append(createNewQuestion())}>
-        <PlusCircle className="mr-2" /> Adicionar pergunta {level > 0 ? 'na ramificação' : ''}
+        <PlusCircle className="mr-2" /> Adicionar pergunta
       </Button>
     </div>
   );
@@ -222,7 +163,6 @@ type QuestionItemProps = {
   index: number;
   remove: () => void;
   namePrefix: string;
-  level: number;
   questionId: string;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -230,7 +170,7 @@ type QuestionItemProps = {
   isLast: boolean;
 }
 
-const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, level, questionId, onMoveUp, onMoveDown, isFirst, isLast }) => {
+const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, namePrefix, questionId, onMoveUp, onMoveDown, isFirst, isLast }) => {
   const questionType = useWatch({ control, name: `${namePrefix}.type` as any });
   const hasOptions = ['yes-no', 'single-choice', 'multiple-choice'].includes(questionType);
 
@@ -243,10 +183,10 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
   useEffect(() => {
     if (hasOptions && options.length === 0) {
       if(questionType === 'yes-no') {
-        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Sim', subQuestions: [], action: undefined });
-        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Não', subQuestions: [], action: undefined });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Sim' });
+        appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: 'Não' });
       } else {
-         appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [], action: undefined });
+         appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '' });
       }
     }
   }, [hasOptions, questionType, options.length, appendOption]);
@@ -327,31 +267,16 @@ const QuestionItem: React.FC<QuestionItemProps> = ({ control, index, remove, nam
                             </FormItem>
                         )}
                         />
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon">
-                                <Wand2 className="h-4 w-4" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-96">
-                            <h4 className="font-semibold mb-2">Ação Automática</h4>
-                            <p className="text-sm text-muted-foreground mb-4">Crie uma tarefa se esta opção for selecionada.</p>
-                            <TaskActionForm control={control} namePrefix={`${namePrefix}.options.${optionIndex}.action`} />
-                        </PopoverContent>
-                    </Popover>
                     {questionType !== 'yes-no' && (
                        <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeOption(optionIndex)}>
                            <Trash2 className="h-4 w-4" />
                        </Button>
                     )}
                 </div>
-                <div className="pt-2">
-                   <QuestionList control={control} namePrefix={`${namePrefix}.options.${optionIndex}.subQuestions` as any} level={level + 1} />
-                </div>
              </div>
            ))}
            {['single-choice', 'multiple-choice'].includes(questionType) && (
-              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '', subQuestions: [], action: undefined })}>
+              <Button type="button" variant="outline" size="sm" className="ml-4" onClick={() => appendOption({ id: 'opt-' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2), value: '' })}>
                 Adicionar opção
               </Button>
            )}
@@ -582,14 +507,14 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-4">
-                                    <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} level={0} />
+                                    <QuestionList control={form.control} namePrefix={`sections.${sectionIndex}.questions`} />
                                 </AccordionContent>
                             </AccordionItem>
                             ))}
                         </Accordion>
                     ) : (
                          <div className="border rounded-lg p-4 bg-muted/50">
-                            {sections[0] && <QuestionList control={form.control} namePrefix={`sections.0.questions`} level={0} />}
+                            {sections[0] && <QuestionList control={form.control} namePrefix={`sections.0.questions`} />}
                          </div>
                     )}
 

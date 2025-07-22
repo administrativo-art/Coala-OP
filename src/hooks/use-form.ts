@@ -12,6 +12,24 @@ type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
     generateDailyChecklist: (kioskId: string, kioskName: string, date: string, dailySchedule: any) => Promise<void>;
 };
 
+const getAllQuestions = (sections: any[]): FormQuestion[] => {
+    const questions: FormQuestion[] = [];
+    const recurse = (qs: FormQuestion[] | undefined) => {
+        if (!qs) return;
+        qs.forEach(q => {
+            questions.push(q);
+            if (q.ramifications) {
+                q.ramifications.forEach(ram => {
+                    // This part would need to be expanded if we were to find questions inside ramifications
+                    // For now, we assume a flat structure within a section for finding questions by ID.
+                });
+            }
+        });
+    };
+    sections.forEach(sec => recurse(sec.questions));
+    return questions;
+};
+
 export const useForm = (): EnrichedFormContextType => {
   const context = useContext(FormContext);
   const { user } = useAuth();
@@ -29,12 +47,7 @@ export const useForm = (): EnrichedFormContextType => {
     let submissionStatus: 'completed' | 'in_progress' = 'completed';
     const tasksToCreate: Omit<Task, 'id' | 'origin'>[] = [];
     
-    const allQuestions: FormQuestion[] = template.sections.flatMap(s => {
-      const getQuestions = (q_list: FormQuestion[]): FormQuestion[] => {
-          return q_list.flatMap(q => [q, ...(q.options ? q.options.flatMap(opt => getQuestions(opt.subQuestions || [])) : [])]);
-      };
-      return getQuestions(s.questions);
-    });
+    const allQuestions = getAllQuestions(template.sections);
 
     const findQuestion = (id: string): (FormQuestion | undefined) => {
         return allQuestions.find(q => q.id === id);
@@ -42,36 +55,41 @@ export const useForm = (): EnrichedFormContextType => {
 
     submission.answers.forEach(answer => {
         const question = findQuestion(answer.questionId);
-        if (question && question.options) {
-            const selectedValues = Array.isArray(answer.value) ? answer.value : [answer.value];
-            question.options.forEach(option => {
-                if (selectedValues.includes(option.value) && option.action) {
-                    submissionStatus = 'in_progress';
-                    const now = new Date();
-                    const historyItem: TaskHistoryItem = {
-                        timestamp: now.toISOString(),
-                        author: { id: user.id, name: user.username },
-                        action: 'created',
-                        details: `Criada a partir do formulário "${template.name}"`
-                    };
-                    
-                    const taskPayload: Omit<Task, 'id' | 'origin'> & { origin: any } = {
-                        ...option.action,
-                        status: 'pending',
-                        origin: {
-                            questionId: question.id,
-                            optionId: option.id,
-                        },
-                        createdAt: now.toISOString(),
-                        updatedAt: now.toISOString(),
-                        history: [historyItem]
-                    };
+        if (question && question.ramifications) {
+            question.ramifications.forEach(ramification => {
+                if (ramification.action === 'create_task' && ramification.taskAction) {
+                    // Implement condition checking logic here
+                    // For simplicity, let's assume a simple 'eq' check for now
+                    const condition = ramification.conditions[0];
+                    if (condition && String(answer.value) === String(condition.value)) {
+                        submissionStatus = 'in_progress';
+                        const now = new Date();
+                        const historyItem: TaskHistoryItem = {
+                            timestamp: now.toISOString(),
+                            author: { id: user.id, name: user.username },
+                            action: 'created',
+                            details: `Criada a partir do formulário "${template.name}"`
+                        };
+                        
+                        const taskPayload: Omit<Task, 'id' | 'origin'> & { origin: any } = {
+                            ...ramification.taskAction,
+                            status: 'pending',
+                            origin: {
+                                type: 'form_submission',
+                                submissionId: '', // This will be set by the provider
+                                questionId: question.id,
+                            },
+                            createdAt: now.toISOString(),
+                            updatedAt: now.toISOString(),
+                            history: [historyItem]
+                        };
 
-                    if (option.action.dueInDays && option.action.dueInDays > 0) {
-                        taskPayload.dueDate = addDays(now, option.action.dueInDays).toISOString();
+                        if (ramification.taskAction.dueInDays && ramification.taskAction.dueInDays > 0) {
+                            taskPayload.dueDate = addDays(now, ramification.taskAction.dueInDays).toISOString();
+                        }
+
+                        tasksToCreate.push(taskPayload);
                     }
-
-                    tasksToCreate.push(taskPayload);
                 }
             });
         }

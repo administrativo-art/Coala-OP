@@ -348,7 +348,7 @@ export type Task = {
         type: 'form_submission';
         submissionId: string;
         questionId: string;
-        optionId: string;
+        optionId?: string; // Optional for non-option based actions
     };
     createdAt: string;
     updatedAt: string;
@@ -368,27 +368,40 @@ export type FormTaskAction = {
     dueInDays?: number;
 };
 
+export type FormQuestionCondition = {
+    id: string;
+    value: string | number;
+    operator: 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte' | 'contains';
+}
+
+export type FormQuestionRamification = {
+    id: string;
+    conditions: FormQuestionCondition[];
+    action: 'show_question' | 'create_task';
+    targetQuestionId?: string; // for 'show_question'
+    taskAction?: FormTaskAction; // for 'create_task'
+};
+
 export type FormQuestion = {
     id: string;
     label: string;
-    type: 'yes-no' | 'text' | 'number' | 'single-choice' | 'multiple-choice' | 'file-attachment';
+    description?: string;
+    type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment';
     isRequired: boolean;
+    options?: { id: string; value: string; }[];
     attachmentConfig?: {
         allowMultiple: boolean;
         allowedFileTypes: ('image' | 'pdf' | 'video')[];
         allowCamera: boolean;
     };
-    options?: {
-        id: string;
-        value: string;
-        subQuestions: FormQuestion[];
-        action?: FormTaskAction;
-    }[];
+    ramifications?: FormQuestionRamification[];
+    // Visual builder properties
+    position: { x: number; y: number };
 };
 
 export type FormSection = {
   id: string;
-  name?: string;
+  name: string;
   questions: FormQuestion[];
 };
 
@@ -398,8 +411,8 @@ export type FormTemplate = {
     sections: FormSection[];
     layout: 'continuous' | 'stepped';
     submissionTitleFormat?: string;
-    type: 'standard' | 'operational_checklist'; // Nova propriedade
-    moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null; // Novo
+    type: 'standard' | 'operational_checklist';
+    moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null;
 };
 
 export type FormAnswer = {
