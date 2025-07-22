@@ -108,9 +108,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [copyFromPopoverOpen, setCopyFromPopoverOpen] = useState(false);
-  const [copyFromValue, setCopyFromValue] = useState("");
-
+  
   const { toast } = useToast();
 
   const form = useForm<SimulationFormValues>({
@@ -148,12 +146,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             });
         } else {
             form.reset({ name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
-            setCopyFromValue("");
         }
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
   
   const handleCopyFrom = (simulationId: string) => {
+    if (!simulationId) return;
     const sourceSimulation = simulations.find(s => s.id === simulationId);
     if (!sourceSimulation) return;
 
@@ -317,48 +315,18 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 {!simulationToEdit && (
                   <FormItem>
                       <FormLabel>Copiar de (Opcional)</FormLabel>
-                        <Popover open={copyFromPopoverOpen} onOpenChange={setCopyFromPopoverOpen}>
-                            <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                role="combobox"
-                                className="w-full justify-between font-normal"
-                            >
-                                {copyFromValue
-                                ? simulations.find((s) => s.id === copyFromValue)?.name
-                                : "Selecione uma mercadoria para copiar..."}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                            <Command>
-                                <CommandList>
-                                <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
-                                <CommandGroup>
-                                    {simulations.map((sim) => (
-                                    <CommandItem
-                                        key={sim.id}
-                                        value={sim.id}
-                                        onSelect={(currentValue) => {
-                                            handleCopyFrom(currentValue);
-                                            setCopyFromValue(currentValue);
-                                            setCopyFromPopoverOpen(false);
-                                        }}
-                                    >
-                                        <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            copyFromValue === sim.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                        />
+                        <Select onValueChange={handleCopyFrom}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione uma mercadoria para copiar..."/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {simulations.map((sim) => (
+                                    <SelectItem key={sim.id} value={sim.id}>
                                         {sim.name}
-                                    </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                                </CommandList>
-                            </Command>
-                            </PopoverContent>
-                        </Popover>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                       <FormDescription>
                           Use uma mercadoria existente como modelo para acelerar o cadastro.
                       </FormDescription>
