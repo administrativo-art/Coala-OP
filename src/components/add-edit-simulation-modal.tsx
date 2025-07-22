@@ -30,7 +30,6 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-analysis-flow';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Separator } from './ui/separator';
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
@@ -91,10 +90,10 @@ const formatCurrency = (value: number | undefined | null) => {
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="relative my-4">
     <div className="absolute inset-0 flex items-center" aria-hidden="true">
-      <div className="w-full border-t border-border/60" />
+      <div className="w-full border-t border-border/60 border-dashed" />
     </div>
-    <div className="relative flex justify-center text-xs uppercase">
-      <span className="bg-background px-2 font-semibold text-muted-foreground tracking-wider">{children}</span>
+    <div className="relative flex justify-center">
+      <span className="bg-background px-3 font-semibold text-muted-foreground tracking-wider uppercase text-xs">{children}</span>
     </div>
   </div>
 );
@@ -341,6 +340,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                                     value={sim.id}
                                                     onSelect={handleCopyFrom}
                                                 >
+                                                    <Check className={cn("mr-2 h-4 w-4", form.getValues('name').includes(sim.name) ? "opacity-100" : "opacity-0")} />
                                                     {sim.name}
                                                 </CommandItem>
                                             ))}
