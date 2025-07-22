@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState, useEffect } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type FormQuestion, type User, type Profile } from '@/types';
@@ -73,22 +73,77 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     }
   });
 
-  const { fields: optionFields, append: appendOption, remove: removeOption } = useFieldArray({
+  const { fields: optionFields, append: appendOption, remove: removeOption, replace: replaceOptions } = useFieldArray({
     control: form.control,
     name: "options"
   });
   
-  const { fields: ramificationFields, append: appendRamification, remove: removeRamification } = useFieldArray({
+  const { fields: ramificationFields, append: appendRamification, remove: removeRamification, replace: replaceRamifications } = useFieldArray({
       control: form.control,
       name: "ramifications"
   });
 
   const questionType = form.watch('type');
-  const showOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
+  const watchedOptions = useWatch({ control: form.control, name: 'options' });
+  const showOptions = ['single-choice', 'multiple-choice'].includes(questionType);
 
-  const onSubmit = (values: FormQuestionValues) => {
+  const onSubmit = () => {
+    const values = form.getValues();
     onChange({ ...question, ...values });
   };
+  
+  // Debounced submit on form change
+  useEffect(() => {
+    const subscription = form.watch((value, { name, type }) => {
+        if (type === 'change') {
+            const timeoutId = setTimeout(() => onSubmit(), 500);
+            return () => clearTimeout(timeoutId);
+        }
+    });
+    return () => subscription.unsubscribe();
+  }, [form.watch, onSubmit]);
+
+
+  useEffect(() => {
+    if (questionType === 'yes-no') {
+        const yesNoOptions = [{ id: 'yes', value: 'Sim' }, { id: 'no', value: 'Não' }];
+        replaceOptions(yesNoOptions);
+
+        const yesNoRamifications = yesNoOptions.map(opt => ({
+            id: `ram-${opt.id}`,
+            conditions: [{ id: nanoid(), value: opt.value, operator: 'eq' as const }],
+            action: 'show_question' as const
+        }));
+        replaceRamifications(yesNoRamifications);
+    } else if (questionType === 'text' || questionType === 'number' || questionType === 'file-attachment') {
+        replaceOptions([]);
+    }
+  }, [questionType, replaceOptions, replaceRamifications]);
+
+  useEffect(() => {
+    if (questionType === 'single-choice' || questionType === 'multiple-choice') {
+        const optionValues = new Set(watchedOptions?.map(o => o.value) || []);
+        
+        // Add ramifications for new options
+        const currentRamificationValues = new Set(ramificationFields.map(r => r.conditions[0].value));
+        optionValues.forEach(optValue => {
+            if (optValue && !currentRamificationValues.has(optValue)) {
+                appendRamification({
+                    id: nanoid(),
+                    conditions: [{ id: nanoid(), value: optValue, operator: 'eq' }],
+                    action: 'show_question',
+                });
+            }
+        });
+
+        // Remove ramifications for deleted options
+        const ramificaitonsToRemove = ramificationFields
+            .map((field, index) => ({ field, index }))
+            .filter(item => !optionValues.has(item.field.conditions[0].value));
+            
+        removeRamification(ramificaitonsToRemove.map(item => item.index));
+    }
+  }, [watchedOptions, questionType, appendRamification, removeRamification, ramificationFields]);
   
   const handleAddNewRamification = () => {
     appendRamification({
@@ -97,6 +152,8 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
         action: 'show_question',
     });
   };
+
+  const isRamificationDisabled = questionType === 'yes-no' || questionType === 'single-choice' || questionType === 'multiple-choice';
 
   return (
     <div className="w-[500px] h-full border-l bg-card flex flex-col shrink-0">
@@ -108,7 +165,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
       </div>
 
       <Form {...form}>
-        <form onChange={() => form.handleSubmit(onSubmit)()} className="flex-1 overflow-hidden flex flex-col">
+        <form className="flex-1 overflow-hidden flex flex-col">
           <ScrollArea className="flex-1 pr-4">
               <div className="p-4 space-y-4">
                   <FormField control={form.control} name="label" render={({ field }) => (
@@ -160,16 +217,21 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                      
                      {ramificationFields.map((field, index) => {
                          const ramification = form.watch(`ramifications.${index}`);
+                         const conditionValue = ramification.conditions[0].value;
+                         const isPredefined = isRamificationDisabled && watchedOptions?.some(o => o.value === conditionValue);
+
                          return (
                             <div key={field.id} className="p-3 border rounded-lg space-y-3 bg-muted/50">
                                 <div className="flex justify-between items-center">
                                     <p className="font-medium text-sm">SE a resposta for...</p>
-                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeRamification(index)}><Trash2 className="h-4 w-4"/></Button>
+                                    {!isPredefined &&
+                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeRamification(index)}><Trash2 className="h-4 w-4"/></Button>
+                                    }
                                 </div>
                                 <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                     <FormField control={form.control} name={`ramifications.${index}.conditions.0.operator`} render={({field}) => (
                                         <FormItem>
-                                             <Select onValueChange={field.onChange} value={field.value}>
+                                             <Select onValueChange={field.onChange} value={field.value} disabled={isPredefined}>
                                                 <FormControl><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger></FormControl>
                                                 <SelectContent>
                                                     <SelectItem value="eq">igual a</SelectItem>
@@ -182,7 +244,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                         </FormItem>
                                     )}/>
                                     <FormField control={form.control} name={`ramifications.${index}.conditions.0.value`} render={({field}) => (
-                                        <FormItem><FormControl><Input {...field} className="h-8" /></FormControl></FormItem>
+                                        <FormItem><FormControl><Input {...field} className="h-8" disabled={isPredefined} /></FormControl></FormItem>
                                     )}/>
                                 </div>
                                 
@@ -233,7 +295,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                                         <FormControl><SelectTrigger className="h-8"><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                                         <SelectContent>
                                                             {(ramification.taskAction.assigneeType === 'user' ? users : profiles).map(item => (
-                                                                <SelectItem key={item.id} value={item.id}>{item.username || item.name}</SelectItem>
+                                                                <SelectItem key={item.id} value={item.id}>{(item as any).username || (item as any).name}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select><FormMessage/>
@@ -245,7 +307,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                             </div>
                          )
                      })}
-                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleAddNewRamification}>
+                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleAddNewRamification} disabled={isRamificationDisabled}>
                           <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Regra
                       </Button>
                   </div>
