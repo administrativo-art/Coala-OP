@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -20,7 +21,7 @@ export function BaseProductManagement() {
   const { kiosks } = useKiosks();
 
   const [productToDelete, setProductToDelete] = useState<BaseProduct | null>(null);
-  const [productToEdit, setProductToEdit] = useState<BaseProduct | null>(null);
+  const [productToEditId, setProductToEditId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleDeleteClick = (product: BaseProduct) => {
@@ -40,12 +41,12 @@ export function BaseProductManagement() {
   };
 
   const handleAddNew = () => {
-    setProductToEdit(null);
+    setProductToEditId(null);
     setIsModalOpen(true);
   };
 
   const handleEdit = (product: BaseProduct) => {
-    setProductToEdit(product);
+    setProductToEditId(product.id);
     setIsModalOpen(true);
   };
 
@@ -128,7 +129,7 @@ export function BaseProductManagement() {
       <AddEditBaseProductModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
-        productToEdit={productToEdit}
+        productToEditId={productToEditId}
       />
 
       {productToDelete && (

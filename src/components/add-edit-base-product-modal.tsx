@@ -39,14 +39,19 @@ type BaseProductFormValues = z.infer<typeof baseProductSchema>;
 interface AddEditBaseProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  productToEdit: BaseProduct | null;
+  productToEditId: string | null;
 }
 
-export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: AddEditBaseProductModalProps) {
-  const { updateBaseProduct, addBaseProduct } = useBaseProducts();
+export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }: AddEditBaseProductModalProps) {
+  const { baseProducts, updateBaseProduct, addBaseProduct } = useBaseProducts();
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  
+  const productToEdit = useMemo(() => {
+    if (!productToEditId) return null;
+    return baseProducts.find(p => p.id === productToEditId) || null;
+  }, [productToEditId, baseProducts]);
 
   const sortedKiosks = useMemo(() => {
     return [...kiosks].sort((a,b) => {
@@ -117,7 +122,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
         stockLevels: stockLevelsObject
       };
       
-      // Only update initial cost if it's not frozen
       if (!productToEdit.lastEffectivePrice) {
           updatedProduct.initialCostPerUnit = values.initialCostPerUnit;
       }
@@ -142,7 +146,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
     
     const updatedProduct = {
       ...productToEdit,
-      lastEffectivePrice: null // This will be handled by the provider to remove the field
+      lastEffectivePrice: null
     };
 
     updateBaseProduct(updatedProduct);
@@ -290,4 +294,3 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEdit }: A
     </>
   );
 }
-
