@@ -62,7 +62,7 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     const templateRef = doc(db, "formTemplates", template.id);
     const { id, ...dataToUpdate } = template;
     try {
-      await updateDoc(templateRef, dataToUpdate);
+      await updateDoc(templateRef, dataToUpdate as any);
     } catch (error) {
       console.error("Error updating template:", error);
     }

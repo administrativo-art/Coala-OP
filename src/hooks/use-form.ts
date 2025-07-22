@@ -12,22 +12,8 @@ type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
     generateDailyChecklist: (kioskId: string, kioskName: string, date: string, dailySchedule: any) => Promise<void>;
 };
 
-const getAllQuestions = (sections: any[]): FormQuestion[] => {
-    const questions: FormQuestion[] = [];
-    const recurse = (qs: FormQuestion[] | undefined) => {
-        if (!qs) return;
-        qs.forEach(q => {
-            questions.push(q);
-            if (q.ramifications) {
-                q.ramifications.forEach(ram => {
-                    // This part would need to be expanded if we were to find questions inside ramifications
-                    // For now, we assume a flat structure within a section for finding questions by ID.
-                });
-            }
-        });
-    };
-    sections.forEach(sec => recurse(sec.questions));
-    return questions;
+const getAllQuestionsFromTemplate = (template: FormTemplate): FormQuestion[] => {
+    return template.sections.flatMap(section => section.questions || []);
 };
 
 export const useForm = (): EnrichedFormContextType => {
@@ -47,49 +33,49 @@ export const useForm = (): EnrichedFormContextType => {
     let submissionStatus: 'completed' | 'in_progress' = 'completed';
     const tasksToCreate: Omit<Task, 'id' | 'origin'>[] = [];
     
-    const allQuestions = getAllQuestions(template.sections);
-
-    const findQuestion = (id: string): (FormQuestion | undefined) => {
-        return allQuestions.find(q => q.id === id);
-    };
+    const allQuestions = getAllQuestionsFromTemplate(template);
+    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
 
     submission.answers.forEach(answer => {
-        const question = findQuestion(answer.questionId);
+        const question = questionMap.get(answer.questionId);
         if (question && question.ramifications) {
             question.ramifications.forEach(ramification => {
-                if (ramification.action === 'create_task' && ramification.taskAction) {
-                    // Implement condition checking logic here
-                    // For simplicity, let's assume a simple 'eq' check for now
-                    const condition = ramification.conditions[0];
-                    if (condition && String(answer.value) === String(condition.value)) {
-                        submissionStatus = 'in_progress';
-                        const now = new Date();
-                        const historyItem: TaskHistoryItem = {
-                            timestamp: now.toISOString(),
-                            author: { id: user.id, name: user.username },
-                            action: 'created',
-                            details: `Criada a partir do formulário "${template.name}"`
-                        };
-                        
-                        const taskPayload: Omit<Task, 'id' | 'origin'> & { origin: any } = {
-                            ...ramification.taskAction,
-                            status: 'pending',
-                            origin: {
-                                type: 'form_submission',
-                                submissionId: '', // This will be set by the provider
-                                questionId: question.id,
-                            },
-                            createdAt: now.toISOString(),
-                            updatedAt: now.toISOString(),
-                            history: [historyItem]
-                        };
+                const condition = ramification.conditions[0]; // Simplified for now
+                let conditionMet = false;
 
-                        if (ramification.taskAction.dueInDays && ramification.taskAction.dueInDays > 0) {
-                            taskPayload.dueDate = addDays(now, ramification.taskAction.dueInDays).toISOString();
-                        }
+                if (condition && condition.operator === 'eq' && String(answer.value) === String(condition.value)) {
+                    conditionMet = true;
+                }
+                // NOTE: More complex condition checks (neq, gt, lt, etc.) would be implemented here.
 
-                        tasksToCreate.push(taskPayload);
+                if (conditionMet && ramification.action === 'create_task' && ramification.taskAction) {
+                    submissionStatus = 'in_progress';
+                    const now = new Date();
+                    const historyItem: TaskHistoryItem = {
+                        timestamp: now.toISOString(),
+                        author: { id: user.id, name: user.username },
+                        action: 'created',
+                        details: `Criada a partir do formulário "${template.name}"`
+                    };
+                    
+                    const taskPayload: Omit<Task, 'id' | 'origin'> & { origin: any } = {
+                        ...ramification.taskAction,
+                        status: 'pending',
+                        origin: {
+                            type: 'form_submission',
+                            submissionId: '',
+                            questionId: question.id,
+                        },
+                        createdAt: now.toISOString(),
+                        updatedAt: now.toISOString(),
+                        history: [historyItem]
+                    };
+
+                    if (ramification.taskAction.dueInDays && ramification.taskAction.dueInDays > 0) {
+                        taskPayload.dueDate = addDays(now, ramification.taskAction.dueInDays).toISOString();
                     }
+
+                    tasksToCreate.push(taskPayload);
                 }
             });
         }

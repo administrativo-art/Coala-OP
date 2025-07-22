@@ -23,43 +23,31 @@ import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIco
 import { useToast } from '@/hooks/use-toast';
 import { PhotoCaptureModal } from './photo-capture-modal';
 
-
 const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
-    const questions: FormQuestion[] = [];
-    const recurse = (qs: FormQuestion[] | undefined) => {
-        if (!qs) return;
-        qs.forEach(q => {
-            questions.push(q);
-            if (q.options) {
-                q.options.forEach(opt => {
-                    recurse(opt.subQuestions);
-                });
-            }
-        });
-    };
-    sections.forEach(sec => recurse(sec.questions));
-    return questions;
+    return sections.flatMap(section => section.questions || []);
 };
 
 const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<string, any>): Set<string> => {
     const visibleIds = new Set<string>();
-    const recurse = (questions: FormQuestion[] | undefined, isVisible: boolean) => {
-        if (!questions || !isVisible) return;
-        questions.forEach(q => {
-            visibleIds.add(q.id);
-            const answer = formValues[q.id];
-            if (q.options && answer) {
-                const selectedValues = Array.isArray(answer) ? answer : [answer];
-                q.options.forEach(opt => {
-                    recurse(opt.subQuestions, selectedValues.includes(opt.value));
-                });
-            }
-        });
-    };
-    sections.forEach(sec => recurse(sec.questions, true));
+    const allQuestions = getAllQuestions(sections);
+    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
+
+    allQuestions.forEach(q => {
+        // A question is visible by default unless a condition hides it (not implemented, but good practice)
+        visibleIds.add(q.id);
+    });
+
+    // This logic needs to be enhanced if we add show/hide ramifications
+    // For now, all questions are considered potentially visible.
+    
+    // A more advanced implementation would traverse the graph:
+    // 1. Start with root questions.
+    // 2. For each answered question, evaluate its ramifications.
+    // 3. If a ramification shows a new question, add it to a "to-visit" queue.
+    // 4. Continue until all visible paths are explored.
+
     return visibleIds;
 };
-
 
 const generateSchema = (allQuestions: FormQuestion[]) => {
     let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
@@ -91,19 +79,10 @@ const generateSchema = (allQuestions: FormQuestion[]) => {
 }
 
 function RenderedQuestion({ question, control }: { question: FormQuestion; control: Control<any> }) {
-    const answer = useWatch({ control, name: question.id });
     const { toast } = useToast();
     const [isUploading, setIsUploading] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    
-    const subQuestions = useMemo(() => {
-        if (!question.options || !answer) return [];
-        const selectedValues = Array.isArray(answer) ? answer : [answer];
-        return question.options
-            .filter(opt => selectedValues.includes(opt.value))
-            .flatMap(opt => opt.subQuestions || []);
-    }, [answer, question.options]);
     
     const handleFileChange = async (files: FileList | null) => {
         if (!files) return;
@@ -233,11 +212,6 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                     }
                 }}
             />
-            {subQuestions.length > 0 && (
-                <div className="pl-4 border-l-2 ml-2 space-y-6">
-                    <QuestionRenderer questions={subQuestions} control={control} />
-                </div>
-            )}
         </div>
     );
 }
@@ -267,17 +241,8 @@ const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>
                 questionId: q.id,
                 questionLabel: q.label,
                 value: value,
-                subAnswers: []
+                subAnswers: [] // Sub-answers are not supported in this simplified model.
             };
-
-            if (q.options) {
-                const selectedValues = Array.isArray(value) ? value : [value];
-                q.options.forEach(opt => {
-                    if (selectedValues.includes(opt.value) && opt.subQuestions && opt.subQuestions.length > 0) {
-                        answer.subAnswers = (answer.subAnswers || []).concat(buildAnswers(opt.subQuestions, formValues));
-                    }
-                });
-            }
             results.push(answer);
         }
     });
