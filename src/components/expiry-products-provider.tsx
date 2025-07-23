@@ -181,8 +181,20 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
       try {
+        // Step 1: Read all necessary data outside the transaction
+        const destinationLotChecks = await Promise.all(paramsArray.map(params => {
+          const destQuery = query(
+            collection(db, "lots"),
+            where("productId", "==", params.productId),
+            where("lotNumber", "==", params.lotNumber),
+            where("kioskId", "==", params.toKioskId),
+            where("locationId", "==", null)
+          );
+          return getDocs(destQuery);
+        }));
+
         await runTransaction(db, async (transaction) => {
-            for (const params of paramsArray) {
+            for (const [index, params] of paramsArray.entries()) {
                 const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
                 const sourceLotRef = doc(db, "lots", lotId);
                 
@@ -197,17 +209,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
                 const newSourceQuantity = sourceLot.quantity - quantityToMove;
                 transaction.update(sourceLotRef, { quantity: newSourceQuantity });
-
-                const destQuery = query(
-                    collection(db, "lots"),
-                    where("productId", "==", sourceLot.productId),
-                    where("lotNumber", "==", sourceLot.lotNumber),
-                    where("expiryDate", "==", sourceLot.expiryDate),
-                    where("kioskId", "==", toKioskId),
-                    where("locationId", "==", null) // Moved stock arrives without a location
-                );
                 
-                const destSnap = await getDocs(destQuery); // This has to be outside the transaction
+                // Use the pre-fetched data inside the transaction
+                const destSnap = destinationLotChecks[index];
                 let destLotId;
 
                 if (!destSnap.empty) {
