@@ -404,6 +404,8 @@ export type FormSection = {
   questions: FormQuestion[];
   position: { x: number; y: number };
   color?: string;
+  width?: number;
+  height?: number;
 };
 
 export type FormTemplate = {

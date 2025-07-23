@@ -23,6 +23,7 @@ import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
 import { AddNode } from './add-node';
 import { nanoid } from 'nanoid';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 interface FormBuilderProps {
   initialTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
@@ -33,10 +34,12 @@ interface FormBuilderProps {
 
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
+const DEFAULT_SECTION_HEIGHT = 600;
 
 export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
 
   const nodeTypes: NodeTypes = useMemo(() => ({
     section: SectionNode,
@@ -49,13 +52,15 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     
     if (type === 'section') {
       const lastSection = newTemplate.sections[newTemplate.sections.length - 1];
-      const newX = lastSection ? lastSection.position.x + SECTION_WIDTH + SECTION_GAP : 0;
+      const newX = lastSection ? lastSection.position.x + (lastSection.width || SECTION_WIDTH) + SECTION_GAP : 0;
       
       newTemplate.sections.push({
         id: `section-${nanoid()}`,
         name: `Momento ${newTemplate.sections.length + 1}`,
         questions: [],
         position: { x: newX, y: 0 },
+        width: SECTION_WIDTH,
+        height: DEFAULT_SECTION_HEIGHT,
         color: '#FEE2E2',
       });
     } else if (type === 'card' && parentId) {
@@ -68,7 +73,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           label: 'Nova Pergunta',
           type: 'text',
           isRequired: false,
-          position: { x: section.position.x + 20 + xOffset, y: 80 + yOffset },
+          position: { x: 20 + xOffset, y: 80 + yOffset },
         });
       }
     }
@@ -85,6 +90,15 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     }
   }
 
+  const handleDeleteSection = () => {
+    if (!sectionToDelete) return;
+
+    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+    newTemplate.sections = newTemplate.sections.filter((s: FormSection) => s.id !== sectionToDelete);
+    onTemplateChange(newTemplate);
+    setSectionToDelete(null);
+  };
+
 
   useEffect(() => {
     if (!initialTemplate || !initialTemplate.sections) {
@@ -97,6 +111,9 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     let currentX = 0;
 
     initialTemplate.sections.forEach((section) => {
+      const sectionWidth = section.width || SECTION_WIDTH;
+      const sectionHeight = section.height || DEFAULT_SECTION_HEIGHT;
+      
       // Add Section Node
       newNodes.push({
         id: section.id,
@@ -105,23 +122,12 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             label: section.name,
             color: section.color,
             onUpdate: (updates: Partial<FormSection>) => handleSectionUpdate(section.id, updates),
+            onDelete: () => setSectionToDelete(section.id),
         },
         position: section.position,
-        draggable: false,
-        style: { width: SECTION_WIDTH, height: 'auto', minHeight: '600px' },
-        zIndex: 1, // Ensure sections are in the background
+        style: { width: sectionWidth, height: sectionHeight },
+        zIndex: 1,
       });
-
-      // Add Question Nodes for the section
-      const questionCount = section.questions.length;
-      const addNodeHeight = 60;
-      const sectionHeight = Math.max(600, (questionCount * 100) + addNodeHeight);
-      
-      const updatedSectionNode = newNodes.find(n => n.id === section.id);
-      if(updatedSectionNode) {
-          updatedSectionNode.style = { ...updatedSectionNode.style, height: `${sectionHeight}px` };
-      }
-
 
       section.questions.forEach((question, index) => {
         newNodes.push({
@@ -130,7 +136,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           data: { label: question.label, description: question.description },
           position: question.position,
           draggable: true,
-          zIndex: 10, // Ensure questions are on top
+          zIndex: 10, 
         });
 
         // Add edges for ramifications
@@ -148,17 +154,8 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           }
         });
       });
-
-      // Add the "Add Card" node at the end of the section
-      newNodes.push({
-        id: `add-card-${section.id}`,
-        type: 'add_node',
-        data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
-        position: { x: section.position.x, y: section.position.y + sectionHeight - addNodeHeight - 10 },
-        zIndex: 2, // Above section, below questions
-      });
       
-      currentX = section.position.x + SECTION_WIDTH + SECTION_GAP;
+      currentX = section.position.x + sectionWidth + SECTION_GAP;
     });
 
     // Add the "Add Section" node at the end
@@ -178,7 +175,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => {
-        if (node.type === 'question') {
+        if (node.type === 'question' || node.type === 'section') {
           node.selected = node.id === selectedNodeId;
         }
         return node;
@@ -190,22 +187,33 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     (changes) => {
         setNodes((nds) => applyNodeChanges(changes, nds));
         
-        const nodePositionChange = changes.find(c => c.type === 'position' && c.dragging === false);
-        if (nodePositionChange && 'position' in nodePositionChange && nodePositionChange.position) {
-            const { id, position } = nodePositionChange;
-            let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-            let questionFound = false;
-            for (const section of newTemplate.sections) {
-                const questionIndex = section.questions.findIndex((q:any) => q.id === id);
-                if (questionIndex > -1) {
-                    section.questions[questionIndex].position = position;
-                    questionFound = true;
-                    break;
+        let templateNeedsUpdate = false;
+        let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+        
+        changes.forEach(change => {
+            if (change.type === 'position' && change.dragging === false && change.position) {
+                const { id, position } = change;
+                for (const section of newTemplate.sections) {
+                    const questionIndex = section.questions.findIndex((q:any) => q.id === id);
+                    if (questionIndex > -1) {
+                        section.questions[questionIndex].position = position;
+                        templateNeedsUpdate = true;
+                        break;
+                    }
+                }
+            } else if (change.type === 'dimensions' && change.resizing === false && change.dimensions) {
+                const { id, dimensions } = change;
+                const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === id);
+                if (sectionIndex > -1) {
+                    newTemplate.sections[sectionIndex].width = dimensions.width;
+                    newTemplate.sections[sectionIndex].height = dimensions.height;
+                    templateNeedsUpdate = true;
                 }
             }
-            if (questionFound) {
-                onTemplateChange(newTemplate);
-            }
+        });
+        
+        if (templateNeedsUpdate) {
+            onTemplateChange(newTemplate);
         }
     },
     [setNodes, initialTemplate, onTemplateChange]
@@ -221,7 +229,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
   );
   
   const onNodeClick: OnNodeClick = useCallback((event, node) => {
-    if (node.type === 'question') {
+    if (node.type === 'question' || node.type === 'section') {
         onNodeSelect(node.id);
     } else {
         onNodeSelect(null);
@@ -244,6 +252,14 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         <Controls />
         <Background />
       </ReactFlow>
+      
+      <DeleteConfirmationDialog 
+        open={!!sectionToDelete}
+        onOpenChange={() => setSectionToDelete(null)}
+        onConfirm={handleDeleteSection}
+        title="Excluir Momento?"
+        description="Esta ação é irreversível e excluirá o momento e todas as perguntas contidas nele."
+      />
     </div>
   );
 }
