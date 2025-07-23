@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState } from "react";
@@ -38,7 +39,7 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 
 export function RepositionManagement() {
     const { activities, loading, deleteRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
-    const { user } = useAuth();
+    const { user, permissions } = useAuth();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
@@ -165,7 +166,7 @@ export function RepositionManagement() {
                                             Auditar Recebimento
                                         </Button>
                                     )}
-                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && user?.username === 'Tiago Brasil' && (
+                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.audit.approve && (
                                         <>
                                             <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
                                                 <Undo2 className="mr-2 h-4 w-4" />
