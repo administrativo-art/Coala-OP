@@ -44,7 +44,7 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
     />
     <Card 
         className={cn(
-            "h-full w-full transition-colors border-2",
+            "h-full w-full transition-colors border-2 bg-transparent",
             selected ? 'border-primary ring-2 ring-ring' : 'border-dashed'
         )}
         style={{ borderColor: data.color || 'hsl(var(--border))' }}
@@ -54,7 +54,7 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
           value={name} 
           onChange={(e) => setName(e.target.value)}
           className={cn(
-            "text-lg font-semibold border-none bg-transparent focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto",
+            "text-lg font-semibold border-none bg-card focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto w-auto inline-block",
             "text-foreground placeholder:text-muted-foreground"
           )}
         />
@@ -69,7 +69,7 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                         {colorSwatches.map(color => (
                              <Button key={color}
                                 variant="outline"
@@ -78,6 +78,12 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
                                 onClick={() => data.onUpdate({ color })}
                              />
                         ))}
+                        <Input
+                            type="color"
+                            value={data.color || '#000000'}
+                            onChange={(e) => data.onUpdate({ color: e.target.value })}
+                            className="w-10 h-8 p-1"
+                        />
                         <Button
                             variant="outline"
                             className={cn("h-7 w-7 p-0 rounded-full", !data.color && "border-2 border-primary ring-2 ring-ring")}
