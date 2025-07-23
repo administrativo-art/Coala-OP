@@ -34,7 +34,7 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
       type: template.type,
       moment: template.moment,
       layout: template.layout,
-      submissionTitleFormat: template.submissionTitleFormat,
+      submissionTitleFormat: template.submissionTitleFormat || '',
     },
   });
 
