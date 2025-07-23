@@ -157,7 +157,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                         <div>
                           <p className="font-semibold">{getProductFullName(product)}</p>
                           <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} {product.unit}(s)</p>
+                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} unid.</p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground"/>
                         <FormField
