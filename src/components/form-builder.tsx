@@ -35,6 +35,8 @@ interface FormBuilderProps {
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
 const DEFAULT_SECTION_HEIGHT = 600;
+const CARD_HEIGHT = 80;
+const CARD_VERTICAL_GAP = 20;
 
 export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -66,14 +68,14 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     } else if (type === 'card' && parentId) {
       const section = newTemplate.sections.find((s: any) => s.id === parentId);
       if (section) {
-        const yOffset = (section.questions.length % 5) * 100;
-        const xOffset = Math.floor(section.questions.length / 5) * 150;
+        const lastQuestionY = section.questions.length > 0 ? section.questions[section.questions.length - 1].position.y : 60;
+
         section.questions.push({
           id: `question-${nanoid()}`,
           label: 'Nova Pergunta',
           type: 'text',
           isRequired: false,
-          position: { x: 20 + xOffset, y: 80 + yOffset },
+          position: { x: 20, y: lastQuestionY + CARD_HEIGHT + CARD_VERTICAL_GAP },
         });
       }
     }
@@ -114,7 +116,6 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
       const sectionWidth = section.width || SECTION_WIDTH;
       const sectionHeight = section.height || DEFAULT_SECTION_HEIGHT;
       
-      // Add Section Node
       newNodes.push({
         id: section.id,
         type: 'section',
@@ -135,11 +136,12 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           type: 'question',
           data: { label: question.label, description: question.description },
           position: question.position,
+          parentId: section.id,
+          extent: 'parent',
           draggable: true,
-          zIndex: 10, 
+          zIndex: 10,
         });
 
-        // Add edges for ramifications
         question.ramifications?.forEach(ramification => {
           if (ramification.action === 'show_question' && ramification.targetQuestionId) {
             newEdges.push({
@@ -155,10 +157,20 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         });
       });
       
+      const lastQuestionY = section.questions.length > 0 ? section.questions[section.questions.length - 1].position.y : 60;
+      newNodes.push({
+          id: `add-card-${section.id}`,
+          type: 'add_node',
+          data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
+          position: { x: 20, y: lastQuestionY + CARD_HEIGHT + CARD_VERTICAL_GAP },
+          parentId: section.id,
+          zIndex: 10,
+          draggable: false,
+      });
+      
       currentX = section.position.x + sectionWidth + SECTION_GAP;
     });
 
-    // Add the "Add Section" node at the end
     newNodes.push({
       id: 'add-section-node',
       type: 'add_node',
@@ -194,6 +206,11 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             if (change.type === 'position' && change.dragging === false && change.position) {
                 const { id, position } = change;
                 for (const section of newTemplate.sections) {
+                    if (section.id === id) {
+                        section.position = position;
+                        templateNeedsUpdate = true;
+                        break;
+                    }
                     const questionIndex = section.questions.findIndex((q:any) => q.id === id);
                     if (questionIndex > -1) {
                         section.questions[questionIndex].position = position;

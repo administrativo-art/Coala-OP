@@ -55,9 +55,9 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
           value={name} 
           onChange={(e) => setName(e.target.value)}
           className={cn(
-            "text-lg font-semibold border-none bg-transparent focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto w-auto inline-block",
-            "text-foreground placeholder:text-muted-foreground"
+            "text-lg font-semibold border-none bg-transparent focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto",
           )}
+          style={{color: 'hsl(var(--foreground))'}}
         />
         <div className="absolute top-2 right-2 flex gap-1">
             <Button variant="ghost" size="icon" className={cn("h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive")} onClick={(e) => { e.stopPropagation(); data.onDelete(); }}>
