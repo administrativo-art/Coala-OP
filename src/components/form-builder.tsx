@@ -16,6 +16,7 @@ import ReactFlow, {
   type NodeTypes,
   type OnNodeClick,
   MarkerType,
+  OnNodesDelete,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
@@ -207,6 +208,20 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     },
     [setNodes, initialTemplate, onTemplateChange]
   );
+  
+  const onNodesDelete: OnNodesDelete = useCallback((deletedNodes) => {
+    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+    
+    deletedNodes.forEach(node => {
+      // Find and remove the question from the template data
+      newTemplate.sections.forEach((section: FormSection) => {
+        section.questions = section.questions.filter(q => q.id !== node.id);
+      });
+    });
+
+    onTemplateChange(newTemplate);
+  }, [initialTemplate, onTemplateChange]);
+
 
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
@@ -232,6 +247,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodesDelete={onNodesDelete}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}

@@ -124,21 +124,24 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         label: 'Nova Pergunta',
         type: 'text',
         isRequired: false,
-        position: { x: 10, y: 10 }, // Default position, user will move it
+        position: { x: 10, y: 10 },
     };
 
-    const newSections = internalTemplate.sections.map((section, index) => {
-        // Add the new question to the first section by default.
-        // The user can then move it freely.
-        if (index === 0) {
-            return {
-                ...section,
-                questions: [...section.questions, newQuestion]
-            };
-        }
-        return section;
-    });
-
+    // Add the new question to the first section
+    // or to a new section if none exist.
+    const newSections = [...(internalTemplate.sections || [])];
+    if (newSections.length === 0) {
+        newSections.push({
+            id: `section-${nanoid()}`,
+            name: 'Novo Momento',
+            questions: [newQuestion],
+            position: { x: 0, y: 0 },
+            color: '#FEE2E2'
+        });
+    } else {
+        newSections[0].questions = [...(newSections[0].questions || []), newQuestion];
+    }
+    
     handleTemplateChange({ ...internalTemplate, sections: newSections });
   };
   
