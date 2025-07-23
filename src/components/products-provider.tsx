@@ -141,7 +141,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     const brandPart = product.brand ? ` - ${product.brand}` : '';
     let sizePart = '';
     if (product.packageSize && product.unit) {
-        const unitDisplay = product.unit.toLowerCase().includes('pacote') ? '' : product.unit;
+        const unitDisplay = product.unit.toLowerCase().includes('pacote') ? 'un' : product.unit;
         sizePart = ` - ${product.packageSize}${unitDisplay}`;
     }
     return `${product.baseName}${brandPart}${sizePart}`;
