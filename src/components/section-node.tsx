@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { memo, useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import { Input } from './ui/input';
 import { useDebounce } from 'use-debounce';
 import { cn } from '@/lib/utils';
 import { type FormSection } from '@/types';
-import { Palette, Trash2, PlusCircle } from 'lucide-react';
+import { Palette, Trash2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Button } from './ui/button';
 import { NodeResizer } from 'reactflow';
@@ -20,7 +19,6 @@ interface SectionNodeProps {
     color?: string;
     onUpdate: (updates: Partial<Pick<FormSection, 'name' | 'color'>>) => void;
     onDelete: () => void;
-    onAddCard: () => void;
   };
   selected: boolean;
 }
@@ -96,12 +94,6 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
             </Popover>
         </div>
       </CardHeader>
-       <div className="p-4">
-        <Button variant="outline" className="w-full h-10 border-dashed" onClick={data.onAddCard}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Adicionar Card
-        </Button>
-      </div>
     </Card>
     </>
   );

@@ -5,7 +5,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
-import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, Loader2 } from 'lucide-react';
+import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, Loader2, PlusCircle } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -50,7 +50,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }
+            { id: `section-${nanoid()}`, name: 'Novo Momento', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }
           ],
         });
       }
@@ -115,9 +115,35 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         }
     }
   }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
+
+  const handleAddQuestion = () => {
+    if (!internalTemplate) return;
+
+    const newQuestion: FormQuestionType = {
+        id: `question-${nanoid()}`,
+        label: 'Nova Pergunta',
+        type: 'text',
+        isRequired: false,
+        position: { x: 10, y: 10 }, // Default position, user will move it
+    };
+
+    const newSections = internalTemplate.sections.map((section, index) => {
+        // Add the new question to the first section by default.
+        // The user can then move it freely.
+        if (index === 0) {
+            return {
+                ...section,
+                questions: [...section.questions, newQuestion]
+            };
+        }
+        return section;
+    });
+
+    handleTemplateChange({ ...internalTemplate, sections: newSections });
+  };
   
   const selectedQuestion = useMemo(() => {
-    if (!selectedQuestionId || !internalTemplate) return null;
+    if (!selectedQuestionId || !internalTemplate || !internalTemplate.sections) return null;
     for (const section of internalTemplate.sections) {
         const question = section.questions.find(q => q.id === selectedQuestionId);
         if (question) return question;
@@ -207,7 +233,13 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         
         <DialogFooter className="p-4 border-t shrink-0">
           <div className="w-full flex justify-between items-center">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+             <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+                <Button variant="outline" onClick={handleAddQuestion} disabled={isPublished}>
+                    <PlusCircle className="mr-2 h-4 w-4"/>
+                    Adicionar Pergunta
+                </Button>
+            </div>
             
             <div className="flex items-center gap-2">
                 {isPublished ? (

@@ -56,24 +56,13 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
       
       newTemplate.sections.push({
         id: `section-${nanoid()}`,
-        name: `Momento ${newTemplate.sections.length + 1}`,
+        name: `Novo Momento`,
         questions: [],
         position: { x: newX, y: 0 },
         width: SECTION_WIDTH,
         height: DEFAULT_SECTION_HEIGHT,
         color: '#FEE2E2',
       });
-    } else if (type === 'card' && parentId) {
-      const section = newTemplate.sections.find((s: any) => s.id === parentId);
-      if (section) {
-        section.questions.push({
-          id: `question-${nanoid()}`,
-          label: 'Nova Pergunta',
-          type: 'text',
-          isRequired: false,
-          position: { x: section.position.x + 20, y: section.position.y + 60 },
-        });
-      }
     }
     
     onTemplateChange(newTemplate);
@@ -120,7 +109,6 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             color: section.color,
             onUpdate: (updates: Partial<FormSection>) => handleSectionUpdate(section.id, updates),
             onDelete: () => setSectionToDelete(section.id),
-            onAddCard: () => handleAddNode('card', section.id),
         },
         position: section.position,
         style: { width: sectionWidth, height: sectionHeight },
