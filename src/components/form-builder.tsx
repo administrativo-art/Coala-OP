@@ -25,7 +25,7 @@ import { AddNode } from './add-node';
 import { nanoid } from 'nanoid';
 
 interface FormBuilderProps {
-  initialTemplate: FormTemplate | Omit<FormTemplate, 'id'>;
+  initialTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
   onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id'>) => void;
   onNodeSelect: (nodeId: string | null) => void;
   selectedNodeId: string | null;
@@ -33,8 +33,6 @@ interface FormBuilderProps {
 
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
-const CARD_HEIGHT = 80;
-const CARD_GAP = 20;
 
 export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -63,12 +61,14 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     } else if (type === 'card' && parentId) {
       const section = newTemplate.sections.find((s: any) => s.id === parentId);
       if (section) {
+        const yOffset = (section.questions.length % 5) * 100;
+        const xOffset = Math.floor(section.questions.length / 5) * 150;
         section.questions.push({
           id: `question-${nanoid()}`,
           label: 'Nova Pergunta',
           type: 'text',
           isRequired: false,
-          position: { x: 0, y: 0 },
+          position: { x: 20 + xOffset, y: 80 + yOffset },
         });
       }
     }
@@ -108,27 +108,36 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         },
         position: section.position,
         draggable: false,
-        style: { width: SECTION_WIDTH, height: 'auto', minHeight: '300px' },
+        style: { width: SECTION_WIDTH, height: 'auto', minHeight: '600px' },
       });
 
       // Add Question Nodes inside the section
-      let currentY = 80; // Initial Y for cards within a section
-      section.questions.forEach((question) => {
+      const questionCount = section.questions.length;
+      const addNodeHeight = 60;
+      const sectionHeight = Math.max(600, (questionCount * 100) + addNodeHeight);
+      
+      const updatedSectionNode = newNodes.find(n => n.id === section.id);
+      if(updatedSectionNode) {
+          updatedSectionNode.style = { ...updatedSectionNode.style, height: `${sectionHeight}px` };
+      }
+
+
+      section.questions.forEach((question, index) => {
         newNodes.push({
           id: question.id,
           type: 'question',
           data: { label: question.label, description: question.description },
-          position: { x: 20, y: currentY },
+          position: question.position || { x: 20, y: 80 + (index * 100) },
           parentId: section.id,
           extent: 'parent',
+          draggable: true,
         });
-        currentY += CARD_HEIGHT + CARD_GAP;
 
         // Add edges for ramifications
         question.ramifications?.forEach(ramification => {
           if (ramification.action === 'show_question' && ramification.targetQuestionId) {
             newEdges.push({
-              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.id}`,
+              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.conditions[0].value || ramification.id}`,
               source: question.id,
               target: ramification.targetQuestionId,
               type: 'smoothstep',
@@ -144,7 +153,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         id: `add-card-${section.id}`,
         type: 'add_node',
         data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
-        position: { x: 20, y: currentY },
+        position: { x: 20, y: sectionHeight - addNodeHeight - 10 },
         parentId: section.id,
         extent: 'parent',
       });
@@ -177,9 +186,30 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
   }, [selectedNodeId]);
 
   const onNodesChange: OnNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [setNodes]
+    (changes) => {
+        setNodes((nds) => applyNodeChanges(changes, nds));
+        
+        const nodePositionChange = changes.find(c => c.type === 'position' && c.dragging === false);
+        if (nodePositionChange && 'position' in nodePositionChange && nodePositionChange.position) {
+            const { id, position } = nodePositionChange;
+            let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+            let questionFound = false;
+            for (const section of newTemplate.sections) {
+                const questionIndex = section.questions.findIndex((q:any) => q.id === id);
+                if (questionIndex > -1) {
+                    section.questions[questionIndex].position = position;
+                    questionFound = true;
+                    break;
+                }
+            }
+            if (questionFound) {
+                onTemplateChange(newTemplate);
+            }
+        }
+    },
+    [setNodes, initialTemplate, onTemplateChange]
   );
+
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
     [setEdges]

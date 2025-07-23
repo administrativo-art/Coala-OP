@@ -104,7 +104,7 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
                          <FormField control={form.control} name="layout" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Layout de Preenchimento</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={(field.onChange as (value: 'continuous' | 'stepped') => void)} value={field.value}>
                                     <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                     <SelectContent>
                                         <SelectItem value="continuous">Contínuo (Todas as perguntas na mesma página)</SelectItem>

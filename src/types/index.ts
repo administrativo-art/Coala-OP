@@ -686,5 +686,3 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
-
-    
