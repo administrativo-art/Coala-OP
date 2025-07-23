@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -179,102 +178,112 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
-      try {
-        // Step 1: Read all necessary data outside the transaction
-        const destinationLotChecks = await Promise.all(paramsArray.map(params => {
-          const destQuery = query(
-            collection(db, "lots"),
-            where("productId", "==", params.productId),
-            where("lotNumber", "==", params.lotNumber),
-            where("kioskId", "==", params.toKioskId),
-            where("locationId", "==", null)
-          );
-          return getDocs(destQuery);
-        }));
+ const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
+    try {
+      // Step 1: Read all destination lots outside the transaction
+      const destinationLotPromises = paramsArray.map(params => {
+        const destQuery = query(
+          collection(db, "lots"),
+          where("productId", "==", params.productId),
+          where("lotNumber", "==", params.lotNumber),
+          where("kioskId", "==", params.toKioskId),
+          where("locationId", "==", null)
+        );
+        return getDocs(destQuery);
+      });
 
-        await runTransaction(db, async (transaction) => {
-            for (const [index, params] of paramsArray.entries()) {
-                const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
-                const sourceLotRef = doc(db, "lots", lotId);
-                
-                const sourceLotDoc = await transaction.get(sourceLotRef);
-                if (!sourceLotDoc.exists()) throw new Error(`Source lot ${lotId} not found`);
+      const destinationLotSnapshots = await Promise.all(destinationLotPromises);
+      
+      const destinationLotMap = new Map<number, import("firebase/firestore").QueryDocumentSnapshot | null>();
+      destinationLotSnapshots.forEach((snap, index) => {
+        destinationLotMap.set(index, snap.empty ? null : snap.docs[0]);
+      });
 
-                const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
+      // Step 2: Run the transaction with only pre-fetched data
+      await runTransaction(db, async (transaction) => {
+          // Read all source lots first
+          const sourceLotPromises = paramsArray.map(params => transaction.get(doc(db, "lots", params.lotId)));
+          const sourceLotDocs = await Promise.all(sourceLotPromises);
 
-                if (sourceLot.kioskId === toKioskId || quantityToMove <= 0 || quantityToMove > sourceLot.quantity) {
-                    throw new Error(`Invalid move operation for lot ${lotId}: qty ${quantityToMove} > available ${sourceLot.quantity}`);
-                }
+          for (const [index, params] of paramsArray.entries()) {
+              const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
+              const sourceLotRef = doc(db, "lots", lotId);
+              
+              const sourceLotDoc = sourceLotDocs[index];
+              if (!sourceLotDoc.exists()) throw new Error(`Source lot ${lotId} not found`);
 
-                const newSourceQuantity = sourceLot.quantity - quantityToMove;
-                transaction.update(sourceLotRef, { quantity: newSourceQuantity });
-                
-                // Use the pre-fetched data inside the transaction
-                const destSnap = destinationLotChecks[index];
-                let destLotId;
+              const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
 
-                if (!destSnap.empty) {
-                    const destDoc = destSnap.docs[0];
-                    destLotId = destDoc.id;
-                    const newQuantity = destDoc.data().quantity + quantityToMove;
-                    transaction.update(destDoc.ref, { quantity: newQuantity });
-                } else {
-                    const newDestLotRef = doc(collection(db, "lots"));
-                    destLotId = newDestLotRef.id;
-                    const newLotData: Omit<LotEntry, 'id'> = {
-                        productId: sourceLot.productId,
-                        productName: sourceLot.productName,
-                        lotNumber: sourceLot.lotNumber,
-                        expiryDate: sourceLot.expiryDate,
-                        kioskId: toKioskId,
-                        quantity: quantityToMove,
-                        imageUrl: sourceLot.imageUrl,
-                        locationId: null,
-                        locationName: null,
-                        locationCode: null,
-                    };
-                    transaction.set(newDestLotRef, newLotData);
-                }
-                
-                const now = new Date().toISOString();
-                const commonData = {
-                    productId: sourceLot.productId,
-                    productName: productName,
-                    lotNumber: lotNumber,
-                    quantityChange: quantityToMove,
-                    userId: movedByUserId,
-                    username: movedByUsername,
-                    timestamp: now
-                };
+              if (sourceLot.kioskId === toKioskId || quantityToMove <= 0 || quantityToMove > sourceLot.quantity) {
+                  throw new Error(`Invalid move operation for lot ${lotId}: qty ${quantityToMove} > available ${sourceLot.quantity}`);
+              }
 
-                const movementOutRef = doc(collection(db, "movementHistory"));
-                transaction.set(movementOutRef, {
-                    ...commonData,
-                    lotId: sourceLot.id,
-                    type: 'TRANSFERENCIA_SAIDA',
-                    fromKioskId,
-                    fromKioskName,
-                    toKioskId,
-                    toKioskName
-                });
+              const newSourceQuantity = sourceLot.quantity - quantityToMove;
+              transaction.update(sourceLotRef, { quantity: newSourceQuantity });
+              
+              const destDoc = destinationLotMap.get(index);
+              let destLotId;
 
-                 const movementInRef = doc(collection(db, "movementHistory"));
-                 transaction.set(movementInRef, {
-                    ...commonData,
-                    lotId: destLotId,
-                    type: 'TRANSFERENCIA_ENTRADA',
-                    fromKioskId,
-                    fromKioskName,
-                    toKioskId,
-                    toKioskName
-                });
-            }
-        });
-      } catch (error) {
-        console.error("Error moving multiple lots:", error);
-        throw error;
-      }
+              if (destDoc) {
+                  destLotId = destDoc.id;
+                  const newQuantity = destDoc.data().quantity + quantityToMove;
+                  transaction.update(destDoc.ref, { quantity: newQuantity });
+              } else {
+                  const newDestLotRef = doc(collection(db, "lots"));
+                  destLotId = newDestLotRef.id;
+                  const newLotData: Omit<LotEntry, 'id'> = {
+                      productId: sourceLot.productId,
+                      productName: sourceLot.productName,
+                      lotNumber: sourceLot.lotNumber,
+                      expiryDate: sourceLot.expiryDate,
+                      kioskId: toKioskId,
+                      quantity: quantityToMove,
+                      imageUrl: sourceLot.imageUrl,
+                      locationId: null,
+                      locationName: null,
+                      locationCode: null,
+                  };
+                  transaction.set(newDestLotRef, newLotData);
+              }
+              
+              const now = new Date().toISOString();
+              const commonData = {
+                  productId: sourceLot.productId,
+                  productName: productName,
+                  lotNumber: lotNumber,
+                  quantityChange: quantityToMove,
+                  userId: movedByUserId,
+                  username: movedByUsername,
+                  timestamp: now
+              };
+
+              const movementOutRef = doc(collection(db, "movementHistory"));
+              transaction.set(movementOutRef, {
+                  ...commonData,
+                  lotId: sourceLot.id,
+                  type: 'TRANSFERENCIA_SAIDA',
+                  fromKioskId,
+                  fromKioskName,
+                  toKioskId,
+                  toKioskName
+              });
+
+               const movementInRef = doc(collection(db, "movementHistory"));
+               transaction.set(movementInRef, {
+                  ...commonData,
+                  lotId: destLotId,
+                  type: 'TRANSFERENCIA_ENTRADA',
+                  fromKioskId,
+                  fromKioskName,
+                  toKioskId,
+                  toKioskName
+              });
+          }
+      });
+    } catch (error) {
+      console.error("Error moving multiple lots:", error);
+      throw error;
+    }
   }, []);
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams) => {
@@ -371,3 +380,5 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+    
