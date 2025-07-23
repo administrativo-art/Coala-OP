@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -22,9 +22,9 @@ import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
-import { AddNode } from './add-node';
 import { nanoid } from 'nanoid';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { Trash2 } from 'lucide-react';
 
 interface FormBuilderProps {
   initialTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
@@ -41,33 +41,13 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const deleteZoneRef = useRef<HTMLDivElement>(null);
 
   const nodeTypes: NodeTypes = useMemo(() => ({
     section: SectionNode,
     question: QuestionNode,
-    add_node: AddNode,
   }), []);
-
-  const handleAddNode = (type: 'section' | 'card', parentId?: string) => {
-    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    
-    if (type === 'section') {
-      const lastSection = newTemplate.sections[newTemplate.sections.length - 1];
-      const newX = lastSection ? lastSection.position.x + (lastSection.width || SECTION_WIDTH) + SECTION_GAP : 0;
-      
-      newTemplate.sections.push({
-        id: `section-${nanoid()}`,
-        name: `Novo Momento`,
-        questions: [],
-        position: { x: newX, y: 0 },
-        width: SECTION_WIDTH,
-        height: DEFAULT_SECTION_HEIGHT,
-        color: '#FEE2E2',
-      });
-    }
-    
-    onTemplateChange(newTemplate);
-  };
   
   const handleSectionUpdate = (sectionId: string, updates: Partial<FormSection>) => {
     let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
@@ -96,12 +76,8 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     }
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
-    let currentX = 0;
-
+    
     initialTemplate.sections.forEach((section) => {
-      const sectionWidth = section.width || SECTION_WIDTH;
-      const sectionHeight = section.height || DEFAULT_SECTION_HEIGHT;
-      
       newNodes.push({
         id: section.id,
         type: 'section',
@@ -112,8 +88,10 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             onDelete: () => setSectionToDelete(section.id),
         },
         position: section.position,
-        style: { width: sectionWidth, height: sectionHeight },
+        style: { width: section.width || SECTION_WIDTH, height: section.height || DEFAULT_SECTION_HEIGHT },
         zIndex: 1,
+        selectable: true,
+        resizable: true,
       });
 
       section.questions.forEach((question) => {
@@ -140,17 +118,6 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           }
         });
       });
-      
-      currentX = section.position.x + sectionWidth + SECTION_GAP;
-    });
-
-    newNodes.push({
-      id: 'add-section-node',
-      type: 'add_node',
-      data: { label: 'Adicionar Momento', type: 'section', onAdd: handleAddNode },
-      position: { x: currentX, y: 0 },
-      draggable: false,
-      zIndex: 1
     });
     
     setNodes(newNodes);
@@ -176,27 +143,11 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
         
         changes.forEach(change => {
-            if (change.type === 'position' && change.dragging === false && change.position) {
-                const { id, position } = change;
-                for (const section of newTemplate.sections) {
-                    if (section.id === id) {
-                        section.position = position;
-                        templateNeedsUpdate = true;
-                        break;
-                    }
-                    const questionIndex = section.questions.findIndex((q:any) => q.id === id);
-                    if (questionIndex > -1) {
-                        section.questions[questionIndex].position = position;
-                        templateNeedsUpdate = true;
-                        break;
-                    }
-                }
-            } else if (change.type === 'dimensions' && change.resizing === false && change.dimensions) {
-                const { id, dimensions } = change;
-                const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === id);
+            if (change.type === 'dimensions' && !change.resizing && change.dimensions) {
+                const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === change.id);
                 if (sectionIndex > -1) {
-                    newTemplate.sections[sectionIndex].width = dimensions.width;
-                    newTemplate.sections[sectionIndex].height = dimensions.height;
+                    newTemplate.sections[sectionIndex].width = change.dimensions.width;
+                    newTemplate.sections[sectionIndex].height = change.dimensions.height;
                     templateNeedsUpdate = true;
                 }
             }
@@ -213,7 +164,6 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
     
     deletedNodes.forEach(node => {
-      // Find and remove the question from the template data
       newTemplate.sections.forEach((section: FormSection) => {
         section.questions = section.questions.filter(q => q.id !== node.id);
       });
@@ -240,8 +190,61 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     }
   }, [onNodeSelect]);
 
+  const onNodeDragStart: OnNodeClick = useCallback((_, node) => {
+    if (node.type === 'question') {
+        setIsDragging(true);
+    }
+  }, []);
+
+  const onNodeDragStop: OnNodeClick = useCallback((event: React.MouseEvent, node) => {
+    setIsDragging(false);
+
+    if (deleteZoneRef.current && node.type === 'question') {
+        const deleteZoneBounds = deleteZoneRef.current.getBoundingClientRect();
+        if (
+            event.clientX >= deleteZoneBounds.left &&
+            event.clientX <= deleteZoneBounds.right &&
+            event.clientY >= deleteZoneBounds.top &&
+            event.clientY <= deleteZoneBounds.bottom
+        ) {
+            let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+            newTemplate.sections.forEach((section: FormSection) => {
+                section.questions = section.questions.filter(q => q.id !== node.id);
+            });
+            onTemplateChange(newTemplate);
+            return;
+        }
+    }
+
+    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
+    let templateNeedsUpdate = false;
+    
+    if (node.type === 'section') {
+        const sectionIndex = newTemplate.sections.findIndex((s:any) => s.id === node.id);
+        if (sectionIndex > -1) {
+            newTemplate.sections[sectionIndex].position = node.position;
+            templateNeedsUpdate = true;
+        }
+    } else if (node.type === 'question') {
+        for (const section of newTemplate.sections) {
+            const questionIndex = section.questions.findIndex((q: any) => q.id === node.id);
+            if (questionIndex > -1) {
+                section.questions[questionIndex].position = node.position;
+                templateNeedsUpdate = true;
+                break;
+            }
+        }
+    }
+    
+    if (templateNeedsUpdate) {
+        onTemplateChange(newTemplate);
+    }
+
+  }, [initialTemplate, onTemplateChange]);
+
+
   return (
-    <div style={{ height: '100%', width: '100%' }}>
+    <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -250,6 +253,8 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         onNodesDelete={onNodesDelete}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         fitView
         className="bg-muted/50"
@@ -257,6 +262,13 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         <Controls />
         <Background />
       </ReactFlow>
+      
+      {isDragging && (
+          <div ref={deleteZoneRef} className="absolute bottom-5 right-5 z-20 flex h-24 w-48 flex-col items-center justify-center rounded-lg border-2 border-dashed border-destructive bg-destructive/10 text-destructive transition-colors pointer-events-none">
+            <Trash2 className="h-8 w-8" />
+            <p className="mt-1 text-sm font-medium">Arraste aqui para excluir</p>
+          </div>
+      )}
       
       <DeleteConfirmationDialog 
         open={!!sectionToDelete}
