@@ -194,7 +194,7 @@ export function PricingSimulator() {
                 body: bodyData,
                 theme: 'striped',
                 headStyles: { fillColor: '#273344' },
-                footStyles: { fillColor: '#F3F4F6' },
+                footStyles: { fillColor: '#F3F4F6', textColor: '#000000' },
                 foot: [['Total CMV', '', '', formatCurrency(sim.totalCmv)]]
             });
 
