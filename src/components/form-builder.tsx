@@ -35,8 +35,6 @@ interface FormBuilderProps {
 const SECTION_WIDTH = 400;
 const SECTION_GAP = 50;
 const DEFAULT_SECTION_HEIGHT = 600;
-const CARD_HEIGHT = 80;
-const CARD_VERTICAL_GAP = 20;
 
 export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -68,14 +66,12 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
     } else if (type === 'card' && parentId) {
       const section = newTemplate.sections.find((s: any) => s.id === parentId);
       if (section) {
-        const lastQuestionY = section.questions.length > 0 ? section.questions[section.questions.length - 1].position.y : 60;
-
         section.questions.push({
           id: `question-${nanoid()}`,
           label: 'Nova Pergunta',
           type: 'text',
           isRequired: false,
-          position: { x: 20, y: lastQuestionY + CARD_HEIGHT + CARD_VERTICAL_GAP },
+          position: { x: section.position.x + 20, y: section.position.y + 60 },
         });
       }
     }
@@ -124,20 +120,19 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             color: section.color,
             onUpdate: (updates: Partial<FormSection>) => handleSectionUpdate(section.id, updates),
             onDelete: () => setSectionToDelete(section.id),
+            onAddCard: () => handleAddNode('card', section.id),
         },
         position: section.position,
         style: { width: sectionWidth, height: sectionHeight },
         zIndex: 1,
       });
 
-      section.questions.forEach((question, index) => {
+      section.questions.forEach((question) => {
         newNodes.push({
           id: question.id,
           type: 'question',
           data: { label: question.label, description: question.description },
           position: question.position,
-          parentId: section.id,
-          extent: 'parent',
           draggable: true,
           zIndex: 10,
         });
@@ -155,17 +150,6 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
             });
           }
         });
-      });
-      
-      const lastQuestionY = section.questions.length > 0 ? section.questions[section.questions.length - 1].position.y : 60;
-      newNodes.push({
-          id: `add-card-${section.id}`,
-          type: 'add_node',
-          data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
-          position: { x: 20, y: lastQuestionY + CARD_HEIGHT + CARD_VERTICAL_GAP },
-          parentId: section.id,
-          zIndex: 10,
-          draggable: false,
       });
       
       currentX = section.position.x + sectionWidth + SECTION_GAP;

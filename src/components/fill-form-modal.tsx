@@ -257,21 +257,47 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const allQuestions = useMemo(() => getAllQuestions(template.sections), [template]);
+    // Determine which questions should be included in the submission
+    const visibleQuestions = useMemo(() => {
+        const questionsInSections = new Set<string>();
+        template.sections.forEach(section => {
+            const sectionRect = {
+                x: section.position.x,
+                y: section.position.y,
+                width: section.width || 400,
+                height: section.height || 600,
+            };
+            section.questions.forEach(q => {
+                // Check if the center of the question node is inside the section
+                const qCenterX = q.position.x + 150; // Assuming card width of 300
+                const qCenterY = q.position.y + 40; // Assuming card height of 80
+                if (
+                    qCenterX >= sectionRect.x &&
+                    qCenterX <= sectionRect.x + sectionRect.width &&
+                    qCenterY >= sectionRect.y &&
+                    qCenterY <= sectionRect.y + sectionRect.height
+                ) {
+                    questionsInSections.add(q.id);
+                }
+            });
+        });
+        return getAllQuestions(template.sections).filter(q => questionsInSections.has(q.id));
+    }, [template]);
+
 
     const defaultValues = useMemo(() => {
         const values: Record<string, any> = {};
-        allQuestions.forEach(q => {
+        visibleQuestions.forEach(q => {
             values[q.id] = q.type === 'multiple-choice' || q.type === 'file-attachment' ? [] : '';
         });
         return values;
-    }, [allQuestions]);
+    }, [visibleQuestions]);
 
     const formSchema = useMemo(() => {
-        const baseSchema = generateSchema(allQuestions);
+        const baseSchema = generateSchema(visibleQuestions);
         return baseSchema.superRefine((data, ctx) => {
             const visibleIds = getVisibleQuestionIds(template.sections, data);
-            allQuestions.forEach(question => {
+            visibleQuestions.forEach(question => {
                 if (question.isRequired && visibleIds.has(question.id)) {
                     const value = data[question.id];
                     const isEmpty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
@@ -285,7 +311,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
                 }
             });
         });
-    }, [template, allQuestions]);
+    }, [template, visibleQuestions]);
     
     const form = useForm({
         resolver: zodResolver(formSchema),
@@ -362,7 +388,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         return (
             <div key={section.id} className="space-y-6">
                 {sectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
-                <QuestionRenderer questions={section.questions} control={form.control} />
+                <QuestionRenderer questions={visibleQuestions.filter(q => section.questions.some(sq => sq.id === q.id))} control={form.control} />
             </div>
         )
     }
