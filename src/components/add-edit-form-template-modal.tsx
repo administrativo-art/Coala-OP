@@ -142,8 +142,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   };
   
   const allQuestions = useMemo(() => {
-      if (!internalTemplate) return [];
-      return internalTemplate.sections.flatMap(s => s.questions);
+    if (!internalTemplate || !internalTemplate.sections) return [];
+    return internalTemplate.sections.flatMap(s => s.questions || []);
   }, [internalTemplate]);
 
   const isPublished = internalTemplate && 'id' in internalTemplate && internalTemplate.status === 'published';
