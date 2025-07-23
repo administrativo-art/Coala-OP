@@ -70,10 +70,10 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     setHasUnsavedChanges(true);
   }
   
-  const handleManualSave = async (showToast = true) => {
+  const autoSave = async (showToast = false) => {
     if (!internalTemplate || !('id' in internalTemplate)) return;
     
-    setIsSaving('manual');
+    setIsSaving('auto');
     await updateTemplate(internalTemplate as FormTemplate);
     if(showToast) {
         toast({ title: 'Rascunho salvo!', description: 'Suas alterações foram salvas com sucesso.' });
@@ -85,7 +85,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   const handlePublish = async () => {
      if (!internalTemplate || !('id' in internalTemplate)) return;
      
-     await handleManualSave(false);
+     await autoSave(false);
      await updateTemplate({ ...internalTemplate as FormTemplate, status: 'published' });
      toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
      onOpenChange(false);
@@ -219,13 +219,9 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                     </div>
                 ) : (
                     <>
-                        <Button onClick={() => handleManualSave()} variant="secondary" disabled={isSaving !== false || !hasUnsavedChanges}>
-                           {isSaving === 'manual' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />} 
-                           Salvar Rascunho
-                        </Button>
                         <Button onClick={handlePublish} disabled={isSaving !== false || hasUnsavedChanges}>
                             <FileUp className="mr-2 h-4 w-4" />
-                            Publicar
+                            {hasUnsavedChanges ? 'Salvando para publicar...' : 'Publicar'}
                         </Button>
                     </>
                 )}
