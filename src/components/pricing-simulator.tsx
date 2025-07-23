@@ -7,7 +7,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
@@ -24,6 +24,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -129,6 +131,77 @@ export function PricingSimulator() {
         }
         
         return 'text-primary'; 
+    };
+
+    const handleExportPdf = () => {
+        const doc = new jsPDF();
+        let yPos = 15;
+
+        const addTitle = (title: string) => {
+            if (yPos > 260) {
+                doc.addPage();
+                yPos = 15;
+            }
+            doc.setFontSize(16);
+            doc.text(title, 14, yPos);
+            yPos += 8;
+        };
+        
+        addTitle("Relatório de Análise de Custo");
+        doc.setFontSize(10);
+        doc.text(`Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`, 14, yPos);
+        yPos += 10;
+        
+        simulationsByCategory.forEach(sim => {
+            if (yPos > 220) {
+                doc.addPage();
+                yPos = 15;
+            }
+            
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text(sim.name, 14, yPos);
+            yPos += 6;
+            
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+
+            const summaryInfo = [
+                `Preço Venda: ${formatCurrency(sim.salePrice)}`,
+                `Custo Bruto: ${formatCurrency(sim.grossCost)}`,
+                `Lucro: ${sim.profitPercentage.toFixed(2)}%`,
+                `Markup: ${sim.markup.toFixed(2)}x`,
+                `Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`
+            ];
+            doc.text(summaryInfo.join('  |  '), 14, yPos);
+            yPos += 8;
+
+            const items = simulationItems.filter(item => item.simulationId === sim.id);
+            const bodyData = items.map(item => {
+                const baseProductInfo = baseProductMap.get(item.baseProductId);
+                const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                return [
+                    baseProductInfo?.name || 'N/A',
+                    `${item.quantity} ${item.overrideUnit || baseProductInfo?.unit}`,
+                    formatCurrency(item.overrideCostPerUnit || 0),
+                    formatCurrency(cost)
+                ];
+            });
+
+            autoTable(doc, {
+                startY: yPos,
+                head: [['Insumo Base', 'Quantidade', 'Custo/unid.', 'Total']],
+                body: bodyData,
+                theme: 'striped',
+                headStyles: { fillColor: '#273344' },
+                footStyles: { fillColor: '#F3F4F6' },
+                foot: [['Total CMV', '', '', formatCurrency(sim.totalCmv)]]
+            });
+
+            yPos = (doc as any).lastAutoTable.finalY + 10;
+        });
+
+        doc.save(`analise_custo_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
@@ -325,7 +398,7 @@ export function PricingSimulator() {
                             <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
                                 <Layers className="mr-2 h-4 w-4" /> Alterar em lote
                             </Button>
-                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                            <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
                                 <History className="mr-2 h-4 w-4" /> Histórico de ajustes
                             </Button>
                             {permissions.pricing.manageParameters && (
@@ -334,6 +407,10 @@ export function PricingSimulator() {
                                     Parâmetros
                                 </Button>
                             )}
+                            <Button variant="outline" onClick={handleExportPdf} disabled={simulationsByCategory.length === 0}>
+                                <Download className="mr-2 h-4 w-4" />
+                                Exportar
+                            </Button>
                         </div>
                     </div>
                     <div className="flex flex-col md:flex-row items-center justify-between gap-2">
