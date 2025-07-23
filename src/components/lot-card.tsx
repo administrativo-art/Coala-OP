@@ -284,7 +284,7 @@ export function LotCard({
                         </PopoverContent>
                     </Popover>
                 </div>
-                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {formatQuantity(product.packageSize, product.unit)}</p>
+                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {product.packageSize}{product.unit.toLowerCase().includes('pacote') ? '' : product.unit}</p>
             </div>
         </div>
 
