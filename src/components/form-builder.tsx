@@ -68,7 +68,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           label: 'Nova Pergunta',
           type: 'text',
           isRequired: false,
-          position: { x: 20 + xOffset, y: 80 + yOffset },
+          position: { x: section.position.x + 20 + xOffset, y: 80 + yOffset },
         });
       }
     }
@@ -109,9 +109,10 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         position: section.position,
         draggable: false,
         style: { width: SECTION_WIDTH, height: 'auto', minHeight: '600px' },
+        zIndex: 1, // Ensure sections are in the background
       });
 
-      // Add Question Nodes inside the section
+      // Add Question Nodes for the section
       const questionCount = section.questions.length;
       const addNodeHeight = 60;
       const sectionHeight = Math.max(600, (questionCount * 100) + addNodeHeight);
@@ -127,22 +128,22 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
           id: question.id,
           type: 'question',
           data: { label: question.label, description: question.description },
-          position: question.position || { x: 20, y: 80 + (index * 100) },
-          parentId: section.id,
-          extent: 'parent',
+          position: question.position,
           draggable: true,
+          zIndex: 10, // Ensure questions are on top
         });
 
         // Add edges for ramifications
         question.ramifications?.forEach(ramification => {
           if (ramification.action === 'show_question' && ramification.targetQuestionId) {
             newEdges.push({
-              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.conditions[0].value || ramification.id}`,
+              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.id}`,
               source: question.id,
               target: ramification.targetQuestionId,
               type: 'smoothstep',
               markerEnd: { type: MarkerType.ArrowClosed },
               label: ramification.conditions[0]?.value || 'next',
+              zIndex: 5,
             });
           }
         });
@@ -153,9 +154,8 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
         id: `add-card-${section.id}`,
         type: 'add_node',
         data: { label: 'Adicionar Card', type: 'card', parentId: section.id, onAdd: handleAddNode },
-        position: { x: 20, y: sectionHeight - addNodeHeight - 10 },
-        parentId: section.id,
-        extent: 'parent',
+        position: { x: section.position.x, y: section.position.y + sectionHeight - addNodeHeight - 10 },
+        zIndex: 2, // Above section, below questions
       });
       
       currentX = section.position.x + SECTION_WIDTH + SECTION_GAP;
@@ -168,6 +168,7 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
       data: { label: 'Adicionar Momento', type: 'section', onAdd: handleAddNode },
       position: { x: currentX, y: 0 },
       draggable: false,
+      zIndex: 1
     });
     
     setNodes(newNodes);
