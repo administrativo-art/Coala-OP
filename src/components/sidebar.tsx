@@ -125,7 +125,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     main: { items: filteredNavItems.filter(i => i.group === 'main') },
     operacao: { label: 'Operação', icon: Briefcase, items: filteredNavItems.filter(i => i.group === 'operacao') },
     admin: { label: 'Administração', icon: UserCog, items: filteredNavItems.filter(i => i.group === 'admin') },
-    suporte: { label: 'Ajuda', icon: LifeBuoy, items: filteredNavItems.filter(i => i.group === 'suporte') },
+    suporte: { label: 'Suporte', icon: LifeBuoy, items: filteredNavItems.filter(i => i.group === 'suporte') },
   }), [filteredNavItems]);
   
   const activeGroup = useMemo(() => {
