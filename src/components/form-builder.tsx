@@ -87,6 +87,11 @@ export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, s
 
 
   useEffect(() => {
+    if (!initialTemplate || !initialTemplate.sections) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
     let currentX = 0;
