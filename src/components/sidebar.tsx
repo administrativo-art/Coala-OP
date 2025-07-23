@@ -94,7 +94,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'admin', show: canRegister },
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
-    { href: '/dashboard/help', label: 'Suporte', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
+    { href: '/dashboard/help', label: 'Ajuda', icon: LifeBuoy, group: 'suporte', show: canUseHelp },
   ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
   
   const filteredNavItems = useMemo(() => {
@@ -125,7 +125,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     main: { items: filteredNavItems.filter(i => i.group === 'main') },
     operacao: { label: 'Operação', icon: Briefcase, items: filteredNavItems.filter(i => i.group === 'operacao') },
     admin: { label: 'Administração', icon: UserCog, items: filteredNavItems.filter(i => i.group === 'admin') },
-    suporte: { label: 'Suporte', icon: LifeBuoy, items: filteredNavItems.filter(i => i.group === 'suporte') },
+    suporte: { label: 'Ajuda', icon: LifeBuoy, items: filteredNavItems.filter(i => i.group === 'suporte') },
   }), [filteredNavItems]);
   
   const activeGroup = useMemo(() => {
