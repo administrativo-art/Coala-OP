@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { memo, useState, useEffect } from 'react';
@@ -54,7 +55,7 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
           value={name} 
           onChange={(e) => setName(e.target.value)}
           className={cn(
-            "text-lg font-semibold border-none bg-card focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto w-auto inline-block",
+            "text-lg font-semibold border-none bg-transparent focus-visible:ring-1 focus-visible:ring-ring p-1 h-auto w-auto inline-block",
             "text-foreground placeholder:text-muted-foreground"
           )}
         />
@@ -87,7 +88,7 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
                         <Button
                             variant="outline"
                             className={cn("h-7 w-7 p-0 rounded-full", !data.color && "border-2 border-primary ring-2 ring-ring")}
-                            onClick={() => data.onUpdate({ color: undefined })}
+                            onClick={() => data.onUpdate({ color: null as any })} // Send null to clear
                         />
                     </div>
                 </PopoverContent>

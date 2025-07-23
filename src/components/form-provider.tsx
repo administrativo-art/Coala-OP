@@ -64,8 +64,14 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   const updateTemplate = useCallback(async (template: FormTemplate) => {
     const templateRef = doc(db, "formTemplates", template.id);
     const { id, ...dataToUpdate } = template;
+
+    // Deep-clone and clean undefined values
+    const cleanedData = JSON.parse(JSON.stringify(dataToUpdate), (key, value) => {
+        return value === undefined ? null : value;
+    });
+
     try {
-      await updateDoc(templateRef, dataToUpdate as any);
+      await updateDoc(templateRef, cleanedData as any);
     } catch (error) {
       console.error("Error updating template:", error);
     }
