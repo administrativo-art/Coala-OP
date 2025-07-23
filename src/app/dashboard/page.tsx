@@ -34,10 +34,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter } from "next/navigation"
 import { PendingTasksDashboard } from "@/components/pending-tasks-dashboard"
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories"
+import { useProducts } from "@/hooks/use-products"
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
+  const { getProductFullName, products } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
   const { generateDailyChecklist } = useForm();
@@ -153,11 +155,13 @@ function OperationalDashboard() {
                 <CardContent>
                     <ScrollArea className="h-48">
                       <div className="space-y-2 pr-4">
-                          {expiringSoonLots.map(lot => (
+                          {expiringSoonLots.map(lot => {
+                              const product = products.find(p => p.id === lot.productId);
+                              return (
                               <Link href="/dashboard/stock/inventory-control" key={lot.id}>
                               <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
                                   <div>
-                                      <p className="font-semibold">{lot.productName}</p>
+                                      <p className="font-semibold">{product ? getProductFullName(product) : lot.productName}</p>
                                       <p className="text-sm text-muted-foreground">
                                           Lote: {lot.lotNumber} | Quiosque: {kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A'}
                                       </p>
@@ -170,7 +174,7 @@ function OperationalDashboard() {
                                   </div>
                               </div>
                               </Link>
-                          ))}
+                          )})}
                       </div>
                     </ScrollArea>
                 </CardContent>
