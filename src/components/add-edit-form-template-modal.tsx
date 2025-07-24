@@ -6,7 +6,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, PlusCircle } from 'lucide-react';
+import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, PlusCircle, Pencil, GitBranch } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -30,6 +30,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
   
   const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const { users } = useAuth();
   const { profiles } = useProfiles();
   const [activeTab, setActiveTab] = useState("builder");
@@ -57,6 +58,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
       }
        setActiveTab("builder");
        setHasUnsavedChanges(false);
+       setSelectedSectionId(null);
     } else {
       setInternalTemplate(null);
       setSelectedQuestionId(null);
@@ -65,11 +67,52 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
       }
     }
   }, [open, templateToEdit]);
-
+  
   const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
     setInternalTemplate(newTemplate);
     setHasUnsavedChanges(true);
   }, []);
+
+  const handleAddMomento = () => {
+    if (!internalTemplate) return;
+    const newSection: FormSection = {
+        id: `section-${nanoid()}`,
+        name: `Momento ${internalTemplate.sections.length + 1}`,
+        questions: [],
+        position: { x: (internalTemplate.sections.length * 450) + 50, y: 100 },
+        width: 400,
+        height: 200,
+        color: '#E2E8F0',
+    };
+    handleTemplateChange({ ...internalTemplate, sections: [...internalTemplate.sections, newSection] });
+  };
+  
+  const handleAddQuestion = () => {
+    if (!internalTemplate || !selectedSectionId) return;
+    
+    const newQuestion: FormQuestion = {
+        id: `question-${nanoid()}`,
+        label: "Nova Pergunta",
+        type: 'text',
+        isRequired: false,
+        options: [],
+        position: { x: 20, y: 80 } 
+    };
+
+    const newSections = internalTemplate.sections.map(section => {
+        if (section.id === selectedSectionId) {
+            const currentQuestions = section.questions || [];
+            newQuestion.position.y = (currentQuestions.length * 100) + 80;
+            return {
+                ...section,
+                questions: [...currentQuestions, newQuestion]
+            };
+        }
+        return section;
+    });
+
+    handleTemplateChange({ ...internalTemplate, sections: newSections });
+  };
   
   const autoSave = async (showToast = false) => {
     if (!internalTemplate || !('id' in internalTemplate)) return;
@@ -168,7 +211,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
             <div className="p-4 border-b">
                 <TabsList>
-                    <TabsTrigger value="builder">Builder Visual</TabsTrigger>
+                    <TabsTrigger value="builder"><GitBranch className="mr-2 h-4 w-4"/> Builder Visual</TabsTrigger>
                     <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Configurações Gerais</TabsTrigger>
                 </TabsList>
             </div>
@@ -179,6 +222,10 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                             key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
                             template={internalTemplate}
                             onTemplateChange={handleTemplateChange}
+                            onSelectQuestion={setSelectedQuestionId}
+                            selectedQuestionId={selectedQuestionId}
+                            onSelectSection={setSelectedSectionId}
+                            selectedSectionId={selectedSectionId}
                         />
                     )}
                     {selectedQuestion && (
@@ -207,7 +254,8 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         <DialogFooter className="p-4 border-t shrink-0">
           <div className="w-full flex justify-between items-center">
              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+                <Button variant="outline" onClick={handleAddMomento}><PlusCircle className="mr-2 h-4 w-4"/> Momento</Button>
+                 <Button variant="outline" onClick={handleAddQuestion} disabled={!selectedSectionId}><PlusCircle className="mr-2 h-4 w-4"/> Pergunta</Button>
             </div>
             
             <div className="flex items-center gap-2">

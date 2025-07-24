@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -13,63 +13,71 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type Node,
-  NodeResizer,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { nanoid } from 'nanoid';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
-import { AddNode } from './add-node';
 
 interface FormBuilderProps {
   template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
   onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => void;
+  onSelectQuestion: (questionId: string | null) => void;
+  selectedQuestionId: string | null;
+  onSelectSection: (sectionId: string | null) => void;
+  selectedSectionId: string | null;
 }
 
 const nodeTypes = {
   section: SectionNode,
   question: QuestionNode,
-  add: AddNode,
 };
 
-export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
+export function FormBuilder({ 
+  template, 
+  onTemplateChange,
+  onSelectQuestion,
+  selectedQuestionId,
+  onSelectSection,
+  selectedSectionId,
+}: FormBuilderProps) {
 
-   const handleAddQuestion = (sectionId: string) => {
-    const newQuestion: FormQuestion = {
-        id: `question-${nanoid()}`,
-        label: "Nova Pergunta",
-        type: 'text',
-        isRequired: false,
-        options: [],
-        position: { x: 50, y: 100 } // Default position within section
-    };
-
-    const newSections = template.sections.map(section => {
-        if (section.id === sectionId) {
-            return {
-                ...section,
-                questions: [...section.questions, newQuestion]
-            };
-        }
-        return section;
-    });
-
-    onTemplateChange({ ...template, sections: newSections });
+  const onNodeDragStop = (_: any, node: Node) => {
+    if (node.type === 'section') {
+        const newSections = template.sections.map(s => {
+            if (s.id === node.id) {
+                return { ...s, position: node.position };
+            }
+            return s;
+        });
+        onTemplateChange({ ...template, sections: newSections });
+    } else if (node.type === 'question' && node.parentNode) {
+        const newSections = template.sections.map(section => {
+            if (section.id === node.parentNode) {
+                const newQuestions = section.questions.map(q => {
+                    if (q.id === node.id) {
+                        return { ...q, position: node.position };
+                    }
+                    return q;
+                });
+                return { ...section, questions: newQuestions };
+            }
+            return section;
+        });
+        onTemplateChange({ ...template, sections: newSections });
+    }
   };
-  
-  const handleAddMomento = () => {
-    const newSection: FormSection = {
-        id: `section-${nanoid()}`,
-        name: 'Novo Momento',
-        questions: [],
-        position: { x: (template.sections.length * 450) + 50, y: 100 },
-        width: 400,
-        height: 200,
-        color: '#E2E8F0',
-    };
-    onTemplateChange({ ...template, sections: [...template.sections, newSection] });
+
+  const handleNodeClick = (_: any, node: Node) => {
+    if (node.type === 'section') {
+        onSelectSection(node.id);
+        onSelectQuestion(null);
+    } else if (node.type === 'question') {
+        onSelectSection(node.parentNode || null);
+        onSelectQuestion(node.id);
+    }
   };
+
 
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
@@ -96,6 +104,7 @@ export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
             backgroundColor: section.color ? `${section.color}20` : 'hsl(var(--card))',
             borderColor: section.color,
         },
+        selected: section.id === selectedSectionId,
       });
 
       (section.questions || []).forEach(question => {
@@ -109,41 +118,17 @@ export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
           },
           parentNode: section.id,
           extent: 'parent',
+          selected: question.id === selectedQuestionId,
         });
       });
-      
-       nodes.push({
-        id: `add-question-${section.id}`,
-        type: 'add',
-        position: { x: 20, y: section.height ? section.height - 80 : 120 },
-        data: {
-            label: "Adicionar Pergunta",
-            onAdd: () => handleAddQuestion(section.id)
-        },
-        parentNode: section.id,
-        extent: 'parent'
-      });
-    });
-
-    nodes.push({
-        id: `add-section-button`,
-        type: 'add',
-        position: { x: (template.sections.length * 450) + 50, y: 100 },
-        data: {
-            label: "Adicionar Momento",
-            onAdd: handleAddMomento,
-        },
-        className: '!w-52 !h-16'
     });
     
     return nodes;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template, onTemplateChange]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   
-  // This effect ensures that when the parent template state changes, the nodes are re-initialized
   useEffect(() => {
     setNodes(initialNodes);
   }, [initialNodes, setNodes]);
@@ -162,6 +147,8 @@ export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStop={onNodeDragStop}
+        onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         fitView
       >

@@ -8,8 +8,7 @@ import { Input } from './ui/input';
 import { useDebounce } from 'use-debounce';
 import { cn } from '@/lib/utils';
 import { type FormSection } from '@/types';
-import { Palette, Trash2 } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { NodeResizer } from 'reactflow';
 
@@ -33,18 +32,23 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
       data.onUpdate({ name: debouncedName });
     }
   }, [debouncedName, data.label, data.onUpdate]);
+  
+  useEffect(() => {
+    setName(data.label);
+  }, [data.label]);
+
 
   return (
     <>
     <NodeResizer 
         isVisible={selected} 
-        minWidth={200} 
-        minHeight={200}
+        minWidth={300} 
+        minHeight={150}
     />
     <Card 
         className={cn(
-            "h-full w-full transition-colors border-2 bg-transparent",
-            selected ? 'border-primary ring-2 ring-ring' : 'border-dashed'
+            "h-full w-full transition-shadow duration-200 border-2",
+            selected ? 'border-primary shadow-lg' : 'border-dashed'
         )}
     >
       <CardHeader className="relative">
