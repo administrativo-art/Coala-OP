@@ -26,7 +26,7 @@ const ramificationSchema = z.object({
         value: z.string(),
         operator: z.enum(['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'contains']),
     })).min(1),
-    action: z.enum(['show_question', 'create_task']),
+    action: z.enum(['show_question', 'create_task']).optional(),
     targetQuestionId: z.string().optional(),
     taskAction: z.object({
         title: z.string(),
@@ -109,41 +109,42 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
   useEffect(() => {
     if (questionType === 'yes-no') {
         const yesNoOptions = [{ id: 'yes', value: 'Sim' }, { id: 'no', value: 'Não' }];
-        replaceOptions(yesNoOptions);
-
-        const yesNoRamifications = yesNoOptions.map(opt => ({
-            id: `ram-${opt.id}`,
-            conditions: [{ id: nanoid(), value: opt.value, operator: 'eq' as const }],
-            action: 'show_question' as const
-        }));
-        replaceRamifications(yesNoRamifications);
+        if (JSON.stringify(form.getValues('options')) !== JSON.stringify(yesNoOptions)) {
+           replaceOptions(yesNoOptions);
+        }
     } else if (questionType === 'text' || questionType === 'number' || questionType === 'file-attachment') {
         replaceOptions([]);
+        replaceRamifications([]);
     }
-  }, [questionType, replaceOptions, replaceRamifications]);
+  }, [questionType, replaceOptions, replaceRamifications, form]);
 
   useEffect(() => {
-    if (questionType === 'single-choice' || questionType === 'multiple-choice') {
+    if (questionType === 'single-choice' || questionType === 'multiple-choice' || questionType === 'yes-no') {
         const optionValues = new Set(watchedOptions?.map(o => o.value) || []);
-        
-        // Add ramifications for new options
         const currentRamificationValues = new Set(ramificationFields.map(r => r.conditions[0].value));
+
+        // Add ramifications for new options that don't have one yet
         optionValues.forEach(optValue => {
             if (optValue && !currentRamificationValues.has(optValue)) {
                 appendRamification({
                     id: nanoid(),
                     conditions: [{ id: nanoid(), value: optValue, operator: 'eq' }],
-                    action: 'show_question',
+                    action: undefined,
                 });
             }
         });
 
-        // Remove ramifications for deleted options
-        const ramificaitonsToRemove = ramificationFields
-            .map((field, index) => ({ field, index }))
-            .filter(item => !optionValues.has(item.field.conditions[0].value));
-            
-        removeRamification(ramificaitonsToRemove.map(item => item.index));
+        // Remove ramifications for options that were deleted
+        const ramificationIndicesToRemove: number[] = [];
+        ramificationFields.forEach((field, index) => {
+            if (!optionValues.has(field.conditions[0].value)) {
+                ramificationIndicesToRemove.push(index);
+            }
+        });
+
+        if(ramificationIndicesToRemove.length > 0) {
+            removeRamification(ramificationIndicesToRemove);
+        }
     }
   }, [watchedOptions, questionType, appendRamification, removeRamification, ramificationFields]);
   
@@ -151,7 +152,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     appendRamification({
         id: nanoid(),
         conditions: [{ id: nanoid(), operator: 'eq', value: '' }],
-        action: 'show_question',
+        action: undefined,
     });
   };
 
@@ -255,9 +256,10 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
 
                                 <FormField control={form.control} name={`ramifications.${index}.action`} render={({field}) => (
                                     <FormItem>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl><SelectTrigger className="h-9"><SelectValue /></SelectTrigger></FormControl>
+                                        <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                                            <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Nenhuma ação"/></SelectTrigger></FormControl>
                                             <SelectContent>
+                                                <SelectItem value="none">Nenhuma ação</SelectItem>
                                                 <SelectItem value="show_question">Mostrar outra pergunta</SelectItem>
                                                 <SelectItem value="create_task">Criar uma tarefa</SelectItem>
                                             </SelectContent>
