@@ -137,9 +137,9 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         };
 
         // Remove the question from sections
-        const newSections = internalTemplate.sections.map(section => ({
+        const newSections = (internalTemplate.sections || []).map(section => ({
             ...section,
-            questions: cleanRamifications(section.questions.filter(q => q.id !== questionId))
+            questions: cleanRamifications((section.questions || []).filter(q => q.id !== questionId))
         }));
 
         // Remove the question from floating questions
@@ -200,7 +200,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
     const allQuestions = useMemo(() => {
         if (!internalTemplate) return [];
-        const sectionQuestions = internalTemplate.sections.flatMap(s => s.questions || []);
+        const sectionQuestions = (internalTemplate.sections || []).flatMap(s => s.questions || []);
         const floatingQuestions = internalTemplate.questions || [];
         return [...sectionQuestions, ...floatingQuestions];
     }, [internalTemplate]);
@@ -222,7 +222,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
         const newFloatingQuestions = (internalTemplate.questions || []).map(updateFn);
         
-        handleTemplateChange({ ...template, sections: newSections, questions: newFloatingQuestions });
+        handleTemplateChange({ ...internalTemplate, sections: newSections, questions: newFloatingQuestions });
     };
 
     const isPublished = internalTemplate && 'id' in internalTemplate && internalTemplate.status === 'published';
