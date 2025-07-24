@@ -90,19 +90,17 @@ export function FormBuilder({
         selected: section.id === selectedSectionId,
       });
 
-       // Questions that are children of this section
       section.questions.forEach(question => {
         nodes.push({
           id: question.id,
           type: 'question',
           position: question.position,
-          parentNode: section.id,
+          parentNode: question.sectionId || undefined,
           extent: 'parent',
           dragHandle: '.drag-handle-question',
           data: {
             ...question,
             onDelete: () => onDeleteQuestion(question.id),
-            onPinToggle: () => {}
           },
           selected: question.id === selectedQuestionId,
           zIndex: 2,
@@ -111,7 +109,7 @@ export function FormBuilder({
     });
 
     return nodes;
-  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, allQuestions, onDeleteQuestion]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, onDeleteQuestion]);
   
   const initialEdges = useMemo(() => {
      const newEdges: Edge[] = [];
@@ -145,7 +143,6 @@ export function FormBuilder({
   }, [initialEdges, setEdges]);
 
 const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
-    // Handle Section Dragging and Resizing
     if (node.type === 'section') {
         const newSections = template.sections.map(s => 
             s.id === node.id ? { ...s, position: node.position, width: node.width, height: node.height } : s
@@ -154,15 +151,15 @@ const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
         return;
     }
 
-    // Handle Question Dragging
     if (node.type === 'question') {
         const questionId = node.id;
         let currentQuestion = allQuestions.find(q => q.id === questionId);
         if (!currentQuestion) return;
 
-        let absolutePosition = { ...node.position };
+        const oldSectionId = currentQuestion.sectionId;
 
-        // If the question was inside a section, calculate its new absolute position
+        // Calculate the absolute position of the question's center
+        let absolutePosition = { ...node.position };
         if (node.parentNode) {
             const parentNode = nodes.find(n => n.id === node.parentNode);
             if (parentNode) {
@@ -173,75 +170,63 @@ const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
             }
         }
         
-        // Find which section it's inside now based on its center point
         const questionCenter = {
             x: absolutePosition.x + (node.width! / 2),
             y: absolutePosition.y + (node.height! / 2),
         };
-        const parentSection = findParentSection(template.sections, questionCenter.x, questionCenter.y);
-        const newSectionId = parentSection ? parentSection.id : null;
-        const oldSectionId = currentQuestion.sectionId;
 
-        // Update the question with its new absolute position and possibly new sectionId
-        currentQuestion = { ...currentQuestion, position: absolutePosition, sectionId: newSectionId };
-        
+        const newParentSection = findParentSection(template.sections, questionCenter.x, questionCenter.y);
+        const newSectionId = newParentSection ? newParentSection.id : null;
+
+        // If section hasn't changed, just update position within the section
+        if (oldSectionId === newSectionId && oldSectionId) {
+            const newSections = template.sections.map(s => {
+                if (s.id === oldSectionId) {
+                    return {
+                        ...s,
+                        questions: s.questions.map(q => q.id === questionId ? { ...q, position: node.position } : q)
+                    };
+                }
+                return s;
+            });
+            onTemplateChange({ ...template, sections: newSections });
+            return;
+        }
+
+        // Section has changed, so we need to move the question
         let newSections = [...template.sections];
-
-        // If the section association has changed
-        if (oldSectionId !== newSectionId) {
-            // Remove from old section
-            if (oldSectionId) {
-                const oldSectionIndex = newSections.findIndex(s => s.id === oldSectionId);
-                if (oldSectionIndex !== -1) {
-                    newSections[oldSectionIndex] = {
-                        ...newSections[oldSectionIndex],
-                        questions: newSections[oldSectionIndex].questions.filter(q => q.id !== questionId)
-                    };
-                }
+        
+        // Remove from old section
+        if (oldSectionId) {
+            const oldSectionIndex = newSections.findIndex(s => s.id === oldSectionId);
+            if (oldSectionIndex !== -1) {
+                newSections[oldSectionIndex] = {
+                    ...newSections[oldSectionIndex],
+                    questions: newSections[oldSectionIndex].questions.filter(q => q.id !== questionId)
+                };
             }
+        }
 
-            // Add to new section
-            if (newSectionId) {
-                const newSectionIndex = newSections.findIndex(s => s.id === newSectionId);
-                if (newSectionIndex !== -1) {
-                    const newParentNode = nodes.find(n => n.id === newSectionId)!;
-                    // Make position relative to the new parent
-                    currentQuestion.position = {
-                        x: absolutePosition.x - newParentNode.position.x,
-                        y: absolutePosition.y - newParentNode.position.y,
-                    };
-                    newSections[newSectionIndex] = {
-                        ...newSections[newSectionIndex],
-                        questions: [...newSections[newSectionIndex].questions, currentQuestion]
-                    };
-                }
-            } else {
-              // This is the case where the question is now "orphaned" (not in any section)
-              // This part of the logic needs to be carefully handled to not lose the question.
-              // For now, let's just update its position in the old section if it's dragged out.
-              // A better approach is to have a top-level questions array.
-              // Re-evaluating: The bug is likely that the question is removed but not re-added anywhere.
-              // Let's ensure it's always *somewhere*.
-            }
-        } else {
-             // If it stays in the same section, just update its relative position
-             if (newSectionId) {
+        // Add to new section (if any)
+        if (newSectionId) {
+             const newSectionIndex = newSections.findIndex(s => s.id === newSectionId);
+             if (newSectionIndex !== -1) {
                 const parentNode = nodes.find(n => n.id === newSectionId)!;
-                currentQuestion.position = {
+                const newRelativePos = {
                     x: absolutePosition.x - parentNode.position.x,
                     y: absolutePosition.y - parentNode.position.y,
                 };
-             }
-             // Update the question in its section
-             const sectionIndex = newSections.findIndex(s => s.id === oldSectionId);
-             if (sectionIndex !== -1) {
-                newSections[sectionIndex] = {
-                    ...newSections[sectionIndex],
-                    questions: newSections[sectionIndex].questions.map(q => q.id === questionId ? currentQuestion : q)
+
+                newSections[newSectionIndex] = {
+                    ...newSections[newSectionIndex],
+                    questions: [...newSections[newSectionIndex].questions, { ...currentQuestion, position: newRelativePos, sectionId: newSectionId }]
                 };
              }
+        } else {
+            // Handle orphan question logic here if needed. For now, it's just removed.
+            // A better approach would be to have a top-level questions array for orphans.
         }
-        
+
         onTemplateChange({ ...template, sections: newSections });
     }
 }, [template, onTemplateChange, allQuestions, nodes]);
