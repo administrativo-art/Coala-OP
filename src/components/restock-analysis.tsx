@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -13,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -52,6 +54,7 @@ function AnalysisTab() {
   const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
+  const isMatrizSelected = selectedKioskId === 'matriz';
   
   const sortedKiosks = useMemo(() => {
     return [...kiosks].sort((a,b) => {
@@ -96,7 +99,7 @@ function AnalysisTab() {
         items: stagedItems,
     });
     
-    toast({ title: 'Atividade de Reposição Criada', description: 'O pedido foi enviado para a tela de gerenciamento de reposição.' });
+    toast({ title: 'Atividade de reposição criada', description: 'O pedido foi enviado para a tela de gerenciamento de reposição.' });
     setStagedItems([]);
   };
 
@@ -166,7 +169,6 @@ function AnalysisTab() {
             stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
         }
 
-        // Only generate suggestions if the selected kiosk is NOT the central distribution center
         if (status === 'repor' && restockNeeded > 0 && selectedKioskId !== 'matriz') {
             const availableMatrizLots = lotsInMatriz
                 .filter(lot => {
@@ -248,6 +250,29 @@ function AnalysisTab() {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
   }, [stagedItems]);
 
+  const handleExportPdf = () => {
+    const doc = new jsPDF();
+    const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+
+    doc.setFontSize(18);
+    doc.text(`Lista de Compras - ${kioskName}`, 14, 22);
+
+    const body = analysisResults
+        .filter(item => item.restockNeeded > 0)
+        .map(item => [
+            item.baseProduct.name,
+            `${item.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.baseProduct.unit}`
+        ]);
+        
+    autoTable(doc, {
+      startY: 30,
+      head: [['Produto Base', 'Quantidade Necessária']],
+      body,
+      theme: 'striped',
+    });
+
+    doc.save(`lista_compras_${kioskName.replace(/\s/g, '_')}.pdf`);
+  };
 
   return (
     <>
@@ -257,7 +282,7 @@ function AnalysisTab() {
         <CardDescription>
           Selecione um quiosque para ver a necessidade de reposição com base nas metas de estoque mínimo.
         </CardDescription>
-        <div className="pt-2">
+        <div className="pt-2 flex justify-between items-center">
             <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
               <SelectTrigger className="w-full max-w-sm">
                 <SelectValue placeholder="Selecione um quiosque..." />
@@ -266,6 +291,11 @@ function AnalysisTab() {
                 {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {isMatrizSelected && (
+                <Button variant="outline" onClick={handleExportPdf} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
+                    <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
+                </Button>
+            )}
         </div>
       </CardHeader>
       <CardContent>
@@ -285,7 +315,7 @@ function AnalysisTab() {
                   <TableHead className="text-center">Estoque mínimo</TableHead>
                   <TableHead className="text-center">Estoque atual</TableHead>
                   <TableHead className="w-[20%] text-center">Nível</TableHead>
-                  <TableHead className="text-center">Reposição sugerida</TableHead>
+                  <TableHead className="text-center">Ação</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -293,7 +323,7 @@ function AnalysisTab() {
                 {analysisResults.length > 0 ? analysisResults.map(result => {
                     const isStaged = stagedItemMap.has(result.baseProduct.id);
                     return (
-                        <TableRow key={result.baseProduct.id} className={cn(isStaged && "bg-primary/5")}>
+                        <TableRow key={result.baseProduct.id} className={cn(!isMatrizSelected && isStaged && "bg-primary/5")}>
                             <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
                             <TableCell className="text-center">{result.minimumStock > 0 ? `${result.minimumStock} ${result.baseProduct.unit}` : '-'}</TableCell>
                             <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
@@ -303,7 +333,9 @@ function AnalysisTab() {
                                 ) : '-'}
                             </TableCell>
                             <TableCell className="text-center font-bold text-primary">
-                            {isStaged ? (
+                            {isMatrizSelected ? (
+                                result.restockNeeded > 0 ? `Comprar ${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}` : '-'
+                            ) : isStaged ? (
                                 <div className="flex items-center justify-center gap-2">
                                 <Badge variant="secondary">Na reposição</Badge>
                                 <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
@@ -335,7 +367,7 @@ function AnalysisTab() {
       </CardContent>
     </Card>
     
-    {stagedItems.length > 0 && (
+    {!isMatrizSelected && stagedItems.length > 0 && (
         <Card className="mt-6 animate-in fade-in">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para reposição</CardTitle>
