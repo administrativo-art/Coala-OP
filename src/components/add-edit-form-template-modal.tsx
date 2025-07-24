@@ -52,7 +52,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
+            { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
           ],
         });
       }
@@ -73,11 +73,11 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     setHasUnsavedChanges(true);
   }, []);
 
-  const handleAddMomento = () => {
+  const handleAddSection = () => {
     if (!internalTemplate) return;
     const newSection: FormSection = {
         id: `section-${nanoid()}`,
-        name: `Momento ${internalTemplate.sections.length + 1}`,
+        name: `Seção ${internalTemplate.sections.length + 1}`,
         questions: [],
         position: { x: (internalTemplate.sections.length * 450) + 50, y: 100 },
         width: 400,
@@ -254,7 +254,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
         <DialogFooter className="p-4 border-t shrink-0">
           <div className="w-full flex justify-between items-center">
              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={handleAddMomento}><PlusCircle className="mr-2 h-4 w-4"/> Momento</Button>
+                <Button variant="outline" onClick={handleAddSection}><PlusCircle className="mr-2 h-4 w-4"/> Seção</Button>
                  <Button variant="outline" onClick={handleAddQuestion} disabled={!selectedSectionId}><PlusCircle className="mr-2 h-4 w-4"/> Pergunta</Button>
             </div>
             
