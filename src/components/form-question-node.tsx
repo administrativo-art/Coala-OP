@@ -5,7 +5,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { ListChecks, GripVertical, Trash2, FileText, ToggleRight, CircleDot, Paperclip, Type, CheckSquare, MessageSquare, AlertTriangle, Pin, PinOff, Palette } from 'lucide-react';
+import { ListChecks, GripVertical, Trash2, FileText, ToggleRight, CircleDot, Paperclip, Type, CheckSquare, MessageSquare, AlertTriangle, Pin, PinOff, Palette, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { type FormQuestion } from '@/types';
