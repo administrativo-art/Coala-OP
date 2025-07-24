@@ -260,30 +260,12 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     
     // Determine which questions should be included in the submission
     const visibleQuestions = useMemo(() => {
-        const questionsInSections = new Set<string>();
-        template.sections.forEach(section => {
-            const sectionRect = {
-                x: section.position.x,
-                y: section.position.y,
-                width: section.width || 400,
-                height: section.height || 600,
-            };
-            section.questions.forEach(q => {
-                // Check if the center of the question node is inside the section
-                const qCenterX = q.position.x + 150; // Assuming card width of 300
-                const qCenterY = q.position.y + 40; // Assuming card height of 80
-                if (
-                    qCenterX >= sectionRect.x &&
-                    qCenterX <= sectionRect.x + sectionRect.width &&
-                    qCenterY >= sectionRect.y &&
-                    qCenterY <= sectionRect.y + sectionRect.height
-                ) {
-                    questionsInSections.add(q.id);
-                }
-            });
-        });
-        return getAllQuestions(template.sections).filter(q => questionsInSections.has(q.id));
+        return getAllQuestions(template.sections);
     }, [template]);
+
+    const questionsWithoutSection = useMemo(() => {
+        return visibleQuestions.filter(q => !q.sectionId);
+    }, [visibleQuestions]);
 
 
     const defaultValues = useMemo(() => {
@@ -375,7 +357,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             kioskId: kiosk?.id || 'N/A',
             kioskName: kiosk?.name || 'N/A',
             createdAt: new Date().toISOString(),
-            answers: template.sections.flatMap(section => buildAnswers(section.questions, values))
+            answers: buildAnswers(visibleQuestions, values),
         };
 
         await addSubmission(submission, template);
@@ -386,10 +368,12 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         const hasMultipleSections = template.sections.length > 1;
         const sectionTitle = hasMultipleSections ? (section.name?.trim() || `Seção ${index + 1}`) : null;
         
+        const questionsInSection = visibleQuestions.filter(q => q.sectionId === section.id);
+
         return (
             <div key={section.id} className="space-y-6">
                 {sectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
-                <QuestionRenderer questions={visibleQuestions.filter(q => section.questions.some(sq => sq.id === q.id))} control={form.control} />
+                <QuestionRenderer questions={questionsInSection} control={form.control} />
             </div>
         )
     }
@@ -417,7 +401,15 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
                  {template.layout === 'stepped' && template.sections.length > 1 ? (
                     renderSection(template.sections[currentSectionIndex], currentSectionIndex)
                  ) : (
-                    template.sections.map((section, index) => renderSection(section, index))
+                    <>
+                        {template.sections.map((section, index) => renderSection(section, index))}
+                        {questionsWithoutSection.length > 0 && (
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-semibold border-b pb-2 text-primary">Outras perguntas</h3>
+                                <QuestionRenderer questions={questionsWithoutSection} control={form.control} />
+                            </div>
+                        )}
+                    </>
                  )}
               </div>
             </ScrollArea>

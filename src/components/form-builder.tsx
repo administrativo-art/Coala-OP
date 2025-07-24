@@ -14,6 +14,7 @@ import ReactFlow, {
   type Edge,
   type Node,
   MarkerType,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
@@ -61,7 +62,7 @@ export function FormBuilder({
   selectedSectionId,
   onDeleteQuestion,
 }: FormBuilderProps) {
-  
+  const reactFlow = useReactFlow();
   const allQuestions = useMemo(() => template.sections.flatMap(s => s.questions || []), [template.sections]);
 
   const initialNodes = useMemo(() => {
@@ -100,6 +101,23 @@ export function FormBuilder({
           data: {
             ...question,
             onDelete: () => onDeleteQuestion(question.id),
+            onTogglePin: () => {
+              const currentQuestion = allQuestions.find(q => q.id === question.id)!;
+              const isPinned = !!currentQuestion.sectionId;
+              let newParentId: string | null = null;
+              if (!isPinned) {
+                const node = reactFlow.getNode(question.id);
+                if (node && node.positionAbsolute) {
+                  const parentSection = findParentSection(template.sections, node.positionAbsolute.x, node.positionAbsolute.y);
+                  newParentId = parentSection ? parentSection.id : null;
+                }
+              }
+              const newSections = template.sections.map(s => ({
+                ...s,
+                questions: s.questions.map(q => q.id === question.id ? { ...q, sectionId: newParentId } : q)
+              }));
+              onTemplateChange({ ...template, sections: newSections });
+            }
           },
           selected: question.id === selectedQuestionId,
           zIndex: 2,
@@ -108,7 +126,7 @@ export function FormBuilder({
     });
 
     return nodes;
-  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, onDeleteQuestion]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, onDeleteQuestion, allQuestions, reactFlow]);
   
   const initialEdges = useMemo(() => {
      const newEdges: Edge[] = [];
@@ -153,32 +171,23 @@ export function FormBuilder({
 
         if (node.type === 'question' && node.positionAbsolute) {
             const questionId = node.id;
-            const absolutePosition = node.positionAbsolute;
-
-            const newParentSection = findParentSection(template.sections, absolutePosition.x, absolutePosition.y);
-            const newSectionId = newParentSection ? newParentSection.id : null;
-
-            const newSections = template.sections.map(section => {
-                let questions = section.questions.filter(q => q.id !== questionId);
-                if (section.id === newSectionId) {
-                    const originalQuestion = allQuestions.find(q => q.id === questionId)!;
-                    questions.push({
-                        ...originalQuestion,
-                        position: {
-                            x: absolutePosition.x - newParentSection!.position.x,
-                            y: absolutePosition.y - newParentSection!.position.y,
-                        },
-                        sectionId: newSectionId,
-                    });
+            const updatedQuestion = allQuestions.find(q => q.id === questionId)!;
+            
+            const newSections = template.sections.map(s => ({
+              ...s,
+              questions: s.questions.map(q => {
+                if (q.id === questionId) {
+                  return { ...q, position: node.position };
                 }
-                return { ...section, questions };
-            });
+                return q;
+              })
+            }));
 
             onTemplateChange({ ...template, sections: newSections });
         }
     },
     [template, onTemplateChange, allQuestions]
-);
+  );
 
 
   const handleNodeClick = (_: any, node: Node) => {
@@ -263,4 +272,3 @@ export function FormBuilder({
     </div>
   );
 }
-
