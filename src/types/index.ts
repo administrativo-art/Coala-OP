@@ -343,7 +343,7 @@ export type Task = {
     assigneeId: string;
     requiresApproval: boolean;
     approverType?: 'user' | 'profile';
-    approverId?: string;
+    approverId?: string; // userId or profileId
     origin: {
         type: 'form_submission';
         submissionId: string;
@@ -395,17 +395,12 @@ export type FormQuestion = {
         allowCamera: boolean;
     };
     ramifications?: FormQuestionRamification[];
-    position: { x: number; y: number };
 };
 
 export type FormSection = {
   id: string;
   name: string;
   questions: FormQuestion[];
-  position: { x: number; y: number };
-  color?: string;
-  width?: number;
-  height?: number;
 };
 
 export type FormTemplate = {

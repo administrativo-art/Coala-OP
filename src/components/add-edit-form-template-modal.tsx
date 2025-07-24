@@ -1,11 +1,12 @@
 
+
 "use client"
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { type FormTemplate, type FormQuestion as FormQuestionType, type FormSection } from '@/types';
-import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, Loader2, PlusCircle } from 'lucide-react';
+import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
+import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, PlusCircle } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -50,7 +51,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${nanoid()}`, name: 'Novo Momento', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }
+            { id: `section-${nanoid()}`, name: 'Seção 1', questions: [] }
           ],
         });
       }
@@ -65,10 +66,10 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     }
   }, [open, templateToEdit]);
 
-  const handleTemplateChange = (newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
+  const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
     setInternalTemplate(newTemplate);
     setHasUnsavedChanges(true);
-  }
+  }, []);
   
   const autoSave = async (showToast = false) => {
     if (!internalTemplate || !('id' in internalTemplate)) return;
@@ -116,33 +117,35 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     }
   }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
 
-  const handleAddQuestion = () => {
+  const handleAddQuestion = (sectionId: string) => {
     if (!internalTemplate) return;
 
-    const newQuestion: FormQuestionType = {
-        id: `question-${nanoid()}`,
-        label: 'Nova Pergunta',
-        type: 'text',
-        isRequired: false,
-        position: { x: 10, y: 10 },
+    const newQuestion: FormQuestion = {
+      id: `question-${nanoid()}`,
+      label: 'Nova Pergunta',
+      type: 'text',
+      isRequired: false,
     };
 
-    // Add the new question to the first section
-    // or to a new section if none exist.
-    const newSections = [...(internalTemplate.sections || [])];
-    if (newSections.length === 0) {
-        newSections.push({
-            id: `section-${nanoid()}`,
-            name: 'Novo Momento',
-            questions: [newQuestion],
-            position: { x: 0, y: 0 },
-            color: '#FEE2E2'
-        });
-    } else {
-        newSections[0].questions = [...(newSections[0].questions || []), newQuestion];
-    }
+    const newSections = internalTemplate.sections.map(section => {
+      if (section.id === sectionId) {
+        return { ...section, questions: [...section.questions, newQuestion] };
+      }
+      return section;
+    });
     
     handleTemplateChange({ ...internalTemplate, sections: newSections });
+    setSelectedQuestionId(newQuestion.id);
+  };
+  
+  const handleAddSection = () => {
+    if (!internalTemplate) return;
+    const newSection: FormSection = {
+      id: `section-${nanoid()}`,
+      name: `Seção ${internalTemplate.sections.length + 1}`,
+      questions: [],
+    };
+    handleTemplateChange({ ...internalTemplate, sections: [...internalTemplate.sections, newSection] });
   };
   
   const selectedQuestion = useMemo(() => {
@@ -154,7 +157,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     return null;
   }, [selectedQuestionId, internalTemplate]);
 
-  const handleQuestionChange = (updatedQuestion: FormQuestionType) => {
+  const handleQuestionChange = (updatedQuestion: FormQuestion) => {
     if (!internalTemplate) return;
 
     const newSections = internalTemplate.sections.map(section => {
@@ -205,10 +208,13 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                     {internalTemplate && (
                         <FormBuilder 
                             key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
-                            initialTemplate={internalTemplate}
+                            template={internalTemplate}
                             onTemplateChange={handleTemplateChange}
-                            onNodeSelect={setSelectedQuestionId}
-                            selectedNodeId={selectedQuestionId}
+                            onSelectQuestion={setSelectedQuestionId}
+                            onAddQuestion={handleAddQuestion}
+                            onAddSection={handleAddSection}
+                            selectedQuestionId={selectedQuestionId}
+                            isPublished={isPublished}
                         />
                     )}
                     {selectedQuestion && (
@@ -238,10 +244,6 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           <div className="w-full flex justify-between items-center">
              <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-                <Button variant="outline" onClick={handleAddQuestion} disabled={isPublished}>
-                    <PlusCircle className="mr-2 h-4 w-4"/>
-                    Adicionar Pergunta
-                </Button>
             </div>
             
             <div className="flex items-center gap-2">

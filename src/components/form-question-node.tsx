@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { memo } from 'react';
@@ -18,7 +19,6 @@ interface QuestionNodeProps {
 export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
   return (
     <>
-      <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-primary" />
       <Card className={cn("w-full shadow-md hover:shadow-lg transition-shadow duration-200", selected && "ring-2 ring-primary")}>
         <CardHeader className="p-3 space-y-1">
           <CardTitle className="text-base flex items-center gap-2">
@@ -28,7 +28,6 @@ export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
           {data.description && <CardDescription className="text-xs truncate">{data.description}</CardDescription>}
         </CardHeader>
       </Card>
-      <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-primary" />
     </>
   );
 });

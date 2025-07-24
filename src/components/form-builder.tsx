@@ -1,282 +1,149 @@
 
+
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import ReactFlow, {
-  Controls,
-  Background,
-  applyNodeChanges,
-  applyEdgeChanges,
-  addEdge,
-  type Node,
-  type Edge,
-  type OnNodesChange,
-  type OnEdgesChange,
-  type OnConnect,
-  type NodeTypes,
-  type OnNodeClick,
-  MarkerType,
-  OnNodesDelete,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { SectionNode } from './section-node';
-import { QuestionNode } from './form-question-node';
+import React from 'react';
+import { type FormTemplate, type FormQuestion } from '@/types';
+import { PlusCircle, GripVertical } from 'lucide-react';
+import { Button } from './ui/button';
 import { nanoid } from 'nanoid';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Trash2 } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Card, CardHeader } from './ui/card';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from './ui/scroll-area';
 
-interface FormBuilderProps {
-  initialTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
-  onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id'>) => void;
-  onNodeSelect: (nodeId: string | null) => void;
-  selectedNodeId: string | null;
+interface QuestionCardProps {
+    question: FormQuestion;
+    isSelected: boolean;
+    onSelect: () => void;
 }
 
-const SECTION_WIDTH = 400;
-const SECTION_GAP = 50;
-const DEFAULT_SECTION_HEIGHT = 600;
+const QuestionCard = React.memo(({ question, isSelected, onSelect }: QuestionCardProps) => {
+    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: question.id });
 
-export function FormBuilder({ initialTemplate, onTemplateChange, onNodeSelect, selectedNodeId }: FormBuilderProps) {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const deleteZoneRef = useRef<HTMLDivElement>(null);
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+    };
 
-  const nodeTypes: NodeTypes = useMemo(() => ({
-    section: SectionNode,
-    question: QuestionNode,
-  }), []);
-  
-  const handleSectionUpdate = (sectionId: string, updates: Partial<FormSection>) => {
-    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === sectionId);
-    if(sectionIndex > -1) {
-        newTemplate.sections[sectionIndex] = { ...newTemplate.sections[sectionIndex], ...updates };
-        onTemplateChange(newTemplate);
-    }
-  }
-
-  const handleDeleteSection = () => {
-    if (!sectionToDelete) return;
-
-    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    newTemplate.sections = newTemplate.sections.filter((s: FormSection) => s.id !== sectionToDelete);
-    onTemplateChange(newTemplate);
-    setSectionToDelete(null);
-  };
-
-
-  useEffect(() => {
-    if (!initialTemplate || !initialTemplate.sections) {
-      setNodes([]);
-      setEdges([]);
-      return;
-    }
-    const newNodes: Node[] = [];
-    const newEdges: Edge[] = [];
-    
-    initialTemplate.sections.forEach((section) => {
-      newNodes.push({
-        id: section.id,
-        type: 'section',
-        data: { 
-            label: section.name,
-            color: section.color,
-            onUpdate: (updates: Partial<FormSection>) => handleSectionUpdate(section.id, updates),
-            onDelete: () => setSectionToDelete(section.id),
-        },
-        position: section.position,
-        style: { width: section.width || SECTION_WIDTH, height: section.height || DEFAULT_SECTION_HEIGHT },
-        zIndex: 1,
-        selectable: true,
-        resizable: true,
-      });
-
-      section.questions.forEach((question) => {
-        newNodes.push({
-          id: question.id,
-          type: 'question',
-          data: { label: question.label, description: question.description },
-          position: question.position,
-          draggable: true,
-          zIndex: 10,
-        });
-
-        question.ramifications?.forEach(ramification => {
-          if (ramification.action === 'show_question' && ramification.targetQuestionId) {
-            newEdges.push({
-              id: `e-${question.id}-${ramification.targetQuestionId}-${ramification.id}`,
-              source: question.id,
-              target: ramification.targetQuestionId,
-              type: 'smoothstep',
-              markerEnd: { type: MarkerType.ArrowClosed },
-              label: ramification.conditions[0]?.value || 'next',
-              zIndex: 5,
-            });
-          }
-        });
-      });
-    });
-    
-    setNodes(newNodes);
-    setEdges(newEdges);
-  }, [initialTemplate]);
-
-  useEffect(() => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.type === 'question' || node.type === 'section') {
-          node.selected = node.id === selectedNodeId;
-        }
-        return node;
-      })
+    return (
+        <div ref={setNodeRef} style={style} onClick={onSelect} className="w-full">
+             <Card className={cn("w-full shadow-md hover:shadow-lg transition-shadow duration-200 group", isSelected && "ring-2 ring-primary")}>
+                <CardHeader className="p-3 flex flex-row items-center gap-2">
+                     <button {...attributes} {...listeners} className="cursor-grab p-1">
+                        <GripVertical className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                    </button>
+                    <div className="flex-grow">
+                        <p className="font-semibold">{question.label}</p>
+                        {question.description && <p className="text-sm text-muted-foreground">{question.description}</p>}
+                    </div>
+                </CardHeader>
+            </Card>
+        </div>
     );
-  }, [selectedNodeId]);
+});
+QuestionCard.displayName = 'QuestionCard';
 
-  const onNodesChange: OnNodesChange = useCallback(
-    (changes) => {
-        setNodes((nds) => applyNodeChanges(changes, nds));
-        
-        let templateNeedsUpdate = false;
-        let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-        
-        changes.forEach(change => {
-            if (change.type === 'dimensions' && !change.resizing && change.dimensions) {
-                const sectionIndex = newTemplate.sections.findIndex((s: any) => s.id === change.id);
-                if (sectionIndex > -1) {
-                    newTemplate.sections[sectionIndex].width = change.dimensions.width;
-                    newTemplate.sections[sectionIndex].height = change.dimensions.height;
-                    templateNeedsUpdate = true;
-                }
-            }
-        });
-        
-        if (templateNeedsUpdate) {
-            onTemplateChange(newTemplate);
+interface SectionColumnProps {
+    section: FormTemplate['sections'][0];
+    onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => void;
+    template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
+    selectedQuestionId: string | null;
+    onSelectQuestion: (id: string) => void;
+    onAddQuestion: (sectionId: string) => void;
+    isPublished: boolean;
+}
+
+const SectionColumn = React.memo(({ section, onTemplateChange, template, selectedQuestionId, onSelectQuestion, onAddQuestion, isPublished }: SectionColumnProps) => {
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+            const oldIndex = section.questions.findIndex(q => q.id === active.id);
+            const newIndex = section.questions.findIndex(q => q.id === over!.id);
+            const newQuestions = arrayMove(section.questions, oldIndex, newIndex);
+
+            const newSections = template.sections.map(s =>
+                s.id === section.id ? { ...s, questions: newQuestions } : s
+            );
+            onTemplateChange({ ...template, sections: newSections });
         }
-    },
-    [setNodes, initialTemplate, onTemplateChange]
-  );
-  
-  const onNodesDelete: OnNodesDelete = useCallback((deletedNodes) => {
-    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    
-    deletedNodes.forEach(node => {
-      newTemplate.sections.forEach((section: FormSection) => {
-        section.questions = section.questions.filter(q => q.id !== node.id);
-      });
-    });
+    };
 
-    onTemplateChange(newTemplate);
-  }, [initialTemplate, onTemplateChange]);
+    return (
+        <Card className="w-[400px] h-full flex flex-col shrink-0 bg-muted/50">
+            <CardHeader>
+                <p className="font-semibold text-lg">{section.name}</p>
+            </CardHeader>
+            <ScrollArea className="flex-1">
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={section.questions.map(q => q.id)} strategy={verticalListSortingStrategy}>
+                        <div className="p-4 space-y-3">
+                            {section.questions.map(question => (
+                                <QuestionCard
+                                    key={question.id}
+                                    question={question}
+                                    isSelected={selectedQuestionId === question.id}
+                                    onSelect={() => onSelectQuestion(question.id)}
+                                />
+                            ))}
+                        </div>
+                    </SortableContext>
+                </DndContext>
+            </ScrollArea>
+             {!isPublished && (
+                <div className="p-4 border-t">
+                    <Button variant="outline" className="w-full" onClick={() => onAddQuestion(section.id)}>
+                        <PlusCircle className="mr-2" /> Adicionar Pergunta
+                    </Button>
+                </div>
+            )}
+        </Card>
+    );
+});
+SectionColumn.displayName = 'SectionColumn';
 
+interface FormBuilderProps {
+  template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
+  onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => void;
+  onSelectQuestion: (questionId: string | null) => void;
+  selectedQuestionId: string | null;
+  onAddQuestion: (sectionId: string) => void;
+  onAddSection: () => void;
+  isPublished: boolean;
+}
 
-  const onEdgesChange: OnEdgesChange = useCallback(
-    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [setEdges]
-  );
-  const onConnect: OnConnect = useCallback(
-    (connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges]
-  );
-  
-  const onNodeClick: OnNodeClick = useCallback((event, node) => {
-    if (node.type === 'question' || node.type === 'section') {
-        onNodeSelect(node.id);
-    } else {
-        onNodeSelect(null);
-    }
-  }, [onNodeSelect]);
-
-  const onNodeDragStart: OnNodeClick = useCallback((_, node) => {
-    if (node.type === 'question') {
-        setIsDragging(true);
-    }
-  }, []);
-
-  const onNodeDragStop: OnNodeClick = useCallback((event: React.MouseEvent, node) => {
-    setIsDragging(false);
-
-    if (deleteZoneRef.current && node.type === 'question') {
-        const deleteZoneBounds = deleteZoneRef.current.getBoundingClientRect();
-        if (
-            event.clientX >= deleteZoneBounds.left &&
-            event.clientX <= deleteZoneBounds.right &&
-            event.clientY >= deleteZoneBounds.top &&
-            event.clientY <= deleteZoneBounds.bottom
-        ) {
-            let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-            newTemplate.sections.forEach((section: FormSection) => {
-                section.questions = section.questions.filter(q => q.id !== node.id);
-            });
-            onTemplateChange(newTemplate);
-            return;
-        }
-    }
-
-    let newTemplate = JSON.parse(JSON.stringify(initialTemplate));
-    let templateNeedsUpdate = false;
-    
-    if (node.type === 'section') {
-        const sectionIndex = newTemplate.sections.findIndex((s:any) => s.id === node.id);
-        if (sectionIndex > -1) {
-            newTemplate.sections[sectionIndex].position = node.position;
-            templateNeedsUpdate = true;
-        }
-    } else if (node.type === 'question') {
-        for (const section of newTemplate.sections) {
-            const questionIndex = section.questions.findIndex((q: any) => q.id === node.id);
-            if (questionIndex > -1) {
-                section.questions[questionIndex].position = node.position;
-                templateNeedsUpdate = true;
-                break;
-            }
-        }
-    }
-    
-    if (templateNeedsUpdate) {
-        onTemplateChange(newTemplate);
-    }
-
-  }, [initialTemplate, onTemplateChange]);
-
-
+export function FormBuilder({ template, onTemplateChange, onSelectQuestion, selectedQuestionId, onAddQuestion, onAddSection, isPublished }: FormBuilderProps) {
   return (
-    <div style={{ height: '100%', width: '100%', position: 'relative' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodesDelete={onNodesDelete}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDragStop={onNodeDragStop}
-        nodeTypes={nodeTypes}
-        fitView
-        className="bg-muted/50"
-      >
-        <Controls />
-        <Background />
-      </ReactFlow>
-      
-      {isDragging && (
-          <div ref={deleteZoneRef} className="absolute bottom-5 right-5 z-20 flex h-24 w-48 flex-col items-center justify-center rounded-lg border-2 border-dashed border-destructive bg-destructive/10 text-destructive transition-colors pointer-events-none">
-            <Trash2 className="h-8 w-8" />
-            <p className="mt-1 text-sm font-medium">Arraste aqui para excluir</p>
-          </div>
+    <div className="w-full h-full flex gap-4 p-4 overflow-x-auto bg-muted">
+      {template.sections.map(section => (
+        <SectionColumn
+          key={section.id}
+          section={section}
+          template={template}
+          onTemplateChange={onTemplateChange}
+          selectedQuestionId={selectedQuestionId}
+          onSelectQuestion={onSelectQuestion}
+          onAddQuestion={onAddQuestion}
+          isPublished={isPublished}
+        />
+      ))}
+      {!isPublished && (
+        <div className="shrink-0 w-[400px]">
+            <Button variant="outline" className="w-full h-20 border-dashed" onClick={onAddSection}>
+                <PlusCircle className="mr-2" /> Adicionar Momento / Seção
+            </Button>
+        </div>
       )}
-      
-      <DeleteConfirmationDialog 
-        open={!!sectionToDelete}
-        onOpenChange={() => setSectionToDelete(null)}
-        onConfirm={handleDeleteSection}
-        title="Excluir Momento?"
-        description="Esta ação é irreversível e excluirá o momento e todas as perguntas contidas nele."
-      />
     </div>
   );
 }
