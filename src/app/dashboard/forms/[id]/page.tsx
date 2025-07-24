@@ -31,7 +31,7 @@ const SortableQuestionItem = ({ id, question, onSelect, onDelete, selectedQuesti
     };
 
     return (
-        <div 
+        <div
             onClick={onSelect}
             className={cn("p-4 rounded-lg bg-card border cursor-pointer", selectedQuestionId === id && "ring-2 ring-primary border-primary")}
         >
@@ -61,7 +61,6 @@ export default function FormBuilderPage() {
 
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
-    const [view, setView] = useState<'builder' | 'settings'>('builder');
 
     const { users } = useAuth();
     const { profiles } = useProfiles();
@@ -96,12 +95,6 @@ export default function FormBuilderPage() {
             }
         }
     }, [templateId, templates, loading, router, selectedQuestionId]);
-    
-    useEffect(() => {
-        if (selectedQuestionId) {
-            setView('builder');
-        }
-    }, [selectedQuestionId]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -148,7 +141,9 @@ export default function FormBuilderPage() {
         handleTemplateChange({ questions: newQuestions });
         
         if (selectedQuestionId === questionId) {
-            const newSelectedId = newQuestions.length > 0 ? newQuestions[Math.max(0, newQuestions.findIndex(q => q.order >= (sortedQuestions.find(sq => sq.id === questionId)?.order || 0)) -1)].id : null;
+            const currentOrder = sortedQuestions.find(sq => sq.id === questionId)?.order ?? 0;
+            const newIndex = Math.max(0, newQuestions.findIndex(q => q.order >= currentOrder) -1);
+            const newSelectedId = newQuestions.length > 0 ? newQuestions[newIndex]?.id : null;
             setSelectedQuestionId(newSelectedId);
         }
     };
@@ -207,29 +202,6 @@ export default function FormBuilderPage() {
     }
 
     const renderRightPanel = () => {
-        if (view === 'settings') {
-            return (
-                 <div className="w-[500px] bg-card border-l flex flex-col h-full shrink-0">
-                    <div className="p-4 border-b">
-                        <h3 className="font-semibold">Configurações Gerais</h3>
-                    </div>
-                    <ScrollArea className="flex-1">
-                        <div className="p-4">
-                            <FormGeneralSettings 
-                                template={internalTemplate} 
-                                onTemplateChange={(updates) => handleTemplateChange(updates)}
-                            />
-                        </div>
-                    </ScrollArea>
-                    <div className="mt-auto p-4 border-t">
-                        <Button variant="outline" className="w-full" onClick={() => setView('builder')}>
-                            Voltar para o editor
-                        </Button>
-                    </div>
-                </div>
-            );
-        }
-
         if (selectedQuestion) {
             return (
                 <QuestionSettingsPanel
@@ -247,7 +219,7 @@ export default function FormBuilderPage() {
         return (
             <div className="w-[500px] bg-card border-l flex flex-col h-full shrink-0">
                 <div className="p-4 border-b">
-                    <h3 className="font-semibold">Perguntas</h3>
+                    <h3 className="font-semibold">Ferramentas</h3>
                 </div>
                 <div className="p-4 space-y-2">
                     <Button variant="outline" className="w-full justify-start" onClick={handleAddQuestion}>
@@ -255,9 +227,11 @@ export default function FormBuilderPage() {
                     </Button>
                 </div>
                  <div className="mt-auto p-4 border-t">
-                    <Button variant="ghost" className="w-full justify-start" onClick={() => setView('settings')}>
-                        <Settings className="mr-2 h-4 w-4"/> Configurações Gerais
-                    </Button>
+                    <h3 className="font-semibold mb-2">Configurações Gerais</h3>
+                    <FormGeneralSettings 
+                        template={internalTemplate} 
+                        onTemplateChange={(updates) => handleTemplateChange(updates)}
+                    />
                 </div>
             </div>
         );
