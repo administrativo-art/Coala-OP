@@ -174,60 +174,60 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     // Automatic stock level calculation and update
                     if (reportId) {
                         const updatedReports = [...allReports, { ...newReport, id: reportId }];
-                        const productsToUpdateMap = new Map<string, BaseProduct>();
-                        const processedBaseProductIds = new Set(finalResults.map(r => r.baseProductId));
+                        const baseProductMap = new Map<string, BaseProduct>(baseProducts.map(bp => [bp.id, JSON.parse(JSON.stringify(bp))]));
 
-                        processedBaseProductIds.forEach(bpId => {
-                            const product = baseProducts.find(p => p.id === bpId);
-                            if (product) {
-                                productsToUpdateMap.set(bpId, JSON.parse(JSON.stringify(product)));
-                            }
-                        });
+                        const monthlyConsumptionByProduct: Record<string, Record<string, number>> = {}; // { baseProductId: { kioskId: totalConsumption } }
 
-                        // 1. Calculate consumption per kiosk
-                        const consumptionPerKiosk: Record<string, Record<string, number>> = {}; // { baseProductId: { kioskId: totalConsumption } }
                         updatedReports.forEach(report => {
                             report.results.forEach(item => {
-                                if (processedBaseProductIds.has(item.baseProductId)) {
-                                    if (!consumptionPerKiosk[item.baseProductId]) {
-                                        consumptionPerKiosk[item.baseProductId] = {};
+                                if (baseProductMap.has(item.baseProductId)) {
+                                    if (!monthlyConsumptionByProduct[item.baseProductId]) {
+                                        monthlyConsumptionByProduct[item.baseProductId] = {};
                                     }
-                                    consumptionPerKiosk[item.baseProductId][report.kioskId] = (consumptionPerKiosk[item.baseProductId][report.kioskId] || 0) + item.consumedQuantity;
+                                    const kioskCons = monthlyConsumptionByProduct[item.baseProductId];
+                                    kioskCons[report.kioskId] = (kioskCons[report.kioskId] || 0) + item.consumedQuantity;
                                 }
                             });
                         });
                         
-                        // 2. Iterate through products to update, recalculating all stock levels
-                        for (const product of productsToUpdateMap.values()) {
+                        const productsToUpdate: BaseProduct[] = [];
+                        
+                        for (const bpId in monthlyConsumptionByProduct) {
+                            const product = baseProductMap.get(bpId);
+                            if (!product) continue;
+                            
                             const newStockLevels: { [kioskId: string]: { min: number } } = {};
                             let totalNetworkConsumption = 0;
-
-                            kiosks.forEach(k => {
-                                if (k.id === 'matriz') return;
-
-                                const monthlyConsumption = consumptionPerKiosk[product.id]?.[k.id];
+                            
+                            // Calculate for each kiosk
+                            for (const k of kiosks) {
+                                if (k.id === 'matriz') continue;
+                                const monthlyConsumption = monthlyConsumptionByProduct[bpId]?.[k.id];
                                 if (monthlyConsumption && monthlyConsumption > 0) {
                                     const dailyAvg = monthlyConsumption / 30;
                                     const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
                                     newStockLevels[k.id] = { min: kioskMinStock };
                                     totalNetworkConsumption += monthlyConsumption;
                                 }
-                            });
+                            }
                             
-                            // 3. Set Matriz stock level
+                            // Calculate for Matriz
                             if (totalNetworkConsumption > 0) {
                                 newStockLevels['matriz'] = { min: Math.ceil(totalNetworkConsumption) };
                             }
 
-                            // 4. Update the product in the map
-                            product.stockLevels = newStockLevels;
-                            productsToUpdateMap.set(product.id, product);
+                            // Only add to update list if stock levels changed
+                            if (JSON.stringify(product.stockLevels) !== JSON.stringify(newStockLevels)) {
+                                product.stockLevels = newStockLevels;
+                                productsToUpdate.push(product);
+                            }
                         }
-                        
-                        const productsToUpdateArray = Array.from(productsToUpdateMap.values());
-                        if (productsToUpdateArray.length > 0) {
-                            await updateMultipleBaseProducts(productsToUpdateArray);
-                            toast({ title: 'Sucesso', description: `Relatório analisado e salvo. Estoques mínimos atualizados.` });
+
+                        if (productsToUpdate.length > 0) {
+                            await updateMultipleBaseProducts(productsToUpdate);
+                            toast({ title: 'Sucesso!', description: `${productsToUpdate.length} produto(s) base tiveram o estoque mínimo recalculado.` });
+                        } else {
+                            toast({ title: 'Sucesso!', description: 'Relatório analisado. Nenhum estoque mínimo precisou de alteração.' });
                         }
                     }
                     
