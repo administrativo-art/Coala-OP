@@ -177,12 +177,24 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     // Automatic stock level calculation and update
                     if (reportId) {
                         const productsToUpdateMap = new Map<string, BaseProduct>();
-                        baseProducts.forEach(bp => productsToUpdateMap.set(bp.id, JSON.parse(JSON.stringify(bp))));
+                        const processedBaseProductIds = new Set(Object.keys(consumptionByProductForKiosk));
+
+                        processedBaseProductIds.forEach(bpId => {
+                            const product = baseProducts.find(p => p.id === bpId);
+                            if (product) {
+                                // IMPORTANT: Deep clone and reset stock levels to avoid merging old and new data
+                                const newProductState = JSON.parse(JSON.stringify(product));
+                                newProductState.stockLevels = {}; 
+                                productsToUpdateMap.set(bpId, newProductState);
+                            }
+                        });
                         
                         const totalConsumptionAcrossAllKiosks: Record<string, number> = {};
-                        [...allReports, {id: reportId, results: finalResults}].forEach(report => {
+                        [...allReports, {id: reportId, results: finalResults, kioskId: kiosk.id} as ConsumptionReport].forEach(report => {
                             report.results.forEach(item => {
-                                totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
+                                if (processedBaseProductIds.has(item.baseProductId)) {
+                                    totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
+                                }
                             });
                         });
                         
