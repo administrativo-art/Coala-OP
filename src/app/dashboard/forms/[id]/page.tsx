@@ -124,7 +124,7 @@ export default function FormBuilderPage() {
             order: currentQuestions.length
         };
         const newQuestions = [...currentQuestions, newQuestion];
-        setInternalTemplate(prev => ({ ...prev!, questions: newQuestions }));
+        handleTemplateChange({ questions: newQuestions });
         setSelectedQuestionId(newQuestion.id);
         setView('builder');
     };
@@ -204,7 +204,7 @@ export default function FormBuilderPage() {
     const renderRightPanel = () => {
         if (view === 'settings') {
             return (
-                 <div className="w-[350px] bg-card border-l flex flex-col h-full">
+                 <div className="w-[500px] bg-card border-l flex flex-col h-full shrink-0">
                     <div className="p-4 border-b">
                         <h3 className="font-semibold">Configurações Gerais</h3>
                     </div>
@@ -240,7 +240,7 @@ export default function FormBuilderPage() {
         }
 
         return (
-            <div className="w-[350px] bg-card border-l flex flex-col h-full">
+            <div className="w-[500px] bg-card border-l flex flex-col h-full shrink-0">
                 <div className="p-4 border-b">
                     <h3 className="font-semibold">Perguntas</h3>
                 </div>
