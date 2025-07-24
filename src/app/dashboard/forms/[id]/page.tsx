@@ -21,6 +21,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FormGeneralSettings } from '@/components/form-general-settings';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 
 const SortableQuestionItem = ({
@@ -88,6 +89,7 @@ export default function FormBuilderPage() {
 
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const { users } = useAuth();
     const { profiles } = useProfiles();
@@ -116,9 +118,12 @@ export default function FormBuilderPage() {
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
                  setInternalTemplate(newTemplate);
+                 if (newTemplate.questions.length > 0 && !selectedQuestionId) {
+                     setSelectedQuestionId(newTemplate.questions[0].id)
+                 }
             }
         }
-    }, [templateId, templates, loading, router]);
+    }, [templateId, templates, loading, router, selectedQuestionId]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -251,8 +256,11 @@ export default function FormBuilderPage() {
                         </Link>
                     </Button>
                 </div>
-                <div className="flex items-center gap-4">
-                     <h1 className="text-xl font-bold mt-2 truncate">{internalTemplate.name}</h1>
+                <div className="flex items-center gap-2">
+                     <h1 className="text-xl font-bold truncate">{internalTemplate.name}</h1>
+                     <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)}>
+                         <Settings className="h-5 w-5 text-muted-foreground"/>
+                     </Button>
                 </div>
                 <div className="flex gap-2">
                      <Button onClick={() => handleSave(false)} variant="secondary" disabled={isSaving}>
@@ -268,11 +276,6 @@ export default function FormBuilderPage() {
             
              <main className="flex-1 min-h-0 bg-muted/40 p-6">
                 <div className="max-w-3xl mx-auto space-y-6">
-                    <FormGeneralSettings
-                        template={internalTemplate}
-                        onTemplateChange={handleTemplateChange}
-                    />
-                    
                     <Accordion type="single" collapsible value={selectedQuestionId ?? undefined} onValueChange={setSelectedQuestionId}>
                         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                             <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
@@ -301,7 +304,22 @@ export default function FormBuilderPage() {
                     </Button>
                 </div>
             </main>
+            
+            <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Configurações Gerais</DialogTitle>
+                        <DialogDescription>Defina o nome e o comportamento do formulário.</DialogDescription>
+                    </DialogHeader>
+                    <FormGeneralSettings
+                        template={internalTemplate}
+                        onTemplateChange={handleTemplateChange}
+                    />
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
 
+    
