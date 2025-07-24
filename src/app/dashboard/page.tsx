@@ -53,7 +53,6 @@ function OnlineUsersPanel() {
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         const q = query(
             collection(db, "userPresence"), 
-            where("status", "==", "online"),
             where("last_seen", ">", fiveMinutesAgo)
         );
 
@@ -61,14 +60,16 @@ function OnlineUsersPanel() {
             const users: OnlineUser[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const lastSeen = (data.last_seen as Timestamp)?.toDate();
-                if (lastSeen) {
-                    users.push({
-                        id: doc.id,
-                        username: data.username,
-                        status: data.status,
-                        last_seen: lastSeen,
-                    });
+                if (data.status === 'online') {
+                    const lastSeen = (data.last_seen as Timestamp)?.toDate();
+                    if (lastSeen) {
+                        users.push({
+                            id: doc.id,
+                            username: data.username,
+                            status: data.status,
+                            last_seen: lastSeen,
+                        });
+                    }
                 }
             });
             setOnlineUsers(users.sort((a,b) => a.username.localeCompare(b.username)));
@@ -516,3 +517,6 @@ export default function DashboardPage() {
     );
 }
 
+
+
+    
