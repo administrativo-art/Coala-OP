@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import { useForm, FormProvider } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type FormTemplate } from '@/types';
@@ -46,63 +46,56 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
   const formType = form.watch('type');
 
   return (
-    <div className="max-w-2xl mx-auto">
-        <Form {...form}>
-            <form className="space-y-8">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Informações básicas</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <FormField control={form.control} name="name" render={({ field }) => (
-                            <FormItem><FormLabel>Nome do Formulário</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )}/>
-                        <FormField control={form.control} name="submissionTitleFormat" render={({ field }) => (
-                            <FormItem><FormLabel>Formato do Título da Resposta (Opcional)</FormLabel><FormControl><Input {...field} placeholder="Ex: Checklist {kioskName} - {date}" /></FormControl><FormMessage /></FormItem>
-                        )}/>
-                    </CardContent>
-                </Card>
-
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Comportamento</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <FormField control={form.control} name="type" render={({ field }) => (
+    <Card>
+        <CardHeader>
+            <CardTitle>Configurações Gerais</CardTitle>
+            <CardDescription>
+                Defina o nome e o comportamento do formulário.
+            </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <Form {...form}>
+                <form className="space-y-4">
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem><FormLabel>Nome do Formulário</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="submissionTitleFormat" render={({ field }) => (
+                        <FormItem><FormLabel>Formato do Título da Resposta (Opcional)</FormLabel><FormControl><Input {...field} placeholder="Ex: Checklist {kioskName} - {date}" /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="type" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Tipo de Formulário</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="standard">Padrão (On-Demand)</SelectItem>
+                                    <SelectItem value="operational_checklist">Checklist Operacional (Automático)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                    {formType === 'operational_checklist' && (
+                        <FormField control={form.control} name="moment" render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Tipo de Formulário</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                <FormLabel>Momento do Checklist</FormLabel>
+                                <Select onValueChange={(value) => field.onChange(value as any)} value={field.value ?? undefined}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione o momento..."/></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="standard">Padrão (On-Demand)</SelectItem>
-                                        <SelectItem value="operational_checklist">Checklist Operacional (Automático)</SelectItem>
+                                        <SelectItem value="PRE_ABERTURA">Pré-Abertura</SelectItem>
+                                        <SelectItem value="ABERTURA">Abertura</SelectItem>
+                                        <SelectItem value="TROCA_FECHAMENTO">Troca (Fechamento)</SelectItem>
+                                        <SelectItem value="TROCA_ABERTURA">Troca (Abertura)</SelectItem>
+                                        <SelectItem value="FECHAMENTO_FINAL">Fechamento Final</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />
                             </FormItem>
                         )}/>
-                        {formType === 'operational_checklist' && (
-                            <FormField control={form.control} name="moment" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Momento do Checklist</FormLabel>
-                                    <Select onValueChange={(value) => field.onChange(value as any)} value={field.value ?? undefined}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione o momento..."/></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="PRE_ABERTURA">Pré-Abertura</SelectItem>
-                                            <SelectItem value="ABERTURA">Abertura</SelectItem>
-                                            <SelectItem value="TROCA_FECHAMENTO">Troca (Fechamento)</SelectItem>
-                                            <SelectItem value="TROCA_ABERTURA">Troca (Abertura)</SelectItem>
-                                            <SelectItem value="FECHAMENTO_FINAL">Fechamento Final</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}/>
-                        )}
-                    </CardContent>
-                </Card>
-            </form>
-        </Form>
-    </div>
+                    )}
+                </form>
+            </Form>
+        </CardContent>
+    </Card>
   );
 }

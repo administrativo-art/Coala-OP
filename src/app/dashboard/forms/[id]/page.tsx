@@ -10,7 +10,6 @@ import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft } f
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
-import { FormGeneralSettings } from '@/components/form-general-settings';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
@@ -21,9 +20,28 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FormGeneralSettings } from '@/components/form-general-settings';
 
 
-const SortableQuestionItem = ({ id, question, onSelect, onDelete, selectedQuestionId }: { id: string, question: FormQuestion, onSelect: () => void, onDelete: () => void, selectedQuestionId: string | null }) => {
+const SortableQuestionItem = ({
+    id,
+    question,
+    onDelete,
+    selectedQuestionId,
+    allQuestions,
+    onQuestionChange,
+    users,
+    profiles
+}: {
+    id: string,
+    question: FormQuestion,
+    onDelete: () => void,
+    selectedQuestionId: string | null,
+    allQuestions: FormQuestion[],
+    onQuestionChange: (updatedQuestion: FormQuestion) => void,
+    users: User[],
+    profiles: Profile[],
+}) => {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -31,24 +49,33 @@ const SortableQuestionItem = ({ id, question, onSelect, onDelete, selectedQuesti
     };
 
     return (
-        <div
-            onClick={onSelect}
-            className={cn("p-4 rounded-lg bg-card border cursor-pointer", selectedQuestionId === id && "ring-2 ring-primary border-primary")}
-        >
-             <div className="flex justify-between items-start">
-                <div className="flex-1">
-                    <p className="font-medium">{question.label}</p>
-                    <p className="text-xs text-muted-foreground">{question.type}</p>
-                </div>
-                 <div className="flex items-center gap-1">
-                    <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-8 w-8">
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={(e) => { e.stopPropagation(); onDelete();}}>
-                        <Trash2 className="h-4 w-4"/>
-                    </Button>
-                 </div>
+        <div ref={setNodeRef} style={style} className="bg-card border rounded-lg overflow-hidden">
+            <div className="flex items-center p-2 pr-3">
+                 <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
+                    <GripVertical className="h-5 w-5 text-muted-foreground" />
+                </Button>
+                <AccordionTrigger className="p-2 text-left hover:no-underline flex-1">
+                    <div>
+                        <p className="font-semibold">{question.label}</p>
+                        <p className="text-xs text-muted-foreground uppercase">{question.type}</p>
+                    </div>
+                </AccordionTrigger>
+                <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
+                    <Trash2 className="h-4 w-4"/>
+                </Button>
             </div>
+             <AccordionContent>
+                <div className="border-t">
+                    <QuestionSettingsPanel
+                        key={question.id}
+                        question={question}
+                        allQuestions={allQuestions}
+                        onChange={onQuestionChange}
+                        users={users}
+                        profiles={profiles}
+                    />
+                </div>
+             </AccordionContent>
         </div>
     );
 }
@@ -89,9 +116,6 @@ export default function FormBuilderPage() {
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
                  setInternalTemplate(newTemplate);
-                 if (newTemplate.questions.length > 0 && !selectedQuestionId) {
-                    setSelectedQuestionId(newTemplate.questions[0].id);
-                 }
             }
         }
     }, [templateId, templates, loading, router]);
@@ -164,10 +188,7 @@ export default function FormBuilderPage() {
         handleTemplateChange({ questions: newQuestions });
         
         if (selectedQuestionId === questionId) {
-            const currentOrder = sortedQuestions.find(sq => sq.id === questionId)?.order ?? 0;
-            const newIndex = Math.max(0, newQuestions.findIndex(q => q.order >= currentOrder) -1);
-            const newSelectedId = newQuestions.length > 0 ? newQuestions[newIndex]?.id : null;
-            setSelectedQuestionId(newSelectedId);
+            setSelectedQuestionId(null);
         }
     };
 
@@ -190,11 +211,6 @@ export default function FormBuilderPage() {
             setIsSaving(false);
         }
     };
-    
-    const selectedQuestion = useMemo(() => {
-        if (!selectedQuestionId || !internalTemplate) return null;
-        return internalTemplate.questions?.find(q => q.id === selectedQuestionId) || null;
-    }, [selectedQuestionId, internalTemplate]);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -224,48 +240,6 @@ export default function FormBuilderPage() {
         )
     }
 
-    const renderRightPanel = () => {
-        if (selectedQuestion) {
-            return (
-                <QuestionSettingsPanel
-                    key={selectedQuestion.id}
-                    question={selectedQuestion}
-                    allQuestions={internalTemplate?.questions || []}
-                    onChange={handleQuestionChange}
-                    onClose={() => setSelectedQuestionId(null)}
-                    users={users}
-                    profiles={profiles}
-                />
-            );
-        }
-
-        return (
-            <div className="w-[500px] bg-card border-l flex flex-col h-full shrink-0">
-                <div className="p-4 border-b">
-                    <h3 className="font-semibold">Ferramentas</h3>
-                </div>
-                <div className="p-4 space-y-2 flex-1">
-                    <Button variant="outline" className="w-full justify-start" onClick={handleAddQuestion}>
-                        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
-                    </Button>
-                </div>
-                 <div className="p-4 border-t">
-                    <Accordion type="single" collapsible>
-                       <AccordionItem value="general-settings" className="border-none">
-                           <AccordionTrigger>Configurações Gerais</AccordionTrigger>
-                           <AccordionContent>
-                                <FormGeneralSettings 
-                                    template={internalTemplate} 
-                                    onTemplateChange={(updates) => handleTemplateChange(updates)}
-                                />
-                           </AccordionContent>
-                       </AccordionItem>
-                    </Accordion>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="w-full h-full flex flex-col">
              <header className="flex items-center justify-between p-4 border-b bg-card">
@@ -276,7 +250,9 @@ export default function FormBuilderPage() {
                             Voltar
                         </Link>
                     </Button>
-                    <h1 className="text-xl font-bold mt-2 truncate">{internalTemplate.name}</h1>
+                </div>
+                <div className="flex items-center gap-4">
+                     <h1 className="text-xl font-bold mt-2 truncate">{internalTemplate.name}</h1>
                 </div>
                 <div className="flex gap-2">
                      <Button onClick={() => handleSave(false)} variant="secondary" disabled={isSaving}>
@@ -290,28 +266,40 @@ export default function FormBuilderPage() {
                 </div>
             </header>
             
-             <main className="flex-1 min-h-0 flex">
-                <ScrollArea className="flex-1 bg-muted/40 p-6">
-                    <div className="max-w-2xl mx-auto">
+             <main className="flex-1 min-h-0 bg-muted/40 p-6">
+                <div className="max-w-3xl mx-auto space-y-6">
+                    <FormGeneralSettings
+                        template={internalTemplate}
+                        onTemplateChange={handleTemplateChange}
+                    />
+                    
+                    <Accordion type="single" collapsible value={selectedQuestionId ?? undefined} onValueChange={setSelectedQuestionId}>
                         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                             <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
                                 <div className="space-y-4">
                                 {sortedQuestions.map(q => (
-                                    <SortableQuestionItem
-                                        key={q.id}
-                                        id={q.id}
-                                        question={q}
-                                        onSelect={() => setSelectedQuestionId(q.id)}
-                                        onDelete={() => handleDeleteQuestion(q.id)}
-                                        selectedQuestionId={selectedQuestionId}
-                                    />
+                                    <AccordionItem value={q.id} key={q.id} className="border-none bg-transparent">
+                                        <SortableQuestionItem
+                                            id={q.id}
+                                            question={q}
+                                            onDelete={() => handleDeleteQuestion(q.id)}
+                                            selectedQuestionId={selectedQuestionId}
+                                            allQuestions={internalTemplate.questions || []}
+                                            onQuestionChange={handleQuestionChange}
+                                            users={users}
+                                            profiles={profiles}
+                                        />
+                                    </AccordionItem>
                                 ))}
                                 </div>
                             </SortableContext>
                         </DndContext>
-                    </div>
-                </ScrollArea>
-                {renderRightPanel()}
+                    </Accordion>
+
+                    <Button variant="outline" className="w-full" onClick={handleAddQuestion}>
+                        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
+                    </Button>
+                </div>
             </main>
         </div>
     );
