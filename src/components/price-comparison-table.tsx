@@ -14,11 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { type Product, type PurchaseItem, type BaseProduct, type Entity } from "@/types";
-import { Star, CheckCircle, AlertTriangle, Info } from "lucide-react";
+import { Star, CheckCircle, AlertTriangle, Info, Building } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface PriceComparisonTableProps {
     baseProductId: string;
@@ -29,6 +30,7 @@ interface PriceComparisonTableProps {
 
 interface PriceRow {
     product: Product;
+    entityId: string;
     price: string;
     pricePerUnit: number | null;
     isBestPrice: boolean;
@@ -43,41 +45,58 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
     const { savePrice, confirmPurchase, lastSavedPrices } = usePurchase();
     const { permissions } = useAuth();
     
-    const [prices, setPrices] = useState<Record<string, string>>({});
-    const [debouncedPrices] = useDebounce(prices, 500);
+    const [localData, setLocalData] = useState<Record<string, { price: string; entityId: string }>>({});
+    const [debouncedData] = useDebounce(localData, 500);
 
     const baseProduct = useMemo(() => baseProducts.find(bp => bp.id === baseProductId), [baseProductId, baseProducts]);
     const linkedProducts = useMemo(() => products.filter(p => p.baseProductId === baseProductId), [products, baseProductId]);
+    const suppliers = useMemo(() => entities.filter(e => e.type === 'pessoa_juridica'), [entities]);
+    const lastPurchaseForBaseProduct = useMemo(() => baseProduct?.lastEffectivePrice, [baseProduct]);
 
     useEffect(() => {
-        const initialPrices: Record<string, string> = {};
+        const initialData: Record<string, { price: string; entityId: string }> = {};
         linkedProducts.forEach(p => {
             const item = items.find(i => i.productId === p.id);
-            if (item && item.price > 0) {
-                initialPrices[p.id] = item.price.toString();
+            if (item) {
+                initialData[p.id] = {
+                    price: item.price > 0 ? item.price.toString() : "",
+                    entityId: item.entityId || lastPurchaseForBaseProduct?.entityId || ""
+                };
             } else {
-                initialPrices[p.id] = "";
+                 initialData[p.id] = {
+                    price: "",
+                    entityId: lastPurchaseForBaseProduct?.entityId || ""
+                };
             }
         });
-        setPrices(initialPrices);
-    }, [linkedProducts, items]);
+        setLocalData(initialData);
+    }, [linkedProducts, items, lastPurchaseForBaseProduct]);
 
     useEffect(() => {
         if (!sessionId || isSessionClosed) return;
         
-        Object.entries(debouncedPrices).forEach(([productId, priceStr]) => {
-            const price = parseFloat(priceStr);
+        Object.entries(debouncedData).forEach(([productId, data]) => {
+            const price = parseFloat(data.price);
+            const entityId = data.entityId;
+            const existingItem = items.find(i => i.productId === productId);
+
+            // Only save if there's a price and either price or entity has changed
             if (!isNaN(price) && price > 0) {
-                const existingItem = items.find(i => i.productId === productId);
-                if (!existingItem || existingItem.price !== price) {
-                    savePrice(sessionId, productId, price);
+                 if (!existingItem || existingItem.price !== price || existingItem.entityId !== entityId) {
+                    savePrice(sessionId, productId, price, entityId);
                 }
             }
         });
-    }, [debouncedPrices, sessionId, savePrice, items, isSessionClosed]);
+    }, [debouncedData, sessionId, savePrice, items, isSessionClosed]);
 
-    const handlePriceChange = (productId: string, value: string) => {
-        setPrices(prev => ({ ...prev, [productId]: value }));
+    const handleLocalDataChange = (productId: string, field: 'price' | 'entityId', value: string) => {
+        setLocalData(prev => ({
+            ...prev,
+            [productId]: {
+                ...prev[productId],
+                [field]: value,
+            },
+        }));
     };
 
     const handleConfirm = (productId: string, pricePerUnit: number | null) => {
@@ -90,9 +109,10 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
     const tableData = useMemo((): PriceRow[] => {
         if (!baseProduct) return [];
         const rows = linkedProducts.map(p => {
-            const priceStr = prices[p.id] || "";
-            const price = parseFloat(priceStr);
+            const data = localData[p.id] || { price: '', entityId: '' };
+            const price = parseFloat(data.price);
             let pricePerUnit: number | null = null;
+
             if (!isNaN(price) && price > 0) {
                 const convertedQty = convertValue(p.packageSize, p.unit, baseProduct.unit, p.category);
                 if (convertedQty > 0) {
@@ -102,7 +122,8 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
             
             return {
                 product: p,
-                price: priceStr,
+                price: data.price,
+                entityId: data.entityId,
                 pricePerUnit,
                 isBestPrice: false,
                 isWorstPrice: false,
@@ -118,16 +139,12 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
             const minPrice = Math.min(...validPrices);
             const maxPrice = Math.max(...validPrices);
             rows.forEach(row => {
-                if (row.pricePerUnit === minPrice) {
-                    row.isBestPrice = true;
-                }
-                if (row.pricePerUnit === maxPrice) {
-                    row.isWorstPrice = true;
-                }
+                if (row.pricePerUnit === minPrice) row.isBestPrice = true;
+                if (row.pricePerUnit === maxPrice) row.isWorstPrice = true;
             });
         }
         return rows.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
-    }, [linkedProducts, prices, baseProduct, items, getProductFullName]);
+    }, [linkedProducts, localData, baseProduct, items, getProductFullName]);
     
     if (!baseProduct) {
         return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
@@ -149,7 +166,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
                 <TableHeader>
                     <TableRow>
                         <TableHead>Variação do Insumo</TableHead>
-                        <TableHead className="w-[150px]">Último Preço (R$)</TableHead>
+                        <TableHead className="w-[200px]">Fornecedor</TableHead>
                         <TableHead className="w-[150px]">Preço Atual (R$)</TableHead>
                         <TableHead className="w-[150px]">R$ / {baseProduct.unit}</TableHead>
                         <TableHead className="w-[150px] text-center">Status</TableHead>
@@ -157,29 +174,31 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {tableData.map(row => {
-                        const lastSavedPrice = lastSavedPrices.get(row.product.id);
-                        
-                        return (
+                    {tableData.map(row => (
                         <TableRow key={row.product.id}>
                             <TableCell className="font-medium">
                                 {getProductFullName(row.product)}
                             </TableCell>
-                            <TableCell>
-                                {lastSavedPrice !== undefined ? (
-                                    <div className="text-sm text-muted-foreground">
-                                        {lastSavedPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </div>
-                                ) : (
-                                    <span className="text-sm text-muted-foreground">-</span>
-                                )}
+                             <TableCell>
+                                <Select 
+                                    value={row.entityId} 
+                                    onValueChange={value => handleLocalDataChange(row.product.id, 'entityId', value)}
+                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed || isSessionClosed}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </TableCell>
                             <TableCell>
                                 <Input
                                     type="number"
                                     placeholder="0,00"
                                     value={row.price}
-                                    onChange={e => handlePriceChange(row.product.id, e.target.value)}
+                                    onChange={e => handleLocalDataChange(row.product.id, 'price', e.target.value)}
                                     disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed || isSessionClosed}
                                 />
                             </TableCell>
@@ -229,7 +248,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
                                 </TooltipProvider>
                             </TableCell>
                         </TableRow>
-                    )})}
+                    ))}
                 </TableBody>
             </Table>
         </div>

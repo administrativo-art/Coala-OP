@@ -520,6 +520,7 @@ export type PurchaseItem = {
   id: string;
   sessionId: string;
   productId: string; // Insumo Vinculado ID
+  entityId?: string; // Fornecedor
   price: number;
   isConfirmed: boolean;
   confirmedBy?: string; // userId

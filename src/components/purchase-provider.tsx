@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -18,7 +19,7 @@ export interface PurchaseContextType {
   addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt'>) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
+  savePrice: (sessionId: string, productId: string, price: number, entityId?: string) => Promise<void>;
   confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
@@ -149,7 +150,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
     
-    const savePrice = useCallback(async (sessionId: string, productId: string, price: number) => {
+    const savePrice = useCallback(async (sessionId: string, productId: string, price: number, entityId?: string) => {
         const q = query(
             collection(db, "purchaseItems"),
             where("sessionId", "==", sessionId),
@@ -161,12 +162,13 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             if (!querySnapshot.empty) {
                 const itemDoc = querySnapshot.docs[0];
                 if (!itemDoc.data().isConfirmed) {
-                    await updateDoc(doc(db, "purchaseItems", itemDoc.id), { price });
+                    await updateDoc(doc(db, "purchaseItems", itemDoc.id), { price, entityId: entityId || null });
                 }
             } else {
                 const newItem: Omit<PurchaseItem, 'id'> = {
                     sessionId,
                     productId,
+                    entityId: entityId || undefined,
                     price,
                     isConfirmed: false,
                     createdAt: new Date().toISOString(),
@@ -205,7 +207,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             batch.update(baseProductRef, {
                 'lastEffectivePrice.pricePerUnit': pricePerUnit,
                 'lastEffectivePrice.productId': itemToConfirm.productId,
-                'lastEffectivePrice.entityId': session?.entityId || 'automatic',
+                'lastEffectivePrice.entityId': itemToConfirm.entityId || session?.entityId || 'automatic',
                 'lastEffectivePrice.updatedAt': now
             });
             
@@ -215,7 +217,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 baseProductId: baseProductId,
                 productId: itemToConfirm.productId,
                 pricePerUnit: pricePerUnit,
-                entityId: session?.entityId || 'automatic',
+                entityId: itemToConfirm.entityId || session?.entityId || 'automatic',
                 confirmedBy: user.id,
                 confirmedAt: now,
             };
