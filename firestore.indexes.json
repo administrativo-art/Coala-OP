@@ -1,0 +1,20 @@
+
+{
+  "indexes": [
+    {
+      "collectionGroup": "userPresence",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "last_seen",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
