@@ -1,7 +1,7 @@
 
       // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
-import { useConsumptionAnalysis } from '@/components/consumption-analysis-provider';
+import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useBaseProducts } from './use-base-products';
 import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
@@ -119,5 +119,3 @@ export function useValidatedConsumptionData() {
     deleteReport,
   };
 }
-
-    

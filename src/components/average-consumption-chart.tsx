@@ -4,9 +4,9 @@
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
-import { useKiosks from "@/hooks/use-kiosks"
+import { useKiosks } from "@/hooks/use-kiosks"
 import { format } from "date-fns"
-import { ptBR from 'date-fns/locale'
+import { ptBR } from 'date-fns/locale'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import Papa from 'papaparse';
@@ -18,8 +18,8 @@ import { TrendingUp, ListFilter, Download } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { ScrollArea from "@/components/ui/scroll-area"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger from "./ui/accordion"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
 
 const formatNumberForDisplay = (value: number) => {
     return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -342,5 +342,3 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
-
-    
