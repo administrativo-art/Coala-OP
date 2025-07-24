@@ -2,38 +2,26 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useForm as useFormHook } from "@/hooks/use-form"
 import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PlusCircle, Edit, Trash2, FileText, ListChecks, History } from "lucide-react"
+import { PlusCircle, Edit, Trash2, FileText, History } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type FormTemplate } from "@/types"
-import { AddEditFormTemplateModal } from "./add-edit-form-template-modal"
 import { FillFormModal } from "./fill-form-modal"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { FormSubmissionsHistory } from "./form-submissions-history"
 import { Badge } from "./ui/badge"
 
 export function FormModule() {
-    const { templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission } = useFormHook()
+    const { templates, submissions, loading, deleteTemplate, addSubmission, deleteSubmission } = useFormHook()
     const { permissions } = useAuth()
 
-    const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false)
-    const [templateToEdit, setTemplateToEdit] = useState<FormTemplate | null>(null)
     const [templateToDelete, setTemplateToDelete] = useState<FormTemplate | null>(null)
     const [templateToFill, setTemplateToFill] = useState<FormTemplate | null>(null);
-
-    const handleAddNew = () => {
-        setTemplateToEdit(null);
-        setIsAddEditModalOpen(true);
-    };
-
-    const handleEdit = (template: FormTemplate) => {
-        setTemplateToEdit(template)
-        setIsAddEditModalOpen(true)
-    }
 
     const handleDelete = (template: FormTemplate) => {
         setTemplateToDelete(template)
@@ -95,7 +83,11 @@ export function FormModule() {
                                 {permissions.forms.fill && isPublished && <Button variant="outline" size="sm" onClick={() => handleFill(template)}>Preencher</Button>}
                                 {permissions.forms.manage && (
                                     <>
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(template)}><Edit className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" asChild>
+                                            <Link href={`/dashboard/forms/${template.id}`}>
+                                                <Edit className="h-4 w-4" />
+                                            </Link>
+                                        </Button>
                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(template)}><Trash2 className="h-4 w-4" /></Button>
                                     </>
                                 )}
@@ -118,8 +110,10 @@ export function FormModule() {
                         {permissions.forms.viewHistory && <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico de respostas</TabsTrigger>}
                     </TabsList>
                     {permissions.forms.manage && (
-                        <Button onClick={handleAddNew}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
+                        <Button asChild>
+                            <Link href="/dashboard/forms/new">
+                                <PlusCircle className="mr-2 h-4 w-4" /> Novo formulário
+                            </Link>
                         </Button>
                     )}
                 </div>
@@ -138,12 +132,6 @@ export function FormModule() {
                 )}
             </Tabs>
             
-            <AddEditFormTemplateModal
-                open={isAddEditModalOpen}
-                onOpenChange={setIsAddEditModalOpen}
-                templateToEdit={templateToEdit}
-            />
-
             {templateToFill && <FillFormModal
                 open={!!templateToFill}
                 onOpenChange={() => setTemplateToFill(null)}

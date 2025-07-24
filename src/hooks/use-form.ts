@@ -10,11 +10,10 @@ import { addDays } from 'date-fns';
 
 type EnrichedFormContextType = Omit<FormContextType, 'addSubmission'> & {
     addSubmission: (submission: Omit<FormSubmission, 'id'>, template: FormTemplate) => Promise<void>;
-    generateDailyChecklist: (kioskId: string, kioskName: string, date: string, dailySchedule: any) => Promise<void>;
 };
 
 const getAllQuestionsFromTemplate = (template: FormTemplate): FormQuestion[] => {
-    return template.sections.flatMap(section => section.questions || []);
+    return template.questions || [];
 };
 
 export const useForm = (): EnrichedFormContextType => {
@@ -86,23 +85,8 @@ export const useForm = (): EnrichedFormContextType => {
     await context.addSubmission(finalSubmission, tasksToCreate);
   };
   
-  const generateDailyChecklist = async (kioskId: string, kioskName: string, date: string, dailySchedule: any) => {
-    // This is where the logic from "Etapa 7" would live.
-    // For now, we'll keep it simple as the configuration UI doesn't exist yet.
-    // A real implementation would:
-    // 1. Fetch the "Regras de Montagem" from Firestore.
-    // 2. Determine the number of shifts for the given kiosk from `dailySchedule`.
-    // 3. Find the correct sequence of "momentos" from the rules.
-    // 4. Fetch each "momento" template from the `templates` state.
-    // 5. Assemble a new `FormSubmission` with the combined sections of all momentos.
-    // 6. Call `context.addSubmission` to save it.
-    console.log(`Placeholder: Gerar checklist para quiosque ${kioskName} na data ${date}`);
-    // console.log("Schedule for the day:", dailySchedule);
-  };
-
   return {
     ...context,
     addSubmission: addSubmissionWithTasks,
-    generateDailyChecklist,
   };
 };
