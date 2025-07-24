@@ -45,7 +45,8 @@ export function FormBuilder({
 
   const onNodeDragStop = (_: React.MouseEvent, node: Node) => {
     let newSections = [...template.sections];
-
+    
+    // Handle dragging a SECTION node
     if (node.type === 'section') {
         newSections = newSections.map(s => 
             s.id === node.id ? { ...s, position: node.position } : s
@@ -54,7 +55,8 @@ export function FormBuilder({
         return;
     } 
     
-    if (node.type === 'question' && node.parentNode) {
+    // Handle dragging a QUESTION node
+    if (node.type === 'question') {
         const questionId = node.id;
         
         let originalSectionId: string | null = null;
@@ -70,12 +72,12 @@ export function FormBuilder({
             }
         }
         
-        if (!questionData) return;
+        if (!questionData || !originalSectionId) return;
         
-        // The node's position is relative to its parent. We need absolute position to find the new parent.
-        const parentSectionNode = template.sections.find(s => s.id === node.parentNode);
+        const parentSectionNode = template.sections.find(s => s.id === originalSectionId);
         if (!parentSectionNode) return;
 
+        // The node's position is relative to its parent. We need absolute position to find the new parent.
         const absolutePosition = {
             x: parentSectionNode.position.x + node.position.x,
             y: parentSectionNode.position.y + node.position.y,
@@ -105,14 +107,13 @@ export function FormBuilder({
             };
             
             // Remove from old section
-            if (originalSectionId) {
-                newSections = newSections.map(sec => {
-                    if (sec.id === originalSectionId) {
-                        return { ...sec, questions: sec.questions.filter(q => q.id !== questionId) };
-                    }
-                    return sec;
-                });
-            }
+            newSections = newSections.map(sec => {
+                if (sec.id === originalSectionId) {
+                    return { ...sec, questions: sec.questions.filter(q => q.id !== questionId) };
+                }
+                return sec;
+            });
+
             // Add to new section
             newSections = newSections.map(sec => {
                 if (sec.id === newParentSection.id) {
@@ -120,17 +121,17 @@ export function FormBuilder({
                 }
                 return sec;
             });
-        } else { // If it stayed in the same section, just update its relative position
-            if (originalSectionId) {
-                 newSections = newSections.map(sec => {
-                    if (sec.id === originalSectionId) {
-                         return { ...sec, questions: sec.questions.map(q => q.id === questionId ? {...q, position: node.position } : q) };
-                    }
-                    return sec;
-                });
-            }
+             onTemplateChange({ ...template, sections: newSections });
+        } else {
+             // If it stayed in the same section, just update its relative position
+             newSections = newSections.map(sec => {
+                if (sec.id === originalSectionId) {
+                     return { ...sec, questions: sec.questions.map(q => q.id === questionId ? {...q, position: node.position } : q) };
+                }
+                return sec;
+            });
+            onTemplateChange({ ...template, sections: newSections });
         }
-        onTemplateChange({ ...template, sections: newSections });
     }
   };
 
@@ -218,7 +219,6 @@ export function FormBuilder({
         nodeTypes={nodeTypes}
         fitView
         nodeDragThreshold={5}
-        dragHandle=".drag-handle"
       >
         <Background />
         <Controls />
