@@ -45,41 +45,102 @@ export function FormBuilder({
 }: FormBuilderProps) {
 
   const onNodeDragStop = (_: any, node: Node) => {
+    let newSections = [...template.sections];
+
     if (node.type === 'section') {
-        const newSections = template.sections.map(s => {
-            if (s.id === node.id) {
-                return { ...s, position: node.position };
+        newSections = newSections.map(s => 
+            s.id === node.id ? { ...s, position: node.position } : s
+        );
+    } else if (node.type === 'question') {
+        const questionId = node.id;
+        const questionWidth = node.width || 300; // default width
+        const questionHeight = node.height || 80; // default height
+        const questionCenterX = node.position.x + questionWidth / 2;
+        const questionCenterY = node.position.y + questionHeight / 2;
+
+        let originalSectionId: string | null = null;
+        let questionData: FormQuestion | null = null;
+        
+        // Find the question and its original section
+        for (const sec of newSections) {
+            const qIndex = sec.questions.findIndex(q => q.id === questionId);
+            if (qIndex !== -1) {
+                originalSectionId = sec.id;
+                questionData = sec.questions[qIndex];
+                break;
             }
-            return s;
-        });
-        onTemplateChange({ ...template, sections: newSections });
-    } else if (node.type === 'question' && node.parentNode) {
-        const newSections = template.sections.map(section => {
-            if (section.id === node.parentNode) {
-                const newQuestions = section.questions.map(q => {
-                    if (q.id === node.id) {
-                        return { ...q, position: node.position };
+        }
+        
+        if (!questionData) return;
+
+        // Find the new parent section
+        const newParentSection = newSections.find(sec =>
+            questionCenterX >= sec.position.x &&
+            questionCenterX <= sec.position.x + (sec.width || 400) &&
+            questionCenterY >= sec.position.y &&
+            questionCenterY <= sec.position.y + (sec.height || 200)
+        );
+
+        // Update question position
+        const updatedQuestionData = { ...questionData, position: node.position };
+
+        // If parent changed
+        if (newParentSection?.id !== originalSectionId) {
+            // Remove from old section
+            if (originalSectionId) {
+                newSections = newSections.map(sec => {
+                    if (sec.id === originalSectionId) {
+                        return { ...sec, questions: sec.questions.filter(q => q.id !== questionId) };
                     }
-                    return q;
+                    return sec;
                 });
-                return { ...section, questions: newQuestions };
             }
-            return section;
-        });
-        onTemplateChange({ ...template, sections: newSections });
+
+            // Add to new section
+            if (newParentSection) {
+                 newSections = newSections.map(sec => {
+                    if (sec.id === newParentSection.id) {
+                        return { ...sec, questions: [...sec.questions, updatedQuestionData] };
+                    }
+                    return sec;
+                });
+            } else {
+                // If it's dropped outside all sections, it becomes "orphaned" in the data model
+                // For now, we'll just update its position within its original section if it's dragged out
+                // To truly support orphans, a top-level `questions` array on the template would be needed.
+                // Reverting to position update in original section for simplicity until then.
+                 newSections = newSections.map(sec => {
+                    if (sec.id === originalSectionId) {
+                         return { ...sec, questions: sec.questions.map(q => q.id === questionId ? updatedQuestionData : q) };
+                    }
+                    return sec;
+                });
+            }
+        } else { // If parent is the same, just update position
+            newSections = newSections.map(sec => {
+                if (sec.id === originalSectionId) {
+                    return { ...sec, questions: sec.questions.map(q => q.id === questionId ? updatedQuestionData : q) };
+                }
+                return sec;
+            });
+        }
     }
+    
+    onTemplateChange({ ...template, sections: newSections });
   };
+
 
   const handleNodeClick = (_: any, node: Node) => {
     if (node.type === 'section') {
         onSelectSection(node.id);
         onSelectQuestion(null);
     } else if (node.type === 'question') {
-        onSelectSection(node.parentNode || null);
+        // Find parent section to also highlight it
+        const parent = template.sections.find(s => s.questions.some(q => q.id === node.id));
+        onSelectSection(parent?.id || null);
         onSelectQuestion(node.id);
     }
   };
-
 
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
@@ -118,8 +179,6 @@ export function FormBuilder({
             label: question.label,
             description: question.description,
           },
-          parentNode: section.id,
-          extent: 'parent',
           selected: question.id === selectedQuestionId,
         });
       });

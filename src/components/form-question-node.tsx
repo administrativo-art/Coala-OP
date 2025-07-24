@@ -19,7 +19,8 @@ interface QuestionNodeProps {
 export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
   return (
     <>
-      <Card className={cn("w-full shadow-md hover:shadow-lg transition-shadow duration-200", selected && "ring-2 ring-primary")}>
+      <Handle type="target" position={Position.Top} className="!w-16 !bg-primary" />
+      <Card className={cn("w-[300px] shadow-md hover:shadow-lg transition-shadow duration-200", selected && "ring-2 ring-primary")}>
         <CardHeader className="p-3 space-y-1">
           <CardTitle className="text-base flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted-foreground" />
@@ -28,6 +29,7 @@ export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
           {data.description && <CardDescription className="text-xs truncate">{data.description}</CardDescription>}
         </CardHeader>
       </Card>
+      <Handle type="source" position={Position.Bottom} className="!w-16 !bg-primary" />
     </>
   );
 });

@@ -50,6 +50,10 @@ export const SectionNode = memo(({ data, selected }: SectionNodeProps) => {
             "h-full w-full transition-shadow duration-200 border-2",
             selected ? 'border-primary shadow-lg' : 'border-dashed'
         )}
+        style={{
+            backgroundColor: data.color ? `${data.color}1A` : 'hsl(var(--card))',
+            borderColor: data.color || 'hsl(var(--border))',
+        }}
     >
       <CardHeader className="relative">
         <Input 
