@@ -51,7 +51,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
           moment: null,
           submissionTitleFormat: '',
           sections: [
-            { id: `section-${nanoid()}`, name: 'Seção 1', questions: [] }
+            { id: `section-${nanoid()}`, name: 'Momento 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
           ],
         });
       }
@@ -117,55 +117,6 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     }
   }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
 
-  const handleAddQuestion = (sectionId: string) => {
-    if (!internalTemplate) return;
-
-    const newQuestion: FormQuestion = {
-      id: `question-${nanoid()}`,
-      label: 'Nova Pergunta',
-      type: 'text',
-      isRequired: false,
-    };
-
-    const newSections = internalTemplate.sections.map(section => {
-      if (section.id === sectionId) {
-        return { ...section, questions: [...section.questions, newQuestion] };
-      }
-      return section;
-    });
-    
-    handleTemplateChange({ ...internalTemplate, sections: newSections });
-    setSelectedQuestionId(newQuestion.id);
-  };
-  
-  const handleAddSection = () => {
-    if (!internalTemplate) return;
-    const newSection: FormSection = {
-      id: `section-${nanoid()}`,
-      name: `Seção ${internalTemplate.sections.length + 1}`,
-      questions: [],
-    };
-    handleTemplateChange({ ...internalTemplate, sections: [...internalTemplate.sections, newSection] });
-  };
-  
-  const handleMoveQuestion = (result: any) => {
-    if (!result.destination || !internalTemplate) return;
-
-    const { source, destination } = result;
-    const newSections = [...internalTemplate.sections];
-    
-    const sourceSectionIndex = newSections.findIndex(s => s.id === source.droppableId);
-    const destSectionIndex = newSections.findIndex(s => s.id === destination.droppableId);
-    
-    const sourceSection = newSections[sourceSectionIndex];
-    const destSection = newSections[destSectionIndex];
-
-    const [removed] = sourceSection.questions.splice(source.index, 1);
-    destSection.questions.splice(destination.index, 0, removed);
-
-    handleTemplateChange({ ...internalTemplate, sections: newSections });
-  };
-
   const selectedQuestion = useMemo(() => {
     if (!selectedQuestionId || !internalTemplate || !internalTemplate.sections) return null;
     for (const section of internalTemplate.sections) {
@@ -228,12 +179,6 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                             key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
                             template={internalTemplate}
                             onTemplateChange={handleTemplateChange}
-                            onSelectQuestion={setSelectedQuestionId}
-                            onAddQuestion={handleAddQuestion}
-                            onAddSection={handleAddSection}
-                            onMoveQuestion={handleMoveQuestion}
-                            selectedQuestionId={selectedQuestionId}
-                            isPublished={isPublished}
                         />
                     )}
                     {selectedQuestion && (

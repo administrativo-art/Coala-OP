@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -394,12 +395,17 @@ export type FormQuestion = {
         allowCamera: boolean;
     };
     ramifications?: FormQuestionRamification[];
+    position: { x: number, y: number };
 };
 
 export type FormSection = {
   id: string;
   name: string;
   questions: FormQuestion[];
+  position: { x: number, y: number };
+  width?: number;
+  height?: number;
+  color?: string;
 };
 
 export type FormTemplate = {
