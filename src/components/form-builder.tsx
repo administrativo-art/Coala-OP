@@ -154,8 +154,6 @@ export function FormBuilder({
         style: { 
             width: section.width || 400, 
             height: section.height || 200,
-            backgroundColor: section.color ? `${section.color}20` : 'hsl(var(--card))',
-            borderColor: section.color,
         },
         selected: section.id === selectedSectionId,
       });
@@ -202,6 +200,8 @@ export function FormBuilder({
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         fitView
+        nodeDragThreshold={5}
+        dragHandle=".drag-handle"
       >
         <Background />
         <Controls />
@@ -210,4 +210,3 @@ export function FormBuilder({
     </div>
   );
 }
-
