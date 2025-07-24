@@ -396,6 +396,7 @@ export type FormQuestion = {
     };
     ramifications?: FormQuestionRamification[];
     position: { x: number, y: number };
+    sectionId: string | null;
 };
 
 export type FormSection = {

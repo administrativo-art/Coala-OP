@@ -16,7 +16,7 @@ import { FormGeneralSettings } from './form-general-settings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
-import { useReactFlow, ReactFlowProvider } from 'reactflow';
+import { ReactFlowProvider, useReactFlow } from 'reactflow';
 
 
 type AddEditFormTemplateModalProps = {
@@ -107,7 +107,8 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             type: 'text',
             isRequired: false,
             options: [],
-            position: { x: 20, y: 80 } 
+            position: { x: 20, y: 80 },
+            sectionId: selectedSectionId,
         };
 
         const newSections = internalTemplate.sections.map(section => {
