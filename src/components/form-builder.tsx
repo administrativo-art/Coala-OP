@@ -16,7 +16,7 @@ import ReactFlow, {
   NodeResizer,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { type FormTemplate, type FormQuestion } from '@/types';
+import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
 import { nanoid } from 'nanoid';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
@@ -34,6 +34,42 @@ const nodeTypes = {
 };
 
 export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
+
+   const handleAddQuestion = (sectionId: string) => {
+    const newQuestion: FormQuestion = {
+        id: `question-${nanoid()}`,
+        label: "Nova Pergunta",
+        type: 'text',
+        isRequired: false,
+        options: [],
+        position: { x: 50, y: 100 } // Default position within section
+    };
+
+    const newSections = template.sections.map(section => {
+        if (section.id === sectionId) {
+            return {
+                ...section,
+                questions: [...section.questions, newQuestion]
+            };
+        }
+        return section;
+    });
+
+    onTemplateChange({ ...template, sections: newSections });
+  };
+  
+  const handleAddMomento = () => {
+    const newSection: FormSection = {
+        id: `section-${nanoid()}`,
+        name: 'Novo Momento',
+        questions: [],
+        position: { x: (template.sections.length * 450) + 50, y: 100 },
+        width: 400,
+        height: 200,
+        color: '#E2E8F0',
+    };
+    onTemplateChange({ ...template, sections: [...template.sections, newSection] });
+  };
 
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
@@ -82,9 +118,7 @@ export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
         position: { x: 20, y: section.height ? section.height - 80 : 120 },
         data: {
             label: "Adicionar Pergunta",
-            type: 'card',
-            parentId: section.id,
-            onAdd: () => { /* This is handled by a different mechanism now */ }
+            onAdd: () => handleAddQuestion(section.id)
         },
         parentNode: section.id,
         extent: 'parent'
@@ -97,17 +131,23 @@ export function FormBuilder({ template, onTemplateChange }: FormBuilderProps) {
         position: { x: (template.sections.length * 450) + 50, y: 100 },
         data: {
             label: "Adicionar Momento",
-            type: 'section',
-            onAdd: () => { /* This is handled by a different mechanism now */ }
+            onAdd: handleAddMomento,
         },
         className: '!w-52 !h-16'
     });
     
     return nodes;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template, onTemplateChange]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  
+  // This effect ensures that when the parent template state changes, the nodes are re-initialized
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
 
   const onConnect = useCallback(
     (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),

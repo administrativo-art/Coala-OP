@@ -9,25 +9,18 @@ import { Button } from './ui/button';
 interface AddNodeProps {
   data: {
     label: string;
-    type: 'section' | 'card';
-    parentId?: string;
-    onAdd: (type: 'section' | 'card', parentId?: string) => void;
+    onAdd: () => void;
   };
 }
 
 export const AddNode = memo(({ data }: AddNodeProps) => {
-  const { label, type, parentId, onAdd } = data;
-  const isSection = type === 'section';
+  const { label, onAdd } = data;
 
   return (
     <div
       className="p-2 w-full"
-      style={{
-        width: isSection ? 'auto' : 'calc(100% - 40px)', // Full width inside parent
-        minWidth: isSection ? 150 : 'auto',
-      }}
     >
-      <Button variant="outline" className="w-full h-12 border-dashed" onClick={() => onAdd(type, parentId)}>
+      <Button variant="outline" className="w-full h-12 border-dashed" onClick={onAdd}>
         <PlusCircle className="mr-2 h-4 w-4" />
         {label}
       </Button>
