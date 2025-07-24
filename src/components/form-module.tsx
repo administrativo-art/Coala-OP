@@ -18,7 +18,7 @@ import { FormSubmissionsHistory } from "./form-submissions-history"
 import { Badge } from "./ui/badge"
 
 export function FormModule() {
-    const { templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission } = useFormHook()
+    const { templates, submissions, loading, addTemplate, updateTemplate, deleteTemplate, addSubmission, deleteSubmission } from useFormHook()
     const { permissions } = useAuth()
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false)
@@ -36,6 +36,13 @@ export function FormModule() {
             sections: [{ id: `section-${Date.now()}`, name: 'Seção 1', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }],
             questions: [],
         });
+        if (newTemplateId) {
+            // A better approach might be to listen for changes from the provider,
+            // but for now, we'll refetch/find it to open the modal.
+            // This is a common pattern that can lead to race conditions if not handled carefully.
+            const newTemplate = templates.find(t => t.id === newTemplateId) || { id: newTemplateId, name: 'Novo Formulário (Rascunho)', status: 'draft' } as FormTemplate;
+            handleEdit(newTemplate);
+        }
     }
 
     const handleEdit = (template: FormTemplate) => {
