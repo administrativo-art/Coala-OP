@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { memo, useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import { Input } from './ui/input';
 import { useDebounce } from 'use-debounce';
 import { cn } from '@/lib/utils';
 import { type FormSection } from '@/types';
-import { Trash2, GripVertical } from 'lucide-react';
+import { Trash2, GripVertical, Palette } from 'lucide-react';
 import { Button } from './ui/button';
 import { NodeResizer, useUpdateNodeInternals } from 'reactflow';
 
@@ -24,8 +23,12 @@ interface SectionNodeProps {
   selected: boolean;
 }
 
+const defaultColors = ['#FEE2E2', '#FEF3C7', '#D1FAE5', '#DBEAFE', '#E0E7FF', '#F3E8FF', '#FCE7F3'];
+
+
 export const SectionNode = memo(({ id, data, selected }: SectionNodeProps) => {
   const [name, setName] = useState(data.label);
+  const [color, setColor] = useState(data.color || defaultColors[0]);
   const [debouncedName] = useDebounce(name, 500);
   const updateNodeInternals = useUpdateNodeInternals();
 
@@ -40,8 +43,16 @@ export const SectionNode = memo(({ id, data, selected }: SectionNodeProps) => {
   }, [data.label]);
 
   useEffect(() => {
+    data.onUpdate({ color });
+  }, [color, data.onUpdate]);
+
+  useEffect(() => {
     updateNodeInternals(id);
   }, [id, data, updateNodeInternals]);
+
+  const handleColorChange = (newColor: string) => {
+    setColor(newColor);
+  };
 
   return (
     <>
@@ -52,12 +63,12 @@ export const SectionNode = memo(({ id, data, selected }: SectionNodeProps) => {
     />
     <div
         className={cn(
-            "h-full w-full rounded-lg transition-shadow duration-200 border-2 pointer-events-none",
+            "h-full w-full rounded-lg transition-shadow duration-200 border-2",
             selected ? 'border-primary shadow-lg' : 'border-dashed'
         )}
         style={{
-            backgroundColor: 'transparent',
-            borderColor: data.color || 'hsl(var(--border))',
+            backgroundColor: `${color}40`, // 25% opacity
+            borderColor: color,
         }}
     >
       <div className="relative pointer-events-auto">
@@ -74,7 +85,17 @@ export const SectionNode = memo(({ id, data, selected }: SectionNodeProps) => {
             style={{color: 'hsl(var(--foreground))'}}
             />
         </div>
-        <div className="absolute top-2 right-2 flex gap-1">
+        <div className="absolute top-2 right-2 flex gap-1 items-center">
+            <div className="flex items-center gap-1 bg-background/50 rounded-full px-1">
+              {defaultColors.map(c => (
+                <button
+                  key={c}
+                  onClick={() => handleColorChange(c)}
+                  className={cn("h-4 w-4 rounded-full border transition-all", c === color ? "ring-2 ring-primary ring-offset-1" : "hover:scale-110")}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
             <Button variant="ghost" size="icon" className={cn("h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive")} onClick={(e) => { e.stopPropagation(); data.onDelete(); }}>
                 <Trash2 className="h-4 w-4"/>
             </Button>
