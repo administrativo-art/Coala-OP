@@ -15,12 +15,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw } from 'lucide-react';
+import { DollarSign, RefreshCw, Info } from 'lucide-react';
 
 
 const baseProductSchema = z.object({
@@ -250,25 +251,45 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               </TableRow>
                           </TableHeader>
                           <TableBody>
-                              {fields.map((field, index) => (
+                              {fields.map((field, index) => {
+                                const kiosk = sortedKiosks.find(k => k.id === field.kioskId);
+                                const isMatriz = kiosk?.id === 'matriz';
+                                const tooltipText = isMatriz
+                                  ? "Cálculo: Consumo total do mês. Este valor foi calculado automaticamente com base no último relatório de consumo."
+                                  : "Cálculo: (Média diária × 7) + (Média diária × 5). Este valor foi calculado automaticamente com base no último relatório de consumo.";
+
+                                return (
                                   <TableRow key={field.id}>
-                                  <TableCell className="font-medium">
-                                      {sortedKiosks.find(k => k.id === field.kioskId)?.name}
-                                  </TableCell>
-                                  <TableCell>
-                                      <FormField
-                                          control={form.control}
-                                          name={`stockLevels.${index}.min`}
-                                          render={({ field }) => (
-                                              <FormItem>
-                                                  <FormControl><Input type="number" className="text-right" {...field} value={field.value ?? ''} /></FormControl>
-                                                  <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
-                                  </TableCell>
+                                    <TableCell className="font-medium">
+                                      {kiosk?.name}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center justify-end gap-2">
+                                          <TooltipProvider>
+                                              <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                      <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                      <p className="max-w-xs">{tooltipText}</p>
+                                                  </TooltipContent>
+                                              </Tooltip>
+                                          </TooltipProvider>
+                                          <FormField
+                                              control={form.control}
+                                              name={`stockLevels.${index}.min`}
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormControl><Input type="number" className="text-right w-32" {...field} value={field.value ?? ''} /></FormControl>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                      </div>
+                                    </TableCell>
                                   </TableRow>
-                              ))}
+                                )}
+                              )}
                           </TableBody>
                       </Table>
                   </div>
