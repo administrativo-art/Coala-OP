@@ -115,7 +115,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             type: 'text',
             isRequired: false,
             options: [],
-            // Position relative to the parent section, but centered in the current view
             position: {
                 x: position.x - targetSection.position.x - 150, // 150 is half node width
                 y: position.y - targetSection.position.y - 40, // 40 is half node height
@@ -139,12 +138,9 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     const handleDeleteQuestion = (questionId: string) => {
         if (!internalTemplate) return;
     
-        // Create a new set of sections
         const newSections = internalTemplate.sections.map(section => {
-            // Remove the question from its section
-            const newQuestions = section.questions.filter(q => q.id !== questionId);
+            const newQuestions = (section.questions || []).filter(q => q.id !== questionId);
     
-            // Also, iterate through all questions in this section to remove ramifications pointing to the deleted question
             const cleanedQuestions = newQuestions.map(q => {
                 if (!q.ramifications) return q;
                 const cleanedRamifications = q.ramifications.filter(r => r.targetQuestionId !== questionId);
@@ -156,7 +152,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     
         handleTemplateChange({ ...internalTemplate, sections: newSections });
         
-        // If the deleted question was selected, unselect it
         if (selectedQuestionId === questionId) {
             setSelectedQuestionId(null);
         }
@@ -230,7 +225,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             return section;
         });
 
-        handleTemplateChange({ ...internalTemplate, sections: newSections });
+        handleTemplateChange({ ...template, sections: newSections });
     };
 
     const allQuestions = useMemo(() => {
