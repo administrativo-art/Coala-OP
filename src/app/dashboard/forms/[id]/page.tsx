@@ -31,22 +31,48 @@ const SortableQuestionItem = ({ id, question, onSelect, onDelete, selectedQuesti
     };
 
     return (
-        <div ref={setNodeRef} style={style} className={cn("border p-2 rounded-lg flex justify-between items-center bg-background", selectedQuestionId === id && "ring-2 ring-primary")}>
-            <div className="flex items-center gap-2 flex-grow">
-                 <button {...listeners} {...attributes} className="cursor-grab p-1">
-                    <GripVertical className="h-5 w-5 text-muted-foreground" />
-                </button>
-                <button className="flex-1 text-left" onClick={onSelect}>
+        <div 
+            onClick={onSelect}
+            className={cn("p-4 rounded-lg bg-card border cursor-pointer", selectedQuestionId === id && "ring-2 ring-primary border-primary")}
+        >
+             <div className="flex justify-between items-start">
+                <div className="flex-1">
                     <p className="font-medium">{question.label}</p>
                     <p className="text-xs text-muted-foreground">{question.type}</p>
-                </button>
+                </div>
+                 <div className="flex items-center gap-1">
+                    <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-8 w-8">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={(e) => { e.stopPropagation(); onDelete();}}>
+                        <Trash2 className="h-4 w-4"/>
+                    </Button>
+                 </div>
             </div>
-            <Button variant="ghost" size="icon" className="text-destructive" onClick={onDelete}>
-                <Trash2 className="h-4 w-4"/>
-            </Button>
         </div>
     );
 }
+
+const FormBuilderSidebar = ({ onAddQuestion, onSettingsClick }: { onAddQuestion: () => void, onSettingsClick: () => void }) => {
+    return (
+        <div className="w-[350px] bg-card border-l flex flex-col h-full">
+            <div className="p-4 border-b">
+                <h3 className="font-semibold">Perguntas</h3>
+            </div>
+            <div className="p-4 space-y-2">
+                <Button variant="outline" className="w-full justify-start" onClick={onAddQuestion}>
+                    <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
+                </Button>
+                {/* Future field types can be added here */}
+            </div>
+             <div className="mt-auto p-4 border-t">
+                <Button variant="ghost" className="w-full justify-start" onClick={onSettingsClick}>
+                    <Settings className="mr-2 h-4 w-4"/> Configurações Gerais
+                </Button>
+            </div>
+        </div>
+    );
+};
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -56,9 +82,10 @@ export default function FormBuilderPage() {
 
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+    const [view, setView] = useState<'builder' | 'settings'>('builder');
+
     const { users } = useAuth();
     const { profiles } = useProfiles();
-    const [activeTab, setActiveTab] = useState("builder");
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
     
@@ -73,19 +100,23 @@ export default function FormBuilderPage() {
                   moment: null,
                   submissionTitleFormat: '',
                   questions: [],
-                  sections: [], // Adicionado para consistência
+                  sections: [],
               };
             setInternalTemplate(initialTemplate);
+            if (initialTemplate.questions.length > 0) {
+              setSelectedQuestionId(initialTemplate.questions[0].id)
+            }
         } else {
             const templateToEdit = templates.find(t => t.id === templateId);
             if(templateToEdit) {
-                 setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
-            } else {
-                // Handle not found case, maybe redirect
-                // router.push('/dashboard/forms');
+                 const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
+                 setInternalTemplate(newTemplate);
+                 if (newTemplate.questions.length > 0 && !selectedQuestionId) {
+                    setSelectedQuestionId(newTemplate.questions[0].id);
+                 }
             }
         }
-    }, [templateId, templates, loading, router]);
+    }, [templateId, templates, loading, router, selectedQuestionId]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -116,6 +147,7 @@ export default function FormBuilderPage() {
         const newQuestions = [...currentQuestions, newQuestion];
         handleTemplateChange({ questions: newQuestions });
         setSelectedQuestionId(newQuestion.id);
+        setView('builder');
     };
 
     const handleDeleteQuestion = (questionId: string) => {
@@ -128,13 +160,12 @@ export default function FormBuilderPage() {
             return { ...q, ramifications: cleanedRamifications };
         });
 
-        // Re-order remaining questions
         newQuestions = newQuestions.sort((a,b) => a.order - b.order).map((q, index) => ({...q, order: index}));
-
         handleTemplateChange({ questions: newQuestions });
         
         if (selectedQuestionId === questionId) {
-            setSelectedQuestionId(null);
+            const newSelectedId = newQuestions.length > 0 ? newQuestions[Math.max(0, newQuestions.findIndex(q => q.order >= (sortedQuestions.find(sq => sq.id === questionId)?.order || 0)) -1)].id : null;
+            setSelectedQuestionId(newSelectedId);
         }
     };
 
@@ -165,11 +196,13 @@ export default function FormBuilderPage() {
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
-        if (active.id !== over?.id) {
+        if (over && active.id !== over.id) {
             setInternalTemplate(prev => {
                 if (!prev || !prev.questions) return prev;
-                const oldIndex = sortedQuestions.findIndex(q => q.id === active.id);
-                const newIndex = sortedQuestions.findIndex(q => q.id === over!.id);
+                const oldIndex = prev.questions.findIndex(q => q.id === active.id);
+                const newIndex = prev.questions.findIndex(q => q.id === over.id);
+                if (oldIndex === -1 || newIndex === -1) return prev;
+                
                 const reorderedQuestions = arrayMove(prev.questions, oldIndex, newIndex);
                 const finalQuestions = reorderedQuestions.map((q, index) => ({...q, order: index}));
                 return {...prev, questions: finalQuestions };
@@ -179,24 +212,68 @@ export default function FormBuilderPage() {
 
     if (loading || !internalTemplate) {
         return (
-             <div className="p-6">
-                <Skeleton className="h-8 w-48 mb-6" />
-                <Skeleton className="h-[60vh] w-full" />
+             <div className="p-6 h-full">
+                <Skeleton className="h-10 w-48 mb-6" />
+                <div className="flex h-[calc(100vh-12rem)] gap-4">
+                    <Skeleton className="flex-1" />
+                    <Skeleton className="w-[350px]" />
+                </div>
              </div>
         )
     }
 
+    const renderRightPanel = () => {
+        if (view === 'settings') {
+            return (
+                 <div className="w-[350px] bg-card border-l flex flex-col h-full">
+                    <div className="p-4 border-b">
+                        <h3 className="font-semibold">Configurações Gerais</h3>
+                    </div>
+                    <ScrollArea className="flex-1">
+                        <div className="p-4">
+                            <FormGeneralSettings 
+                                template={internalTemplate} 
+                                onTemplateChange={(updates) => handleTemplateChange(updates)}
+                            />
+                        </div>
+                    </ScrollArea>
+                    <div className="mt-auto p-4 border-t">
+                        <Button variant="outline" className="w-full" onClick={() => setView('builder')}>
+                            Voltar para o editor
+                        </Button>
+                    </div>
+                </div>
+            );
+        }
+
+        if (selectedQuestion) {
+            return (
+                <QuestionSettingsPanel
+                    key={selectedQuestion.id}
+                    question={selectedQuestion}
+                    allQuestions={internalTemplate?.questions || []}
+                    onChange={handleQuestionChange}
+                    onClose={() => setSelectedQuestionId(null)}
+                    users={users}
+                    profiles={profiles}
+                />
+            );
+        }
+
+        return <FormBuilderSidebar onAddQuestion={handleAddQuestion} onSettingsClick={() => setView('settings')} />;
+    }
+
     return (
-        <div className="w-full h-full flex flex-col p-6 gap-4">
-             <header className="flex items-center justify-between">
+        <div className="w-full h-full flex flex-col">
+             <header className="flex items-center justify-between p-4 border-b bg-card">
                 <div>
                     <Button variant="outline" asChild>
                         <Link href="/dashboard/forms">
                             <ArrowLeft className="mr-2 h-4 w-4" />
-                            Voltar para formulários
+                            Voltar
                         </Link>
                     </Button>
-                    <h1 className="text-2xl font-bold mt-4">{internalTemplate.name}</h1>
+                    <h1 className="text-xl font-bold mt-2 truncate">{internalTemplate.name}</h1>
                 </div>
                 <div className="flex gap-2">
                      <Button onClick={() => handleSave(false)} variant="secondary" disabled={isSaving}>
@@ -210,60 +287,29 @@ export default function FormBuilderPage() {
                 </div>
             </header>
             
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
-                <div className="pb-4 border-b">
-                    <TabsList>
-                        <TabsTrigger value="builder">Editor de Perguntas</TabsTrigger>
-                        <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Configurações Gerais</TabsTrigger>
-                    </TabsList>
-                </div>
-                <TabsContent value="builder" className="flex-1 min-h-0 pt-4">
-                    <div className="flex-1 min-h-0 flex h-full">
-                        <div className="flex-1 pr-4 space-y-2">
-                            <Button onClick={handleAddQuestion} className="w-full">
-                                <PlusCircle className="mr-2"/> Adicionar Pergunta
-                            </Button>
-                            <ScrollArea className="h-[calc(100vh-20rem)]">
-                                <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                    <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
-                                        <div className="space-y-2 pr-4">
-                                        {sortedQuestions.map(q => (
-                                            <SortableQuestionItem
-                                                key={q.id}
-                                                id={q.id}
-                                                question={q}
-                                                onSelect={() => setSelectedQuestionId(q.id)}
-                                                onDelete={() => handleDeleteQuestion(q.id)}
-                                                selectedQuestionId={selectedQuestionId}
-                                            />
-                                        ))}
-                                        </div>
-                                    </SortableContext>
-                                </DndContext>
-                            </ScrollArea>
-                        </div>
-                        {selectedQuestion && (
-                            <QuestionSettingsPanel
-                                key={selectedQuestion.id}
-                                question={selectedQuestion}
-                                allQuestions={internalTemplate?.questions || []}
-                                onChange={handleQuestionChange}
-                                onClose={() => setSelectedQuestionId(null)}
-                                users={users}
-                                profiles={profiles}
-                            />
-                        )}
+             <main className="flex-1 min-h-0 flex">
+                <ScrollArea className="flex-1 bg-muted/40 p-6">
+                    <div className="max-w-2xl mx-auto">
+                        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                            <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
+                                <div className="space-y-4">
+                                {sortedQuestions.map(q => (
+                                    <SortableQuestionItem
+                                        key={q.id}
+                                        id={q.id}
+                                        question={q}
+                                        onSelect={() => { setSelectedQuestionId(q.id); setView('builder'); }}
+                                        onDelete={() => handleDeleteQuestion(q.id)}
+                                        selectedQuestionId={selectedQuestionId}
+                                    />
+                                ))}
+                                </div>
+                            </SortableContext>
+                        </DndContext>
                     </div>
-                </TabsContent>
-                <TabsContent value="settings" className="flex-1 overflow-auto p-6">
-                    {internalTemplate && (
-                        <FormGeneralSettings 
-                            template={internalTemplate} 
-                            onTemplateChange={(updates) => handleTemplateChange(updates)}
-                        />
-                    )}
-                </TabsContent>
-            </Tabs>
+                </ScrollArea>
+                {renderRightPanel()}
+            </main>
         </div>
     );
 }
