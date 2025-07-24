@@ -1,4 +1,5 @@
 
+
       
 "use client"
 
@@ -255,8 +256,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                 const kiosk = sortedKiosks.find(k => k.id === field.kioskId);
                                 const isMatriz = kiosk?.id === 'matriz';
                                 const tooltipText = isMatriz
-                                  ? "Cálculo: Média do consumo mensal de toda a rede. Este valor é calculado com base no histórico de todos os relatórios."
-                                  : "Cálculo: (Média diária × 7) + (Média diária × 5). Este valor é calculado com base no histórico de relatórios de consumo deste quiosque.";
+                                  ? "Cálculo: Média do consumo mensal de toda a rede (arredondado para cima). Este valor é calculado com base no histórico de todos os relatórios."
+                                  : "Cálculo: (Média diária × 7) + (Média diária × 5) (arredondado para cima). Este valor é calculado com base no histórico de relatórios de consumo deste quiosque.";
 
                                 return (
                                   <TableRow key={field.id}>

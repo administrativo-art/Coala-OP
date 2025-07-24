@@ -1,4 +1,5 @@
 
+
       // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
@@ -119,3 +120,4 @@ export function useValidatedConsumptionData() {
     deleteReport,
   };
 }
+
