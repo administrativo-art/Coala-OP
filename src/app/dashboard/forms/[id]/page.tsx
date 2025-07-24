@@ -53,27 +53,6 @@ const SortableQuestionItem = ({ id, question, onSelect, onDelete, selectedQuesti
     );
 }
 
-const FormBuilderSidebar = ({ onAddQuestion, onSettingsClick }: { onAddQuestion: () => void, onSettingsClick: () => void }) => {
-    return (
-        <div className="w-[350px] bg-card border-l flex flex-col h-full">
-            <div className="p-4 border-b">
-                <h3 className="font-semibold">Perguntas</h3>
-            </div>
-            <div className="p-4 space-y-2">
-                <Button variant="outline" className="w-full justify-start" onClick={onAddQuestion}>
-                    <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
-                </Button>
-                {/* Future field types can be added here */}
-            </div>
-             <div className="mt-auto p-4 border-t">
-                <Button variant="ghost" className="w-full justify-start" onClick={onSettingsClick}>
-                    <Settings className="mr-2 h-4 w-4"/> Configurações Gerais
-                </Button>
-            </div>
-        </div>
-    );
-};
-
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
     const router = useRouter();
@@ -145,7 +124,7 @@ export default function FormBuilderPage() {
             order: currentQuestions.length
         };
         const newQuestions = [...currentQuestions, newQuestion];
-        handleTemplateChange({ questions: newQuestions });
+        setInternalTemplate(prev => ({ ...prev!, questions: newQuestions }));
         setSelectedQuestionId(newQuestion.id);
         setView('builder');
     };
@@ -260,7 +239,23 @@ export default function FormBuilderPage() {
             );
         }
 
-        return <FormBuilderSidebar onAddQuestion={handleAddQuestion} onSettingsClick={() => setView('settings')} />;
+        return (
+            <div className="w-[350px] bg-card border-l flex flex-col h-full">
+                <div className="p-4 border-b">
+                    <h3 className="font-semibold">Perguntas</h3>
+                </div>
+                <div className="p-4 space-y-2">
+                    <Button variant="outline" className="w-full justify-start" onClick={handleAddQuestion}>
+                        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
+                    </Button>
+                </div>
+                 <div className="mt-auto p-4 border-t">
+                    <Button variant="ghost" className="w-full justify-start" onClick={() => setView('settings')}>
+                        <Settings className="mr-2 h-4 w-4"/> Configurações Gerais
+                    </Button>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -313,4 +308,3 @@ export default function FormBuilderPage() {
         </div>
     );
 }
-
