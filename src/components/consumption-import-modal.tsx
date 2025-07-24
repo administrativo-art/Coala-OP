@@ -59,14 +59,12 @@ interface ConsumptionImportModalProps {
     onOpenChange: (open: boolean) => void;
     kiosks: Kiosk[];
     baseProducts: BaseProduct[];
-    addReport: (report: Omit<ConsumptionReport, 'id'>) => Promise<string | null>;
 }
 
-export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
+export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const { updateMultipleBaseProducts } = useBaseProducts();
-    const { history: allReports } = useConsumptionAnalysis();
+    const { addReport } = useConsumptionAnalysis();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -169,61 +167,11 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         status: 'completed',
                         results: finalResults,
                     };
-                    const reportId = await addReport(newReport);
-
-                    // Automatic stock level calculation and update
-                    if (reportId) {
-                        const updatedReports = [...allReports, { ...newReport, id: reportId }];
-                        const productsToUpdate: BaseProduct[] = [];
-                        const baseProductMap = new Map<string, BaseProduct>(baseProducts.map(bp => [bp.id, JSON.parse(JSON.stringify(bp))]));
-
-                        for (const bp of baseProductMap.values()) {
-                            const newStockLevels: { [kioskId: string]: { min: number } } = {};
-                            let totalNetworkConsumption = 0;
-
-                            // Calculate for each individual kiosk
-                            for (const k of kiosks) {
-                                if (k.id === 'matriz') continue;
-
-                                const kioskReports = updatedReports.filter(r => r.kioskId === k.id);
-                                if (kioskReports.length === 0) continue;
-                                
-                                const totalKioskConsumption = kioskReports.reduce((sum, report) => {
-                                    const item = report.results.find(res => res.baseProductId === bp.id);
-                                    return sum + (item?.consumedQuantity || 0);
-                                }, 0);
-                                
-                                totalNetworkConsumption += totalKioskConsumption;
-                                
-                                if (totalKioskConsumption > 0) {
-                                    const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
-                                    const dailyAvg = avgMonthlyConsumption / 30;
-                                    const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
-                                    newStockLevels[k.id] = { min: kioskMinStock };
-                                }
-                            }
-
-                            // Calculate for Matriz based on total network consumption
-                            if (totalNetworkConsumption > 0) {
-                                const totalMonthsWithConsumption = new Set(updatedReports.filter(r => r.results.some(item => item.baseProductId === bp.id)).map(r => `${r.year}-${r.month}`)).size;
-                                const avgTotalMonthlyConsumption = totalMonthsWithConsumption > 0 ? totalNetworkConsumption / totalMonthsWithConsumption : 0;
-                                newStockLevels['matriz'] = { min: Math.ceil(avgTotalMonthlyConsumption) };
-                            }
-
-                             // Only update if there are new levels to set
-                            if (Object.keys(newStockLevels).length > 0) {
-                                bp.stockLevels = newStockLevels;
-                                productsToUpdate.push(bp);
-                            }
-                        }
-
-                        if (productsToUpdate.length > 0) {
-                            await updateMultipleBaseProducts(productsToUpdate);
-                            toast({ title: 'Sucesso!', description: `${productsToUpdate.length} produto(s) base tiveram o estoque mínimo recalculado.` });
-                        } else {
-                            toast({ title: 'Sucesso!', description: 'Relatório analisado. Nenhum estoque mínimo precisou de alteração.' });
-                        }
-                    }
+                    
+                    // The addReport function now handles all the calculation and updating logic
+                    await addReport(newReport, baseProducts, kiosks);
+                    
+                    toast({ title: 'Sucesso!', description: 'Relatório processado e estoques mínimos foram recalculados.' });
                     
                     onOpenChange(false);
 
