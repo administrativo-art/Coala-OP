@@ -388,6 +388,7 @@ export type FormQuestion = {
     description?: string;
     type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment';
     isRequired: boolean;
+    order: number;
     options?: { id: string; value: string; }[];
     attachmentConfig?: {
         allowMultiple: boolean;
@@ -398,9 +399,20 @@ export type FormQuestion = {
     customColor?: string;
 };
 
+export type FormSection = {
+    id: string;
+    name: string;
+    description?: string;
+    order: number;
+    questions?: FormQuestion[];
+};
+
 export type FormTemplate = {
     id: string;
     name: string;
+    description?: string;
+    layout: 'continuous' | 'paginated' | 'flow';
+    sections: FormSection[];
     questions: FormQuestion[];
     submissionTitleFormat?: string;
     type: 'standard' | 'operational_checklist';
