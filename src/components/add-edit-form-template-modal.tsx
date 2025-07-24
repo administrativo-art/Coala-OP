@@ -100,24 +100,29 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
     const handleAddQuestion = () => {
         if (!internalTemplate || !selectedSectionId) return;
-        
+
+        const targetSection = internalTemplate.sections.find(s => s.id === selectedSectionId);
+        if (!targetSection) return;
+
+        const currentQuestions = targetSection.questions || [];
+        const yOffset = (currentQuestions.length % 5) * 100 + 80;
+        const xOffset = Math.floor(currentQuestions.length / 5) * 320 + 20;
+
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: "Nova Pergunta",
             type: 'text',
             isRequired: false,
             options: [],
-            position: { x: 20, y: 80 },
+            position: { x: xOffset, y: yOffset },
             sectionId: selectedSectionId,
         };
 
         const newSections = internalTemplate.sections.map(section => {
             if (section.id === selectedSectionId) {
-                const currentQuestions = section.questions || [];
-                newQuestion.position.y = (currentQuestions.length * 100) + 80;
                 return {
                     ...section,
-                    questions: [...currentQuestions, newQuestion]
+                    questions: [...(section.questions || []), newQuestion]
                 };
             }
             return section;
