@@ -83,7 +83,7 @@ function AnalysisTab() {
   };
   
   const handleCreateRepositionActivity = async () => {
-    if (stagedItems.length === 0 || !selectedKioskId) return;
+    if (stagedItems.length === 0 || !selectedKioskId || selectedKioskId === 'matriz') return;
 
     const destinationKiosk = kiosks.find(k => k.id === selectedKioskId);
     if (!destinationKiosk) return;
@@ -166,7 +166,8 @@ function AnalysisTab() {
             stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
         }
 
-        if (status === 'repor' && restockNeeded > 0) {
+        // Only generate suggestions if the selected kiosk is NOT the central distribution center
+        if (status === 'repor' && restockNeeded > 0 && selectedKioskId !== 'matriz') {
             const availableMatrizLots = lotsInMatriz
                 .filter(lot => {
                     const p = productMap.get(lot.productId);
@@ -252,7 +253,7 @@ function AnalysisTab() {
     <>
     <Card>
       <CardHeader>
-        <CardTitle>Análise de Reposição</CardTitle>
+        <CardTitle>Análise de reposição</CardTitle>
         <CardDescription>
           Selecione um quiosque para ver a necessidade de reposição com base nas metas de estoque mínimo.
         </CardDescription>
@@ -280,11 +281,11 @@ function AnalysisTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[30%]">Produto Base</TableHead>
-                  <TableHead className="text-center">Estoque Mínimo</TableHead>
-                  <TableHead className="text-center">Estoque Atual</TableHead>
+                  <TableHead className="w-[30%]">Produto base</TableHead>
+                  <TableHead className="text-center">Estoque mínimo</TableHead>
+                  <TableHead className="text-center">Estoque atual</TableHead>
                   <TableHead className="w-[20%] text-center">Nível</TableHead>
-                  <TableHead className="text-center">Reposição Sugerida</TableHead>
+                  <TableHead className="text-center">Reposição sugerida</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -311,7 +312,7 @@ function AnalysisTab() {
                                 </div>
                             ) : result.suggestion ? (
                                 <Button variant="outline" size="sm" onClick={() => setSuggestionToView(result)}>
-                                <Wand2 className="mr-2 h-4 w-4"/> Ver Sugestão
+                                <Wand2 className="mr-2 h-4 w-4"/> Ver sugestão
                                 </Button>
                             ) : result.restockNeeded > 0 ? (
                                 `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`
@@ -337,7 +338,7 @@ function AnalysisTab() {
     {stagedItems.length > 0 && (
         <Card className="mt-6 animate-in fade-in">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para Reposição</CardTitle>
+                <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para reposição</CardTitle>
                 <CardDescription>Revise os itens antes de criar a atividade de reposição para o quiosque {kiosks.find(k => k.id === selectedKioskId)?.name}.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -358,7 +359,7 @@ function AnalysisTab() {
             <CardFooter className="justify-end border-t pt-4">
                 <Button onClick={handleCreateRepositionActivity} disabled={repositionLoading}>
                     <Truck className="mr-2 h-4 w-4" />
-                    {repositionLoading ? 'Criando atividade...' : `Criar Atividade de Reposição (${stagedItems.length})`}
+                    {repositionLoading ? 'Criando atividade...' : `Criar atividade de reposição (${stagedItems.length})`}
                 </Button>
             </CardFooter>
         </Card>
@@ -381,7 +382,7 @@ export function RestockAnalysis() {
     <Tabs defaultValue="analysis" className="w-full">
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="analysis"><Wand2 className="mr-2 h-4 w-4" /> Análise</TabsTrigger>
-        <TabsTrigger value="management"><Truck className="mr-2 h-4 w-4" /> Gerenciar Reposição</TabsTrigger>
+        <TabsTrigger value="management"><Truck className="mr-2 h-4 w-4" /> Gerenciar reposição</TabsTrigger>
       </TabsList>
       <TabsContent value="analysis" className="mt-4">
         <AnalysisTab />
