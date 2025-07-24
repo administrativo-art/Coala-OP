@@ -14,7 +14,6 @@ import ReactFlow, {
   type Edge,
   type Node,
   useReactFlow,
-  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
@@ -55,13 +54,9 @@ export function FormBuilder({
         return;
     } 
     
-    if (node.type === 'question') {
+    if (node.type === 'question' && node.parentNode) {
         const questionId = node.id;
-        const questionWidth = node.width || 300;
-        const questionHeight = node.height || 80;
-        const questionCenterX = node.position.x + questionWidth / 2;
-        const questionCenterY = node.position.y + questionHeight / 2;
-
+        
         let originalSectionId: string | null = null;
         let questionData: FormQuestion | null = null;
 
@@ -76,7 +71,21 @@ export function FormBuilder({
         }
         
         if (!questionData) return;
+        
+        // The node's position is relative to its parent. We need absolute position to find the new parent.
+        const parentSectionNode = template.sections.find(s => s.id === node.parentNode);
+        if (!parentSectionNode) return;
 
+        const absolutePosition = {
+            x: parentSectionNode.position.x + node.position.x,
+            y: parentSectionNode.position.y + node.position.y,
+        };
+
+        const questionWidth = node.width || 300;
+        const questionHeight = node.height || 80;
+        const questionCenterX = absolutePosition.x + questionWidth / 2;
+        const questionCenterY = absolutePosition.y + questionHeight / 2;
+        
         // Find the new parent section based on where the node was dropped
         const newParentSection = newSections.find(sec =>
             questionCenterX >= sec.position.x &&
@@ -85,10 +94,16 @@ export function FormBuilder({
             questionCenterY <= sec.position.y + (sec.height || 200)
         );
 
-        const updatedQuestionData = { ...questionData, position: node.position };
-
-        // If the question moved to a different section
         if (newParentSection && newParentSection.id !== originalSectionId) {
+            // Recalculate position relative to the new parent
+            const updatedQuestionData = {
+                ...questionData,
+                position: {
+                    x: absolutePosition.x - newParentSection.position.x,
+                    y: absolutePosition.y - newParentSection.position.y,
+                },
+            };
+            
             // Remove from old section
             if (originalSectionId) {
                 newSections = newSections.map(sec => {
@@ -105,11 +120,11 @@ export function FormBuilder({
                 }
                 return sec;
             });
-        } else { // If it stayed in the same section or was dropped outside, just update its position
+        } else { // If it stayed in the same section, just update its relative position
             if (originalSectionId) {
                  newSections = newSections.map(sec => {
                     if (sec.id === originalSectionId) {
-                         return { ...sec, questions: sec.questions.map(q => q.id === questionId ? updatedQuestionData : q) };
+                         return { ...sec, questions: sec.questions.map(q => q.id === questionId ? {...q, position: node.position } : q) };
                     }
                     return sec;
                 });
@@ -163,6 +178,8 @@ export function FormBuilder({
           id: question.id,
           type: 'question',
           position: question.position || { x: 50, y: 50 },
+          parentNode: section.id,
+          extent: 'parent',
           data: {
             label: question.label,
             description: question.description,
