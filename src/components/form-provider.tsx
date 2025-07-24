@@ -54,6 +54,9 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   const addTemplate = useCallback(async (template: Omit<FormTemplate, 'id' | 'status'>): Promise<string | null> => {
     try {
       const docRef = await addDoc(collection(db, "formTemplates"), { ...template, status: 'draft' });
+      // This is a bit of a hack to ensure the new template is in the state before the modal tries to use it.
+      // A more robust solution might involve optimistic updates or waiting for the snapshot listener to fire.
+      setTemplates(prev => [...prev, { ...template, id: docRef.id, status: 'draft' }]);
       return docRef.id;
     } catch (error) {
       console.error("Error adding template:", error);
@@ -150,5 +153,3 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
-
-    

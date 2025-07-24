@@ -232,7 +232,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0">
                 <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
                 <div>
-                    <DialogTitle>{templateToEdit ? 'Editar formulário' : 'Novo formulário'}</DialogTitle>
+                    <DialogTitle>{templateToEdit?.name || 'Novo formulário'}</DialogTitle>
                     <DialogDescription>
                         Use as abas abaixo para configurar o formulário e construir o fluxo de perguntas.
                     </DialogDescription>
@@ -319,6 +319,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 }
 
 export function AddEditFormTemplateModal(props: AddEditFormTemplateModalProps) {
+    if (!props.open) return null;
     return (
         <ReactFlowProvider>
             <AddEditFormTemplateModalContent {...props} />

@@ -34,12 +34,8 @@ export function FormModule() {
             moment: null,
             submissionTitleFormat: '',
             sections: [{ id: `section-${Date.now()}`, name: 'Seção 1', questions: [], position: { x: 0, y: 0 }, color: '#FEE2E2' }],
+            questions: [],
         });
-
-        if (newTemplateId) {
-            const newTemplate = templates.find(t => t.id === newTemplateId) || { id: newTemplateId, name: 'Novo Formulário (Rascunho)', status: 'draft' } as FormTemplate;
-            handleEdit(newTemplate);
-        }
     }
 
     const handleEdit = (template: FormTemplate) => {
@@ -87,7 +83,7 @@ export function FormModule() {
              <ScrollArea className="h-96 mt-4">
                 <div className="space-y-2 pr-4">
                 {templates.map(template => {
-                    const itemCount = template.sections.reduce((acc, section) => acc + section.questions.length, 0);
+                    const itemCount = (template.sections?.reduce((acc, section) => acc + (section.questions?.length || 0), 0) || 0) + (template.questions?.length || 0);
                     const isPublished = template.status === 'published';
                     return (
                         <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
@@ -176,5 +172,3 @@ export function FormModule() {
         </>
     )
 }
-
-    
