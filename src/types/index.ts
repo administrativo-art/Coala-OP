@@ -516,17 +516,6 @@ export type Entity = {
 };
 
 // Purchase Module Types
-export type PurchaseSession = {
-  id: string;
-  baseProductIds: string[];
-  userId: string;
-  entityId: string;
-  description: string;
-  status: 'open' | 'closed';
-  createdAt: string; // ISO String
-  closedAt?: string; // ISO String
-};
-
 export type PurchaseItem = {
   id: string;
   sessionId: string;
@@ -535,7 +524,7 @@ export type PurchaseItem = {
   isConfirmed: boolean;
   confirmedBy?: string; // userId
   confirmedAt?: string; // ISO String
-  confirmationComment?: string;
+  createdAt: string; // ISO String
 };
 
 export type ItemAdditionRequest = {
@@ -683,5 +672,3 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
-
-    

@@ -1,25 +1,20 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseSession, type PurchaseItem, type BaseProduct, type LastEffectivePrice, type PriceHistoryEntry } from '@/types';
+import { type PurchaseItem, type LastEffectivePrice, type PriceHistoryEntry } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 
 export interface PurchaseContextType {
-  sessions: PurchaseSession[];
   items: PurchaseItem[];
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
   lastEffectivePrices: Map<string, LastEffectivePrice>;
-  lastSavedPrices: Map<string, number>; // New map for last saved prices
-  startNewSession: (data: { baseProductIds: string[], entityId: string, description: string }) => Promise<string | null>;
+  lastSavedPrices: Map<string, number>;
   savePrice: (sessionId: string, productId: string, price: number) => Promise<void>;
-  closeSession: (sessionId: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
   confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
@@ -30,7 +25,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
 
-    const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,14 +50,12 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
     const lastSavedPrices = useMemo((): Map<string, number> => {
         const priceMap = new Map<string, { price: number; date: string }>();
-        const closedSessionsMap = new Map(sessions.filter(s => s.status === 'closed').map(s => [s.id, s]));
 
         items.forEach(item => {
-            const session = closedSessionsMap.get(item.sessionId);
-            if (session && item.price > 0 && session.closedAt) {
+            if (item.price > 0 && item.createdAt) { // Assuming createdAt exists on purchase item
                 const existing = priceMap.get(item.productId);
-                if (!existing || new Date(session.closedAt) > new Date(existing.date)) {
-                    priceMap.set(item.productId, { price: item.price, date: session.closedAt });
+                if (!existing || new Date(item.createdAt) > new Date(existing.date)) {
+                    priceMap.set(item.productId, { price: item.price, date: item.createdAt });
                 }
             }
         });
@@ -75,25 +67,17 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
         return finalMap;
 
-    }, [items, sessions]);
+    }, [items]);
 
     useEffect(() => {
-        const qSessions = query(collection(db, "purchaseSessions"));
-        const unsubscribeSessions = onSnapshot(qSessions, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseSession));
-            setSessions(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching purchase sessions:", error);
-            setLoading(false);
-        });
-
         const qItems = query(collection(db, "purchaseItems"));
         const unsubscribeItems = onSnapshot(qItems, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseItem));
             setItems(data);
+            setLoading(false);
         }, (error) => {
             console.error("Error fetching purchase items:", error);
+            setLoading(false);
         });
         
         const qHistory = query(collection(db, "priceHistory"));
@@ -105,30 +89,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         });
 
         return () => {
-            unsubscribeSessions();
             unsubscribeItems();
             unsubscribeHistory();
         };
     }, []);
-
-    const startNewSession = useCallback(async (data: { baseProductIds: string[], entityId: string, description: string }): Promise<string | null> => {
-        if (!user) return null;
-
-        try {
-            const newSession: Omit<PurchaseSession, 'id'> = {
-                ...data,
-                userId: user.id,
-                status: 'open',
-                createdAt: new Date().toISOString(),
-            };
-            const docRef = await addDoc(collection(db, "purchaseSessions"), newSession);
-            return docRef.id;
-        } catch (error) {
-            console.error("Error starting new session:", error);
-            return null;
-        }
-    }, [user]);
-
+    
     const savePrice = useCallback(async (sessionId: string, productId: string, price: number) => {
         const q = query(
             collection(db, "purchaseItems"),
@@ -149,41 +114,12 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                     productId,
                     price,
                     isConfirmed: false,
+                    createdAt: new Date().toISOString(),
                 };
                 await addDoc(collection(db, "purchaseItems"), newItem);
             }
         } catch (error) {
             console.error("Error saving price:", error);
-        }
-    }, []);
-
-    const closeSession = useCallback(async (sessionId: string) => {
-        try {
-            await updateDoc(doc(db, "purchaseSessions", sessionId), {
-                status: 'closed',
-                closedAt: new Date().toISOString()
-            });
-        } catch (error) {
-            console.error("Error closing session:", error);
-        }
-    }, []);
-
-    const deleteSession = useCallback(async (sessionId: string) => {
-        try {
-            const batch = writeBatch(db);
-            
-            const sessionRef = doc(db, "purchaseSessions", sessionId);
-            batch.delete(sessionRef);
-
-            const itemsQuery = query(collection(db, "purchaseItems"), where("sessionId", "==", sessionId));
-            const itemsSnapshot = await getDocs(itemsQuery);
-            itemsSnapshot.forEach(itemDoc => {
-                batch.delete(doc(db, "purchaseItems", itemDoc.id));
-            });
-            
-            await batch.commit();
-        } catch (error) {
-            console.error("Error deleting session and its items:", error);
         }
     }, []);
 
@@ -198,7 +134,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         try {
             const batch = writeBatch(db);
             const now = new Date().toISOString();
-            const session = sessions.find(s => s.id === itemToConfirm.sessionId);
             
             // 1. Update the purchase item
             const itemRef = doc(db, "purchaseItems", itemId);
@@ -213,7 +148,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             batch.update(baseProductRef, {
                 'lastEffectivePrice.pricePerUnit': pricePerUnit,
                 'lastEffectivePrice.productId': itemToConfirm.productId,
-                'lastEffectivePrice.entityId': session?.entityId || '',
+                'lastEffectivePrice.entityId': 'automatic', // Or find a way to associate entity
                 'lastEffectivePrice.updatedAt': now
             });
             
@@ -223,7 +158,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 baseProductId: baseProductId,
                 productId: itemToConfirm.productId,
                 pricePerUnit: pricePerUnit,
-                entityId: session?.entityId || '',
+                entityId: 'automatic', // Or find a way to associate entity
                 confirmedBy: user.id,
                 confirmedAt: now,
             };
@@ -234,7 +169,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
             console.error("Error confirming purchase:", error);
         }
-    }, [user, items, baseProducts, sessions]);
+    }, [user, items, baseProducts]);
     
     const deletePriceHistoryEntry = useCallback(async (historyId: string) => {
         try {
@@ -245,21 +180,15 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const value: PurchaseContextType = useMemo(() => ({
-        sessions,
         items,
         priceHistory,
         loading: loading || loadingBaseProducts,
         lastEffectivePrices,
         lastSavedPrices,
-        startNewSession,
         savePrice,
-        closeSession,
-        deleteSession,
         confirmPurchase,
         deletePriceHistoryEntry,
-    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, startNewSession, savePrice, closeSession, deleteSession, confirmPurchase, deletePriceHistoryEntry]);
+    }), [items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, savePrice, confirmPurchase, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
-
-    

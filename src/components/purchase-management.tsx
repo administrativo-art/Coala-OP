@@ -1,12 +1,11 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PurchaseSessionList } from "./purchase-session-list";
+import { AutomaticPurchaseList } from "./purchase-session-list";
 import { PriceHistoryDashboard } from "./price-history-dashboard";
 import { History, ShoppingCart } from "lucide-react";
 
@@ -26,7 +25,7 @@ export function PurchaseManagement() {
                         <TabsList className="grid w-full grid-cols-2">
                              <TabsTrigger value="sessions">
                                 <ShoppingCart className="mr-2 h-4 w-4"/>
-                                Pesquisas atuais
+                                Lista de Compras Automática
                             </TabsTrigger>
                             <TabsTrigger value="history">
                                 <History className="mr-2 h-4 w-4"/>
@@ -34,7 +33,7 @@ export function PurchaseManagement() {
                             </TabsTrigger>
                         </TabsList>
                         <TabsContent value="sessions" className="mt-6">
-                            <PurchaseSessionList />
+                            <AutomaticPurchaseList />
                         </TabsContent>
                         <TabsContent value="history" className="mt-6">
                             <PriceHistoryDashboard />
@@ -45,5 +44,3 @@ export function PurchaseManagement() {
         </div>
     );
 }
-
-    

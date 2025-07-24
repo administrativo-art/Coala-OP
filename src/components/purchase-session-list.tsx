@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -7,134 +6,128 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useEntities } from "@/hooks/use-entities";
 import { useBaseProducts } from "@/hooks/use-base-products";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Search, History, Inbox } from "lucide-react";
-import { StartPurchaseSessionModal } from "./start-purchase-session-modal";
-import { PurchaseSessionCard } from "./purchase-session-card";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
-import { Input } from "./ui/input";
+import { useProducts } from "@/hooks/use-products";
+import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { convertValue } from "@/lib/conversion";
 
-export function PurchaseSessionList() {
-    const { user, users, permissions } = useAuth();
-    const { sessions, loading: loadingPurchase } = usePurchase();
+import { Skeleton } from "@/components/ui/skeleton";
+import { Inbox } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Card } from "@/components/ui/card";
+import { PriceComparisonTable } from "./price-comparison-table";
+
+interface AnalysisResult {
+  baseProduct: import('@/types').BaseProduct;
+  currentStock: number;
+  minimumStock: number;
+  restockNeeded: number;
+}
+
+export function AutomaticPurchaseList() {
+    const { users } = useAuth();
     const { entities, loading: loadingEntities } = useEntities();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
+    const { products, loading: loadingProducts } = useProducts();
+    const { lots, loading: lotsLoading } = useExpiryProducts();
+    const { items: purchaseItems, loading: purchaseLoading } = usePurchase();
 
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
-    
-    const baseProductMap = useMemo(() => {
-        return new Map(baseProducts.map(bp => [bp.id, bp.name]));
-    }, [baseProducts]);
+    const loading = loadingEntities || loadingBaseProducts || loadingProducts || lotsLoading || purchaseLoading;
 
-    const { openSessions, closedSessions } = useMemo(() => {
-        const lowerCaseSearch = searchTerm.toLowerCase();
+    const analysisResults = useMemo((): AnalysisResult[] => {
+        if (loading) return [];
 
-        const filterSession = (session: typeof sessions[0]) => {
-            if (!lowerCaseSearch) return true;
-            const entity = entities.find(e => e.id === session.entityId);
-            const createdByUser = users.find(u => u.id === session.userId);
-            const hasMatchingBaseProduct = session.baseProductIds.some(bpId => {
-                const bpName = baseProductMap.get(bpId);
-                return bpName && bpName.toLowerCase().includes(lowerCaseSearch);
+        const productMap = new Map(products.map(p => [p.id, p]));
+        const lotsInMatriz = lots.filter(lot => lot.kioskId === 'matriz');
+
+        return baseProducts.map(baseProduct => {
+            const minimumStock = baseProduct.stockLevels?.['matriz']?.min;
+            let currentStock = 0;
+            let hasConversionError = false;
+
+            const lotsForBaseProduct = lotsInMatriz.filter(lot => {
+                const product = productMap.get(lot.productId);
+                return product?.baseProductId === baseProduct.id;
             });
 
-            return (
-                session.description.toLowerCase().includes(lowerCaseSearch) ||
-                (entity && entity.name.toLowerCase().includes(lowerCaseSearch)) ||
-                (createdByUser && createdByUser.username.toLowerCase().includes(lowerCaseSearch)) ||
-                hasMatchingBaseProduct
-            );
-        };
+            for (const lot of lotsForBaseProduct) {
+                const product = productMap.get(lot.productId);
+                if (!product) {
+                    hasConversionError = true;
+                    continue;
+                }
 
-        const open: typeof sessions = [];
-        const closed: typeof sessions = [];
-        sessions.forEach(s => {
-            if (filterSession(s)) {
-                (s.status === 'open' ? open : closed).push(s);
+                try {
+                    let valueInBaseUnit = 0;
+                    if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                        const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                        valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                    } else if (product.category === baseProduct.category) {
+                        const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                        valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                    } else {
+                        throw new Error("Conversion not possible without secondary unit.");
+                    }
+                    currentStock += valueInBaseUnit;
+                } catch (error) {
+                    hasConversionError = true;
+                }
             }
-        });
-        return { openSessions: open, closedSessions: closed };
-    }, [sessions, searchTerm, entities, users, baseProductMap]);
+            
+            const restockNeeded = Math.max(0, (minimumStock || 0) - currentStock);
+            
+            return {
+                baseProduct,
+                currentStock,
+                minimumStock: minimumStock || 0,
+                restockNeeded,
+            };
+        }).filter(result => result.restockNeeded > 0);
+    }, [loading, baseProducts, products, lots]);
 
-    const isLoading = loadingPurchase || loadingEntities || loadingBaseProducts;
-
-    const renderSessionList = (list: typeof sessions, emptyMessage: string) => {
-        if (isLoading) {
-            return (
-                <div className="space-y-4">
-                    <Skeleton className="h-48 w-full" />
-                </div>
-            );
-        }
-        if (list.length === 0) {
-            return (
-                <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
-                    <Inbox className="h-12 w-12 mb-4" />
-                    <p className="font-semibold">{searchTerm ? "Nenhum resultado encontrado" : emptyMessage}</p>
-                    {searchTerm && <p className="text-sm">Tente ajustar sua busca.</p>}
-                </div>
-            )
-        }
+    if (loading) {
         return (
             <div className="space-y-4">
-                {list.map(session => (
-                    <PurchaseSessionCard key={session.id} session={session} />
-                ))}
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+            </div>
+        );
+    }
+    
+    if (analysisResults.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
+                <Inbox className="h-12 w-12 mb-4" />
+                <p className="font-semibold">Nenhuma necessidade de compra encontrada.</p>
+                <p className="text-sm">O estoque da Matriz está de acordo com as metas definidas.</p>
             </div>
         )
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                 <div className="relative w-full max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por título, fornecedor ou insumo..."
-                        className="pl-10"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                {permissions.purchasing.suggest && (
-                    <Button onClick={() => setIsCreateModalOpen(true)}>
-                        <PlusCircle className="mr-2" />
-                        Registrar nova pesquisa
-                    </Button>
-                )}
-            </div>
-            
-            <Accordion type="multiple" defaultValue={['open-sessions']} className="w-full space-y-4">
-                <AccordionItem value="open-sessions" className="border-none">
-                    <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
-                        <h3>Pesquisas em aberto</h3>
-                    </AccordionTrigger>
-                    <AccordionContent className="pt-4">
-                        {renderSessionList(openSessions, "Nenhuma pesquisa de preços em andamento.")}
-                    </AccordionContent>
-                </AccordionItem>
-                
-                {permissions.purchasing.viewHistory && (
-                    <AccordionItem value="session-history" className="border-none">
-                        <AccordionTrigger className="text-lg font-semibold text-muted-foreground p-0 hover:no-underline">
-                            <div className="flex items-center gap-2">
-                                <History /> Histórico de pesquisas
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4">
-                            {renderSessionList(closedSessions, "Nenhuma pesquisa no histórico.")}
-                        </AccordionContent>
+        <div className="space-y-4">
+            <Accordion type="multiple" className="w-full space-y-3">
+                {analysisResults.map(result => (
+                    <AccordionItem value={result.baseProduct.id} key={result.baseProduct.id} className="border-none">
+                        <Card className="bg-card/40">
+                             <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
+                                <div className="flex justify-between w-full items-center">
+                                    <span>{result.baseProduct.name}</span>
+                                    <span className="text-sm font-normal text-destructive">Comprar: {result.restockNeeded.toLocaleString()} {result.baseProduct.unit}</span>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4">
+                                 <PriceComparisonTable
+                                    baseProductId={result.baseProduct.id}
+                                    items={purchaseItems}
+                                    sessionId="automatic"
+                                    isSessionClosed={false}
+                                />
+                            </AccordionContent>
+                        </Card>
                     </AccordionItem>
-                )}
+                ))}
             </Accordion>
-             <StartPurchaseSessionModal
-                open={isCreateModalOpen}
-                onOpenChange={setIsCreateModalOpen}
-            />
         </div>
     );
 }
-
-    
