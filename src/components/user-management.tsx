@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -183,7 +184,7 @@ export function UserManagement() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Usuários e Perfis
+            Usuários e perfis
           </CardTitle>
           <CardDescription>Adicione ou edite usuários e atribua perfis e escalas.</CardDescription>
         </CardHeader>
@@ -213,7 +214,7 @@ export function UserManagement() {
                   </div>
                   
                   <Separator />
-                  <h4 className="font-medium text-muted-foreground">Permissões e Alocação</h4>
+                  <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="profileId" render={({ field }) => (
@@ -273,7 +274,7 @@ export function UserManagement() {
                   </div>
 
                   <Separator />
-                  <h4 className="font-medium text-muted-foreground">Configuração de Escala</h4>
+                  <h4 className="font-medium text-muted-foreground">Configuração de escala</h4>
 
                   <FormField
                     control={form.control}
@@ -281,7 +282,7 @@ export function UserManagement() {
                     render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                         <div className="space-y-0.5">
-                            <FormLabel>Colaborador Operacional</FormLabel>
+                            <FormLabel>Colaborador operacional</FormLabel>
                             <FormDescription>
                                 Ative se este colaborador deve ser incluído na geração da escala de trabalho.
                             </FormDescription>
@@ -299,7 +300,7 @@ export function UserManagement() {
                    <FormField control={form.control} name="folguista" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                             <div className="space-y-0.5">
-                                <FormLabel>É Folguista?</FormLabel>
+                                <FormLabel>É folguista?</FormLabel>
                             </div>
                             <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                         </FormItem>
@@ -308,7 +309,7 @@ export function UserManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="turno" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Turno Padrão</FormLabel>
+                            <FormLabel>Turno padrão</FormLabel>
                             <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione um turno..." /></SelectTrigger></FormControl>
                                 <SelectContent>
@@ -322,7 +323,7 @@ export function UserManagement() {
                     )}/>
                      <FormField control={form.control} name="valeTransporte" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Valor Diário do VT (R$)</FormLabel>
+                            <FormLabel>Valor diário do VT (R$)</FormLabel>
                             <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <FormControl><Input type="number" placeholder="ex: 8.80" className="pl-8" {...field} value={field.value ?? ''} /></FormControl>
@@ -336,7 +337,7 @@ export function UserManagement() {
                     name="color"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Cor do Destaque</FormLabel>
+                        <FormLabel>Cor do destaque</FormLabel>
                         <FormControl>
                             <div className="flex flex-wrap gap-2 pt-2">
                             {userColors.map((color) => (
@@ -440,7 +441,7 @@ export function UserManagement() {
                   <div>Usuário</div>
                   <div>Perfil</div>
                   <div>Quiosque(s)</div>
-                  <div>VT Diário</div>
+                  <div>VT diário</div>
                   <div className="text-right">Ações</div>
                 </div>
                 {filteredUsers.map(user => (
@@ -461,7 +462,7 @@ export function UserManagement() {
                       {getKioskNames(user.assignedKioskIds)}
                     </div>
                      <div>
-                      <span className="md:hidden text-muted-foreground">VT Diário: </span>
+                      <span className="md:hidden text-muted-foreground">VT diário: </span>
                       {(user.valeTransporte || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">

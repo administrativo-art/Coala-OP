@@ -13,7 +13,7 @@ export default function AnalysisPage() {
             <Link href="/dashboard/stock" className="inline-block mb-4">
                 <Button variant="outline">
                     <ArrowLeft className="mr-2" />
-                    voltar para gestão de estoque
+                    Voltar para gestão de estoque
                 </Button>
             </Link>
             <div className="mb-6">

@@ -254,8 +254,8 @@ export function EntityManagement() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">Todos os tipos</SelectItem>
-                        <SelectItem value="pessoa_fisica">Pessoa Física</SelectItem>
-                        <SelectItem value="pessoa_juridica">Pessoa Jurídica</SelectItem>
+                        <SelectItem value="pessoa_fisica">Pessoa física</SelectItem>
+                        <SelectItem value="pessoa_juridica">Pessoa jurídica</SelectItem>
                     </SelectContent>
                 </Select>
                 <Button variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>

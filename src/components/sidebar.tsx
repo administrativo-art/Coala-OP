@@ -73,7 +73,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length, show: canViewTasks },
-    { href: '/dashboard/forms', label: 'Formulários e Processos', icon: ClipboardList, group: 'operacao', show: canViewForms },
+    { href: '/dashboard/forms', label: 'Formulários e processos', icon: ClipboardList, group: 'operacao', show: canViewForms },
     { 
         href: '/dashboard/stock', 
         label: 'Gestão de estoque', 

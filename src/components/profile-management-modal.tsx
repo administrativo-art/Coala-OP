@@ -184,7 +184,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             />
                             <Accordion type="multiple" defaultValue={['pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests', 'reports']} className="w-full">
                             <AccordionItem value="pricing">
-                                <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e preço</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderPermissionSwitch("permissions.pricing.simulate", "Simular custo e preço", "Permite criar e editar composições de mercadorias e analisar preços.")}
                                     {renderPermissionSwitch("permissions.pricing.manageParameters", "Gerenciar parâmetros", "Permite alterar o percentual operacional e as faixas de lucro.")}
