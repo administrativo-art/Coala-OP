@@ -1,12 +1,11 @@
 
-
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Settings, GitBranch, CheckCircle2, FileUp, Undo2, PlusCircle, Pencil, Cloud } from 'lucide-react';
+import { Settings, GitBranch, CheckCircle2, FileUp, Undo2, PlusCircle, Pencil, Cloud, Save } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
@@ -34,12 +33,9 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     const { users } = useAuth();
     const { profiles } = useProfiles();
     const [activeTab, setActiveTab] = useState("builder");
-    const [isSaving, setIsSaving] = useState<'auto' | 'manual' | false>(false);
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState<'draft' | 'publish' | false>(false);
     const { toast } = useToast();
     const reactFlowInstance = useReactFlow();
-
-    const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (open) {
@@ -59,20 +55,15 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             });
         }
         setActiveTab("builder");
-        setHasUnsavedChanges(false);
         setSelectedSectionId(null);
         } else {
-        setInternalTemplate(null);
-        setSelectedQuestionId(null);
-        if (autoSaveTimer.current) {
-            clearTimeout(autoSaveTimer.current);
-        }
+            setInternalTemplate(null);
+            setSelectedQuestionId(null);
         }
     }, [open, templateToEdit]);
 
     const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
         setInternalTemplate(newTemplate);
-        setHasUnsavedChanges(true);
     }, []);
 
     const handleAddSection = () => {
@@ -151,36 +142,42 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             setSelectedQuestionId(null);
         }
     };
-
-    const autoSave = async (showToast = false) => {
-        if (!internalTemplate || !('id' in internalTemplate)) return;
+    
+    const handleSaveDraft = async () => {
+        if (!internalTemplate) return;
+        setIsSaving('draft');
         
-        setIsSaving('auto');
-        await updateTemplate(internalTemplate as FormTemplate);
-        if(showToast) {
-            toast({ title: 'Rascunho salvo!', description: 'Suas alterações foram salvas com sucesso.' });
+        if ('id' in internalTemplate) {
+            await updateTemplate({ ...internalTemplate, status: 'draft' });
+            toast({ title: 'Rascunho salvo!' });
+        } else {
+            const newId = await addTemplate(internalTemplate);
+            if (newId) {
+                // To continue editing, we need to update the internal state with the new ID
+                setInternalTemplate(prev => ({ ...prev!, id: newId }));
+                toast({ title: 'Rascunho criado!' });
+            }
         }
         setIsSaving(false);
-        setHasUnsavedChanges(false);
-    }
+    };
 
     const handlePublish = async () => {
         if (!internalTemplate) return;
+        setIsSaving('publish');
 
         if (!('id' in internalTemplate)) {
             // This is a new template, add it first
-            const newId = await addTemplate(internalTemplate);
+            const newId = await addTemplate({ ...internalTemplate, status: 'published' });
             if(newId) {
-                await updateTemplate({ ...internalTemplate, id: newId, status: 'published' });
                 toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
                 onOpenChange(false);
             }
         } else {
-            await autoSave(false); // Save any pending changes
             await updateTemplate({ ...internalTemplate, status: 'published' });
             toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
             onOpenChange(false);
         }
+        setIsSaving(false);
     }
 
     const handleReopen = async () => {
@@ -188,25 +185,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         await updateTemplate({ ...internalTemplate as FormTemplate, status: 'draft' });
         toast({ title: 'Formulário reaberto!', description: 'Agora você pode editar o formulário novamente.' });
     }
-
-    useEffect(() => {
-        if(hasUnsavedChanges && internalTemplate && 'id' in internalTemplate) {
-            if(autoSaveTimer.current) {
-                clearTimeout(autoSaveTimer.current);
-            }
-            autoSaveTimer.current = setTimeout(async () => {
-                setIsSaving('auto');
-                await updateTemplate(internalTemplate as FormTemplate);
-                setIsSaving(false);
-                setHasUnsavedChanges(false);
-            }, 5000); // Autosave after 5 seconds of inactivity
-        }
-        return () => {
-            if (autoSaveTimer.current) {
-                clearTimeout(autoSaveTimer.current);
-            }
-        }
-    }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
 
     const allQuestions = useMemo(() => {
         if (!internalTemplate) return [];
@@ -242,14 +220,10 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0">
                 <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
                 <div>
-                    <DialogTitle>{templateToEdit?.name || 'Novo formulário'}</DialogTitle>
+                    <DialogTitle>{templateToEdit?.name || internalTemplate?.name || 'Novo formulário'}</DialogTitle>
                     <DialogDescription>
                         Use as abas abaixo para configurar o formulário e construir o fluxo de perguntas.
                     </DialogDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                        {isSaving === 'auto' && <span className="text-sm text-muted-foreground flex items-center gap-1"><Cloud className="h-4 w-4 animate-pulse"/>Salvando...</span>}
-                        {isSaving === false && !hasUnsavedChanges && internalTemplate && 'id' in internalTemplate && <span className="text-sm text-muted-foreground flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-green-600"/>Salvo</span>}
                 </div>
                 </DialogHeader>
                 
@@ -314,9 +288,13 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                             </div>
                         ) : (
                             <>
-                                <Button onClick={handlePublish} disabled={isSaving !== false || hasUnsavedChanges}>
+                                <Button onClick={handleSaveDraft} variant="secondary" disabled={isSaving !== false}>
+                                    <Save className="mr-2 h-4 w-4"/>
+                                    {isSaving === 'draft' ? 'Salvando...' : 'Salvar Rascunho'}
+                                </Button>
+                                <Button onClick={handlePublish} disabled={isSaving !== false}>
                                     <FileUp className="mr-2 h-4 w-4" />
-                                    {hasUnsavedChanges ? 'Salvando para publicar...' : 'Publicar'}
+                                    {isSaving === 'publish' ? 'Publicando...' : 'Publicar'}
                                 </Button>
                             </>
                         )}

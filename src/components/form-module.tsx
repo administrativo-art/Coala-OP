@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState } from "react"
@@ -27,7 +26,7 @@ export function FormModule() {
     const [templateToFill, setTemplateToFill] = useState<FormTemplate | null>(null);
 
     const handleAddNew = () => {
-        setTemplateToEdit(null); // Explicitly set to null for "add new" mode
+        setTemplateToEdit(null);
         setIsAddEditModalOpen(true);
     };
 
@@ -143,7 +142,7 @@ export function FormModule() {
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
                 templateToEdit={templateToEdit}
-                addTemplate={addTemplate as any}
+                addTemplate={addTemplate}
                 updateTemplate={updateTemplate}
             />}
 

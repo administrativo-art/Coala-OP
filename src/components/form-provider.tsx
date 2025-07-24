@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -11,7 +10,7 @@ export interface FormContextType {
   templates: FormTemplate[];
   submissions: FormSubmission[];
   loading: boolean;
-  addTemplate: (template: Omit<FormTemplate, 'id' | 'status'>) => Promise<string | null>;
+  addTemplate: (template: Omit<FormTemplate, 'id'>) => Promise<string | null>;
   updateTemplate: (template: FormTemplate) => Promise<void>;
   deleteTemplate: (templateId: string) => Promise<void>;
   addSubmission: (submission: Omit<FormSubmission, 'id'>, tasksToCreate?: Omit<Task, 'id' | 'origin'>[]) => Promise<string | null>;
@@ -51,9 +50,9 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const addTemplate = useCallback(async (template: Omit<FormTemplate, 'id' | 'status'>): Promise<string | null> => {
+  const addTemplate = useCallback(async (template: Omit<FormTemplate, 'id'>): Promise<string | null> => {
     try {
-      const docRef = await addDoc(collection(db, "formTemplates"), { ...template, status: 'draft' });
+      const docRef = await addDoc(collection(db, "formTemplates"), template);
       return docRef.id;
     } catch (error) {
       console.error("Error adding template:", error);
