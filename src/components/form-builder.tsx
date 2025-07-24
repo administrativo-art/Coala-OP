@@ -21,6 +21,15 @@ import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
 import { EdgeDeleteButton } from './edge-delete-button';
 
+interface FormBuilderProps {
+    template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
+    onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => void;
+    onSelectQuestion: (questionId: string | null) => void;
+    selectedQuestionId: string | null;
+    onSelectSection: (sectionId: string | null) => void;
+    selectedSectionId: string | null;
+    onDeleteQuestion: (questionId: string) => void;
+}
 
 const nodeTypes = {
   section: SectionNode,
@@ -38,8 +47,8 @@ const findParentSection = (sections: FormSection[], x: number, y: number, width:
         const secY = sec.position.y;
         const secWidth = sec.width || 400;
         const secHeight = sec.height || 200;
-        return x >= secX && x <= secX + secWidth &&
-               y >= secY && y <= secY + secHeight;
+        return x >= secX && x + width <= secX + secWidth &&
+               y >= secY && y + height <= secY + secHeight;
     });
 };
 
@@ -51,6 +60,7 @@ export function FormBuilder({
   selectedQuestionId,
   onSelectSection,
   selectedSectionId,
+  onDeleteQuestion,
 }: FormBuilderProps) {
   
   const allQuestions = useMemo(() => template.sections.flatMap(s => s.questions || []), [template.sections]);
@@ -91,11 +101,16 @@ export function FormBuilder({
           dragHandle: '.drag-handle-question',
           data: {
             ...question,
+            onDelete: () => onDeleteQuestion(question.id),
             onPinToggle: () => {
                  const currentQuestion = allQuestions.find(q => q.id === question.id)!;
                  let newSectionId: string | null = null;
                  
-                 if (!currentQuestion.sectionId) {
+                 // If un-pinning, set sectionId to null
+                 if (currentQuestion.sectionId) {
+                     newSectionId = null;
+                 } else {
+                    // If pinning, find the section it's inside
                     const parent = findParentSection(template.sections, currentQuestion.position.x, currentQuestion.position.y, 300, 80);
                     newSectionId = parent?.id || null;
                  }
@@ -116,7 +131,7 @@ export function FormBuilder({
       });
 
     return nodes;
-  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, allQuestions]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, allQuestions, onDeleteQuestion]);
   
   const initialEdges = useMemo(() => {
      const newEdges: Edge[] = [];
@@ -161,40 +176,54 @@ export function FormBuilder({
 
     if (node.type === 'question') {
         const questionId = node.id;
-        const currentQuestion = allQuestions.find(q => q.id === questionId);
-        
+        let currentQuestion = allQuestions.find(q => q.id === questionId);
         if (!currentQuestion) return;
 
-        let absolutePosition = node.position;
-        if (currentQuestion.sectionId && node.parentNode) {
-            const parentSection = template.sections.find(s => s.id === node.parentNode);
-            if (parentSection) {
-                 absolutePosition = {
-                    x: parentSection.position.x + node.position.x,
-                    y: parentSection.position.y + node.position.y,
+        let absolutePosition = { ...node.position };
+
+        // Calculate absolute position if it's a child node
+        if (node.parentNode) {
+            const parentNode = nodes.find(n => n.id === node.parentNode);
+            if (parentNode) {
+                absolutePosition = {
+                    x: parentNode.position.x + node.position.x,
+                    y: parentNode.position.y + node.position.y
                 };
             }
         }
         
+        // Find which section it's inside now
         const parentSection = findParentSection(template.sections, absolutePosition.x, absolutePosition.y, node.width!, node.height!);
-        const newSectionId = parentSection ? parentSection.id : currentQuestion.sectionId;
+        const newSectionId = parentSection ? parentSection.id : currentQuestion.sectionId; // Keep old section if dropped outside
 
-        const updatedQuestionData = { 
-            ...currentQuestion,
-            position: absolutePosition, 
-            sectionId: newSectionId, 
-        };
-        
-        const newSections = template.sections.map(s => ({
+        let newSections = [...template.sections];
+
+        // If the section has changed, update the structure
+        if (currentQuestion.sectionId !== newSectionId) {
+            // Remove from old section
+            newSections = newSections.map(s => ({
+                ...s,
+                questions: s.questions.filter(q => q.id !== questionId)
+            }));
+            
+            // Add to new section
+            const newSectionIndex = newSections.findIndex(s => s.id === newSectionId);
+            if (newSectionIndex !== -1) {
+                newSections[newSectionIndex].questions.push({ ...currentQuestion, sectionId: newSectionId });
+            }
+        }
+
+        // Always update the position
+        newSections = newSections.map(s => ({
             ...s,
-            questions: s.questions
-                .filter(q => q.id !== questionId) // Remove from all sections
-                .concat(s.id === newSectionId ? [updatedQuestionData] : []) // Add to the correct one
+            questions: s.questions.map(q => 
+                q.id === questionId ? { ...q, position: absolutePosition, sectionId: newSectionId } : q
+            )
         }));
 
         onTemplateChange({ ...template, sections: newSections });
     }
-  }, [template, onTemplateChange, allQuestions]);
+}, [template, onTemplateChange, allQuestions, nodes]);
 
 
   const handleNodeClick = (_: any, node: Node) => {

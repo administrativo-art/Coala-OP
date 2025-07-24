@@ -77,7 +77,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     const handleAddSection = () => {
         if (!internalTemplate) return;
         
-        const viewport = reactFlowInstance.getViewport();
         const position = reactFlowInstance.project({
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
@@ -100,24 +99,30 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
     const handleAddQuestion = () => {
         if (!internalTemplate || !selectedSectionId) return;
-
+    
+        const viewport = reactFlowInstance.getViewport();
+        const position = reactFlowInstance.project({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+        });
+    
         const targetSection = internalTemplate.sections.find(s => s.id === selectedSectionId);
         if (!targetSection) return;
-
-        const currentQuestions = targetSection.questions || [];
-        const yOffset = (currentQuestions.length % 5) * 100 + 80;
-        const xOffset = Math.floor(currentQuestions.length / 5) * 320 + 20;
-
+    
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: "Nova Pergunta",
             type: 'text',
             isRequired: false,
             options: [],
-            position: { x: xOffset, y: yOffset },
+            // Position relative to the parent section, but centered in the current view
+            position: {
+                x: position.x - targetSection.position.x - 150, // 150 is half node width
+                y: position.y - targetSection.position.y - 40, // 40 is half node height
+            },
             sectionId: selectedSectionId,
         };
-
+    
         const newSections = internalTemplate.sections.map(section => {
             if (section.id === selectedSectionId) {
                 return {
@@ -127,8 +132,34 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             }
             return section;
         });
-
+    
         handleTemplateChange({ ...internalTemplate, sections: newSections });
+    };
+
+    const handleDeleteQuestion = (questionId: string) => {
+        if (!internalTemplate) return;
+    
+        // Create a new set of sections
+        const newSections = internalTemplate.sections.map(section => {
+            // Remove the question from its section
+            const newQuestions = section.questions.filter(q => q.id !== questionId);
+    
+            // Also, iterate through all questions in this section to remove ramifications pointing to the deleted question
+            const cleanedQuestions = newQuestions.map(q => {
+                if (!q.ramifications) return q;
+                const cleanedRamifications = q.ramifications.filter(r => r.targetQuestionId !== questionId);
+                return { ...q, ramifications: cleanedRamifications };
+            });
+    
+            return { ...section, questions: cleanedQuestions };
+        });
+    
+        handleTemplateChange({ ...internalTemplate, sections: newSections });
+        
+        // If the deleted question was selected, unselect it
+        if (selectedQuestionId === questionId) {
+            setSelectedQuestionId(null);
+        }
     };
 
     const autoSave = async (showToast = false) => {
@@ -243,6 +274,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                                     selectedQuestionId={selectedQuestionId}
                                     onSelectSection={setSelectedSectionId}
                                     selectedSectionId={selectedSectionId}
+                                    onDeleteQuestion={handleDeleteQuestion}
                                 />
                             )}
                             {selectedQuestion && (
