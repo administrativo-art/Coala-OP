@@ -412,6 +412,7 @@ export type FormSection = {
 export type FormTemplate = {
     id: string;
     name: string;
+    questions: FormQuestion[];
     sections: FormSection[];
     layout: 'continuous' | 'stepped';
     submissionTitleFormat?: string;

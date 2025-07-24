@@ -52,6 +52,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             layout: 'continuous',
             moment: null,
             submissionTitleFormat: '',
+            questions: [],
             sections: [
                 { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
             ],
@@ -119,40 +120,32 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             sectionId: null, // Starts as a floating question
         };
     
-        const newSections = internalTemplate.sections.map(section => ({
-            ...section,
-            questions: section.questions ? [...section.questions] : []
-        }));
-    
-        // Find if there's a section to add the question to or add to the first one
-        const targetSection = newSections.find(s => s.id === selectedSectionId) || newSections[0];
-        if (targetSection) {
-            targetSection.questions.push(newQuestion);
-        } else {
-            // This case should be rare if a default section always exists.
-            // But as a fallback, we could create a new section for it.
-            // For now, we assume at least one section exists.
-        }
-    
-        handleTemplateChange({ ...internalTemplate, sections: newSections });
+        const newQuestions = [...(internalTemplate.questions || []), newQuestion];
+        handleTemplateChange({ ...internalTemplate, questions: newQuestions });
     };
 
     const handleDeleteQuestion = (questionId: string) => {
         if (!internalTemplate) return;
     
-        const newSections = internalTemplate.sections.map(section => {
-            const newQuestions = (section.questions || []).filter(q => q.id !== questionId);
-    
-            const cleanedQuestions = newQuestions.map(q => {
+        // Function to clean ramifications pointing to the deleted question
+        const cleanRamifications = (questions: FormQuestion[]) => {
+            return questions.map(q => {
                 if (!q.ramifications) return q;
                 const cleanedRamifications = q.ramifications.filter(r => r.targetQuestionId !== questionId);
                 return { ...q, ramifications: cleanedRamifications };
             });
-    
-            return { ...section, questions: cleanedQuestions };
-        });
-    
-        handleTemplateChange({ ...internalTemplate, sections: newSections });
+        };
+
+        // Remove the question from sections
+        const newSections = internalTemplate.sections.map(section => ({
+            ...section,
+            questions: cleanRamifications(section.questions.filter(q => q.id !== questionId))
+        }));
+
+        // Remove the question from floating questions
+        const newFloatingQuestions = cleanRamifications((internalTemplate.questions || []).filter(q => q.id !== questionId));
+
+        handleTemplateChange({ ...internalTemplate, sections: newSections, questions: newFloatingQuestions });
         
         if (selectedQuestionId === questionId) {
             setSelectedQuestionId(null);
@@ -205,35 +198,32 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         }
     }, [internalTemplate, hasUnsavedChanges, updateTemplate]);
 
+    const allQuestions = useMemo(() => {
+        if (!internalTemplate) return [];
+        const sectionQuestions = internalTemplate.sections.flatMap(s => s.questions || []);
+        const floatingQuestions = internalTemplate.questions || [];
+        return [...sectionQuestions, ...floatingQuestions];
+    }, [internalTemplate]);
+
     const selectedQuestion = useMemo(() => {
-        if (!selectedQuestionId || !internalTemplate || !internalTemplate.sections) return null;
-        for (const section of internalTemplate.sections) {
-            const question = section.questions.find(q => q.id === selectedQuestionId);
-            if (question) return question;
-        }
-        return null;
-    }, [selectedQuestionId, internalTemplate]);
+        if (!selectedQuestionId) return null;
+        return allQuestions.find(q => q.id === selectedQuestionId) || null;
+    }, [selectedQuestionId, allQuestions]);
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
 
-        const newSections = internalTemplate.sections.map(section => {
-            const questionIndex = section.questions.findIndex(q => q.id === updatedQuestion.id);
-            if (questionIndex > -1) {
-                const newQuestions = [...section.questions];
-                newQuestions[questionIndex] = updatedQuestion;
-                return { ...section, questions: newQuestions };
-            }
-            return section;
-        });
+        const updateFn = (q: FormQuestion) => q.id === updatedQuestion.id ? updatedQuestion : q;
 
-        handleTemplateChange({ ...template, sections: newSections });
+        const newSections = (internalTemplate.sections || []).map(section => ({
+            ...section,
+            questions: (section.questions || []).map(updateFn)
+        }));
+
+        const newFloatingQuestions = (internalTemplate.questions || []).map(updateFn);
+        
+        handleTemplateChange({ ...template, sections: newSections, questions: newFloatingQuestions });
     };
-
-    const allQuestions = useMemo(() => {
-        if (!internalTemplate || !internalTemplate.sections) return [];
-        return internalTemplate.sections.flatMap(s => s.questions || []);
-    }, [internalTemplate]);
 
     const isPublished = internalTemplate && 'id' in internalTemplate && internalTemplate.status === 'published';
 

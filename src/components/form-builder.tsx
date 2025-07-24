@@ -63,11 +63,16 @@ export function FormBuilder({
   onDeleteQuestion,
 }: FormBuilderProps) {
   const reactFlow = useReactFlow();
-  const allQuestions = useMemo(() => template.sections.flatMap(s => s.questions || []), [template.sections]);
+  const allQuestions = useMemo(() => {
+    const sectionQuestions = template.sections.flatMap(s => s.questions || []);
+    const floatingQuestions = template.questions || [];
+    return [...sectionQuestions, ...floatingQuestions];
+  }, [template.sections, template.questions]);
 
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
 
+    // Render sections
     (template.sections || []).forEach(section => {
       nodes.push({
         id: section.id,
@@ -89,40 +94,50 @@ export function FormBuilder({
         zIndex: 1,
         selected: section.id === selectedSectionId,
       });
+    });
 
-      section.questions.forEach(question => {
+    // Render all questions (both in sections and floating)
+    allQuestions.forEach(question => {
         nodes.push({
-          id: question.id,
-          type: 'question',
-          position: question.position,
-          parentNode: question.sectionId || undefined,
-          extent: question.sectionId ? 'parent' : undefined,
-          dragHandle: '.drag-handle-question',
-          data: {
-            ...question,
-            onDelete: () => onDeleteQuestion(question.id),
-            onTogglePin: () => {
-              const currentQuestion = allQuestions.find(q => q.id === question.id)!;
-              const isPinned = !!currentQuestion.sectionId;
-              let newParentId: string | null = null;
-              if (!isPinned) {
-                const node = reactFlow.getNode(question.id);
-                if (node && node.positionAbsolute) {
-                  const parentSection = findParentSection(template.sections, node.positionAbsolute.x, node.positionAbsolute.y);
-                  newParentId = parentSection ? parentSection.id : null;
+            id: question.id,
+            type: 'question',
+            position: question.position,
+            parentNode: question.sectionId || undefined,
+            extent: question.sectionId ? 'parent' : undefined,
+            dragHandle: '.drag-handle-question',
+            data: {
+              ...question,
+              onDelete: () => onDeleteQuestion(question.id),
+              onTogglePin: () => {
+                const currentQuestion = allQuestions.find(q => q.id === question.id)!;
+                const isPinned = !!currentQuestion.sectionId;
+                const newTemplate = { ...template };
+                
+                if (isPinned) {
+                    // Unpin: Move from section to root
+                    const sourceSection = newTemplate.sections.find(s => s.id === currentQuestion.sectionId);
+                    if (sourceSection) {
+                        sourceSection.questions = sourceSection.questions.filter(q => q.id !== currentQuestion.id);
+                    }
+                    newTemplate.questions = [...(newTemplate.questions || []), { ...currentQuestion, sectionId: null }];
+                } else {
+                    // Pin: Move from root to section
+                    const node = reactFlow.getNode(question.id);
+                    const parentSection = node?.positionAbsolute ? findParentSection(template.sections, node.positionAbsolute.x, node.positionAbsolute.y) : null;
+                    if (parentSection) {
+                        newTemplate.questions = (newTemplate.questions || []).filter(q => q.id !== currentQuestion.id);
+                        const targetSection = newTemplate.sections.find(s => s.id === parentSection.id);
+                        if(targetSection) {
+                           targetSection.questions.push({ ...currentQuestion, sectionId: parentSection.id });
+                        }
+                    }
                 }
+                onTemplateChange(newTemplate);
               }
-              const newSections = template.sections.map(s => ({
-                ...s,
-                questions: s.questions.map(q => q.id === question.id ? { ...q, sectionId: newParentId } : q)
-              }));
-              onTemplateChange({ ...template, sections: newSections });
-            }
-          },
-          selected: question.id === selectedQuestionId,
-          zIndex: 2,
+            },
+            selected: question.id === selectedQuestionId,
+            zIndex: 2,
         });
-      });
     });
 
     return nodes;
@@ -150,6 +165,11 @@ export function FormBuilder({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const nodeRef = React.useRef(nodes);
+
+  useEffect(() => {
+    nodeRef.current = nodes;
+  }, [nodes]);
   
   useEffect(() => {
     setNodes(initialNodes);
@@ -171,19 +191,34 @@ export function FormBuilder({
 
         if (node.type === 'question' && node.positionAbsolute) {
             const questionId = node.id;
-            const updatedQuestion = allQuestions.find(q => q.id === questionId)!;
+            const newTemplate = { ...template, sections: [...template.sections], questions: [...(template.questions || [])] };
             
-            const newSections = template.sections.map(s => ({
-              ...s,
-              questions: s.questions.map(q => {
-                if (q.id === questionId) {
-                  return { ...q, position: node.position };
-                }
-                return q;
-              })
-            }));
+            const question = allQuestions.find(q => q.id === questionId)!;
+            const oldSectionId = question.sectionId;
+            const newParentSection = findParentSection(template.sections, node.positionAbsolute.x, node.positionAbsolute.y);
 
-            onTemplateChange({ ...template, sections: newSections });
+            // Remove from old location
+            if (oldSectionId) {
+                const sourceSection = newTemplate.sections.find(s => s.id === oldSectionId);
+                if (sourceSection) {
+                    sourceSection.questions = sourceSection.questions.filter(q => q.id !== questionId);
+                }
+            } else {
+                newTemplate.questions = newTemplate.questions.filter(q => q.id !== questionId);
+            }
+
+            // Add to new location
+            const updatedQuestion = { ...question, position: node.position, sectionId: newParentSection?.id || null };
+            if (newParentSection) {
+                const targetSection = newTemplate.sections.find(s => s.id === newParentSection.id);
+                if(targetSection) {
+                    targetSection.questions.push(updatedQuestion);
+                }
+            } else {
+                newTemplate.questions.push(updatedQuestion);
+            }
+
+            onTemplateChange(newTemplate);
         }
     },
     [template, onTemplateChange, allQuestions]
@@ -205,9 +240,9 @@ export function FormBuilder({
       const newEdge = { ...params, type: 'deletable', markerEnd: { type: MarkerType.ArrowClosed }};
       setEdges((eds) => addEdge(newEdge, eds));
       
-      const newSections = template.sections.map(section => ({
-        ...section,
-        questions: section.questions.map(q => {
+      const newTemplate = { ...template, sections: [...template.sections], questions: [...(template.questions || [])] };
+
+      const updateQuestionRamification = (q: FormQuestion) => {
           if (q.id === params.source) {
             const newRamification = {
               id: `ram-${Date.now()}`,
@@ -215,15 +250,18 @@ export function FormBuilder({
               action: 'show_question' as const,
               targetQuestionId: params.target!,
             };
-            return {
-              ...q,
-              ramifications: [...(q.ramifications || []), newRamification]
-            };
+            return { ...q, ramifications: [...(q.ramifications || []), newRamification] };
           }
           return q;
-        })
+      };
+
+      newTemplate.sections = newTemplate.sections.map(section => ({
+        ...section,
+        questions: section.questions.map(updateQuestionRamification)
       }));
-      onTemplateChange({ ...template, sections: newSections });
+      newTemplate.questions = newTemplate.questions.map(updateQuestionRamification);
+      
+      onTemplateChange(newTemplate);
     },
     [setEdges, template, onTemplateChange]
   );
@@ -231,20 +269,25 @@ export function FormBuilder({
   const handleEdgeDelete = (edgeId: string) => {
     const [_, sourceId, targetId] = edgeId.split('-');
     
-    const newSections = template.sections.map(section => ({
-        ...section,
-        questions: section.questions.map(question => {
-            if (question.id === sourceId) {
-                const newRamifications = (question.ramifications || []).filter(
-                    ram => !(ram.action === 'show_question' && ram.targetQuestionId === targetId)
-                );
-                return { ...question, ramifications: newRamifications };
-            }
-            return question;
-        })
-    }));
+    const newTemplate = { ...template, sections: [...template.sections], questions: [...(template.questions || [])] };
+    
+    const updateQuestionRamification = (q: FormQuestion) => {
+        if (q.id === sourceId) {
+            const newRamifications = (q.ramifications || []).filter(
+                ram => !(ram.action === 'show_question' && ram.targetQuestionId === targetId)
+            );
+            return { ...q, ramifications: newRamifications };
+        }
+        return q;
+    }
 
-    onTemplateChange({ ...template, sections: newSections });
+    newTemplate.sections = newTemplate.sections.map(section => ({
+        ...section,
+        questions: section.questions.map(updateQuestionRamification)
+    }));
+    newTemplate.questions = newTemplate.questions.map(updateQuestionRamification);
+
+    onTemplateChange(newTemplate);
 };
 
 

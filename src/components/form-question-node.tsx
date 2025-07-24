@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { memo } from 'react';
@@ -20,6 +21,16 @@ interface QuestionNodeProps {
 
 export const QuestionNode = memo(({ id, data, selected }: QuestionNodeProps) => {
 
+  const handleTogglePinClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    data.onTogglePin();
+  };
+  
+  const handleDeleteClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    data.onDelete();
+  };
+
   return (
     <>
       <Handle type="target" position={Position.Top} className="!w-16 !bg-primary" />
@@ -34,10 +45,10 @@ export const QuestionNode = memo(({ id, data, selected }: QuestionNodeProps) => 
               <span className="truncate flex-1">{data.label}</span>
             </CardTitle>
             <div className="flex items-center">
-                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground/70 hover:text-primary" onClick={(e) => { e.stopPropagation(); data.onTogglePin(); }}>
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground/70 hover:text-primary" onClick={handleTogglePinClick}>
                     {data.sectionId ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); data.onDelete(); }}>
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-destructive/70 hover:text-destructive" onClick={handleDeleteClick}>
                     <Trash2 className="h-4 w-4"/>
                 </Button>
             </div>
