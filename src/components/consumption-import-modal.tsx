@@ -16,7 +16,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
-import { useBaseProducts } from '@/hooks/use-base-products';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 
 
@@ -59,12 +58,12 @@ interface ConsumptionImportModalProps {
     onOpenChange: (open: boolean) => void;
     kiosks: Kiosk[];
     baseProducts: BaseProduct[];
+    addReport: (report: Omit<ConsumptionReport, 'id'>) => Promise<string | null>;
 }
 
-export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts }: ConsumptionImportModalProps) {
+export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const { addReport } = useConsumptionAnalysis();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -168,8 +167,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         results: finalResults,
                     };
                     
-                    // The addReport function now handles all the calculation and updating logic
-                    await addReport(newReport, baseProducts, kiosks);
+                    await addReport(newReport);
                     
                     toast({ title: 'Sucesso!', description: 'Relatório processado e estoques mínimos foram recalculados.' });
                     

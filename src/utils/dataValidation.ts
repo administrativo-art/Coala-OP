@@ -1,4 +1,5 @@
 
+
 export interface ConsumptionItem {
   baseProductId: string;
   consumedQuantity: number;
@@ -32,8 +33,11 @@ export function validateConsumptionItem(item: any): ConsumptionItem | null {
 
   // Validar baseProductId
   if (!baseProductId || typeof baseProductId !== 'string' || baseProductId.trim() === '') {
-    console.warn('Item sem baseProductId válido:', item);
-    return null;
+    // Tenta usar o productName como fallback se baseProductId não existir
+    if (!productName || typeof productName !== 'string' || productName.trim() === '') {
+      console.warn('Item sem baseProductId ou productName válido:', item);
+      return null;
+    }
   }
 
   // Validar consumedQuantity
@@ -51,7 +55,7 @@ export function validateConsumptionItem(item: any): ConsumptionItem | null {
 
   return {
     ...item,
-    baseProductId: baseProductId.trim(),
+    baseProductId: (baseProductId || '').trim(), // Pode ser vazio aqui, será preenchido depois
     consumedQuantity: quantity,
     productName: productName.trim()
   };
