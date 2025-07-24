@@ -1,5 +1,5 @@
 
-
+      
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -315,3 +315,5 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
+
+    

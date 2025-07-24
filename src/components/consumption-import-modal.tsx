@@ -1,5 +1,5 @@
 
-"use client"
+      "use client"
 
 import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
-import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
+import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 
 
 const consumptionUploadSchema = z.object({
@@ -201,8 +201,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                     <SelectContent>{kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                                </Select><FormMessage />
-                                </FormItem>
+                                </Select><FormMessage /></FormItem>
                             )}/>
                             <FormField control={uploadForm.control} name="month" render={({ field }) => (
                                 <FormItem><FormLabel>Mês</FormLabel><FormControl><Input type="number" min="1" max="12" {...field} /></FormControl><FormMessage /></FormItem>
@@ -242,3 +241,5 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
         </Dialog>
     );
 }
+
+    

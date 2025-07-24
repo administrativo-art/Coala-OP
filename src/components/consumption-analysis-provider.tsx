@@ -1,5 +1,5 @@
 
-"use client";
+      "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ConsumptionReport } from '@/types';
@@ -61,3 +61,5 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
 
   return <ConsumptionAnalysisContext.Provider value={value}>{children}</ConsumptionAnalysisContext.Provider>;
 }
+
+    

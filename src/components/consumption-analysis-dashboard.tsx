@@ -1,8 +1,8 @@
 
-"use client"
+      "use client"
 
 import { useState } from "react"
-import { useKiosks } from "@/hooks/use-kiosks"
+import { useKiosks from "@/hooks/use-kiosks"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Button } from "@/components/ui/button"
@@ -66,3 +66,5 @@ export function ConsumptionAnalysisDashboard() {
     </>
   )
 }
+
+    

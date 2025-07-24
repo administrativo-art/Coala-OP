@@ -1,7 +1,7 @@
 
-// src/hooks/useValidatedConsumptionData.ts
-import { useEffect, useMemo } from 'react';
-import { useConsumptionAnalysis } from './use-consumption-analysis';
+      // src/hooks/useValidatedConsumptionData.ts
+import { useEffect, useMemo, useCallback } from 'react';
+import { useConsumptionAnalysis } from '@/components/consumption-analysis-provider';
 import { useBaseProducts } from './use-base-products';
 import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
@@ -39,19 +39,18 @@ export function useValidatedConsumptionData() {
     };
   }, [rawReports, rawBaseProducts]);
   
-  const calculateAllMinimumStocks = async (updatedReports: any[]) => {
+  const calculateAndApplyAllMinimumStocks = useCallback(async (allReports: any[]) => {
       const productsToUpdate: any[] = [];
+      const kioskList = kiosks.filter(k => k.id !== 'matriz');
 
       for (const bp of baseProducts) {
-        const newStockLevels: { [kioskId: string]: { min: number } } = {};
+        const newStockLevels: { [kioskId: string]: { min: number } } = { ...(bp.stockLevels || {}) };
         
         let totalNetworkConsumption = 0;
-        let totalNetworkMonths = new Set();
+        let totalNetworkMonths = new Set<string>();
         
-        for (const k of kiosks) {
-            if (k.id === 'matriz') continue;
-
-            const kioskReports = updatedReports.filter(r => r.kioskId === k.id);
+        for (const k of kioskList) {
+            const kioskReports = allReports.filter(r => r.kioskId === k.id);
             if (kioskReports.length === 0) continue;
             
             const totalKioskConsumption = kioskReports.reduce((sum, r) => {
@@ -90,34 +89,35 @@ export function useValidatedConsumptionData() {
       if (productsToUpdate.length > 0) {
         await updateMultipleBaseProducts(productsToUpdate);
       }
-  };
+  }, [kiosks, baseProducts, updateMultipleBaseProducts]);
   
-  const addReport = async (reportData: any) => {
+  const addReport = useCallback(async (reportData: any) => {
     const reportId = await rawAddReport(reportData);
     if (reportId) {
         const newReportsList = [...reports, { ...reportData, id: reportId }];
-        await calculateAllMinimumStocks(newReportsList);
+        await calculateAndApplyAllMinimumStocks(newReportsList);
     }
     return reportId;
-  };
+  }, [rawAddReport, reports, calculateAndApplyAllMinimumStocks]);
 
 
   useEffect(() => {
-    // Initial calculation on load
     if(!loadingReports && !loadingBases && !loadingKiosks && reports.length > 0 && baseProducts.length > 0) {
-        calculateAllMinimumStocks(reports);
+        calculateAndApplyAllMinimumStocks(reports);
     }
-  }, [loadingReports, loadingBases, loadingKiosks]);
+  }, [loadingReports, loadingBases, loadingKiosks, reports, baseProducts, calculateAndApplyAllMinimumStocks]);
 
 
   return {
     reports,
     baseProducts,
     integrityReport,
-    isLoading: loadingReports || loadingBases,
-    error: null, // Placeholder for future error handling
+    isLoading: loadingReports || loadingBases || loadingKiosks,
+    error: null,
     hasValidData: reports.length > 0 && baseProducts.length > 0,
     addReport,
     deleteReport,
   };
 }
+
+    
