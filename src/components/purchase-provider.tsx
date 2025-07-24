@@ -67,8 +67,9 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
 
      const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'entityId'>) => {
         if (!user) return;
-        const newSession: Omit<PurchaseSession, 'id'> = {
-            ...data,
+        const { entityId, ...restOfData } = data as any; // Exclude entityId
+        const newSession: Omit<PurchaseSession, 'id' | 'entityId'> = {
+            ...restOfData,
             userId: user.id,
             status: 'open',
             createdAt: new Date().toISOString()

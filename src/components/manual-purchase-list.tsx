@@ -14,13 +14,9 @@ export function ManualPurchaseList() {
     const { user, permissions } = useAuth();
     const [isStartModalOpen, setIsStartModalOpen] = useState(false);
 
-    const handleCreateSession = async (data: any) => {
+    const handleCreateSession = async (data: {description: string, baseProductIds: string[]}) => {
         if (!user) return;
-        await addSession({
-            description: data.description,
-            entityId: data.entityId,
-            baseProductIds: data.baseProductIds,
-        });
+        await addSession(data);
     };
     
     const openSessions = sessions.filter(s => s.status === 'open');

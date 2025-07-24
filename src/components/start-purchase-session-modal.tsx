@@ -31,7 +31,7 @@ type SessionFormValues = z.infer<typeof sessionSchema>;
 interface StartPurchaseSessionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (data: Omit<SessionFormValues, 'entityId'>) => void;
+  onConfirm: (data: SessionFormValues) => void;
 }
 
 export function StartPurchaseSessionModal({ open, onOpenChange, onConfirm }: StartPurchaseSessionModalProps) {
