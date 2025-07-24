@@ -48,15 +48,18 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         }
 
         setIsSaving('draft');
-        if ('id' in internalTemplate) {
-            await updateTemplate({ ...internalTemplate, status: 'draft' });
-        } else {
-            const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
-            if (newId) {
-                setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
+        try {
+            if ('id' in internalTemplate) {
+                await updateTemplate({ ...internalTemplate, status: 'draft' });
+            } else {
+                const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
+                if (newId) {
+                    setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
+                }
             }
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     }, 1500);
 
     useEffect(() => {
@@ -67,24 +70,24 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
     useEffect(() => {
         if (open) {
-        if (templateToEdit) {
-            setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
-        } else {
-            setInternalTemplate({
-                name: 'Novo Formulário',
-                type: 'standard',
-                layout: 'continuous',
-                moment: null,
-                submissionTitleFormat: '',
-                questions: [],
-                sections: [
-                    { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
-                ],
-            });
-        }
-        setActiveTab("builder");
-        setSelectedSectionId(null);
-        setSelectedQuestionId(null);
+            if (templateToEdit) {
+                setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
+            } else {
+                setInternalTemplate({
+                    name: 'Novo Formulário',
+                    type: 'standard',
+                    layout: 'continuous',
+                    moment: null,
+                    submissionTitleFormat: '',
+                    questions: [],
+                    sections: [
+                        { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
+                    ],
+                });
+            }
+            setActiveTab("builder");
+            setSelectedSectionId(null);
+            setSelectedQuestionId(null);
         } else {
             setInternalTemplate(null);
         }
@@ -134,6 +137,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                 y: position.y - 40, // 40 is half node height
             },
             sectionId: null, // Starts as a floating question
+            customColor: undefined,
         };
     
         const newQuestions = [...(internalTemplate.questions || []), newQuestion];
