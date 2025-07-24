@@ -17,6 +17,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 
 const consumptionUploadSchema = z.object({
@@ -64,6 +65,7 @@ interface ConsumptionImportModalProps {
 export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
+    const { updateMultipleBaseProducts } = useBaseProducts();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -156,6 +158,37 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
                     }
 
+                    // Automatic stock level calculation and update
+                    const baseProductsToUpdate: BaseProduct[] = [];
+                    const isMatriz = kiosk.id === 'matriz';
+                    
+                    finalResults.forEach(item => {
+                        const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+                        if (baseProduct) {
+                            const monthlyConsumption = item.consumedQuantity;
+                            const dailyAvg = monthlyConsumption / 30;
+                            let newMinStock = 0;
+
+                            if(isMatriz) {
+                                newMinStock = monthlyConsumption;
+                            } else {
+                                newMinStock = (dailyAvg * 7) + (dailyAvg * 5);
+                            }
+
+                            const updatedProduct = {
+                                ...baseProduct,
+                                stockLevels: {
+                                    ...baseProduct.stockLevels,
+                                    [kiosk.id]: { min: Math.ceil(newMinStock) }
+                                }
+                            };
+                            baseProductsToUpdate.push(updatedProduct);
+                        }
+                    });
+
+                    if (baseProductsToUpdate.length > 0) {
+                        await updateMultipleBaseProducts(baseProductsToUpdate);
+                    }
 
                     await addReport({
                         reportName: file.name,
@@ -168,7 +201,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         results: finalResults,
                     });
                     
-                    toast({ title: 'Sucesso', description: `Relatório analisado e salvo.` });
+                    toast({ title: 'Sucesso', description: `Relatório analisado e salvo. O estoque mínimo de ${baseProductsToUpdate.length} iten(s) foi atualizado.` });
                     onOpenChange(false);
 
                 } catch (error: any) {
@@ -188,7 +221,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                 <DialogHeader>
                     <DialogTitle>Importar relatório de consumo</DialogTitle>
                     <DialogDescription>
-                        Faça o upload de um relatório de vendas/consumo em formato CSV para análise.
+                        Faça o upload de um relatório de vendas/consumo em formato CSV para análise. O estoque mínimo será atualizado automaticamente.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...uploadForm}>
