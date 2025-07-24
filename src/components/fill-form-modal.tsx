@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useMemo, useEffect, useState, useRef } from 'react';
@@ -16,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAnswer, type FormSection } from '@/types';
+import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAnswer } from '@/types';
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { uploadFile } from '@/lib/storage';
@@ -24,24 +23,20 @@ import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIco
 import { useToast } from '@/hooks/use-toast';
 import { PhotoCaptureModal } from './photo-capture-modal';
 
-const getAllQuestions = (sections: FormSection[]): FormQuestion[] => {
-    return sections.flatMap(section => section.questions || []);
+const getAllQuestions = (questions: FormQuestion[]): FormQuestion[] => {
+    return questions;
 };
 
-const getVisibleQuestionIds = (sections: FormSection[], formValues: Record<string, any>): Set<string> => {
+const getVisibleQuestionIds = (questions: FormQuestion[], formValues: Record<string, any>): Set<string> => {
     const visibleIds = new Set<string>();
-    const allQuestions = getAllQuestions(sections);
-    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
+    const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    allQuestions.forEach(q => {
+    questions.forEach(q => {
         // A question is visible by default unless a condition hides it (not implemented, but good practice)
         visibleIds.add(q.id);
     });
-
-    // This logic needs to be enhanced if we add show/hide ramifications
-    // For now, all questions are considered potentially visible.
     
-    // A more advanced implementation would traverse the graph:
+    // A mais advanced implementation would traverse the graph:
     // 1. Start with root questions.
     // 2. For each answered question, evaluate its ramifications.
     // 3. If a ramification shows a new question, add it to a "to-visit" queue.
@@ -220,7 +215,7 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
 
 function QuestionRenderer({ questions, control }: { questions: FormQuestion[]; control: Control<any> }) {
   if (!questions || questions.length === 0) return null;
-  return <>{questions.map(q => <RenderedQuestion key={q.id} question={q} control={control} />)}</>;
+  return <div className="space-y-6">{questions.map(q => <RenderedQuestion key={q.id} question={q} control={control} />)}</div>;
 }
 
 type FillFormModalProps = {
@@ -255,19 +250,12 @@ const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>
 export function FillFormModal({ open, onOpenChange, template, addSubmission }: FillFormModalProps) {
     const { user } = useAuth();
     const { kiosks } = useKiosks();
-    const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Determine which questions should be included in the submission
     const visibleQuestions = useMemo(() => {
-        return getAllQuestions(template.sections);
+        return getAllQuestions(template.questions);
     }, [template]);
-
-    const questionsWithoutSection = useMemo(() => {
-        return visibleQuestions.filter(q => !q.sectionId);
-    }, [visibleQuestions]);
-
-
+    
     const defaultValues = useMemo(() => {
         const values: Record<string, any> = {};
         visibleQuestions.forEach(q => {
@@ -279,7 +267,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const formSchema = useMemo(() => {
         const baseSchema = generateSchema(visibleQuestions);
         return baseSchema.superRefine((data, ctx) => {
-            const visibleIds = getVisibleQuestionIds(template.sections, data);
+            const visibleIds = getVisibleQuestionIds(template.questions, data);
             visibleQuestions.forEach(question => {
                 if (question.isRequired && visibleIds.has(question.id)) {
                     const value = data[question.id];
@@ -305,25 +293,10 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     useEffect(() => {
         if (open) {
             form.reset(defaultValues);
-            setCurrentSectionIndex(0);
             setIsSubmitting(false);
         }
     }, [open, form, defaultValues]);
-
-    const handleNextStep = async () => {
-        const currentSection = template.sections[currentSectionIndex];
-        const questionIdsInStep = getAllQuestions([currentSection]).map(q => q.id);
-        const isValid = await form.trigger(questionIdsInStep as any);
-
-        if (isValid) {
-            setCurrentSectionIndex(prev => prev + 1);
-        }
-    };
-
-    const handlePrevStep = () => {
-        setCurrentSectionIndex(prev => prev - 1);
-    };
-
+    
     const onSubmit = async (values: Record<string, any>) => {
         if (!user) return;
         setIsSubmitting(true);
@@ -363,71 +336,25 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         await addSubmission(submission, template);
         onOpenChange(false);
     };
-  
-    const renderSection = (section: FormSection, index: number) => {
-        const hasMultipleSections = template.sections.length > 1;
-        const sectionTitle = hasMultipleSections ? (section.name?.trim() || `Seção ${index + 1}`) : null;
-        
-        const questionsInSection = visibleQuestions.filter(q => q.sectionId === section.id);
-
-        return (
-            <div key={section.id} className="space-y-6">
-                {sectionTitle && <h3 className="text-lg font-semibold border-b pb-2 text-primary">{sectionTitle}</h3>}
-                <QuestionRenderer questions={questionsInSection} control={form.control} />
-            </div>
-        )
-    }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{template.name}</DialogTitle>
-          {template.layout === 'stepped' && template.sections.length > 1 && (
-            <DialogDescription>
-                Passo {currentSectionIndex + 1} de {template.sections.length}
-            </DialogDescription>
-          )}
         </DialogHeader>
-
-        {template.layout === 'stepped' && template.sections.length > 1 && (
-            <Progress value={((currentSectionIndex + 1) / template.sections.length) * 100} className="w-full" />
-        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <ScrollArea className="h-[60vh] p-4 -mx-4 pr-6">
-              <div className="space-y-8 p-2">
-                 {template.layout === 'stepped' && template.sections.length > 1 ? (
-                    renderSection(template.sections[currentSectionIndex], currentSectionIndex)
-                 ) : (
-                    <>
-                        {template.sections.map((section, index) => renderSection(section, index))}
-                        {questionsWithoutSection.length > 0 && (
-                            <div className="space-y-6">
-                                <h3 className="text-lg font-semibold border-b pb-2 text-primary">Outras perguntas</h3>
-                                <QuestionRenderer questions={questionsWithoutSection} control={form.control} />
-                            </div>
-                        )}
-                    </>
-                 )}
-              </div>
+              <QuestionRenderer questions={visibleQuestions} control={form.control} />
             </ScrollArea>
             <DialogFooter className="pt-6 border-t flex justify-between w-full">
-              <div>
-                {template.layout === 'stepped' && currentSectionIndex > 0 && (
-                    <Button type="button" variant="outline" onClick={handlePrevStep} disabled={isSubmitting}>Voltar</Button>
-                )}
-              </div>
               <div className="flex-grow flex justify-end">
-                {template.layout === 'stepped' && currentSectionIndex < template.sections.length - 1 ? (
-                    <Button type="button" onClick={handleNextStep} disabled={isSubmitting}>Próxima</Button>
-                ) : (
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
-                        {isSubmitting ? 'Enviando...' : 'Enviar formulário'}
-                    </Button>
-                )}
+                <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
+                    {isSubmitting ? 'Enviando...' : 'Enviar formulário'}
+                </Button>
               </div>
             </DialogFooter>
           </form>

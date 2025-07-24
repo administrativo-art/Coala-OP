@@ -395,27 +395,13 @@ export type FormQuestion = {
         allowCamera: boolean;
     };
     ramifications?: FormQuestionRamification[];
-    position: { x: number, y: number };
-    sectionId: string | null;
     customColor?: string;
-};
-
-export type FormSection = {
-  id: string;
-  name: string;
-  questions: FormQuestion[];
-  position: { x: number, y: number };
-  width?: number;
-  height?: number;
-  color?: string;
 };
 
 export type FormTemplate = {
     id: string;
     name: string;
     questions: FormQuestion[];
-    sections: FormSection[];
-    layout: 'continuous' | 'stepped';
     submissionTitleFormat?: string;
     type: 'standard' | 'operational_checklist';
     moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null;

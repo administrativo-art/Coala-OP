@@ -15,15 +15,14 @@ const settingsSchema = z.object({
   name: z.string().min(1, "O nome do formulário é obrigatório."),
   type: z.enum(['standard', 'operational_checklist']),
   moment: z.enum(['PRE_ABERTURA', 'ABERTURA', 'TROCA_FECHAMENTO', 'TROCA_ABERTURA', 'FECHAMENTO_FINAL']).nullable(),
-  layout: z.enum(['continuous', 'stepped']),
   submissionTitleFormat: z.string().optional(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
 
 interface FormGeneralSettingsProps {
-  template: FormTemplate | Omit<FormTemplate, 'id'>;
-  onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id'>) => void;
+  template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
+  onTemplateChange: (template: Partial<FormTemplate>) => void;
 }
 
 export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralSettingsProps) {
@@ -33,17 +32,16 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
       name: template.name,
       type: template.type,
       moment: template.moment,
-      layout: template.layout,
       submissionTitleFormat: template.submissionTitleFormat || '',
     },
   });
 
   React.useEffect(() => {
     const subscription = form.watch((values) => {
-        onTemplateChange({ ...template, ...values });
+        onTemplateChange(values);
     });
     return () => subscription.unsubscribe();
-  }, [form.watch, template, onTemplateChange]);
+  }, [form.watch, onTemplateChange]);
 
   const formType = form.watch('type');
 
@@ -67,7 +65,7 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
 
                  <Card>
                     <CardHeader>
-                        <CardTitle>Comportamento e Layout</CardTitle>
+                        <CardTitle>Comportamento</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <FormField control={form.control} name="type" render={({ field }) => (
@@ -101,19 +99,6 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
                                 </FormItem>
                             )}/>
                         )}
-                         <FormField control={form.control} name="layout" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Layout de Preenchimento</FormLabel>
-                                <Select onValueChange={(field.onChange as (value: 'continuous' | 'stepped') => void)} value={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="continuous">Contínuo (Todas as perguntas na mesma página)</SelectItem>
-                                        <SelectItem value="stepped">Passo a Passo (Uma seção por página)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )}/>
                     </CardContent>
                 </Card>
             </form>
