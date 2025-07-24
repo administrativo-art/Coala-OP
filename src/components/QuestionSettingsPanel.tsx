@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -15,6 +16,7 @@ import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { nanoid } from 'nanoid';
 import { ScrollArea } from './ui/scroll-area';
+import { Alert, AlertTitle } from './ui/alert';
 
 
 const ramificationSchema = z.object({
@@ -219,6 +221,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                          const ramification = form.watch(`ramifications.${index}`);
                          const conditionValue = ramification.conditions[0].value;
                          const isPredefined = isRamificationDisabled && watchedOptions?.some(o => o.value === conditionValue);
+                         const hasError = ramification.action === 'show_question' && !ramification.targetQuestionId;
 
                          return (
                             <div key={field.id} className="p-3 border rounded-lg space-y-3 bg-muted/50">
@@ -263,6 +266,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                 )}/>
                                 
                                 {ramification.action === 'show_question' && (
+                                  <>
                                     <FormField control={form.control} name={`ramifications.${index}.targetQuestionId`} render={({field}) => (
                                         <FormItem>
                                             <Select onValueChange={field.onChange} value={field.value}>
@@ -275,6 +279,13 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                             </Select><FormMessage/>
                                         </FormItem>
                                     )}/>
+                                    {hasError && 
+                                        <Alert variant="destructive" className="text-xs p-2">
+                                            <AlertTriangle className="h-4 w-4"/>
+                                            <AlertTitle>É necessário selecionar uma pergunta de destino.</AlertTitle>
+                                        </Alert>
+                                    }
+                                  </>
                                 )}
                                 
                                 {ramification.action === 'create_task' && (

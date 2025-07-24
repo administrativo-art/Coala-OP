@@ -5,7 +5,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { ListChecks, GripVertical, Trash2, FileText, ToggleRight, CircleDot, Paperclip, Type, CheckSquare, MessageSquare } from 'lucide-react';
+import { ListChecks, GripVertical, Trash2, FileText, ToggleRight, CircleDot, Paperclip, Type, CheckSquare, MessageSquare, AlertTriangle, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { type FormQuestion } from '@/types';
@@ -14,6 +14,7 @@ interface QuestionNodeProps {
   id: string;
   data: FormQuestion & {
       onDelete: () => void;
+      onTogglePin: () => void;
   };
   selected?: boolean;
 }
@@ -38,14 +39,19 @@ export const QuestionNode = memo(({ id, data, selected }: QuestionNodeProps) => 
   const visuals = QUESTION_VISUALS[data.type] || QUESTION_VISUALS.text;
   const Icon = visuals.icon;
 
+  const hasIncompleteOptions = (data.type === 'single-choice' || data.type === 'multiple-choice') && (!data.options || data.options.length === 0);
+  const hasIncompleteRamification = data.ramifications?.some(r => r.action === 'show_question' && !r.targetQuestionId);
+  const hasError = hasIncompleteOptions || hasIncompleteRamification;
+
   return (
     <>
       <Handle type="target" position={Position.Top} className="!w-16 !bg-primary" />
       <Card className={cn(
           "w-[300px] shadow-md hover:shadow-lg transition-shadow duration-200 relative group border-2", 
-          selected ? 'ring-2 ring-primary border-primary' : visuals.color
+          selected ? 'ring-2 ring-primary border-primary' : visuals.color,
+          hasError && '!border-destructive'
       )}>
-        <div className="drag-handle-question absolute top-1/2 -translate-y-1/2 -left-3 p-1 cursor-grab bg-background/50 rounded-md hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="drag-handle absolute top-1/2 -translate-y-1/2 -left-3 p-1 cursor-grab bg-background/50 rounded-md hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity">
             <GripVertical className="h-5 w-5 text-muted-foreground" />
         </div>
         <CardHeader className="p-3 space-y-1">
@@ -55,6 +61,7 @@ export const QuestionNode = memo(({ id, data, selected }: QuestionNodeProps) => 
               <span className="truncate flex-1">{data.label}</span>
             </CardTitle>
             <div className="flex items-center">
+                 {hasError && <AlertTriangle className="h-4 w-4 text-destructive mr-1" />}
                 <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-destructive/70 hover:text-destructive" onClick={handleDeleteClick}>
                     <Trash2 className="h-4 w-4"/>
                 </Button>
