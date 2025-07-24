@@ -527,6 +527,18 @@ export type PurchaseItem = {
   createdAt: string; // ISO String
 };
 
+export type PurchaseSession = {
+  id: string;
+  description: string;
+  userId: string;
+  entityId: string;
+  baseProductIds: string[];
+  status: 'open' | 'closed';
+  createdAt: string; // ISO String
+  closedAt?: string; // ISO String
+};
+
+
 export type ItemAdditionRequest = {
   id: string;
   kioskId: string;
