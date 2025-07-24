@@ -112,8 +112,11 @@ export function AutomaticPurchaseList() {
                             </AccordionTrigger>
                             <AccordionContent className="p-4">
                                  <PriceComparisonTable
-                                    baseProductId={result.baseProduct.id}
-                                    items={purchaseItems.filter(i => i.sessionId === 'automatic')}
+                                    baseProduct={result.baseProduct}
+                                    items={purchaseItems.filter(i => {
+                                        const product = products.find(p => p.id === i.productId);
+                                        return i.sessionId === 'automatic' && product?.baseProductId === result.baseProduct.id;
+                                    })}
                                     sessionId="automatic"
                                     isSessionClosed={false}
                                 />

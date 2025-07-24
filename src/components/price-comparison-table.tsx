@@ -40,7 +40,11 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
     const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
     const [debouncedPrices] = useDebounce(localPrices, 500);
 
-    const linkedProducts = useMemo(() => products.filter(p => p.baseProductId === baseProduct.id), [products, baseProduct.id]);
+    const linkedProducts = useMemo(() => {
+        if (!baseProduct) return [];
+        return products.filter(p => p.baseProductId === baseProduct.id);
+    }, [products, baseProduct]);
+
     const suppliers = useMemo(() => entities.filter(e => e.type === 'pessoa_juridica'), [entities]);
 
     useEffect(() => {
@@ -73,13 +77,18 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
     };
 
     const tableData = useMemo((): PriceRow[] => {
+        if (!baseProduct) return [];
         const rows: Omit<PriceRow, 'isBestPrice'>[] = items.map(item => {
             const product = products.find(p => p.id === item.productId);
             let pricePerUnit: number | null = null;
             if (product && item.price > 0) {
-                const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                if (convertedQty > 0) {
-                    pricePerUnit = item.price / convertedQty;
+                try {
+                    const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    if (convertedQty > 0) {
+                        pricePerUnit = item.price / convertedQty;
+                    }
+                } catch (e) {
+                    console.error("Error converting value for price comparison:", e);
                 }
             }
             return { purchaseItem: item, product, pricePerUnit };
@@ -104,6 +113,10 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
     const canSuggest = permissions.purchasing.suggest && !isSessionClosed;
     const canApprove = permissions.purchasing.approve && !isSessionClosed;
     
+    if (!baseProduct) {
+        return <p className="text-destructive">Erro: Produto base não encontrado.</p>;
+    }
+
     return (
         <div className="space-y-2">
             <div className="rounded-md border">
