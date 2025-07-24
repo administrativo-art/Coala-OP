@@ -14,8 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck } from 'lucide-react'
-import { differenceInDays, parseISO } from 'date-fns'
+import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi } from 'lucide-react'
+import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -35,6 +35,87 @@ import { useRouter } from "next/navigation"
 import { PendingTasksDashboard } from "@/components/pending-tasks-dashboard"
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories"
 import { useProducts } from "@/hooks/use-products"
+import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface OnlineUser {
+    id: string;
+    username: string;
+    status: 'online' | 'offline';
+    last_seen: Date;
+}
+
+function OnlineUsersPanel() {
+    const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const q = query(
+            collection(db, "userPresence"), 
+            where("status", "==", "online"),
+            where("last_seen", ">", fiveMinutesAgo)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const users: OnlineUser[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const lastSeen = (data.last_seen as Timestamp)?.toDate();
+                if (lastSeen) {
+                    users.push({
+                        id: doc.id,
+                        username: data.username,
+                        status: data.status,
+                        last_seen: lastSeen,
+                    });
+                }
+            });
+            setOnlineUsers(users.sort((a,b) => a.username.localeCompare(b.username)));
+        });
+
+        // Update 'now' every 30 seconds to refresh the 'time ago' display
+        const timer = setInterval(() => setNow(new Date()), 30 * 1000);
+
+        return () => {
+            unsubscribe();
+            clearInterval(timer);
+        };
+    }, []);
+
+    return (
+        <Card className="lg:col-span-1">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Wifi /> Usuários Online ({onlineUsers.length})</CardTitle>
+                <CardDescription>
+                    Usuários ativos no sistema nos últimos 5 minutos.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-48">
+                    <div className="space-y-2 pr-4">
+                        {onlineUsers.length > 0 ? onlineUsers.map(user => (
+                             <div key={user.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                                 <div>
+                                    <p className="font-semibold">{user.username}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Visto por último: {formatDistanceToNow(user.last_seen, { locale: ptBR, addSuffix: true })}
+                                    </p>
+                                </div>
+                                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                             </div>
+                        )) : (
+                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                                <Users className="h-8 w-8 mb-2"/>
+                                <p>Nenhum usuário online no momento.</p>
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    )
+}
 
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
@@ -255,6 +336,9 @@ function OperationalDashboard() {
                 )}
             </CardContent>
         </Card>
+        
+        { user?.username === 'Tiago Brasil' && <OnlineUsersPanel /> }
+        
       </div>
       
       <AverageConsumptionChart />
@@ -431,3 +515,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

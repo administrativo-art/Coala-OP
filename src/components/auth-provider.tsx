@@ -6,7 +6,7 @@ import React, { createContext, useState, useEffect, useCallback, useContext, use
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, runTransaction } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, runTransaction, serverTimestamp, setDoc } from "firebase/firestore";
 import { ProfilesContext } from '@/components/profiles-provider';
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
@@ -55,15 +55,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setAuthLoading(false); // Initial load done
   }, []);
+  
+    // Presence management
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const userPresenceRef = doc(db, 'userPresence', currentUser.id);
+
+    // Set online status
+    setDoc(userPresenceRef, {
+        username: currentUser.username,
+        status: 'online',
+        last_seen: serverTimestamp(),
+    });
+
+    // Update last_seen timestamp periodically
+    const interval = setInterval(() => {
+        if (document.hasFocus()) {
+            updateDoc(userPresenceRef, { last_seen: serverTimestamp() });
+        }
+    }, 60 * 1000); // every minute
+
+    // Set offline on unload
+    const handleBeforeUnload = () => {
+      updateDoc(userPresenceRef, { status: 'offline' });
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        // Note: 'offline' on unload is best-effort and might not always run.
+        // A Cloud Function with Realtime Database is the most reliable way.
+        updateDoc(userPresenceRef, { status: 'offline' });
+    };
+  }, [currentUser]);
 
   const logout = useCallback(() => {
+    if (currentUser) {
+        const userPresenceRef = doc(db, 'userPresence', currentUser.id);
+        updateDoc(userPresenceRef, { status: 'offline' });
+    }
     setCurrentUser(null);
     setOriginalUser(null); // Clear impersonation state
     setPermissions(defaultGuestPermissions);
     window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY); // Clear impersonation from storage
     router.push('/login');
-  }, [router]);
+  }, [router, currentUser]);
 
   useEffect(() => {
     if (!profilesContext || profilesContext.loading) {
@@ -100,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
             pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
+            audit: { ...defaultGuestPermissions.audit, ...profilePermissions?.audit },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
@@ -298,3 +339,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
