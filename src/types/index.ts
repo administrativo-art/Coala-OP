@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -519,8 +518,8 @@ export type Entity = {
 export type PurchaseItem = {
   id: string;
   sessionId: string;
-  productId: string; // Insumo Vinculado ID
-  entityId?: string; // Fornecedor
+  productId: string;
+  entityId?: string;
   price: number;
   isConfirmed: boolean;
   confirmedBy?: string; // userId
@@ -532,7 +531,7 @@ export type PurchaseSession = {
   id: string;
   description: string;
   userId: string;
-  entityId: string;
+  entityId?: string;
   baseProductIds: string[];
   status: 'open' | 'closed';
   createdAt: string; // ISO String

@@ -1,10 +1,7 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { useAuth } from "@/hooks/use-auth";
 import { usePurchase } from "@/hooks/use-purchase";
 import { convertValue } from "@/lib/conversion";
@@ -12,247 +9,197 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { type Product, type PurchaseItem, type BaseProduct, type Entity } from "@/types";
-import { Star, CheckCircle, AlertTriangle, Info, Building } from "lucide-react";
+import { Star, CheckCircle, AlertTriangle, Trash2, PlusCircle } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
-import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { cn } from "@/lib/utils";
 
 interface PriceComparisonTableProps {
-    baseProductId: string;
+    baseProduct: BaseProduct;
     items: PurchaseItem[];
     sessionId: string;
     isSessionClosed: boolean;
 }
 
 interface PriceRow {
-    product: Product;
-    entityId: string;
-    price: string;
+    purchaseItem: PurchaseItem;
+    product: Product | undefined;
     pricePerUnit: number | null;
     isBestPrice: boolean;
-    isWorstPrice: boolean;
-    purchaseItem?: PurchaseItem;
 }
 
-export function PriceComparisonTable({ baseProductId, items, sessionId, isSessionClosed }: PriceComparisonTableProps) {
+export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionClosed }: PriceComparisonTableProps) {
     const { getProductFullName, products } = useProducts();
     const { entities } = useEntities();
-    const { baseProducts } = useBaseProducts();
-    const { savePrice, confirmPurchase, lastSavedPrices } = usePurchase();
+    const { savePrice, confirmPurchase, deletePurchaseItem } = usePurchase();
     const { permissions } = useAuth();
     
-    const [localData, setLocalData] = useState<Record<string, { price: string; entityId: string }>>({});
-    const [debouncedData] = useDebounce(localData, 500);
+    const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
+    const [debouncedPrices] = useDebounce(localPrices, 500);
 
-    const baseProduct = useMemo(() => baseProducts.find(bp => bp.id === baseProductId), [baseProductId, baseProducts]);
-    const linkedProducts = useMemo(() => products.filter(p => p.baseProductId === baseProductId), [products, baseProductId]);
+    const linkedProducts = useMemo(() => products.filter(p => p.baseProductId === baseProduct.id), [products, baseProduct.id]);
     const suppliers = useMemo(() => entities.filter(e => e.type === 'pessoa_juridica'), [entities]);
-    const lastPurchaseForBaseProduct = useMemo(() => baseProduct?.lastEffectivePrice, [baseProduct]);
 
     useEffect(() => {
-        const initialData: Record<string, { price: string; entityId: string }> = {};
-        linkedProducts.forEach(p => {
-            const item = items.find(i => i.productId === p.id);
-            if (item) {
-                initialData[p.id] = {
-                    price: item.price > 0 ? item.price.toString() : "",
-                    entityId: item.entityId || lastPurchaseForBaseProduct?.entityId || ""
-                };
-            } else {
-                 initialData[p.id] = {
-                    price: "",
-                    entityId: lastPurchaseForBaseProduct?.entityId || ""
-                };
-            }
+        const initialPrices: Record<string, string> = {};
+        items.forEach(item => {
+            initialPrices[item.id] = item.price > 0 ? item.price.toString() : "";
         });
-        setLocalData(initialData);
-    }, [linkedProducts, items, lastPurchaseForBaseProduct]);
+        setLocalPrices(initialPrices);
+    }, [items]);
 
     useEffect(() => {
-        if (!sessionId || isSessionClosed) return;
-        
-        Object.entries(debouncedData).forEach(([productId, data]) => {
-            const price = parseFloat(data.price);
-            const entityId = data.entityId;
-            const existingItem = items.find(i => i.productId === productId);
-
-            // Only save if there's a price and either price or entity has changed
-            if (!isNaN(price) && price > 0) {
-                 if (!existingItem || existingItem.price !== price || existingItem.entityId !== entityId) {
-                    savePrice(sessionId, productId, price, entityId);
-                }
+        if (isSessionClosed) return;
+        Object.entries(debouncedPrices).forEach(([itemId, priceStr]) => {
+            const price = parseFloat(priceStr);
+            const item = items.find(i => i.id === itemId);
+            if (item && !isNaN(price) && price > 0 && item.price !== price) {
+                savePrice(item.id, { price });
             }
         });
-    }, [debouncedData, sessionId, savePrice, items, isSessionClosed]);
+    }, [debouncedPrices, isSessionClosed, items, savePrice]);
 
-    const handleLocalDataChange = (productId: string, field: 'price' | 'entityId', value: string) => {
-        setLocalData(prev => ({
-            ...prev,
-            [productId]: {
-                ...prev[productId],
-                [field]: value,
-            },
-        }));
-    };
-
-    const handleConfirm = (productId: string, pricePerUnit: number | null) => {
-        const item = items.find(i => i.productId === productId);
-        if (item && baseProduct && pricePerUnit) {
-            confirmPurchase(item.id, baseProduct.id, pricePerUnit);
+    const handleAddItem = () => {
+        if (linkedProducts.length > 0) {
+            savePrice(null, {
+                sessionId,
+                productId: linkedProducts[0].id,
+                price: 0,
+            });
         }
     };
 
     const tableData = useMemo((): PriceRow[] => {
-        if (!baseProduct) return [];
-        const rows = linkedProducts.map(p => {
-            const data = localData[p.id] || { price: '', entityId: '' };
-            const price = parseFloat(data.price);
+        const rows: Omit<PriceRow, 'isBestPrice'>[] = items.map(item => {
+            const product = products.find(p => p.id === item.productId);
             let pricePerUnit: number | null = null;
-
-            if (!isNaN(price) && price > 0) {
-                const convertedQty = convertValue(p.packageSize, p.unit, baseProduct.unit, p.category);
+            if (product && item.price > 0) {
+                const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                 if (convertedQty > 0) {
-                    pricePerUnit = price / convertedQty;
+                    pricePerUnit = item.price / convertedQty;
                 }
             }
-            
-            return {
-                product: p,
-                price: data.price,
-                entityId: data.entityId,
-                pricePerUnit,
-                isBestPrice: false,
-                isWorstPrice: false,
-                purchaseItem: items.find(i => i.productId === p.id),
-            };
+            return { purchaseItem: item, product, pricePerUnit };
         });
 
         const validPrices = rows
             .map(r => r.pricePerUnit)
             .filter((p): p is number => p !== null && p > 0);
 
-        if (validPrices.length > 1) {
+        if (validPrices.length > 0) {
             const minPrice = Math.min(...validPrices);
-            const maxPrice = Math.max(...validPrices);
-            rows.forEach(row => {
-                if (row.pricePerUnit === minPrice) row.isBestPrice = true;
-                if (row.pricePerUnit === maxPrice) row.isWorstPrice = true;
-            });
+            return rows.map(row => ({
+                ...row,
+                isBestPrice: row.pricePerUnit === minPrice
+            }));
         }
-        return rows.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
-    }, [linkedProducts, localData, baseProduct, items, getProductFullName]);
-    
-    if (!baseProduct) {
-        return <div className="text-center text-muted-foreground p-4">Produto base não encontrado.</div>;
-    }
-    
-    if (linkedProducts.length === 0) {
-        return (
-            <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
-                Nenhum insumo vinculado a este produto base. Adicione insumos na tela de "cadastros".
-            </div>
-        );
-    }
-    
-    const canApprove = permissions.purchasing.approve;
+        
+        return rows.map(row => ({ ...row, isBestPrice: false }));
 
+    }, [items, products, baseProduct, getProductFullName]);
+    
+    const canSuggest = permissions.purchasing.suggest && !isSessionClosed;
+    const canApprove = permissions.purchasing.approve && !isSessionClosed;
+    
     return (
-        <div className="rounded-md border">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Variação do Insumo</TableHead>
-                        <TableHead className="w-[200px]">Fornecedor</TableHead>
-                        <TableHead className="w-[150px]">Preço Atual (R$)</TableHead>
-                        <TableHead className="w-[150px]">R$ / {baseProduct.unit}</TableHead>
-                        <TableHead className="w-[150px] text-center">Status</TableHead>
-                        <TableHead className="w-[120px] text-right">Ação</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {tableData.map(row => (
-                        <TableRow key={row.product.id}>
-                            <TableCell className="font-medium">
-                                {getProductFullName(row.product)}
-                            </TableCell>
-                             <TableCell>
-                                <Select 
-                                    value={row.entityId} 
-                                    onValueChange={value => handleLocalDataChange(row.product.id, 'entityId', value)}
-                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed || isSessionClosed}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecione..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </TableCell>
-                            <TableCell>
-                                <Input
-                                    type="number"
-                                    placeholder="0,00"
-                                    value={row.price}
-                                    onChange={e => handleLocalDataChange(row.product.id, 'price', e.target.value)}
-                                    disabled={!permissions.purchasing.suggest || row.purchaseItem?.isConfirmed || isSessionClosed}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
-                            </TableCell>
-                            <TableCell className="text-center">
-                                {row.purchaseItem?.isConfirmed ? (
-                                     <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                        <CheckCircle className="mr-1 h-3 w-3" />
-                                        Confirmado
-                                    </Badge>
-                                ) : row.isBestPrice ? (
-                                    <Badge className="bg-amber-100 text-amber-800">
-                                        <Star className="mr-1 h-3 w-3" />
-                                        Melhor preço
-                                    </Badge>
-                                ) : row.isWorstPrice ? (
-                                     <Badge variant="destructive" className="bg-red-100 text-red-800">
-                                        <AlertTriangle className="mr-1 h-3 w-3" />
-                                        Pior preço
-                                    </Badge>
-                                ) : (
-                                    <Badge variant="outline">Pendente</Badge>
-                                )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div>
-                                                <Button 
-                                                    size="sm" 
-                                                    onClick={() => handleConfirm(row.product.id, row.pricePerUnit)}
-                                                    disabled={!canApprove || !row.purchaseItem || row.purchaseItem.isConfirmed || !row.pricePerUnit || isSessionClosed}
-                                                >
-                                                    Efetivar
-                                                </Button>
-                                            </div>
-                                        </TooltipTrigger>
-                                        {!canApprove && (
-                                            <TooltipContent>
-                                                <p>Você não tem permissão para aprovar compras.</p>
-                                            </TooltipContent>
-                                        )}
-                                    </Tooltip>
-                                </TooltipProvider>
-                            </TableCell>
+        <div className="space-y-2">
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[30%]">Insumo Vinculado</TableHead>
+                            <TableHead>Fornecedor</TableHead>
+                            <TableHead>Preço (R$)</TableHead>
+                            <TableHead>R$ / {baseProduct.unit}</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                            <TableHead className="w-[120px] text-right">Ação</TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {tableData.map(row => (
+                            <TableRow key={row.purchaseItem.id}>
+                                <TableCell>
+                                    <Select
+                                        value={row.purchaseItem.productId}
+                                        onValueChange={(value) => savePrice(row.purchaseItem.id, { productId: value })}
+                                        disabled={!canSuggest || row.purchaseItem.isConfirmed}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {linkedProducts.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    <Select
+                                        value={row.purchaseItem.entityId || ''}
+                                        onValueChange={(value) => savePrice(row.purchaseItem.id, { entityId: value })}
+                                        disabled={!canSuggest || row.purchaseItem.isConfirmed}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    <Input
+                                        type="number"
+                                        placeholder="0,00"
+                                        value={localPrices[row.purchaseItem.id] || ''}
+                                        onChange={e => setLocalPrices(prev => ({...prev, [row.purchaseItem.id]: e.target.value}))}
+                                        disabled={!canSuggest || row.purchaseItem.isConfirmed}
+                                    />
+                                </TableCell>
+                                <TableCell className={cn(row.isBestPrice && "text-amber-500 font-bold")}>
+                                    {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    {row.purchaseItem.isConfirmed ? (
+                                        <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                            <CheckCircle className="mr-1 h-3 w-3" /> Confirmado
+                                        </Badge>
+                                    ) : row.isBestPrice ? (
+                                        <Badge className="bg-amber-100 text-amber-800">
+                                            <Star className="mr-1 h-3 w-3" /> Melhor preço
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="outline">Pendente</Badge>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                        <Button 
+                                            size="sm"
+                                            onClick={() => confirmPurchase(row.purchaseItem.id, baseProduct.id, row.pricePerUnit!)}
+                                            disabled={!canApprove || !row.pricePerUnit || row.purchaseItem.isConfirmed}
+                                        >
+                                            Efetivar
+                                        </Button>
+                                         <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive h-8 w-8"
+                                            onClick={() => deletePurchaseItem(row.purchaseItem.id)}
+                                            disabled={!canSuggest || row.purchaseItem.isConfirmed}
+                                         >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            {canSuggest && (
+                 <Button variant="outline" size="sm" className="w-full" onClick={handleAddItem}>
+                    <PlusCircle className="mr-2 h-4 w-4"/> Adicionar cotação
+                </Button>
+            )}
         </div>
     );
 }
-
-    

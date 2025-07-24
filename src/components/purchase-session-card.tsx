@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -57,7 +56,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         <div>
                             <CardTitle className="flex items-center gap-2"><ShoppingCart /> {session.description}</CardTitle>
                             <CardDescription className="mt-2 space-y-1 text-xs">
-                                <p className="flex items-center gap-1.5"><Building className="h-3 w-3" /> Fornecedor: <strong>{entity?.name || 'Não encontrado'}</strong></p>
+                                {entity && <p className="flex items-center gap-1.5"><Building className="h-3 w-3" /> Fornecedor: <strong>{entity?.name}</strong></p>}
                                 <p className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /> Criado em: {format(new Date(session.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
                                 <p className="flex items-center gap-1.5"><User className="h-3 w-3" /> Por: {user?.username || 'Desconhecido'}</p>
                                  {isSessionClosed && session.closedAt && (
@@ -79,14 +78,17 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     <Accordion type="multiple" className="w-full space-y-3">
                         {sessionBaseProducts.map(bp => (
                             <AccordionItem value={bp.id} key={bp.id} className="border-none">
-                                <Card className="bg-card/40">
+                                <Card className="bg-background">
                                     <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
                                         {bp.name}
                                     </AccordionTrigger>
                                     <AccordionContent className="p-4">
-                                        <PriceComparisonTable
-                                            baseProductId={bp.id}
-                                            items={sessionItems}
+                                         <PriceComparisonTable
+                                            baseProduct={bp}
+                                            items={sessionItems.filter(i => {
+                                                const product = products.find(p => p.id === i.productId);
+                                                return product?.baseProductId === bp.id;
+                                            })}
                                             sessionId={session.id}
                                             isSessionClosed={isSessionClosed}
                                         />
@@ -113,5 +115,3 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         </>
     );
 }
-
-    

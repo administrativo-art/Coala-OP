@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -14,12 +13,11 @@ export interface PurchaseContextType {
   items: PurchaseItem[];
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
-  lastEffectivePrices: Map<string, LastEffectivePrice>;
-  lastSavedPrices: Map<string, number>;
   addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt'>) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  savePrice: (sessionId: string, productId: string, price: number, entityId?: string) => Promise<void>;
+  savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
+  deletePurchaseItem: (itemId: string) => Promise<void>;
   confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
@@ -34,46 +32,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
-
-    const lastEffectivePrices = useMemo((): Map<string, LastEffectivePrice> => {
-        const priceMap = new Map<string, LastEffectivePrice>();
-        if (loadingBaseProducts || !baseProducts || baseProducts.length === 0) {
-            return priceMap;
-        }
-
-        baseProducts.forEach(bp => {
-            if (bp.lastEffectivePrice && bp.lastEffectivePrice.productId && bp.lastEffectivePrice.updatedAt) {
-                const currentPriceInfo = bp.lastEffectivePrice;
-                const existingPriceInfo = priceMap.get(currentPriceInfo.productId);
-                 
-                if (!existingPriceInfo || new Date(currentPriceInfo.updatedAt) > new Date(existingPriceInfo.updatedAt)) {
-                    priceMap.set(currentPriceInfo.productId, currentPriceInfo);
-                }
-            }
-        });
-        return priceMap;
-    }, [baseProducts, loadingBaseProducts]);
-
-    const lastSavedPrices = useMemo((): Map<string, number> => {
-        const priceMap = new Map<string, { price: number; date: string }>();
-
-        items.forEach(item => {
-            if (item.price > 0 && item.createdAt) { // Assuming createdAt exists on purchase item
-                const existing = priceMap.get(item.productId);
-                if (!existing || new Date(item.createdAt) > new Date(existing.date)) {
-                    priceMap.set(item.productId, { price: item.price, date: item.createdAt });
-                }
-            }
-        });
-        
-        const finalMap = new Map<string, number>();
-        priceMap.forEach((value, key) => {
-            finalMap.set(key, value.price);
-        });
-
-        return finalMap;
-
-    }, [items]);
 
     useEffect(() => {
         const qSessions = query(collection(db, "purchaseSessions"));
@@ -150,26 +108,17 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
     
-    const savePrice = useCallback(async (sessionId: string, productId: string, price: number, entityId?: string) => {
-        const q = query(
-            collection(db, "purchaseItems"),
-            where("sessionId", "==", sessionId),
-            where("productId", "==", productId)
-        );
-        
+    const savePrice = useCallback(async (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => {
         try {
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                const itemDoc = querySnapshot.docs[0];
-                if (!itemDoc.data().isConfirmed) {
-                    await updateDoc(doc(db, "purchaseItems", itemDoc.id), { price, entityId: entityId || null });
-                }
+            if (itemId) {
+                // Update existing item
+                await updateDoc(doc(db, "purchaseItems", itemId), data);
             } else {
+                // Add new item
                 const newItem: Omit<PurchaseItem, 'id'> = {
-                    sessionId,
-                    productId,
-                    entityId: entityId || undefined,
-                    price,
+                    sessionId: data.sessionId!,
+                    productId: data.productId!,
+                    price: data.price || 0,
                     isConfirmed: false,
                     createdAt: new Date().toISOString(),
                 };
@@ -179,6 +128,15 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             console.error("Error saving price:", error);
         }
     }, []);
+
+    const deletePurchaseItem = useCallback(async (itemId: string) => {
+        try {
+            await deleteDoc(doc(db, "purchaseItems", itemId));
+        } catch (error) {
+            console.error("Error deleting purchase item:", error);
+        }
+    }, []);
+
 
     const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number) => {
         if (!user) return;
@@ -243,15 +201,14 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         items,
         priceHistory,
         loading: loading || loadingBaseProducts,
-        lastEffectivePrices,
-        lastSavedPrices,
         addSession,
         closeSession,
         deleteSession,
         savePrice,
+        deletePurchaseItem,
         confirmPurchase,
         deletePriceHistoryEntry,
-    }), [sessions, items, priceHistory, loading, loadingBaseProducts, lastEffectivePrices, lastSavedPrices, addSession, closeSession, deleteSession, savePrice, confirmPurchase, deletePriceHistoryEntry]);
+    }), [sessions, items, priceHistory, loading, loadingBaseProducts, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, confirmPurchase, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
