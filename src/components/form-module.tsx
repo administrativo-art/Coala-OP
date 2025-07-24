@@ -138,7 +138,7 @@ export function FormModule() {
                 )}
             </Tabs>
             
-            {permissions.forms.manage && <AddEditFormTemplateModal
+            {permissions.forms.manage && isAddEditModalOpen && <AddEditFormTemplateModal
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
                 templateToEdit={templateToEdit}

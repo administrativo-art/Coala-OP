@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
+import { useDebouncedCallback } from 'use-debounce';
 
 
 type AddEditFormTemplateModalProps = {
@@ -37,34 +38,58 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     const { toast } = useToast();
     const reactFlowInstance = useReactFlow();
 
+    const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
+        setInternalTemplate(newTemplate);
+    }, []);
+
+    const debouncedSaveDraft = useDebouncedCallback(async () => {
+        if (!internalTemplate || ('id' in internalTemplate && internalTemplate.status === 'published')) {
+            return;
+        }
+
+        setIsSaving('draft');
+        if ('id' in internalTemplate) {
+            await updateTemplate({ ...internalTemplate, status: 'draft' });
+        } else {
+            const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
+            if (newId) {
+                setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
+            }
+        }
+        setIsSaving(false);
+    }, 1500);
+
+    useEffect(() => {
+        if (internalTemplate) {
+            debouncedSaveDraft();
+        }
+    }, [internalTemplate, debouncedSaveDraft]);
+
     useEffect(() => {
         if (open) {
         if (templateToEdit) {
             setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
         } else {
             setInternalTemplate({
-            name: 'Novo Formulário',
-            type: 'standard',
-            layout: 'continuous',
-            moment: null,
-            submissionTitleFormat: '',
-            questions: [],
-            sections: [
-                { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
-            ],
+                name: 'Novo Formulário',
+                type: 'standard',
+                layout: 'continuous',
+                moment: null,
+                submissionTitleFormat: '',
+                questions: [],
+                sections: [
+                    { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
+                ],
             });
         }
         setActiveTab("builder");
         setSelectedSectionId(null);
+        setSelectedQuestionId(null);
         } else {
             setInternalTemplate(null);
-            setSelectedQuestionId(null);
         }
     }, [open, templateToEdit]);
 
-    const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
-        setInternalTemplate(newTemplate);
-    }, []);
 
     const handleAddSection = () => {
         if (!internalTemplate) return;
@@ -143,24 +168,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         }
     };
     
-    const handleSaveDraft = async () => {
-        if (!internalTemplate) return;
-        setIsSaving('draft');
-        
-        if ('id' in internalTemplate) {
-            await updateTemplate({ ...internalTemplate, status: 'draft' });
-            toast({ title: 'Rascunho salvo!' });
-        } else {
-            const newId = await addTemplate(internalTemplate);
-            if (newId) {
-                // To continue editing, we need to update the internal state with the new ID
-                setInternalTemplate(prev => ({ ...prev!, id: newId }));
-                toast({ title: 'Rascunho criado!' });
-            }
-        }
-        setIsSaving(false);
-    };
-
     const handlePublish = async () => {
         if (!internalTemplate) return;
         setIsSaving('publish');
@@ -288,7 +295,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                             </div>
                         ) : (
                             <>
-                                <Button onClick={handleSaveDraft} variant="secondary" disabled={isSaving !== false}>
+                                <Button onClick={debouncedSaveDraft.flush} variant="secondary" disabled={isSaving !== false}>
                                     <Save className="mr-2 h-4 w-4"/>
                                     {isSaving === 'draft' ? 'Salvando...' : 'Salvar Rascunho'}
                                 </Button>
