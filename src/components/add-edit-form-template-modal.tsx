@@ -148,6 +148,24 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
     handleTemplateChange({ ...internalTemplate, sections: [...internalTemplate.sections, newSection] });
   };
   
+  const handleMoveQuestion = (result: any) => {
+    if (!result.destination || !internalTemplate) return;
+
+    const { source, destination } = result;
+    const newSections = [...internalTemplate.sections];
+    
+    const sourceSectionIndex = newSections.findIndex(s => s.id === source.droppableId);
+    const destSectionIndex = newSections.findIndex(s => s.id === destination.droppableId);
+    
+    const sourceSection = newSections[sourceSectionIndex];
+    const destSection = newSections[destSectionIndex];
+
+    const [removed] = sourceSection.questions.splice(source.index, 1);
+    destSection.questions.splice(destination.index, 0, removed);
+
+    handleTemplateChange({ ...internalTemplate, sections: newSections });
+  };
+
   const selectedQuestion = useMemo(() => {
     if (!selectedQuestionId || !internalTemplate || !internalTemplate.sections) return null;
     for (const section of internalTemplate.sections) {
@@ -213,6 +231,7 @@ export function AddEditFormTemplateModal({ open, onOpenChange, templateToEdit, a
                             onSelectQuestion={setSelectedQuestionId}
                             onAddQuestion={handleAddQuestion}
                             onAddSection={handleAddSection}
+                            onMoveQuestion={handleMoveQuestion}
                             selectedQuestionId={selectedQuestionId}
                             isPublished={isPublished}
                         />
