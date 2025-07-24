@@ -40,7 +40,6 @@ const edgeTypes = {
   deletable: EdgeDeleteButton,
 };
 
-// Helper function to find which section a point is inside
 const findParentSection = (sections: FormSection[], x: number, y: number): FormSection | undefined => {
     return sections.find(sec => {
         const secX = sec.position.x;
@@ -96,7 +95,7 @@ export function FormBuilder({
           type: 'question',
           position: question.position,
           parentNode: question.sectionId || undefined,
-          extent: 'parent',
+          extent: question.sectionId ? 'parent' : undefined,
           dragHandle: '.drag-handle-question',
           data: {
             ...question,
@@ -152,64 +151,29 @@ export function FormBuilder({
             return;
         }
 
-        if (node.type === 'question') {
+        if (node.type === 'question' && node.positionAbsolute) {
             const questionId = node.id;
-            const originalQuestion = allQuestions.find(q => q.id === questionId);
-            if (!originalQuestion) return;
+            const absolutePosition = node.positionAbsolute;
 
-            // Absolute position of the node's center
-            const nodeWidth = node.width || 300;
-            const nodeHeight = node.height || 80;
-            const centerX = node.position.x + nodeWidth / 2;
-            const centerY = node.position.y + nodeHeight / 2;
-            
-            // Find which section the node was dropped into
-            const newParentSection = findParentSection(template.sections, centerX, centerY);
+            const newParentSection = findParentSection(template.sections, absolutePosition.x, absolutePosition.y);
             const newSectionId = newParentSection ? newParentSection.id : null;
-            const oldSectionId = originalQuestion.sectionId;
 
-            if (oldSectionId === newSectionId) {
-                // The question remained in the same section, just update its relative position.
-                const newSections = template.sections.map(s => {
-                    if (s.id === oldSectionId) {
-                        return {
-                            ...s,
-                            questions: s.questions.map(q =>
-                                q.id === questionId
-                                    ? { ...q, position: { x: node.position.x - s.position.x, y: node.position.y - s.position.y } }
-                                    : q
-                            ),
-                        };
-                    }
-                    return s;
-                });
-                onTemplateChange({ ...template, sections: newSections });
-                return;
-            }
-
-            // The question has moved to a new section or became a root node.
-            const newSections = [...template.sections];
-
-            // 1. Remove from the old section
-            if (oldSectionId) {
-                const oldSection = newSections.find(s => s.id === oldSectionId);
-                if (oldSection) {
-                    oldSection.questions = oldSection.questions.filter(q => q.id !== questionId);
+            const newSections = template.sections.map(section => {
+                let questions = section.questions.filter(q => q.id !== questionId);
+                if (section.id === newSectionId) {
+                    const originalQuestion = allQuestions.find(q => q.id === questionId)!;
+                    questions.push({
+                        ...originalQuestion,
+                        position: {
+                            x: absolutePosition.x - newParentSection!.position.x,
+                            y: absolutePosition.y - newParentSection!.position.y,
+                        },
+                        sectionId: newSectionId,
+                    });
                 }
-            }
+                return { ...section, questions };
+            });
 
-            // 2. Add to the new section
-            if (newSectionId) {
-                const newSection = newSections.find(s => s.id === newSectionId);
-                if (newSection) {
-                    const newPosition = {
-                        x: node.position.x - newSection.position.x,
-                        y: node.position.y - newSection.position.y,
-                    };
-                    newSection.questions.push({ ...originalQuestion, sectionId: newSectionId, position: newPosition });
-                }
-            }
-            
             onTemplateChange({ ...template, sections: newSections });
         }
     },
@@ -299,3 +263,4 @@ export function FormBuilder({
     </div>
   );
 }
+

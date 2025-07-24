@@ -67,7 +67,7 @@ export function StockManagement() {
                             <CardDescription>Realize auditorias pontuais para garantir a acurácia dos processos de estoque.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                            <Link href="/dashboard/stock/audit" className="w-full">
+                            <Link href="/dashboard/audit" className="w-full">
                                 <Button className="w-full text-lg py-6">
                                     Acessar auditorias <ArrowRight className="ml-2" />
                                 </Button>

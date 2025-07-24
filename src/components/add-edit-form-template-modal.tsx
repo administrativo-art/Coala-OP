@@ -1,6 +1,6 @@
 
 
-"use client"
+"use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -98,16 +98,13 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     };
 
     const handleAddQuestion = () => {
-        if (!internalTemplate || !selectedSectionId) return;
+        if (!internalTemplate) return;
     
         const viewport = reactFlowInstance.getViewport();
         const position = reactFlowInstance.project({
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
         });
-    
-        const targetSection = internalTemplate.sections.find(s => s.id === selectedSectionId);
-        if (!targetSection) return;
     
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
@@ -116,21 +113,26 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             isRequired: false,
             options: [],
             position: {
-                x: position.x - targetSection.position.x - 150, // 150 is half node width
-                y: position.y - targetSection.position.y - 40, // 40 is half node height
+                x: position.x - 150, // 150 is half node width
+                y: position.y - 40, // 40 is half node height
             },
-            sectionId: selectedSectionId,
+            sectionId: null, // Starts as a floating question
         };
     
-        const newSections = internalTemplate.sections.map(section => {
-            if (section.id === selectedSectionId) {
-                return {
-                    ...section,
-                    questions: [...(section.questions || []), newQuestion]
-                };
-            }
-            return section;
-        });
+        const newSections = internalTemplate.sections.map(section => ({
+            ...section,
+            questions: section.questions ? [...section.questions] : []
+        }));
+    
+        // Find if there's a section to add the question to or add to the first one
+        const targetSection = newSections.find(s => s.id === selectedSectionId) || newSections[0];
+        if (targetSection) {
+            targetSection.questions.push(newQuestion);
+        } else {
+            // This case should be rare if a default section always exists.
+            // But as a fallback, we could create a new section for it.
+            // For now, we assume at least one section exists.
+        }
     
         handleTemplateChange({ ...internalTemplate, sections: newSections });
     };
@@ -299,7 +301,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                 <div className="w-full flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <Button variant="outline" onClick={handleAddSection}><PlusCircle className="mr-2 h-4 w-4"/> Seção</Button>
-                        <Button variant="outline" onClick={handleAddQuestion} disabled={!selectedSectionId}><PlusCircle className="mr-2 h-4 w-4"/> Pergunta</Button>
+                        <Button variant="outline" onClick={handleAddQuestion}><PlusCircle className="mr-2 h-4 w-4"/> Pergunta</Button>
                     </div>
                     
                     <div className="flex items-center gap-2">
