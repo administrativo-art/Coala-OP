@@ -107,6 +107,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
 
                     const analysisResults: { [baseProductId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
                     const unmatchedItems = new Set<string>();
+                    const consumptionByProductForKiosk: Record<string, number> = {};
+
 
                     for (const row of rows) {
                         const itemName = (row['Item'])?.trim();
@@ -133,6 +135,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         }
                         analysisResults[baseProductConfig.id].consumedQuantity += quantityValue;
                         analysisResults[baseProductConfig.id].count += 1;
+                        consumptionByProductForKiosk[baseProductConfig.id] = (consumptionByProductForKiosk[baseProductConfig.id] || 0) + quantityValue;
                     }
 
                     if (unmatchedItems.size > 0) {
@@ -157,40 +160,8 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                      if (finalResults.length === 0 && unmatchedItems.size > 0) {
                         throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
                     }
-
-                    // Automatic stock level calculation and update
-                    const baseProductsToUpdate: BaseProduct[] = [];
-                    const isMatriz = kiosk.id === 'matriz';
-                    
-                    finalResults.forEach(item => {
-                        const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-                        if (baseProduct) {
-                            const monthlyConsumption = item.consumedQuantity;
-                            const dailyAvg = monthlyConsumption / 30;
-                            let newMinStock = 0;
-
-                            if(isMatriz) {
-                                newMinStock = monthlyConsumption;
-                            } else {
-                                newMinStock = (dailyAvg * 7) + (dailyAvg * 5);
-                            }
-
-                            const updatedProduct = {
-                                ...baseProduct,
-                                stockLevels: {
-                                    ...baseProduct.stockLevels,
-                                    [kiosk.id]: { min: Math.ceil(newMinStock) }
-                                }
-                            };
-                            baseProductsToUpdate.push(updatedProduct);
-                        }
-                    });
-
-                    if (baseProductsToUpdate.length > 0) {
-                        await updateMultipleBaseProducts(baseProductsToUpdate);
-                    }
-
-                    await addReport({
+                     
+                    const reportId = await addReport({
                         reportName: file.name,
                         month: values.month,
                         year: values.year,
@@ -200,8 +171,53 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         status: 'completed',
                         results: finalResults,
                     });
+
+                    // Automatic stock level calculation and update
+                    if (reportId) {
+                        const productsToUpdateMap = new Map<string, BaseProduct>();
+
+                        // Initialize with all existing base products to ensure all stock levels are preserved
+                        baseProducts.forEach(bp => {
+                            productsToUpdateMap.set(bp.id, JSON.parse(JSON.stringify(bp)));
+                        });
+
+                        Object.entries(consumptionByProductForKiosk).forEach(([baseProductId, monthlyConsumption]) => {
+                            const baseProduct = productsToUpdateMap.get(baseProductId);
+                            if (baseProduct) {
+                                const dailyAvg = monthlyConsumption / 30;
+                                const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
+                                
+                                if (!baseProduct.stockLevels) {
+                                    baseProduct.stockLevels = {};
+                                }
+                                baseProduct.stockLevels[kiosk.id] = { min: kioskMinStock };
+                                productsToUpdateMap.set(baseProductId, baseProduct);
+                            }
+                        });
+                        
+                        const totalConsumptionByProduct: Record<string, number> = {};
+                         finalResults.forEach(item => {
+                            totalConsumptionByProduct[item.baseProductId] = (totalConsumptionByProduct[item.baseProductId] || 0) + item.consumedQuantity;
+                        });
+
+                        Object.entries(totalConsumptionByProduct).forEach(([baseProductId, totalConsumption]) => {
+                             const baseProduct = productsToUpdateMap.get(baseProductId);
+                             if (baseProduct) {
+                                if (!baseProduct.stockLevels) {
+                                    baseProduct.stockLevels = {};
+                                }
+                                baseProduct.stockLevels['matriz'] = { min: Math.ceil(totalConsumption) };
+                                productsToUpdateMap.set(baseProductId, baseProduct);
+                             }
+                        });
+
+                        const productsToUpdateArray = Array.from(productsToUpdateMap.values());
+                        if (productsToUpdateArray.length > 0) {
+                            await updateMultipleBaseProducts(productsToUpdateArray);
+                            toast({ title: 'Sucesso', description: `Relatório analisado e salvo. O estoque mínimo de ${Object.keys(consumptionByProductForKiosk).length} iten(s) foi atualizado para ${kiosk.name} e Matriz.` });
+                        }
+                    }
                     
-                    toast({ title: 'Sucesso', description: `Relatório analisado e salvo. O estoque mínimo de ${baseProductsToUpdate.length} iten(s) foi atualizado.` });
                     onOpenChange(false);
 
                 } catch (error: any) {
