@@ -16,7 +16,7 @@ import { FormGeneralSettings } from './form-general-settings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
-import { useReactFlow } from 'reactflow';
+import { useReactFlow, ReactFlowProvider } from 'reactflow';
 
 
 type AddEditFormTemplateModalProps = {
