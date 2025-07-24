@@ -40,11 +40,13 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit }:
     const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
         setInternalTemplate(newTemplate);
     }, []);
-
+    
+    // This useEffect now ONLY runs when the modal opens. It sets the initial state.
+    // It no longer depends on `templateToEdit` directly to avoid re-running on parent updates.
     useEffect(() => {
         if (open) {
             const initialTemplate = templateToEdit
-              ? JSON.parse(JSON.stringify(templateToEdit))
+              ? JSON.parse(JSON.stringify(templateToEdit)) // Deep copy to prevent mutation
               : {
                   name: 'Novo Formulário',
                   type: 'standard',
@@ -66,18 +68,17 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit }:
     }, [open, templateToEdit]);
     
     const handleSaveDraft = async () => {
-        if (!internalTemplate || ('id' in internalTemplate && internalTemplate.status === 'published')) {
-            return;
-        }
+        if (!internalTemplate) return;
 
         setIsSaving('draft');
         try {
-            if ('id' in internalTemplate) {
+            if ('id' in internalTemplate && internalTemplate.id) {
                 await updateTemplate({ ...internalTemplate, status: 'draft' } as FormTemplate);
                 toast({ title: "Rascunho salvo!" });
             } else {
                 const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
                 if (newId) {
+                    // Update internal state with new ID so subsequent saves are updates
                     setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
                     toast({ title: "Rascunho salvo!" });
                 }
@@ -170,24 +171,29 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit }:
         if (!internalTemplate) return;
         setIsSaving('publish');
 
-        if (!('id' in internalTemplate) || !internalTemplate.id) {
-            // This is a new template, add it first
-            const newId = await addTemplate({ ...internalTemplate, status: 'published' });
-            if(newId) {
-                toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
-                onOpenChange(false);
+        try {
+            if ('id' in internalTemplate && internalTemplate.id) {
+                // This is an existing template, update it
+                await updateTemplate({ ...internalTemplate, status: 'published' } as FormTemplate);
+            } else {
+                // This is a new template, add it
+                await addTemplate({ ...internalTemplate, status: 'published' });
             }
-        } else {
-            await updateTemplate({ ...internalTemplate, status: 'published' } as FormTemplate);
             toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
             onOpenChange(false);
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     }
 
     const handleReopen = async () => {
         if (!internalTemplate || !('id' in internalTemplate)) return;
-        await updateTemplate({ ...internalTemplate as FormTemplate, status: 'draft' });
+        
+        // Optimistically update the UI
+        const updatedTemplate = { ...internalTemplate as FormTemplate, status: 'draft' };
+        setInternalTemplate(updatedTemplate);
+
+        await updateTemplate(updatedTemplate);
         toast({ title: 'Formulário reaberto!', description: 'Agora você pode editar o formulário novamente.' });
     }
 
