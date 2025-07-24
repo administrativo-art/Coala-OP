@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useEntities } from "@/hooks/use-entities";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
+import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession } from "@/types";
 import { PriceComparisonTable } from "./price-comparison-table";
 import { Building, Calendar, ShoppingCart, User, Trash2 } from 'lucide-react';
@@ -25,6 +26,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
     const { items, closeSession, deleteSession } = usePurchase();
+    const { products } = useProducts();
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
     const entity = useMemo(() => entities.find(e => e.id === session.entityId), [session.entityId, entities]);
