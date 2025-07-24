@@ -50,6 +50,18 @@ const formQuestionSchema = z.object({
       value: z.string().min(1, "O valor da opção não pode ser vazio.")
   })).optional(),
   ramifications: z.array(ramificationSchema).optional(),
+}).superRefine((data, ctx) => {
+    if (data.ramifications) {
+        data.ramifications.forEach((ram, index) => {
+            if (ram.action === 'show_question' && !ram.targetQuestionId) {
+                ctx.addIssue({
+                    code: 'custom',
+                    path: [`ramifications.${index}.targetQuestionId`],
+                    message: "Selecione uma pergunta para a ramificação.",
+                });
+            }
+        });
+    }
 });
 
 
@@ -80,18 +92,20 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     name: "options"
   });
   
-  const { fields: ramificationFields, append: appendRamification, remove: removeRamification, replace: replaceRamifications } = useFieldArray({
+  const { fields: ramificationFields, append: appendRamification, remove: removeRamification } = useFieldArray({
       control: form.control,
       name: "ramifications"
   });
 
   const questionType = form.watch('type');
-  const watchedOptions = useWatch({ control: form.control, name: 'options' });
   const showOptions = ['single-choice', 'multiple-choice'].includes(questionType);
 
   const onSubmit = () => {
-    const values = form.getValues();
-    onChange({ ...question, ...values });
+    form.trigger().then(isValid => {
+      if (isValid) {
+        onChange({ ...question, ...form.getValues() });
+      }
+    });
   };
   
   // Debounced submit on form change
@@ -112,42 +126,11 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
         if (JSON.stringify(form.getValues('options')) !== JSON.stringify(yesNoOptions)) {
            replaceOptions(yesNoOptions);
         }
-    } else if (questionType === 'text' || questionType === 'number' || questionType === 'file-attachment') {
+    } else if (!showOptions) {
         replaceOptions([]);
-        replaceRamifications([]);
     }
-  }, [questionType, replaceOptions, replaceRamifications, form]);
+  }, [questionType, replaceOptions, showOptions, form]);
 
-  useEffect(() => {
-    if (questionType === 'single-choice' || questionType === 'multiple-choice' || questionType === 'yes-no') {
-        const optionValues = new Set(watchedOptions?.map(o => o.value) || []);
-        const currentRamificationValues = new Set(ramificationFields.map(r => r.conditions[0].value));
-
-        // Add ramifications for new options that don't have one yet
-        optionValues.forEach(optValue => {
-            if (optValue && !currentRamificationValues.has(optValue)) {
-                appendRamification({
-                    id: nanoid(),
-                    conditions: [{ id: nanoid(), value: optValue, operator: 'eq' }],
-                    action: undefined,
-                });
-            }
-        });
-
-        // Remove ramifications for options that were deleted
-        const ramificationIndicesToRemove: number[] = [];
-        ramificationFields.forEach((field, index) => {
-            if (!optionValues.has(field.conditions[0].value)) {
-                ramificationIndicesToRemove.push(index);
-            }
-        });
-
-        if(ramificationIndicesToRemove.length > 0) {
-            removeRamification(ramificationIndicesToRemove);
-        }
-    }
-  }, [watchedOptions, questionType, appendRamification, removeRamification, ramificationFields]);
-  
   const handleAddNewRamification = () => {
     appendRamification({
         id: nanoid(),
@@ -156,7 +139,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     });
   };
 
-  const isRamificationDisabled = questionType === 'yes-no' || questionType === 'single-choice' || questionType === 'multiple-choice';
+  const isRamificationEnabled = ['yes-no', 'single-choice', 'multiple-choice', 'text', 'number'].includes(questionType);
 
   return (
     <div className="w-[500px] h-full border-l bg-card flex flex-col shrink-0">
@@ -220,22 +203,16 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                      
                      {ramificationFields.map((field, index) => {
                          const ramification = form.watch(`ramifications.${index}`);
-                         const conditionValue = ramification.conditions[0].value;
-                         const isPredefined = isRamificationDisabled && watchedOptions?.some(o => o.value === conditionValue);
-                         const hasError = ramification.action === 'show_question' && !ramification.targetQuestionId;
-
                          return (
                             <div key={field.id} className="p-3 border rounded-lg space-y-3 bg-muted/50">
                                 <div className="flex justify-between items-center">
                                     <p className="font-medium text-sm">SE a resposta for...</p>
-                                    {!isPredefined &&
-                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeRamification(index)}><Trash2 className="h-4 w-4"/></Button>
-                                    }
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeRamification(index)}><Trash2 className="h-4 w-4"/></Button>
                                 </div>
                                 <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                                     <FormField control={form.control} name={`ramifications.${index}.conditions.0.operator`} render={({field}) => (
                                         <FormItem>
-                                             <Select onValueChange={field.onChange} value={field.value} disabled={isPredefined}>
+                                             <Select onValueChange={field.onChange} value={field.value}>
                                                 <FormControl><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger></FormControl>
                                                 <SelectContent>
                                                     <SelectItem value="eq">igual a</SelectItem>
@@ -248,7 +225,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                         </FormItem>
                                     )}/>
                                     <FormField control={form.control} name={`ramifications.${index}.conditions.0.value`} render={({field}) => (
-                                        <FormItem><FormControl><Input {...field} className="h-8" disabled={isPredefined} /></FormControl></FormItem>
+                                        <FormItem><FormControl><Input {...field} className="h-8" /></FormControl></FormItem>
                                     )}/>
                                 </div>
                                 
@@ -281,12 +258,6 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                             </Select><FormMessage/>
                                         </FormItem>
                                     )}/>
-                                    {hasError && 
-                                        <Alert variant="destructive" className="text-xs p-2">
-                                            <AlertTriangle className="h-4 w-4"/>
-                                            <AlertTitle>É necessário selecionar uma pergunta de destino.</AlertTitle>
-                                        </Alert>
-                                    }
                                   </>
                                 )}
                                 
@@ -320,9 +291,14 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                             </div>
                          )
                      })}
-                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleAddNewRamification} disabled={isRamificationDisabled}>
+                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleAddNewRamification} disabled={!isRamificationEnabled}>
                           <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Regra
                       </Button>
+                      {!isRamificationEnabled && 
+                        <p className="text-xs text-muted-foreground text-center">
+                            Ramificações não estão disponíveis para o tipo de pergunta "Anexo".
+                        </p>
+                      }
                   </div>
               </div>
           </ScrollArea>
@@ -331,3 +307,4 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     </div>
   );
 }
+
