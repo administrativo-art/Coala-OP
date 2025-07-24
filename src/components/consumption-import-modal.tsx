@@ -174,52 +174,46 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     // Automatic stock level calculation and update
                     if (reportId) {
                         const updatedReports = [...allReports, { ...newReport, id: reportId }];
+                        const productsToUpdate: BaseProduct[] = [];
                         const baseProductMap = new Map<string, BaseProduct>(baseProducts.map(bp => [bp.id, JSON.parse(JSON.stringify(bp))]));
 
-                        const monthlyConsumptionByProduct: Record<string, Record<string, number>> = {}; // { baseProductId: { kioskId: totalConsumption } }
-
-                        updatedReports.forEach(report => {
-                            report.results.forEach(item => {
-                                if (baseProductMap.has(item.baseProductId)) {
-                                    if (!monthlyConsumptionByProduct[item.baseProductId]) {
-                                        monthlyConsumptionByProduct[item.baseProductId] = {};
-                                    }
-                                    const kioskCons = monthlyConsumptionByProduct[item.baseProductId];
-                                    kioskCons[report.kioskId] = (kioskCons[report.kioskId] || 0) + item.consumedQuantity;
-                                }
-                            });
-                        });
-                        
-                        const productsToUpdate: BaseProduct[] = [];
-                        
-                        for (const bpId in monthlyConsumptionByProduct) {
-                            const product = baseProductMap.get(bpId);
-                            if (!product) continue;
-                            
+                        for (const bp of baseProductMap.values()) {
                             const newStockLevels: { [kioskId: string]: { min: number } } = {};
                             let totalNetworkConsumption = 0;
-                            
-                            // Calculate for each kiosk
+
+                            // Calculate for each individual kiosk
                             for (const k of kiosks) {
                                 if (k.id === 'matriz') continue;
-                                const monthlyConsumption = monthlyConsumptionByProduct[bpId]?.[k.id];
-                                if (monthlyConsumption && monthlyConsumption > 0) {
-                                    const dailyAvg = monthlyConsumption / 30;
+
+                                const kioskReports = updatedReports.filter(r => r.kioskId === k.id);
+                                if (kioskReports.length === 0) continue;
+                                
+                                const totalKioskConsumption = kioskReports.reduce((sum, report) => {
+                                    const item = report.results.find(res => res.baseProductId === bp.id);
+                                    return sum + (item?.consumedQuantity || 0);
+                                }, 0);
+                                
+                                totalNetworkConsumption += totalKioskConsumption;
+                                
+                                if (totalKioskConsumption > 0) {
+                                    const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
+                                    const dailyAvg = avgMonthlyConsumption / 30;
                                     const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
                                     newStockLevels[k.id] = { min: kioskMinStock };
-                                    totalNetworkConsumption += monthlyConsumption;
                                 }
                             }
-                            
-                            // Calculate for Matriz
+
+                            // Calculate for Matriz based on total network consumption
                             if (totalNetworkConsumption > 0) {
-                                newStockLevels['matriz'] = { min: Math.ceil(totalNetworkConsumption) };
+                                const totalMonthsWithConsumption = new Set(updatedReports.filter(r => r.results.some(item => item.baseProductId === bp.id)).map(r => `${r.year}-${r.month}`)).size;
+                                const avgTotalMonthlyConsumption = totalMonthsWithConsumption > 0 ? totalNetworkConsumption / totalMonthsWithConsumption : 0;
+                                newStockLevels['matriz'] = { min: Math.ceil(avgTotalMonthlyConsumption) };
                             }
 
-                            // Only add to update list if stock levels changed
-                            if (JSON.stringify(product.stockLevels) !== JSON.stringify(newStockLevels)) {
-                                product.stockLevels = newStockLevels;
-                                productsToUpdate.push(product);
+                             // Only update if there are new levels to set
+                            if (Object.keys(newStockLevels).length > 0) {
+                                bp.stockLevels = newStockLevels;
+                                productsToUpdate.push(bp);
                             }
                         }
 
