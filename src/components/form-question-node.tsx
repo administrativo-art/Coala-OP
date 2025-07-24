@@ -3,7 +3,7 @@
 "use client";
 
 import React, { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ListChecks, Pin, PinOff, GripVertical, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,13 +11,35 @@ import { Button } from './ui/button';
 import { type FormQuestion } from '@/types';
 
 interface QuestionNodeProps {
+  id: string;
   data: FormQuestion & {
       onDelete: () => void;
+      onTogglePin: (id: string, newParent: string | null) => void;
   };
   selected?: boolean;
 }
 
-export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
+export const QuestionNode = memo(({ id, data, selected }: QuestionNodeProps) => {
+  const { setNodes } = useReactFlow();
+
+  const handleTogglePin = () => {
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.id === id) {
+          const isPinned = !!node.parentNode;
+          return {
+            ...node,
+            // Toggle parent and extent
+            parentNode: isPinned ? undefined : node.data.sectionId,
+            extent: isPinned ? undefined : 'parent',
+          };
+        }
+        return node;
+      })
+    );
+    // The actual data update should be handled by onNodeDragStop now
+  };
+
   return (
     <>
       <Handle type="target" position={Position.Top} className="!w-16 !bg-primary" />
@@ -32,6 +54,9 @@ export const QuestionNode = memo(({ data, selected }: QuestionNodeProps) => {
               <span className="truncate flex-1">{data.label}</span>
             </CardTitle>
             <div className="flex items-center">
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground/70 hover:text-primary" onClick={handleTogglePin}>
+                    {data.sectionId ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+                </Button>
                 <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-destructive/70 hover:text-destructive" onClick={data.onDelete}>
                     <Trash2 className="h-4 w-4"/>
                 </Button>

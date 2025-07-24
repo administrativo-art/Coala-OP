@@ -96,11 +96,14 @@ export function FormBuilder({
           type: 'question',
           position: question.position,
           parentNode: question.sectionId || undefined,
-          extent: 'parent',
+          extent: question.sectionId ? 'parent' : undefined,
           dragHandle: '.drag-handle-question',
           data: {
             ...question,
             onDelete: () => onDeleteQuestion(question.id),
+            onTogglePin: () => {
+              // This is where the pin toggle logic will go
+            }
           },
           selected: question.id === selectedQuestionId,
           zIndex: 2,
@@ -145,7 +148,7 @@ export function FormBuilder({
 const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
     if (node.type === 'section') {
         const newSections = template.sections.map(s => 
-            s.id === node.id ? { ...s, position: node.position, width: node.width, height: node.height } : s
+            s.id === node.id ? { ...s, position: node.position, width: node.width || s.width, height: node.height || s.height } : s
         );
         onTemplateChange({ ...template, sections: newSections });
         return;
@@ -157,74 +160,51 @@ const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
         if (!currentQuestion) return;
 
         const oldSectionId = currentQuestion.sectionId;
-
-        // Calculate the absolute position of the question's center
-        let absolutePosition = { ...node.position };
-        if (node.parentNode) {
-            const parentNode = nodes.find(n => n.id === node.parentNode);
-            if (parentNode) {
-                absolutePosition = {
-                    x: parentNode.position.x + node.position.x,
-                    y: parentNode.position.y + node.position.y
-                };
-            }
-        }
-        
-        const questionCenter = {
-            x: absolutePosition.x + (node.width! / 2),
-            y: absolutePosition.y + (node.height! / 2),
-        };
-
-        const newParentSection = findParentSection(template.sections, questionCenter.x, questionCenter.y);
+        const newParentSection = findParentSection(template.sections, node.position.x + (node.width! / 2), node.position.y + (node.height! / 2));
         const newSectionId = newParentSection ? newParentSection.id : null;
-
-        // If section hasn't changed, just update position within the section
-        if (oldSectionId === newSectionId && oldSectionId) {
-            const newSections = template.sections.map(s => {
-                if (s.id === oldSectionId) {
-                    return {
-                        ...s,
-                        questions: s.questions.map(q => q.id === questionId ? { ...q, position: node.position } : q)
-                    };
-                }
-                return s;
-            });
-            onTemplateChange({ ...template, sections: newSections });
+        
+        // If the section remains the same, just update the position.
+        if (oldSectionId === newSectionId) {
+            if (oldSectionId) {
+                 const newSections = template.sections.map(s => {
+                    if (s.id === oldSectionId) {
+                        return {
+                            ...s,
+                            questions: s.questions.map(q => q.id === questionId ? { ...q, position: node.position } : q)
+                        };
+                    }
+                    return s;
+                });
+                onTemplateChange({ ...template, sections: newSections });
+            }
             return;
         }
 
-        // Section has changed, so we need to move the question
+        // Section has changed, move the question.
         let newSections = [...template.sections];
         
-        // Remove from old section
+        // 1. Remove from old section
         if (oldSectionId) {
-            const oldSectionIndex = newSections.findIndex(s => s.id === oldSectionId);
-            if (oldSectionIndex !== -1) {
-                newSections[oldSectionIndex] = {
-                    ...newSections[oldSectionIndex],
-                    questions: newSections[oldSectionIndex].questions.filter(q => q.id !== questionId)
-                };
-            }
+            newSections = newSections.map(s => {
+                if (s.id === oldSectionId) {
+                    return { ...s, questions: s.questions.filter(q => q.id !== questionId) };
+                }
+                return s;
+            });
         }
 
-        // Add to new section (if any)
+        // 2. Add to new section (if any)
         if (newSectionId) {
-             const newSectionIndex = newSections.findIndex(s => s.id === newSectionId);
-             if (newSectionIndex !== -1) {
-                const parentNode = nodes.find(n => n.id === newSectionId)!;
-                const newRelativePos = {
-                    x: absolutePosition.x - parentNode.position.x,
-                    y: absolutePosition.y - parentNode.position.y,
-                };
-
-                newSections[newSectionIndex] = {
-                    ...newSections[newSectionIndex],
-                    questions: [...newSections[newSectionIndex].questions, { ...currentQuestion, position: newRelativePos, sectionId: newSectionId }]
-                };
-             }
+             newSections = newSections.map(s => {
+                if (s.id === newSectionId) {
+                    const newQuestion = { ...currentQuestion!, position: node.position, sectionId: newSectionId };
+                    return { ...s, questions: [...s.questions, newQuestion] };
+                }
+                return s;
+            });
         } else {
-            // Handle orphan question logic here if needed. For now, it's just removed.
-            // A better approach would be to have a top-level questions array for orphans.
+           // The question is now orphaned. We need a place to store it.
+           // For now, it will be removed from all sections. A better implementation might add it to a top-level `questions` array.
         }
 
         onTemplateChange({ ...template, sections: newSections });
@@ -243,8 +223,31 @@ const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
   };
 
   const onConnect = useCallback(
-    (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    (params: Edge | Connection) => {
+      const newEdge = { ...params, type: 'deletable', markerEnd: { type: MarkerType.ArrowClosed }};
+      setEdges((eds) => addEdge(newEdge, eds));
+      
+      const newSections = template.sections.map(section => ({
+        ...section,
+        questions: section.questions.map(q => {
+          if (q.id === params.source) {
+            const newRamification = {
+              id: `ram-${Date.now()}`,
+              conditions: [], // Simplified: no condition for direct connection
+              action: 'show_question' as const,
+              targetQuestionId: params.target!,
+            };
+            return {
+              ...q,
+              ramifications: [...(q.ramifications || []), newRamification]
+            };
+          }
+          return q;
+        })
+      }));
+      onTemplateChange({ ...template, sections: newSections });
+    },
+    [setEdges, template, onTemplateChange]
   );
   
   const handleEdgeDelete = (edgeId: string) => {
