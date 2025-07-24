@@ -94,7 +94,7 @@ export default function FormBuilderPage() {
                  }
             }
         }
-    }, [templateId, templates, loading, router, selectedQuestionId]);
+    }, [templateId, templates, loading, router]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -287,3 +287,5 @@ export default function FormBuilderPage() {
         </div>
     );
 }
+
+    
