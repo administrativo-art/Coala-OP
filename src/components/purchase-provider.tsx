@@ -13,7 +13,7 @@ export interface PurchaseContextType {
   items: PurchaseItem[];
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
-  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt'>) => Promise<void>;
+  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'entityId'>) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
@@ -65,7 +65,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-     const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt'>) => {
+     const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'entityId'>) => {
         if (!user) return;
         const newSession: Omit<PurchaseSession, 'id'> = {
             ...data,

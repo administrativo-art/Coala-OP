@@ -16,16 +16,13 @@ import {
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useEntities } from '@/hooks/use-entities';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 
 const sessionSchema = z.object({
   description: z.string().min(3, 'A descrição deve ter pelo menos 3 caracteres.'),
-  entityId: z.string().min(1, 'Selecione um fornecedor.'),
   baseProductIds: z.array(z.string()).min(1, 'Selecione pelo menos um produto base.'),
 });
 
@@ -34,11 +31,10 @@ type SessionFormValues = z.infer<typeof sessionSchema>;
 interface StartPurchaseSessionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (data: SessionFormValues) => void;
+  onConfirm: (data: Omit<SessionFormValues, 'entityId'>) => void;
 }
 
 export function StartPurchaseSessionModal({ open, onOpenChange, onConfirm }: StartPurchaseSessionModalProps) {
-  const { entities, loading: loadingEntities } = useEntities();
   const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -46,7 +42,6 @@ export function StartPurchaseSessionModal({ open, onOpenChange, onConfirm }: Sta
     resolver: zodResolver(sessionSchema),
     defaultValues: {
       description: '',
-      entityId: '',
       baseProductIds: [],
     },
   });
@@ -71,56 +66,31 @@ export function StartPurchaseSessionModal({ open, onOpenChange, onConfirm }: Sta
     onOpenChange(isOpen);
   };
 
-  const suppliers = useMemo(() => entities.filter(e => e.type === 'pessoa_juridica'), [entities]);
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Criar nova pesquisa de preço</DialogTitle>
           <DialogDescription>
-            Defina um fornecedor e selecione os produtos base que você deseja cotar.
+            Defina uma descrição e selecione os produtos base que você deseja cotar com diferentes fornecedores.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição da pesquisa</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Cotação semanal" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="entityId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingEntities}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um fornecedor..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {suppliers.map(e => (
-                          <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrição da pesquisa</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Cotação semanal" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
             <div>
               <Label>Produtos base para cotação</Label>
               <Input
