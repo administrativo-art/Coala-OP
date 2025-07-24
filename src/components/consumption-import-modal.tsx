@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useRef } from 'react';
@@ -109,8 +108,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
 
                     const analysisResults: { [baseProductId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
                     const unmatchedItems = new Set<string>();
-                    const consumptionByProductForKiosk: Record<string, number> = {};
-
 
                     for (const row of rows) {
                         const itemName = (row['Item'])?.trim();
@@ -137,7 +134,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         }
                         analysisResults[baseProductConfig.id].consumedQuantity += quantityValue;
                         analysisResults[baseProductConfig.id].count += 1;
-                        consumptionByProductForKiosk[baseProductConfig.id] = (consumptionByProductForKiosk[baseProductConfig.id] || 0) + quantityValue;
                     }
 
                     if (unmatchedItems.size > 0) {
@@ -163,7 +159,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
                     }
                      
-                    const reportId = await addReport({
+                    const newReport: Omit<ConsumptionReport, 'id'> = {
                         reportName: file.name,
                         month: values.month,
                         year: values.year,
@@ -172,52 +168,62 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         createdAt: new Date().toISOString(),
                         status: 'completed',
                         results: finalResults,
-                    });
+                    };
+                    const reportId = await addReport(newReport);
 
                     // Automatic stock level calculation and update
                     if (reportId) {
+                        const updatedReports = [...allReports, { ...newReport, id: reportId }];
                         const productsToUpdateMap = new Map<string, BaseProduct>();
-                        const processedBaseProductIds = new Set(Object.keys(consumptionByProductForKiosk));
+                        const processedBaseProductIds = new Set(finalResults.map(r => r.baseProductId));
 
                         processedBaseProductIds.forEach(bpId => {
                             const product = baseProducts.find(p => p.id === bpId);
                             if (product) {
-                                // Load existing stock levels to avoid overwriting them
                                 productsToUpdateMap.set(bpId, JSON.parse(JSON.stringify(product)));
                             }
                         });
-                        
-                        // Kiosk min stock for the imported report
-                        Object.entries(consumptionByProductForKiosk).forEach(([baseProductId, monthlyConsumption]) => {
-                            const baseProduct = productsToUpdateMap.get(baseProductId);
-                            if (baseProduct) {
-                                const dailyAvg = monthlyConsumption / 30;
-                                const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
-                                if (!baseProduct.stockLevels) baseProduct.stockLevels = {};
-                                baseProduct.stockLevels[kiosk.id] = { min: kioskMinStock };
-                                productsToUpdateMap.set(baseProductId, baseProduct);
-                            }
-                        });
 
-                        // Matriz min stock (total consumption across ALL reports)
-                        const totalConsumptionAcrossAllKiosks: Record<string, number> = {};
-                        [...allReports, {id: reportId, results: finalResults, kioskId: kiosk.id} as ConsumptionReport].forEach(report => {
+                        // 1. Calculate consumption per kiosk
+                        const consumptionPerKiosk: Record<string, Record<string, number>> = {}; // { baseProductId: { kioskId: totalConsumption } }
+                        updatedReports.forEach(report => {
                             report.results.forEach(item => {
                                 if (processedBaseProductIds.has(item.baseProductId)) {
-                                    totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
+                                    if (!consumptionPerKiosk[item.baseProductId]) {
+                                        consumptionPerKiosk[item.baseProductId] = {};
+                                    }
+                                    consumptionPerKiosk[item.baseProductId][report.kioskId] = (consumptionPerKiosk[item.baseProductId][report.kioskId] || 0) + item.consumedQuantity;
                                 }
                             });
                         });
+                        
+                        // 2. Iterate through products to update, recalculating all stock levels
+                        for (const product of productsToUpdateMap.values()) {
+                            const newStockLevels: { [kioskId: string]: { min: number } } = {};
+                            let totalNetworkConsumption = 0;
 
-                        Object.entries(totalConsumptionAcrossAllKiosks).forEach(([baseProductId, totalConsumption]) => {
-                             const baseProduct = productsToUpdateMap.get(baseProductId);
-                             if (baseProduct) {
-                                if (!baseProduct.stockLevels) baseProduct.stockLevels = {};
-                                baseProduct.stockLevels['matriz'] = { min: Math.ceil(totalConsumption) };
-                                productsToUpdateMap.set(baseProductId, baseProduct);
-                             }
-                        });
+                            kiosks.forEach(k => {
+                                if (k.id === 'matriz') return;
 
+                                const monthlyConsumption = consumptionPerKiosk[product.id]?.[k.id];
+                                if (monthlyConsumption && monthlyConsumption > 0) {
+                                    const dailyAvg = monthlyConsumption / 30;
+                                    const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
+                                    newStockLevels[k.id] = { min: kioskMinStock };
+                                    totalNetworkConsumption += monthlyConsumption;
+                                }
+                            });
+                            
+                            // 3. Set Matriz stock level
+                            if (totalNetworkConsumption > 0) {
+                                newStockLevels['matriz'] = { min: Math.ceil(totalNetworkConsumption) };
+                            }
+
+                            // 4. Update the product in the map
+                            product.stockLevels = newStockLevels;
+                            productsToUpdateMap.set(product.id, product);
+                        }
+                        
                         const productsToUpdateArray = Array.from(productsToUpdateMap.values());
                         if (productsToUpdateArray.length > 0) {
                             await updateMultipleBaseProducts(productsToUpdateArray);
