@@ -16,18 +16,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
-import { useDebouncedCallback } from 'use-debounce';
+import { useForm as useFormHook } from '@/hooks/use-form';
 
 
 type AddEditFormTemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   templateToEdit: FormTemplate | null;
-  addTemplate: (template: Omit<FormTemplate, 'id' | 'status'>) => Promise<string | null>;
-  updateTemplate: (template: FormTemplate) => void;
 };
 
-function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, addTemplate, updateTemplate }: AddEditFormTemplateModalProps) {
+function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit }: AddEditFormTemplateModalProps) {
+    const { addTemplate, updateTemplate } = useFormHook();
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -41,32 +40,6 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     const handleTemplateChange = useCallback((newTemplate: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => {
         setInternalTemplate(newTemplate);
     }, []);
-
-    const debouncedSaveDraft = useDebouncedCallback(async () => {
-        if (!internalTemplate || ('id' in internalTemplate && internalTemplate.status === 'published')) {
-            return;
-        }
-
-        setIsSaving('draft');
-        try {
-            if ('id' in internalTemplate) {
-                await updateTemplate({ ...internalTemplate, status: 'draft' });
-            } else {
-                const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
-                if (newId) {
-                    setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
-                }
-            }
-        } finally {
-            setIsSaving(false);
-        }
-    }, 1500);
-
-    useEffect(() => {
-        if (internalTemplate) {
-            debouncedSaveDraft();
-        }
-    }, [internalTemplate, debouncedSaveDraft]);
 
     useEffect(() => {
         if (open) {
@@ -91,6 +64,28 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
             setInternalTemplate(null);
         }
     }, [open, templateToEdit]);
+    
+    const handleSaveDraft = async () => {
+        if (!internalTemplate || ('id' in internalTemplate && internalTemplate.status === 'published')) {
+            return;
+        }
+
+        setIsSaving('draft');
+        try {
+            if ('id' in internalTemplate) {
+                await updateTemplate({ ...internalTemplate, status: 'draft' } as FormTemplate);
+                toast({ title: "Rascunho salvo!" });
+            } else {
+                const newId = await addTemplate({ ...internalTemplate, status: 'draft' });
+                if (newId) {
+                    setInternalTemplate(prev => ({ ...prev!, id: newId, status: 'draft' }));
+                    toast({ title: "Rascunho salvo!" });
+                }
+            }
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
 
     const handleAddSection = () => {
@@ -298,7 +293,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                             </div>
                         ) : (
                             <>
-                                <Button onClick={debouncedSaveDraft.flush} variant="secondary" disabled={isSaving !== false}>
+                                <Button onClick={handleSaveDraft} variant="secondary" disabled={isSaving !== false}>
                                     <Save className="mr-2 h-4 w-4"/>
                                     {isSaving === 'draft' ? 'Salvando...' : 'Salvar Rascunho'}
                                 </Button>

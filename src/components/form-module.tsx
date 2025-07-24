@@ -138,15 +138,11 @@ export function FormModule() {
                 )}
             </Tabs>
             
-            {isAddEditModalOpen && (
-                <AddEditFormTemplateModal
-                    open={isAddEditModalOpen}
-                    onOpenChange={setIsAddEditModalOpen}
-                    templateToEdit={templateToEdit}
-                    addTemplate={addTemplate}
-                    updateTemplate={updateTemplate}
-                />
-            )}
+            <AddEditFormTemplateModal
+                open={isAddEditModalOpen}
+                onOpenChange={setIsAddEditModalOpen}
+                templateToEdit={templateToEdit}
+            />
 
             {templateToFill && <FillFormModal
                 open={!!templateToFill}
