@@ -11,7 +11,7 @@ import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { FormGeneralSettings } from '@/components/form-general-settings';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -221,17 +221,23 @@ export default function FormBuilderPage() {
                 <div className="p-4 border-b">
                     <h3 className="font-semibold">Ferramentas</h3>
                 </div>
-                <div className="p-4 space-y-2">
+                <div className="p-4 space-y-2 flex-1">
                     <Button variant="outline" className="w-full justify-start" onClick={handleAddQuestion}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
                     </Button>
                 </div>
-                 <div className="mt-auto p-4 border-t">
-                    <h3 className="font-semibold mb-2">Configurações Gerais</h3>
-                    <FormGeneralSettings 
-                        template={internalTemplate} 
-                        onTemplateChange={(updates) => handleTemplateChange(updates)}
-                    />
+                 <div className="p-4 border-t">
+                    <Accordion type="single" collapsible>
+                       <AccordionItem value="general-settings" className="border-none">
+                           <AccordionTrigger>Configurações Gerais</AccordionTrigger>
+                           <AccordionContent>
+                                <FormGeneralSettings 
+                                    template={internalTemplate} 
+                                    onTemplateChange={(updates) => handleTemplateChange(updates)}
+                                />
+                           </AccordionContent>
+                       </AccordionItem>
+                    </Accordion>
                 </div>
             </div>
         );
@@ -287,5 +293,3 @@ export default function FormBuilderPage() {
         </div>
     );
 }
-
-    
