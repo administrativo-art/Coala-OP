@@ -51,6 +51,14 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
       // 2. Recalculate stock levels for ALL base products
       for (const bp of baseProductMap.values()) {
         const newStockLevels: { [kioskId: string]: { min: number } } = {};
+        
+        // Preserve existing levels first
+        if (bp.stockLevels) {
+            for (const kioskId in bp.stockLevels) {
+                newStockLevels[kioskId] = bp.stockLevels[kioskId];
+            }
+        }
+
         let totalNetworkConsumption = 0;
 
         // Calculate for each individual kiosk
