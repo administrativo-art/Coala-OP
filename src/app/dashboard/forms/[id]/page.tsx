@@ -97,6 +97,12 @@ export default function FormBuilderPage() {
         }
     }, [templateId, templates, loading, router, selectedQuestionId]);
     
+    useEffect(() => {
+        if (selectedQuestionId) {
+            setView('builder');
+        }
+    }, [selectedQuestionId]);
+    
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
         return [...internalTemplate.questions].sort((a,b) => a.order - b.order);
@@ -126,7 +132,6 @@ export default function FormBuilderPage() {
         const newQuestions = [...currentQuestions, newQuestion];
         handleTemplateChange({ questions: newQuestions });
         setSelectedQuestionId(newQuestion.id);
-        setView('builder');
     };
 
     const handleDeleteQuestion = (questionId: string) => {
@@ -293,7 +298,7 @@ export default function FormBuilderPage() {
                                         key={q.id}
                                         id={q.id}
                                         question={q}
-                                        onSelect={() => { setSelectedQuestionId(q.id); setView('builder'); }}
+                                        onSelect={() => setSelectedQuestionId(q.id)}
                                         onDelete={() => handleDeleteQuestion(q.id)}
                                         selectedQuestionId={selectedQuestionId}
                                     />
