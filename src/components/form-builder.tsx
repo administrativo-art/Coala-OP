@@ -44,23 +44,27 @@ export function FormBuilder({
   selectedSectionId,
 }: FormBuilderProps) {
 
-  const onNodeDragStop = (_: any, node: Node) => {
+  const onNodeDragStop = (_: React.MouseEvent, node: Node) => {
     let newSections = [...template.sections];
 
     if (node.type === 'section') {
         newSections = newSections.map(s => 
             s.id === node.id ? { ...s, position: node.position } : s
         );
-    } else if (node.type === 'question') {
+        onTemplateChange({ ...template, sections: newSections });
+        return;
+    } 
+    
+    if (node.type === 'question') {
         const questionId = node.id;
-        const questionWidth = node.width || 300; // default width
-        const questionHeight = node.height || 80; // default height
+        const questionWidth = node.width || 300;
+        const questionHeight = node.height || 80;
         const questionCenterX = node.position.x + questionWidth / 2;
         const questionCenterY = node.position.y + questionHeight / 2;
 
         let originalSectionId: string | null = null;
         let questionData: FormQuestion | null = null;
-        
+
         // Find the question and its original section
         for (const sec of newSections) {
             const qIndex = sec.questions.findIndex(q => q.id === questionId);
@@ -73,7 +77,7 @@ export function FormBuilder({
         
         if (!questionData) return;
 
-        // Find the new parent section
+        // Find the new parent section based on where the node was dropped
         const newParentSection = newSections.find(sec =>
             questionCenterX >= sec.position.x &&
             questionCenterX <= sec.position.x + (sec.width || 400) &&
@@ -81,11 +85,10 @@ export function FormBuilder({
             questionCenterY <= sec.position.y + (sec.height || 200)
         );
 
-        // Update question position
         const updatedQuestionData = { ...questionData, position: node.position };
 
-        // If parent changed
-        if (newParentSection?.id !== originalSectionId) {
+        // If the question moved to a different section
+        if (newParentSection && newParentSection.id !== originalSectionId) {
             // Remove from old section
             if (originalSectionId) {
                 newSections = newSections.map(sec => {
@@ -95,20 +98,15 @@ export function FormBuilder({
                     return sec;
                 });
             }
-
             // Add to new section
-            if (newParentSection) {
-                 newSections = newSections.map(sec => {
-                    if (sec.id === newParentSection.id) {
-                        return { ...sec, questions: [...sec.questions, updatedQuestionData] };
-                    }
-                    return sec;
-                });
-            } else {
-                // If it's dropped outside all sections, it becomes "orphaned" in the data model
-                // For now, we'll just update its position within its original section if it's dragged out
-                // To truly support orphans, a top-level `questions` array on the template would be needed.
-                // Reverting to position update in original section for simplicity until then.
+            newSections = newSections.map(sec => {
+                if (sec.id === newParentSection.id) {
+                    return { ...sec, questions: [...sec.questions, updatedQuestionData] };
+                }
+                return sec;
+            });
+        } else { // If it stayed in the same section or was dropped outside, just update its position
+            if (originalSectionId) {
                  newSections = newSections.map(sec => {
                     if (sec.id === originalSectionId) {
                          return { ...sec, questions: sec.questions.map(q => q.id === questionId ? updatedQuestionData : q) };
@@ -116,17 +114,9 @@ export function FormBuilder({
                     return sec;
                 });
             }
-        } else { // If parent is the same, just update position
-            newSections = newSections.map(sec => {
-                if (sec.id === originalSectionId) {
-                    return { ...sec, questions: sec.questions.map(q => q.id === questionId ? updatedQuestionData : q) };
-                }
-                return sec;
-            });
         }
+        onTemplateChange({ ...template, sections: newSections });
     }
-    
-    onTemplateChange({ ...template, sections: newSections });
   };
 
 
@@ -220,3 +210,4 @@ export function FormBuilder({
     </div>
   );
 }
+
