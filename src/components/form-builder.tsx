@@ -13,24 +13,22 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type Node,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
 import { SectionNode } from './section-node';
 import { QuestionNode } from './form-question-node';
+import { EdgeDeleteButton } from './edge-delete-button';
 
-interface FormBuilderProps {
-  template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>;
-  onTemplateChange: (template: FormTemplate | Omit<FormTemplate, 'id' | 'status'>) => void;
-  onSelectQuestion: (questionId: string | null) => void;
-  selectedQuestionId: string | null;
-  onSelectSection: (sectionId: string | null) => void;
-  selectedSectionId: string | null;
-}
 
 const nodeTypes = {
   section: SectionNode,
   question: QuestionNode,
+};
+
+const edgeTypes = {
+  deletable: EdgeDeleteButton,
 };
 
 // Helper function to find which section a point is inside
@@ -40,9 +38,8 @@ const findParentSection = (sections: FormSection[], x: number, y: number, width:
         const secY = sec.position.y;
         const secWidth = sec.width || 400;
         const secHeight = sec.height || 200;
-        // Check if the center of the question is inside the section
-        return x + width / 2 >= secX && x + width / 2 <= secX + secWidth &&
-               y + height / 2 >= secY && y + height / 2 <= secY + secHeight;
+        return x >= secX && x <= secX + secWidth &&
+               y >= secY && y <= secY + secHeight;
     });
 };
 
@@ -56,9 +53,10 @@ export function FormBuilder({
   selectedSectionId,
 }: FormBuilderProps) {
   
+  const allQuestions = useMemo(() => template.sections.flatMap(s => s.questions || []), [template.sections]);
+
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
-    const allQuestions = template.sections.flatMap(s => s.questions || []);
 
     (template.sections || []).forEach(section => {
       nodes.push({
@@ -97,18 +95,18 @@ export function FormBuilder({
                  const currentQuestion = allQuestions.find(q => q.id === question.id)!;
                  let newSectionId: string | null = null;
                  
-                 // If unpinning, sectionId becomes null
-                 // If pinning, find which section it's inside
                  if (!currentQuestion.sectionId) {
                     const parent = findParentSection(template.sections, currentQuestion.position.x, currentQuestion.position.y, 300, 80);
                     newSectionId = parent?.id || null;
                  }
                 
                 const updatedQuestion = { ...currentQuestion, sectionId: newSectionId };
-                const newSections = template.sections.map(s => ({
-                    ...s,
-                    questions: s.questions.map(q => q.id === question.id ? updatedQuestion : q)
-                }));
+
+                const newSections = template.sections.map(s => {
+                    const newQuestions = s.questions.map(q => q.id === question.id ? updatedQuestion : q);
+                    return {...s, questions: newQuestions };
+                });
+                
                 onTemplateChange({ ...template, sections: newSections });
             }
           },
@@ -118,20 +116,44 @@ export function FormBuilder({
       });
 
     return nodes;
-  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, allQuestions]);
+  
+  const initialEdges = useMemo(() => {
+     const newEdges: Edge[] = [];
+      allQuestions.forEach(question => {
+          if (question.ramifications) {
+              question.ramifications.forEach(ramification => {
+                  if (ramification.action === 'show_question' && ramification.targetQuestionId) {
+                      newEdges.push({
+                          id: `e-${question.id}-${ramification.targetQuestionId}`,
+                          source: question.id,
+                          target: ramification.targetQuestionId,
+                          type: 'deletable',
+                          markerEnd: { type: MarkerType.ArrowClosed },
+                      });
+                  }
+              });
+          }
+      });
+      return newEdges;
+  }, [allQuestions]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   
   useEffect(() => {
     setNodes(initialNodes);
   }, [initialNodes, setNodes]);
+  
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
 
 
   const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
     if (node.type === 'section') {
         const newSections = template.sections.map(s => 
-            s.id === node.id ? { ...s, position: node.position } : s
+            s.id === node.id ? { ...s, position: node.position, width: node.width, height: node.height } : s
         );
         onTemplateChange({ ...template, sections: newSections });
         return;
@@ -139,15 +161,13 @@ export function FormBuilder({
 
     if (node.type === 'question') {
         const questionId = node.id;
-        const allQuestions = template.sections.flatMap(s => s.questions || []);
-        const questionData = allQuestions.find(q => q.id === questionId);
+        const currentQuestion = allQuestions.find(q => q.id === questionId);
         
-        if (!questionData) return;
+        if (!currentQuestion) return;
 
         let absolutePosition = node.position;
-        // If node was child, its position is relative. Calculate absolute.
-        if (questionData.sectionId) {
-            const parentSection = template.sections.find(s => s.id === questionData.sectionId);
+        if (currentQuestion.sectionId && node.parentNode) {
+            const parentSection = template.sections.find(s => s.id === node.parentNode);
             if (parentSection) {
                  absolutePosition = {
                     x: parentSection.position.x + node.position.x,
@@ -156,26 +176,33 @@ export function FormBuilder({
             }
         }
         
-        // Always update the absolute position
-        const updatedQuestionData = { ...questionData, position: absolutePosition };
+        const parentSection = findParentSection(template.sections, absolutePosition.x, absolutePosition.y, node.width!, node.height!);
+        const newSectionId = parentSection ? parentSection.id : currentQuestion.sectionId;
+
+        const updatedQuestionData = { 
+            ...currentQuestion,
+            position: absolutePosition, 
+            sectionId: newSectionId, 
+        };
         
         const newSections = template.sections.map(s => ({
             ...s,
-            questions: s.questions.map(q => q.id === questionId ? updatedQuestionData : q)
+            questions: s.questions
+                .filter(q => q.id !== questionId) // Remove from all sections
+                .concat(s.id === newSectionId ? [updatedQuestionData] : []) // Add to the correct one
         }));
 
         onTemplateChange({ ...template, sections: newSections });
     }
-}, [template, onTemplateChange]);
+  }, [template, onTemplateChange, allQuestions]);
+
 
   const handleNodeClick = (_: any, node: Node) => {
     if (node.type === 'section') {
         onSelectSection(node.id);
         onSelectQuestion(null);
     } else if (node.type === 'question') {
-        const allQuestions = template.sections.flatMap(s => s.questions);
-        const question = allQuestions.find(q => q.id === node.id);
-        onSelectSection(question?.sectionId || null);
+        onSelectSection(node.parentNode || null);
         onSelectQuestion(node.id);
     }
   };
@@ -185,6 +212,26 @@ export function FormBuilder({
     [setEdges]
   );
   
+  const handleEdgeDelete = (edgeId: string) => {
+    const [_, sourceId, targetId] = edgeId.split('-');
+    
+    const newSections = template.sections.map(section => ({
+        ...section,
+        questions: section.questions.map(question => {
+            if (question.id === sourceId) {
+                const newRamifications = (question.ramifications || []).filter(
+                    ram => !(ram.action === 'show_question' && ram.targetQuestionId === targetId)
+                );
+                return { ...question, ramifications: newRamifications };
+            }
+            return question;
+        })
+    }));
+
+    onTemplateChange({ ...template, sections: newSections });
+};
+
+
   return (
     <div className="w-full h-full">
       <ReactFlow
@@ -196,8 +243,11 @@ export function FormBuilder({
         onNodeDragStop={onNodeDragStop}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         nodeDragThreshold={5}
+        deleteKeyCode={['Backspace', 'Delete']}
+        onEdgesDelete={(edgesToDelete) => handleEdgeDelete(edgesToDelete[0].id)}
       >
         <Background />
         <Controls />
