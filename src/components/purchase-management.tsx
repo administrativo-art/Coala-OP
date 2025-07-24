@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -44,3 +45,5 @@ export function PurchaseManagement() {
         </div>
     );
 }
+
+    

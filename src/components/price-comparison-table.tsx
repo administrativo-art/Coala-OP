@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -135,7 +136,7 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
     if (linkedProducts.length === 0) {
         return (
             <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
-                Nenhum insumo vinculado a este produto base. Adicione insumos na tela de "Cadastros".
+                Nenhum insumo vinculado a este produto base. Adicione insumos na tela de "cadastros".
             </div>
         );
     }
@@ -234,3 +235,5 @@ export function PriceComparisonTable({ baseProductId, items, sessionId, isSessio
         </div>
     );
 }
+
+    

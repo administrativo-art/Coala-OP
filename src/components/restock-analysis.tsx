@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -93,7 +94,7 @@ function AnalysisTab() {
     
     await createRepositionActivity({
         kioskOriginId: 'matriz',
-        kioskOriginName: 'Centro de distribuição - Matriz',
+        kioskOriginName: 'Centro de distribuição',
         kioskDestinationId: destinationKiosk.id,
         kioskDestinationName: destinationKiosk.name,
         items: stagedItems,
@@ -425,3 +426,5 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
+
+    

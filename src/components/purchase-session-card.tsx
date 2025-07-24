@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -112,3 +113,5 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         </>
     );
 }
+
+    

@@ -186,3 +186,5 @@ export function PriceHistoryDashboard() {
         </div>
     );
 }
+
+    
