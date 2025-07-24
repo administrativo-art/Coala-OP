@@ -108,8 +108,31 @@ export default function FormBuilderPage() {
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
-        const newQuestions = (internalTemplate.questions || []).map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
-        handleTemplateChange({ questions: newQuestions });
+
+        const isCreatingNewQuestionFromRamification = updatedQuestion.ramifications?.some(r => r.targetQuestionId === '__CREATE_NEW__');
+
+        if (isCreatingNewQuestionFromRamification) {
+            const newQuestion: FormQuestion = {
+                id: `question-${nanoid()}`,
+                label: 'Nova Pergunta',
+                type: 'text',
+                isRequired: false,
+                order: (internalTemplate.questions || []).length
+            };
+            
+            const newQuestions = [...(internalTemplate.questions || []), newQuestion];
+
+            const newRamifications = updatedQuestion.ramifications!.map(r => 
+                r.targetQuestionId === '__CREATE_NEW__' ? { ...r, targetQuestionId: newQuestion.id } : r
+            );
+
+            const finalUpdatedQuestion = { ...updatedQuestion, ramifications: newRamifications };
+
+            handleTemplateChange({ questions: newQuestions.map(q => q.id === finalUpdatedQuestion.id ? finalUpdatedQuestion : q) });
+        } else {
+            const newQuestions = (internalTemplate.questions || []).map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
+            handleTemplateChange({ questions: newQuestions });
+        }
     };
 
     const handleAddQuestion = () => {
@@ -293,3 +316,4 @@ export default function FormBuilderPage() {
         </div>
     );
 }
+

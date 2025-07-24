@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -57,7 +56,7 @@ const formQuestionSchema = z.object({
                 ctx.addIssue({
                     code: 'custom',
                     path: [`ramifications.${index}.targetQuestionId`],
-                    message: "Selecione uma pergunta para a ramificação.",
+                    message: "Selecione uma pergunta ou crie uma nova.",
                 });
             }
         });
@@ -209,7 +208,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                     <p className="font-medium text-sm">SE a resposta for...</p>
                                     <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeRamification(index)}><Trash2 className="h-4 w-4"/></Button>
                                 </div>
-                                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                                <div className="grid grid-cols-[1fr_1fr] gap-2 items-center">
                                     <FormField control={form.control} name={`ramifications.${index}.conditions.0.operator`} render={({field}) => (
                                         <FormItem>
                                              <Select onValueChange={field.onChange} value={field.value}>
@@ -251,6 +250,9 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                             <Select onValueChange={field.onChange} value={field.value}>
                                                 <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
                                                 <SelectContent>
+                                                    <SelectItem value="__CREATE_NEW__">
+                                                        <span className="flex items-center"><PlusCircle className="mr-2 h-4 w-4" /> Criar nova pergunta...</span>
+                                                    </SelectItem>
                                                     {allQuestions.filter(q => q.id !== question.id).map(q => (
                                                         <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
                                                     ))}
@@ -307,4 +309,3 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     </div>
   );
 }
-
