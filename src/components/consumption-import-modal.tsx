@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 
 
 const consumptionUploadSchema = z.object({
@@ -66,6 +67,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
     const { user } = useAuth();
     const { toast } = useToast();
     const { updateMultipleBaseProducts } = useBaseProducts();
+    const { history: allReports } = useConsumptionAnalysis();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -175,37 +177,32 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     // Automatic stock level calculation and update
                     if (reportId) {
                         const productsToUpdateMap = new Map<string, BaseProduct>();
-
-                        // Initialize with all existing base products to ensure all stock levels are preserved
-                        baseProducts.forEach(bp => {
-                            productsToUpdateMap.set(bp.id, JSON.parse(JSON.stringify(bp)));
+                        baseProducts.forEach(bp => productsToUpdateMap.set(bp.id, JSON.parse(JSON.stringify(bp))));
+                        
+                        const totalConsumptionAcrossAllKiosks: Record<string, number> = {};
+                        [...allReports, {id: reportId, results: finalResults}].forEach(report => {
+                            report.results.forEach(item => {
+                                totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
+                            });
                         });
-
+                        
+                        // Kiosk min stock
                         Object.entries(consumptionByProductForKiosk).forEach(([baseProductId, monthlyConsumption]) => {
                             const baseProduct = productsToUpdateMap.get(baseProductId);
                             if (baseProduct) {
                                 const dailyAvg = monthlyConsumption / 30;
                                 const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
-                                
-                                if (!baseProduct.stockLevels) {
-                                    baseProduct.stockLevels = {};
-                                }
+                                if (!baseProduct.stockLevels) baseProduct.stockLevels = {};
                                 baseProduct.stockLevels[kiosk.id] = { min: kioskMinStock };
                                 productsToUpdateMap.set(baseProductId, baseProduct);
                             }
                         });
-                        
-                        const totalConsumptionByProduct: Record<string, number> = {};
-                         finalResults.forEach(item => {
-                            totalConsumptionByProduct[item.baseProductId] = (totalConsumptionByProduct[item.baseProductId] || 0) + item.consumedQuantity;
-                        });
 
-                        Object.entries(totalConsumptionByProduct).forEach(([baseProductId, totalConsumption]) => {
+                        // Matriz min stock (total consumption)
+                        Object.entries(totalConsumptionAcrossAllKiosks).forEach(([baseProductId, totalConsumption]) => {
                              const baseProduct = productsToUpdateMap.get(baseProductId);
                              if (baseProduct) {
-                                if (!baseProduct.stockLevels) {
-                                    baseProduct.stockLevels = {};
-                                }
+                                if (!baseProduct.stockLevels) baseProduct.stockLevels = {};
                                 baseProduct.stockLevels['matriz'] = { min: Math.ceil(totalConsumption) };
                                 productsToUpdateMap.set(baseProductId, baseProduct);
                              }
@@ -214,7 +211,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         const productsToUpdateArray = Array.from(productsToUpdateMap.values());
                         if (productsToUpdateArray.length > 0) {
                             await updateMultipleBaseProducts(productsToUpdateArray);
-                            toast({ title: 'Sucesso', description: `Relatório analisado e salvo. O estoque mínimo de ${Object.keys(consumptionByProductForKiosk).length} iten(s) foi atualizado para ${kiosk.name} e Matriz.` });
+                            toast({ title: 'Sucesso', description: `Relatório analisado e salvo. Estoques mínimos atualizados.` });
                         }
                     }
                     
