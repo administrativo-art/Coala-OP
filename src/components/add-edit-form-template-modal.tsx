@@ -6,7 +6,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Save, Settings, Cloud, CheckCircle2, FileUp, Undo2, PlusCircle, Pencil, GitBranch } from 'lucide-react';
+import { Settings, GitBranch, CheckCircle2, FileUp, Undo2, PlusCircle, Pencil, Cloud } from 'lucide-react';
 import { FormBuilder } from './form-builder';
 import { QuestionSettingsPanel } from './QuestionSettingsPanel';
 import { nanoid } from 'nanoid';
