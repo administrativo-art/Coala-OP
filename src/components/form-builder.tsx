@@ -107,8 +107,7 @@ export function FormBuilder({
             type: 'question',
             position: question.position,
             parentNode: question.sectionId || undefined,
-            extent: 'parent',
-            dragHandle: '.drag-handle-question',
+            extent: question.sectionId ? 'parent' : undefined,
             data: {
               ...question,
               onDelete: () => onDeleteQuestion(question.id),
@@ -277,12 +276,18 @@ const handleGroup = () => {
     const question = allQuestions.find(q => q.id === nodeId)!;
     const newTemplate = { ...template };
     
+    // Calculate new relative position
+    const relativePosition = {
+        x: node.positionAbsolute.x - parentSection.position.x,
+        y: node.positionAbsolute.y - parentSection.position.y,
+    };
+
     // Remove from root
     newTemplate.questions = (newTemplate.questions || []).filter(q => q.id !== nodeId);
     
     // Add to section
     const targetSection = newTemplate.sections.find(s => s.id === parentSection.id)!;
-    targetSection.questions = [...(targetSection.questions || []), { ...question, sectionId: parentSection.id }];
+    targetSection.questions = [...(targetSection.questions || []), { ...question, sectionId: parentSection.id, position: relativePosition }];
     
     onTemplateChange(newTemplate);
     setContextMenu(null);
@@ -291,6 +296,8 @@ const handleGroup = () => {
 const handleUngroup = () => {
     if (!contextMenu) return;
     const nodeId = contextMenu.nodeId;
+    const node = reactFlow.getNode(nodeId);
+    if (!node) return;
     
     const question = allQuestions.find(q => q.id === nodeId)!;
     const oldSectionId = question.sectionId;
@@ -302,8 +309,8 @@ const handleUngroup = () => {
     const sourceSection = newTemplate.sections.find(s => s.id === oldSectionId)!;
     sourceSection.questions = sourceSection.questions.filter(q => q.id !== nodeId);
 
-    // Add to root
-    newTemplate.questions = [...(newTemplate.questions || []), { ...question, sectionId: null }];
+    // Add to root with absolute position
+    newTemplate.questions = [...(newTemplate.questions || []), { ...question, sectionId: null, position: node.positionAbsolute! }];
 
     onTemplateChange(newTemplate);
     setContextMenu(null);
