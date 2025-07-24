@@ -73,6 +73,19 @@ export function FormBuilder({
     return [...sectionQuestions, ...floatingQuestions];
   }, [template.sections, template.questions]);
 
+  const handleQuestionUpdate = useCallback((questionId: string, updates: Partial<FormQuestion>) => {
+    const updateFn = (q: FormQuestion) => q.id === questionId ? { ...q, ...updates } : q;
+    
+    const newSections = (template.sections || []).map(section => ({
+        ...section,
+        questions: (section.questions || []).map(updateFn)
+    }));
+
+    const newFloatingQuestions = (template.questions || []).map(updateFn);
+    
+    onTemplateChange({ ...template, sections: newSections, questions: newFloatingQuestions });
+  }, [template, onTemplateChange]);
+
   const initialNodes = useMemo(() => {
     const nodes: Node[] = [];
 
@@ -111,6 +124,7 @@ export function FormBuilder({
             data: {
               ...question,
               onDelete: () => onDeleteQuestion(question.id),
+              onUpdate: (updates: Partial<FormQuestion>) => handleQuestionUpdate(question.id, updates),
             },
             selected: question.id === selectedQuestionId,
             zIndex: 2,
@@ -118,7 +132,7 @@ export function FormBuilder({
     });
 
     return nodes;
-  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, onDeleteQuestion, allQuestions]);
+  }, [template, onTemplateChange, selectedQuestionId, selectedSectionId, onDeleteQuestion, allQuestions, handleQuestionUpdate]);
   
   const initialEdges = useMemo(() => {
      const newEdges: Edge[] = [];
@@ -162,25 +176,14 @@ export function FormBuilder({
         }
 
         if (node.type === 'question') {
-            const newQuestions = allQuestions.map(q => q.id === node.id ? {...q, position: node.position} : q);
-             const newTemplate = { ...template, sections: [...template.sections], questions: [...(template.questions || [])] };
-             const question = newQuestions.find(q => q.id === node.id)!;
+             const questionToUpdate = allQuestions.find(q => q.id === node.id)!;
+             const parentSection = node.parentNode ? template.sections.find(s => s.id === node.parentNode) : undefined;
+             const newPosition = node.position;
              
-             // Remove from wherever it was
-             newTemplate.sections.forEach(s => { s.questions = s.questions.filter(q => q.id !== node.id) });
-             newTemplate.questions = newTemplate.questions.filter(q => q.id !== node.id);
-
-             // Add to new parent or root
-             if(node.parentNode) {
-                 const parentSection = newTemplate.sections.find(s => s.id === node.parentNode);
-                 parentSection?.questions.push(question);
-             } else {
-                 newTemplate.questions.push(question);
-             }
-             onTemplateChange(newTemplate);
+             handleQuestionUpdate(node.id, { position: newPosition });
         }
     },
-    [template, onTemplateChange, allQuestions]
+    [template, onTemplateChange, allQuestions, handleQuestionUpdate]
   );
 
 

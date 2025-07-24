@@ -165,12 +165,22 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
     }
 
     const handlePublish = async () => {
-        if (!internalTemplate || !('id' in internalTemplate)) return;
-        
-        await autoSave(false);
-        await updateTemplate({ ...internalTemplate as FormTemplate, status: 'published' });
-        toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
-        onOpenChange(false);
+        if (!internalTemplate) return;
+
+        if (!('id' in internalTemplate)) {
+            // This is a new template, add it first
+            const newId = await addTemplate(internalTemplate);
+            if(newId) {
+                await updateTemplate({ ...internalTemplate, id: newId, status: 'published' });
+                toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
+                onOpenChange(false);
+            }
+        } else {
+            await autoSave(false); // Save any pending changes
+            await updateTemplate({ ...internalTemplate, status: 'published' });
+            toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
+            onOpenChange(false);
+        }
     }
 
     const handleReopen = async () => {
