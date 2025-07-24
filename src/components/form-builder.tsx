@@ -96,14 +96,11 @@ export function FormBuilder({
           type: 'question',
           position: question.position,
           parentNode: question.sectionId || undefined,
-          extent: question.sectionId ? 'parent' : undefined,
+          extent: 'parent',
           dragHandle: '.drag-handle-question',
           data: {
             ...question,
             onDelete: () => onDeleteQuestion(question.id),
-            onTogglePin: () => {
-              // This is where the pin toggle logic will go
-            }
           },
           selected: question.id === selectedQuestionId,
           zIndex: 2,
@@ -145,71 +142,79 @@ export function FormBuilder({
     setEdges(initialEdges);
   }, [initialEdges, setEdges]);
 
-const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
-    if (node.type === 'section') {
-        const newSections = template.sections.map(s => 
-            s.id === node.id ? { ...s, position: node.position, width: node.width || s.width, height: node.height || s.height } : s
-        );
-        onTemplateChange({ ...template, sections: newSections });
-        return;
-    }
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+        if (node.type === 'section') {
+            const newSections = template.sections.map(s =>
+                s.id === node.id ? { ...s, position: node.position, width: node.width || s.width, height: node.height || s.height } : s
+            );
+            onTemplateChange({ ...template, sections: newSections });
+            return;
+        }
 
-    if (node.type === 'question') {
-        const questionId = node.id;
-        let currentQuestion = allQuestions.find(q => q.id === questionId);
-        if (!currentQuestion) return;
+        if (node.type === 'question') {
+            const questionId = node.id;
+            const originalQuestion = allQuestions.find(q => q.id === questionId);
+            if (!originalQuestion) return;
 
-        const oldSectionId = currentQuestion.sectionId;
-        const newParentSection = findParentSection(template.sections, node.position.x + (node.width! / 2), node.position.y + (node.height! / 2));
-        const newSectionId = newParentSection ? newParentSection.id : null;
-        
-        // If the section remains the same, just update the position.
-        if (oldSectionId === newSectionId) {
-            if (oldSectionId) {
-                 const newSections = template.sections.map(s => {
+            // Absolute position of the node's center
+            const nodeWidth = node.width || 300;
+            const nodeHeight = node.height || 80;
+            const centerX = node.position.x + nodeWidth / 2;
+            const centerY = node.position.y + nodeHeight / 2;
+            
+            // Find which section the node was dropped into
+            const newParentSection = findParentSection(template.sections, centerX, centerY);
+            const newSectionId = newParentSection ? newParentSection.id : null;
+            const oldSectionId = originalQuestion.sectionId;
+
+            if (oldSectionId === newSectionId) {
+                // The question remained in the same section, just update its relative position.
+                const newSections = template.sections.map(s => {
                     if (s.id === oldSectionId) {
                         return {
                             ...s,
-                            questions: s.questions.map(q => q.id === questionId ? { ...q, position: node.position } : q)
+                            questions: s.questions.map(q =>
+                                q.id === questionId
+                                    ? { ...q, position: { x: node.position.x - s.position.x, y: node.position.y - s.position.y } }
+                                    : q
+                            ),
                         };
                     }
                     return s;
                 });
                 onTemplateChange({ ...template, sections: newSections });
+                return;
             }
-            return;
-        }
 
-        // Section has changed, move the question.
-        let newSections = [...template.sections];
-        
-        // 1. Remove from old section
-        if (oldSectionId) {
-            newSections = newSections.map(s => {
-                if (s.id === oldSectionId) {
-                    return { ...s, questions: s.questions.filter(q => q.id !== questionId) };
+            // The question has moved to a new section or became a root node.
+            const newSections = [...template.sections];
+
+            // 1. Remove from the old section
+            if (oldSectionId) {
+                const oldSection = newSections.find(s => s.id === oldSectionId);
+                if (oldSection) {
+                    oldSection.questions = oldSection.questions.filter(q => q.id !== questionId);
                 }
-                return s;
-            });
-        }
+            }
 
-        // 2. Add to new section (if any)
-        if (newSectionId) {
-             newSections = newSections.map(s => {
-                if (s.id === newSectionId) {
-                    const newQuestion = { ...currentQuestion!, position: node.position, sectionId: newSectionId };
-                    return { ...s, questions: [...s.questions, newQuestion] };
+            // 2. Add to the new section
+            if (newSectionId) {
+                const newSection = newSections.find(s => s.id === newSectionId);
+                if (newSection) {
+                    const newPosition = {
+                        x: node.position.x - newSection.position.x,
+                        y: node.position.y - newSection.position.y,
+                    };
+                    newSection.questions.push({ ...originalQuestion, sectionId: newSectionId, position: newPosition });
                 }
-                return s;
-            });
-        } else {
-           // The question is now orphaned. We need a place to store it.
-           // For now, it will be removed from all sections. A better implementation might add it to a top-level `questions` array.
+            }
+            
+            onTemplateChange({ ...template, sections: newSections });
         }
-
-        onTemplateChange({ ...template, sections: newSections });
-    }
-}, [template, onTemplateChange, allQuestions, nodes]);
+    },
+    [template, onTemplateChange, allQuestions]
+);
 
 
   const handleNodeClick = (_: any, node: Node) => {
