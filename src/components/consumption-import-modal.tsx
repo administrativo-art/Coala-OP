@@ -182,23 +182,12 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                         processedBaseProductIds.forEach(bpId => {
                             const product = baseProducts.find(p => p.id === bpId);
                             if (product) {
-                                // IMPORTANT: Deep clone and reset stock levels to avoid merging old and new data
-                                const newProductState = JSON.parse(JSON.stringify(product));
-                                newProductState.stockLevels = {}; 
-                                productsToUpdateMap.set(bpId, newProductState);
+                                // Load existing stock levels to avoid overwriting them
+                                productsToUpdateMap.set(bpId, JSON.parse(JSON.stringify(product)));
                             }
                         });
                         
-                        const totalConsumptionAcrossAllKiosks: Record<string, number> = {};
-                        [...allReports, {id: reportId, results: finalResults, kioskId: kiosk.id} as ConsumptionReport].forEach(report => {
-                            report.results.forEach(item => {
-                                if (processedBaseProductIds.has(item.baseProductId)) {
-                                    totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
-                                }
-                            });
-                        });
-                        
-                        // Kiosk min stock
+                        // Kiosk min stock for the imported report
                         Object.entries(consumptionByProductForKiosk).forEach(([baseProductId, monthlyConsumption]) => {
                             const baseProduct = productsToUpdateMap.get(baseProductId);
                             if (baseProduct) {
@@ -210,7 +199,16 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                             }
                         });
 
-                        // Matriz min stock (total consumption)
+                        // Matriz min stock (total consumption across ALL reports)
+                        const totalConsumptionAcrossAllKiosks: Record<string, number> = {};
+                        [...allReports, {id: reportId, results: finalResults, kioskId: kiosk.id} as ConsumptionReport].forEach(report => {
+                            report.results.forEach(item => {
+                                if (processedBaseProductIds.has(item.baseProductId)) {
+                                    totalConsumptionAcrossAllKiosks[item.baseProductId] = (totalConsumptionAcrossAllKiosks[item.baseProductId] || 0) + item.consumedQuantity;
+                                }
+                            });
+                        });
+
                         Object.entries(totalConsumptionAcrossAllKiosks).forEach(([baseProductId, totalConsumption]) => {
                              const baseProduct = productsToUpdateMap.get(baseProductId);
                              if (baseProduct) {
