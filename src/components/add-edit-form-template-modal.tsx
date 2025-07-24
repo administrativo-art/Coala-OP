@@ -70,21 +70,20 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
 
     useEffect(() => {
         if (open) {
-            if (templateToEdit) {
-                setInternalTemplate(JSON.parse(JSON.stringify(templateToEdit)));
-            } else {
-                setInternalTemplate({
-                    name: 'Novo Formulário',
-                    type: 'standard',
-                    layout: 'continuous',
-                    moment: null,
-                    submissionTitleFormat: '',
-                    questions: [],
-                    sections: [
-                        { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
-                    ],
-                });
-            }
+            const initialTemplate = templateToEdit
+              ? JSON.parse(JSON.stringify(templateToEdit))
+              : {
+                  name: 'Novo Formulário',
+                  type: 'standard',
+                  layout: 'continuous',
+                  moment: null,
+                  submissionTitleFormat: '',
+                  questions: [],
+                  sections: [
+                      { id: `section-${nanoid()}`, name: 'Seção 1', questions: [], position: { x: 50, y: 50 }, color: '#FEE2E2' }
+                  ],
+              };
+            setInternalTemplate(initialTemplate);
             setActiveTab("builder");
             setSelectedSectionId(null);
             setSelectedQuestionId(null);
@@ -176,7 +175,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
         if (!internalTemplate) return;
         setIsSaving('publish');
 
-        if (!('id' in internalTemplate)) {
+        if (!('id' in internalTemplate) || !internalTemplate.id) {
             // This is a new template, add it first
             const newId = await addTemplate({ ...internalTemplate, status: 'published' });
             if(newId) {
@@ -184,7 +183,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                 onOpenChange(false);
             }
         } else {
-            await updateTemplate({ ...internalTemplate, status: 'published' });
+            await updateTemplate({ ...internalTemplate, status: 'published' } as FormTemplate);
             toast({ title: 'Formulário publicado!', description: 'Seu formulário agora está disponível para os usuários.' });
             onOpenChange(false);
         }
@@ -249,7 +248,7 @@ function AddEditFormTemplateModalContent({ open, onOpenChange, templateToEdit, a
                         <div className="flex-1 min-h-0 flex h-full">
                             {internalTemplate && (
                                 <FormBuilder 
-                                    key={('id' in internalTemplate) ? internalTemplate.id : 'new'}
+                                    key={('id' in internalTemplate && internalTemplate.id) ? internalTemplate.id : 'new'}
                                     template={internalTemplate}
                                     onTemplateChange={handleTemplateChange}
                                     onSelectQuestion={setSelectedQuestionId}
