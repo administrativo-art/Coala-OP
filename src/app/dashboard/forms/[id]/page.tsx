@@ -85,20 +85,14 @@ export default function FormBuilderPage() {
                   sections: [],
               };
             setInternalTemplate(initialTemplate);
-            if (initialTemplate.questions.length > 0 && !selectedQuestionId) {
-              setSelectedQuestionId(initialTemplate.questions[0].id)
-            }
         } else {
             const templateToEdit = templates.find(t => t.id === templateId);
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
                  setInternalTemplate(newTemplate);
-                 if (newTemplate.questions.length > 0 && !selectedQuestionId) {
-                     setSelectedQuestionId(newTemplate.questions[0].id)
-                 }
             }
         }
-    }, [templateId, templates, loading, router, selectedQuestionId]);
+    }, [templateId, templates, loading]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -271,9 +265,6 @@ export default function FormBuilderPage() {
                                     </div>
                                 </SortableContext>
                             </DndContext>
-                             <Button variant="outline" className="w-full" onClick={() => handleAddQuestion('text')}>
-                                <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Pergunta
-                            </Button>
                         </div>
                     </ScrollArea>
                 </div>
