@@ -20,40 +20,63 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FormBuilderSidebar } from '@/components/form-builder-sidebar';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { FormGeneralSettings } from '@/components/form-general-settings';
+
 
 const SortableQuestionItem = ({
-    id,
     question,
+    allQuestions,
     onDelete,
-    onSelect,
-    isSelected,
+    onQuestionChange,
+    users,
+    profiles,
 }: {
-    id: string,
     question: FormQuestion,
+    allQuestions: FormQuestion[],
     onDelete: () => void,
-    onSelect: () => void;
-    isSelected: boolean;
+    onQuestionChange: (updatedQuestion: FormQuestion) => void;
+    users: User[];
+    profiles: Profile[];
 }) => {
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: question.id });
     const style = {
         transform: CSS.Transform.toString(transform),
-        transition
+        transition,
+        zIndex: isDragging ? 10 : 'auto',
     };
 
     return (
-        <div ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden transition-all", isSelected && "ring-2 ring-primary")}>
-            <div className="flex items-center p-2 pr-3">
-                 <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
-                    <GripVertical className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <div className="flex-1 cursor-pointer p-2 text-left" onClick={onSelect}>
-                    <p className="font-semibold">{question.label}</p>
-                    <p className="text-xs text-muted-foreground uppercase">{question.type}</p>
-                </div>
-                <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
-                    <Trash2 className="h-4 w-4"/>
-                </Button>
-            </div>
+        <div ref={setNodeRef} style={style} className="bg-card border rounded-lg overflow-hidden">
+            <Accordion type="single" collapsible>
+                <AccordionItem value={question.id} className="border-b-0">
+                    <div className="flex items-center p-2 pr-3">
+                        <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
+                            <GripVertical className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                        <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
+                             <div className="flex-1">
+                                <p className="font-semibold">{question.label}</p>
+                                <p className="text-xs text-muted-foreground uppercase">{question.type}</p>
+                            </div>
+                        </AccordionTrigger>
+                        <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
+                            <Trash2 className="h-4 w-4"/>
+                        </Button>
+                    </div>
+                    <AccordionContent className="px-4 pb-4">
+                        <QuestionSettingsPanel
+                            key={question.id} // Re-mount when question changes
+                            question={question}
+                            allQuestions={allQuestions}
+                            onChange={onQuestionChange}
+                            users={users}
+                            profiles={profiles}
+                        />
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
         </div>
     );
 }
@@ -65,11 +88,11 @@ export default function FormBuilderPage() {
     const { id: templateId } = params;
 
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
-    const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
     const { users } = useAuth();
     const { profiles } = useProfiles();
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     
     useEffect(() => {
         if(loading) return;
@@ -145,7 +168,6 @@ export default function FormBuilderPage() {
         };
         const newQuestions = [...currentQuestions, newQuestion];
         handleTemplateChange({ questions: newQuestions });
-        setSelectedQuestionId(newQuestion.id);
     };
 
     const handleDeleteQuestion = (questionId: string) => {
@@ -160,10 +182,6 @@ export default function FormBuilderPage() {
 
         newQuestions = newQuestions.sort((a,b) => a.order - b.order).map((q, index) => ({...q, order: index}));
         handleTemplateChange({ questions: newQuestions });
-        
-        if (selectedQuestionId === questionId) {
-            setSelectedQuestionId(null);
-        }
     };
 
     const handleSave = async (publish: boolean) => {
@@ -175,7 +193,7 @@ export default function FormBuilderPage() {
             if ('id' in internalTemplate && internalTemplate.id) {
                 await updateTemplate({ ...internalTemplate, status } as FormTemplate);
             } else {
-                const newId = await addTemplate({ ...internalTemplate, status });
+                const newId = await addTemplate({ ...internalTemplate, status } as any);
                 if (newId) {
                     router.replace(`/dashboard/forms/${newId}`);
                 }
@@ -202,18 +220,12 @@ export default function FormBuilderPage() {
         }
     };
 
-    const selectedQuestion = useMemo(() => {
-        return internalTemplate?.questions?.find(q => q.id === selectedQuestionId) || null;
-    }, [internalTemplate, selectedQuestionId]);
 
     if (loading || !internalTemplate) {
         return (
              <div className="p-6 h-full">
                 <Skeleton className="h-10 w-48 mb-6" />
-                <div className="flex h-[calc(100vh-12rem)] gap-4">
-                    <Skeleton className="flex-1" />
-                    <Skeleton className="w-[350px]" />
-                </div>
+                <Skeleton className="h-[calc(100vh-12rem)] w-full" />
              </div>
         )
     }
@@ -231,6 +243,9 @@ export default function FormBuilderPage() {
                 </div>
                 <div className="flex items-center gap-2">
                      <h1 className="text-xl font-bold truncate">{internalTemplate.name}</h1>
+                     <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)}>
+                        <Settings className="h-5 w-5" />
+                     </Button>
                 </div>
                 <div className="flex gap-2">
                      <Button onClick={() => handleSave(false)} variant="secondary" disabled={isSaving}>
@@ -244,52 +259,41 @@ export default function FormBuilderPage() {
                 </div>
             </header>
             
-            <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[1fr_380px] gap-6 p-6">
-                {/* Left Panel: Form Canvas */}
-                <div className="bg-muted/40 p-6 rounded-lg">
-                    <ScrollArea className="h-full pr-4">
-                        <div className="max-w-3xl mx-auto space-y-6">
-                            <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
-                                    <div className="space-y-4">
-                                    {sortedQuestions.map(q => (
-                                        <SortableQuestionItem
-                                            key={q.id}
-                                            id={q.id}
-                                            question={q}
-                                            onDelete={() => handleDeleteQuestion(q.id)}
-                                            onSelect={() => setSelectedQuestionId(q.id)}
-                                            isSelected={selectedQuestionId === q.id}
-                                        />
-                                    ))}
-                                    </div>
-                                </SortableContext>
-                            </DndContext>
-                        </div>
-                    </ScrollArea>
-                </div>
-
-                {/* Right Panel: Tools and Settings */}
-                <div className="flex flex-col gap-4">
-                    {selectedQuestion ? (
-                        <QuestionSettingsPanel
-                            key={selectedQuestion.id} // Re-mount when question changes
-                            question={selectedQuestion}
-                            allQuestions={internalTemplate.questions || []}
-                            onChange={handleQuestionChange}
-                            users={users}
-                            profiles={profiles}
-                            onClose={() => setSelectedQuestionId(null)}
-                        />
-                    ) : (
-                        <FormBuilderSidebar
-                            template={internalTemplate}
-                            onTemplateChange={handleTemplateChange}
-                            onAddQuestion={handleAddQuestion}
-                        />
-                    )}
+            <main className="flex-1 min-h-0 bg-muted/40 p-6">
+                <div className="max-w-3xl mx-auto space-y-6">
+                    <FormBuilderSidebar onAddQuestion={handleAddQuestion} />
+                    <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
+                            <div className="space-y-4">
+                            {sortedQuestions.map(q => (
+                                <SortableQuestionItem
+                                    key={q.id}
+                                    question={q}
+                                    allQuestions={internalTemplate?.questions || []}
+                                    onDelete={() => handleDeleteQuestion(q.id)}
+                                    onQuestionChange={handleQuestionChange}
+                                    users={users}
+                                    profiles={profiles}
+                                />
+                            ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
                 </div>
             </main>
+             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Configurações Gerais do Formulário</DialogTitle>
+                    </DialogHeader>
+                    <FormGeneralSettings template={internalTemplate} onTemplateChange={handleTemplateChange} />
+                    <DialogFooter>
+                        <Button onClick={() => setIsSettingsOpen(false)}>Concluir</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
+
+    
