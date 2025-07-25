@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import Link from 'next/link';
@@ -27,7 +26,7 @@ export default function AuditHubPage() {
                         <CardDescription>Inicie ou continue uma auditoria de contagem de lotes de estoque em um quiosque.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end">
-                        <Link href="/dashboard/audit" className="w-full">
+                        <Link href="/dashboard/stock/audit/stock-audit" className="w-full">
                             <Button className="w-full">
                                 Acessar auditoria <ArrowRight className="ml-2" />
                             </Button>
