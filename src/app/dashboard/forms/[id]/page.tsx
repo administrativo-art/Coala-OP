@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
-import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter, type DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
@@ -82,6 +82,16 @@ const SortableQuestionItem = ({
         </div>
     );
 }
+
+const DroppableQuestionArea = ({ children, id }: { children: React.ReactNode, id: string }) => {
+    const { setNodeRef } = useDroppable({ id });
+    return (
+        <div ref={setNodeRef} className="space-y-4">
+            {children}
+        </div>
+    );
+};
+
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -180,18 +190,27 @@ export default function FormBuilderPage() {
         }
     };
 
-    const handleAddQuestion = (type: FormQuestion['type'] = 'text') => {
+    const handleAddQuestion = (type: FormQuestion['type'] = 'text', index?: number) => {
         if (!internalTemplate) return;
-        const currentQuestions = internalTemplate.questions || [];
+        
+        let newQuestions = [...(internalTemplate.questions || [])];
+        
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: "Nova Pergunta",
             type: type,
             isRequired: false,
-            order: currentQuestions.length
+            order: 0 // Will be set in re-indexing
         };
-        const newQuestions = [...currentQuestions, newQuestion];
-        handleTemplateChange({ questions: newQuestions });
+
+        if(index !== undefined) {
+            newQuestions.splice(index, 0, newQuestion);
+        } else {
+            newQuestions.push(newQuestion);
+        }
+        
+        const reorderedQuestions = newQuestions.map((q, i) => ({ ...q, order: i }));
+        handleTemplateChange({ questions: reorderedQuestions });
     };
 
     const handleDeleteQuestion = (questionId: string) => {
@@ -222,19 +241,34 @@ export default function FormBuilderPage() {
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
-        if (over && active.id !== over.id) {
-            setInternalTemplate(prev => {
-                if (!prev || !prev.questions) return prev;
-                const oldIndex = prev.questions.findIndex(q => q.id === active.id);
-                const newIndex = prev.questions.findIndex(q => q.id === over.id);
-                if (oldIndex === -1 || newIndex === -1) return prev;
-                
-                const reorderedQuestions = arrayMove(prev.questions, oldIndex, newIndex);
-                const finalQuestions = reorderedQuestions.map((q, index) => ({...q, order: index}));
-                return {...prev, questions: finalQuestions };
-            });
+        if (!over || !internalTemplate) return;
+        
+        const isNewQuestion = String(active.id).startsWith('new-question-');
+        const questions = internalTemplate.questions || [];
+
+        if (isNewQuestion) {
+            const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
+            const overId = over.id === 'question-drop-area' ? null : over.id;
+            
+            let newIndex = questions.length;
+            if (overId) {
+                const overIndex = questions.findIndex(q => q.id === overId);
+                newIndex = overIndex !== -1 ? overIndex : questions.length;
+            }
+            handleAddQuestion(questionType, newIndex);
+        } else {
+            // Reordering existing question
+            const oldIndex = questions.findIndex(q => q.id === active.id);
+            const newIndex = questions.findIndex(q => q.id === over.id);
+
+            if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                 const reorderedQuestions = arrayMove(questions, oldIndex, newIndex);
+                 const finalQuestions = reorderedQuestions.map((q, index) => ({...q, order: index}));
+                 handleTemplateChange({ questions: finalQuestions });
+            }
         }
     };
+
 
     const handlePreviewSubmit = async () => {
         toast({
@@ -255,51 +289,51 @@ export default function FormBuilderPage() {
     }
 
     return (
-        <div className="w-full h-full flex flex-col">
-             <header className="flex items-center justify-between p-4 border-b bg-card">
-                <div>
-                    <Button variant="outline" asChild>
-                        <Link href="/dashboard/forms">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Voltar
-                        </Link>
-                    </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                     <h1 className="text-xl font-bold truncate">{internalTemplate.name}</h1>
-                     <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)}>
-                        <Settings className="h-5 w-5" />
-                     </Button>
-                </div>
-                <div className="flex gap-2">
-                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        {isSaving ? (
-                            <>
-                                <Save className="h-4 w-4 animate-spin" /> Salvando...
-                            </>
-                        ) : (
-                           <span>
-                                {('id' in internalTemplate && internalTemplate.status === 'published')
-                                    ? 'Publicado'
-                                    : 'Salvo como rascunho'
-                                }
-                            </span>
-                        )}
-                     </div>
-                    <Button variant="outline" size="icon" onClick={() => setIsPreviewOpen(true)}>
-                        <Eye className="h-5 w-5" />
-                        <span className="sr-only">Preview</span>
-                    </Button>
-                    <Button onClick={handlePublish} disabled={isSaving || !('id' in internalTemplate)}>
-                        <FileUp className="mr-2 h-4 w-4" />
-                        {isSaving ? 'Publicando...' : 'Publicar'}
-                    </Button>
-                </div>
-            </header>
-            
-            <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-1 md:grid-cols-[1fr_350px] gap-6">
-                <div className="space-y-4">
-                    <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <div className="w-full h-full flex flex-col">
+                <header className="flex items-center justify-between p-4 border-b bg-card">
+                    <div>
+                        <Button variant="outline" asChild>
+                            <Link href="/dashboard/forms">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Voltar
+                            </Link>
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-xl font-bold truncate">{internalTemplate.name}</h1>
+                        <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)}>
+                            <Settings className="h-5 w-5" />
+                        </Button>
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            {isSaving ? (
+                                <>
+                                    <Save className="h-4 w-4 animate-spin" /> Salvando...
+                                </>
+                            ) : (
+                            <span>
+                                    {('id' in internalTemplate && internalTemplate.status === 'published')
+                                        ? 'Publicado'
+                                        : 'Salvo como rascunho'
+                                    }
+                                </span>
+                            )}
+                        </div>
+                        <Button variant="outline" size="icon" onClick={() => setIsPreviewOpen(true)}>
+                            <Eye className="h-5 w-5" />
+                            <span className="sr-only">Preview</span>
+                        </Button>
+                        <Button onClick={handlePublish} disabled={isSaving || !('id' in internalTemplate)}>
+                            <FileUp className="mr-2 h-4 w-4" />
+                            {isSaving ? 'Publicando...' : 'Publicar'}
+                        </Button>
+                    </div>
+                </header>
+                
+                <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-1 md:grid-cols-[1fr_350px] gap-6">
+                    <DroppableQuestionArea id="question-drop-area">
                         <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
                             <div className="space-y-4">
                             {sortedQuestions.map(q => (
@@ -315,33 +349,33 @@ export default function FormBuilderPage() {
                             ))}
                             </div>
                         </SortableContext>
-                    </DndContext>
-                </div>
-                 <aside className="h-full">
-                    <FormBuilderSidebar onAddQuestion={handleAddQuestion} />
-                </aside>
-            </main>
-             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Configurações Gerais do Formulário</DialogTitle>
-                    </DialogHeader>
-                    <FormGeneralSettings template={internalTemplate} onTemplateChange={handleTemplateChange} />
-                    <DialogFooter>
-                        <Button onClick={() => setIsSettingsOpen(false)}>Concluir</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </DroppableQuestionArea>
+                    <aside className="h-full">
+                        <FormBuilderSidebar />
+                    </aside>
+                </main>
+                <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Configurações Gerais do Formulário</DialogTitle>
+                        </DialogHeader>
+                        <FormGeneralSettings template={internalTemplate} onTemplateChange={handleTemplateChange} />
+                        <DialogFooter>
+                            <Button onClick={() => setIsSettingsOpen(false)}>Concluir</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
-            {isPreviewOpen && (
-                <FillFormModal
-                    open={isPreviewOpen}
-                    onOpenChange={setIsPreviewOpen}
-                    template={internalTemplate as FormTemplate}
-                    addSubmission={handlePreviewSubmit as any}
-                />
-            )}
-        </div>
+                {isPreviewOpen && (
+                    <FillFormModal
+                        open={isPreviewOpen}
+                        onOpenChange={setIsPreviewOpen}
+                        template={internalTemplate as FormTemplate}
+                        addSubmission={handlePreviewSubmit as any}
+                    />
+                )}
+            </div>
+        </DndContext>
     );
 }
 
