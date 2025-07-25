@@ -21,7 +21,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FormGeneralSettings } from '@/components/form-general-settings';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 
 const SortableQuestionItem = ({
@@ -315,11 +315,16 @@ export default function FormBuilderPage() {
                         template={internalTemplate}
                         onTemplateChange={handleTemplateChange}
                     />
+                    <DialogFooter>
+                        <Button onClick={() => setIsSettingsOpen(false)}>Concluir</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
         </div>
     );
 }
+
+    
 
     
