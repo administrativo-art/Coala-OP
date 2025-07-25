@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type FormTemplate, type FormQuestion } from '@/types';
-import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft } from 'lucide-react';
+import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -24,6 +24,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
+import { FillFormModal } from '@/components/fill-form-modal';
 
 
 const SortableQuestionItem = ({
@@ -96,6 +97,7 @@ export default function FormBuilderPage() {
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     
     useEffect(() => {
         if(loading) return;
@@ -234,6 +236,14 @@ export default function FormBuilderPage() {
         }
     };
 
+    const handlePreviewSubmit = async () => {
+        toast({
+            title: "Envio de teste",
+            description: "Este é um preview e a resposta não será salva.",
+        });
+        setIsPreviewOpen(false);
+    };
+
 
     if (loading || !internalTemplate) {
         return (
@@ -276,6 +286,10 @@ export default function FormBuilderPage() {
                             </span>
                         )}
                      </div>
+                    <Button variant="outline" size="icon" onClick={() => setIsPreviewOpen(true)}>
+                        <Eye className="h-5 w-5" />
+                        <span className="sr-only">Preview</span>
+                    </Button>
                     <Button onClick={handlePublish} disabled={isSaving || !('id' in internalTemplate)}>
                         <FileUp className="mr-2 h-4 w-4" />
                         {isSaving ? 'Publicando...' : 'Publicar'}
@@ -318,8 +332,19 @@ export default function FormBuilderPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {isPreviewOpen && (
+                <FillFormModal
+                    open={isPreviewOpen}
+                    onOpenChange={setIsPreviewOpen}
+                    template={internalTemplate as FormTemplate}
+                    addSubmission={handlePreviewSubmit as any}
+                />
+            )}
         </div>
     );
 }
+
+    
 
     
