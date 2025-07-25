@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
-import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
@@ -85,6 +85,12 @@ const SortableQuestionItem = ({
         </div>
     );
 }
+
+const DroppableQuestionArea = ({ children, id }: { children: React.ReactNode, id: string }) => {
+    const { setNodeRef } = useDroppable({ id });
+    return <div ref={setNodeRef}>{children}</div>;
+};
+
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -262,31 +268,38 @@ export default function FormBuilderPage() {
     const handleDragEnd = (event: DragEndEvent) => {
         setActiveId(null);
         setOverId(null);
-        
+    
         const { active, over } = event;
         if (!over || !internalTemplate) return;
-        
+    
         const isNewQuestion = String(active.id).startsWith('new-question-');
-        const questions = [...(internalTemplate.questions || [])].sort((a,b) => a.order - b.order);
-
+        const questions = [...(internalTemplate.questions || [])].sort((a, b) => a.order - b.order);
+    
+        const getDropIndex = (overId: string): number => {
+            if (overId.startsWith('placeholder-')) {
+                return parseInt(overId.replace('placeholder-', ''), 10);
+            }
+            if (overId === 'droppable-end-area') {
+                return questions.length;
+            }
+            const overIndex = questions.findIndex(q => q.id === overId);
+            return overIndex;
+        };
+    
+        let newIndex = getDropIndex(over.id.toString());
+    
         if (isNewQuestion) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-            const overIndex = questions.findIndex(q => q.id === over.id);
-            const newIndex = overIndex !== -1 ? overIndex : questions.length;
             handleAddQuestion(questionType, newIndex);
         } else {
             const oldIndex = questions.findIndex(q => q.id === active.id);
-            let newIndex = questions.findIndex(q => q.id === over.id);
-
-            if (over.id.toString().startsWith('placeholder-')) {
-                newIndex = parseInt(over.id.toString().replace('placeholder-', ''), 10);
-                if (oldIndex < newIndex) newIndex--;
+            if (newIndex > oldIndex) {
+                 newIndex--;
             }
-
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-                 const reorderedQuestions = arrayMove(questions, oldIndex, newIndex);
-                 const finalQuestions = reorderedQuestions.map((q, index) => ({...q, order: index}));
-                 handleTemplateChange({ questions: finalQuestions });
+                const reorderedQuestions = arrayMove(questions, oldIndex, newIndex);
+                const finalQuestions = reorderedQuestions.map((q, index) => ({ ...q, order: index }));
+                handleTemplateChange({ questions: finalQuestions });
             }
         }
     };
@@ -390,11 +403,17 @@ export default function FormBuilderPage() {
                                 </React.Fragment>
                             ))}
                         </SortableContext>
-                        {overId && !sortedQuestions.some(q => q.id === overId) && <Placeholder index={sortedQuestions.length} />}
+                        <DroppableQuestionArea id="droppable-end-area">
+                          {overId === 'droppable-end-area' && <Placeholder index={sortedQuestions.length} />}
+                        </DroppableQuestionArea>
+
                          {sortedQuestions.length === 0 && (
-                            <div className="text-center py-16 border-2 border-dashed rounded-lg text-muted-foreground">
-                                <p>Arraste um campo da barra de ferramentas para começar.</p>
-                            </div>
+                            <DroppableQuestionArea id="droppable-empty-area">
+                                <div className="text-center py-16 border-2 border-dashed rounded-lg text-muted-foreground">
+                                    <p>Arraste um campo da barra de ferramentas para começar.</p>
+                                    {overId === 'droppable-empty-area' && <div className="mt-2"><Placeholder index={0} /></div>}
+                                </div>
+                            </DroppableQuestionArea>
                          )}
                     </div>
 
@@ -432,3 +451,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
