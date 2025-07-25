@@ -37,8 +37,8 @@ const SortableQuestionItem = ({
     allQuestions: FormQuestion[],
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    users: User[];
-    profiles: Profile[];
+    users: any[];
+    profiles: any[];
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: question.id });
     const style = {
@@ -259,9 +259,8 @@ export default function FormBuilderPage() {
                 </div>
             </header>
             
-            <main className="flex-1 min-h-0 bg-muted/40 p-6">
-                <div className="max-w-3xl mx-auto space-y-6">
-                    <FormBuilderSidebar onAddQuestion={handleAddQuestion} />
+            <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-1 md:grid-cols-[1fr_350px] gap-6">
+                <div className="space-y-4">
                     <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
                             <div className="space-y-4">
@@ -280,6 +279,9 @@ export default function FormBuilderPage() {
                         </SortableContext>
                     </DndContext>
                 </div>
+                 <aside className="h-full">
+                    <FormBuilderSidebar onAddQuestion={handleAddQuestion} />
+                </aside>
             </main>
              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                 <DialogContent className="max-w-2xl">
@@ -295,5 +297,3 @@ export default function FormBuilderPage() {
         </div>
     );
 }
-
-    

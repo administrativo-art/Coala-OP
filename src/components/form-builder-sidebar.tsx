@@ -21,8 +21,8 @@ interface FormBuilderSidebarProps {
 
 export function FormBuilderSidebar({ onAddQuestion }: FormBuilderSidebarProps) {
   return (
-    <div className="p-4 border rounded-lg bg-card">
-        <h3 className="font-semibold mb-4">Adicionar Pergunta</h3>
+    <div className="p-4 border rounded-lg bg-card sticky top-6">
+        <h3 className="font-semibold mb-4 text-center">Adicionar Pergunta</h3>
         <div className="grid grid-cols-2 gap-2">
             {questionTypes.map(({ type, label, icon: Icon }) => (
                 <Button
@@ -39,5 +39,3 @@ export function FormBuilderSidebar({ onAddQuestion }: FormBuilderSidebarProps) {
     </div>
   );
 }
-
-    
