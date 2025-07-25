@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
 import { FillFormModal } from '@/components/fill-form-modal';
 import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
+import { FormQuestionNav } from '@/components/form-question-nav';
 
 
 const SortableQuestionItem = ({
@@ -52,7 +53,7 @@ const SortableQuestionItem = ({
     };
 
     return (
-        <div ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50')}>
+        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50')}>
             <Accordion type="single" collapsible>
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
@@ -105,6 +106,10 @@ export default function FormBuilderPage() {
     const [activeId, setActiveId] = useState<string | null>(null);
     const [overId, setOverId] = useState<string | null>(null);
     const sensors = useSensors(useSensor(PointerSensor));
+    
+    // Navigation state
+    const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+    const mainContentRef = useRef<HTMLDivElement>(null);
 
     const activeQuestion = useMemo(() => {
         if (!activeId || !String(activeId).startsWith('question-')) return null;
@@ -162,6 +167,14 @@ export default function FormBuilderPage() {
         if (!internalTemplate?.questions) return [];
         return [...internalTemplate.questions].sort((a,b) => a.order - b.order);
     }, [internalTemplate]);
+    
+    const scrollToQuestion = (questionId: string) => {
+        setSelectedQuestionId(questionId);
+        const element = document.getElementById(`question-card-${questionId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
 
     const handleTemplateChange = (updates: Partial<FormTemplate>) => {
         if (!internalTemplate) return;
@@ -213,6 +226,9 @@ export default function FormBuilderPage() {
         
         const reorderedQuestions = newQuestions.map((q, i) => ({ ...q, order: i }));
         handleTemplateChange({ questions: reorderedQuestions });
+        
+        // Timeout to allow DOM to update before scrolling
+        setTimeout(() => scrollToQuestion(newQuestion.id), 100);
     };
 
     const handleDeleteQuestion = (questionId: string) => {
@@ -262,10 +278,9 @@ export default function FormBuilderPage() {
             const oldIndex = questions.findIndex(q => q.id === active.id);
             let newIndex = questions.findIndex(q => q.id === over.id);
 
-            // Handle dropping over a placeholder
             if (over.id.toString().startsWith('placeholder-')) {
                 newIndex = parseInt(over.id.toString().replace('placeholder-', ''), 10);
-                if (oldIndex < newIndex) newIndex--; // Adjust index if moving down
+                if (oldIndex < newIndex) newIndex--;
             }
 
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
@@ -350,8 +365,15 @@ export default function FormBuilderPage() {
                     </div>
                 </header>
                 
-                <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-1 md:grid-cols-[1fr_350px] gap-6">
-                    <div className="space-y-4">
+                <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-[280px_1fr_350px] gap-6">
+                    <FormQuestionNav
+                        questions={sortedQuestions}
+                        selectedQuestionId={selectedQuestionId}
+                        onQuestionSelect={scrollToQuestion}
+                        onReorder={(reordered) => handleTemplateChange({ questions: reordered })}
+                    />
+
+                    <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
                         <SortableContext items={sortedQuestions.map(q => q.id)}>
                             {sortedQuestions.map((q, index) => (
                                 <React.Fragment key={q.id}>
@@ -369,6 +391,11 @@ export default function FormBuilderPage() {
                             ))}
                         </SortableContext>
                         {overId && !sortedQuestions.some(q => q.id === overId) && <Placeholder index={sortedQuestions.length} />}
+                         {sortedQuestions.length === 0 && (
+                            <div className="text-center py-16 border-2 border-dashed rounded-lg text-muted-foreground">
+                                <p>Arraste um campo da barra de ferramentas para começar.</p>
+                            </div>
+                         )}
                     </div>
 
                     <aside className="h-full">
