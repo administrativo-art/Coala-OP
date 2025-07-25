@@ -23,6 +23,7 @@ import { FormBuilderSidebar } from '@/components/form-builder-sidebar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { FormGeneralSettings } from '@/components/form-general-settings';
+import { useDebounce } from 'use-debounce';
 
 
 const SortableQuestionItem = ({
@@ -88,6 +89,8 @@ export default function FormBuilderPage() {
     const { id: templateId } = params;
 
     const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
+    const [debouncedTemplate] = useDebounce(internalTemplate, 1500);
+
     const { users } = useAuth();
     const { profiles } = useProfiles();
     const [isSaving, setIsSaving] = useState(false);
@@ -116,6 +119,25 @@ export default function FormBuilderPage() {
             }
         }
     }, [templateId, templates, loading]);
+
+    useEffect(() => {
+        const autoSave = async () => {
+            if (!debouncedTemplate || !('questions' in debouncedTemplate)) return;
+
+            setIsSaving(true);
+            if ('id' in debouncedTemplate) {
+                await updateTemplate({ ...debouncedTemplate, status: debouncedTemplate.status || 'draft' });
+            } else {
+                const newId = await addTemplate({ ...debouncedTemplate, status: 'draft' });
+                if (newId) {
+                    router.replace(`/dashboard/forms/${newId}`, { scroll: false });
+                }
+            }
+            setIsSaving(false);
+        };
+
+        autoSave();
+    }, [debouncedTemplate, addTemplate, updateTemplate, router]);
     
     const sortedQuestions = useMemo(() => {
         if (!internalTemplate?.questions) return [];
@@ -184,25 +206,17 @@ export default function FormBuilderPage() {
         handleTemplateChange({ questions: newQuestions });
     };
 
-    const handleSave = async (publish: boolean) => {
-        if (!internalTemplate) return;
+    const handlePublish = async () => {
+        if (!internalTemplate || !('id' in internalTemplate)) return;
         setIsSaving(true);
-        const status = publish ? 'published' : 'draft';
-
         try {
-            if ('id' in internalTemplate && internalTemplate.id) {
-                await updateTemplate({ ...internalTemplate, status } as FormTemplate);
-            } else {
-                const newId = await addTemplate({ ...internalTemplate, status } as any);
-                if (newId) {
-                    router.replace(`/dashboard/forms/${newId}`);
-                }
-            }
-            toast({ title: publish ? 'Formulário publicado!' : 'Rascunho salvo!' });
+            await updateTemplate({ ...internalTemplate, status: 'published' } as FormTemplate);
+            toast({ title: 'Formulário publicado!' });
         } finally {
             setIsSaving(false);
         }
     };
+
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -248,11 +262,21 @@ export default function FormBuilderPage() {
                      </Button>
                 </div>
                 <div className="flex gap-2">
-                     <Button onClick={() => handleSave(false)} variant="secondary" disabled={isSaving}>
-                        <Save className="mr-2 h-4 w-4"/>
-                        {isSaving ? 'Salvando...' : 'Salvar Rascunho'}
-                    </Button>
-                    <Button onClick={() => handleSave(true)} disabled={isSaving}>
+                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        {isSaving ? (
+                            <>
+                                <Save className="h-4 w-4 animate-spin" /> Salvando...
+                            </>
+                        ) : (
+                           <span>
+                                {('id' in internalTemplate && internalTemplate.status === 'published')
+                                    ? 'Publicado'
+                                    : 'Salvo como rascunho'
+                                }
+                            </span>
+                        )}
+                     </div>
+                    <Button onClick={handlePublish} disabled={isSaving || !('id' in internalTemplate)}>
                         <FileUp className="mr-2 h-4 w-4" />
                         {isSaving ? 'Publicando...' : 'Publicar'}
                     </Button>
