@@ -14,8 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
-import { DndContext, closestCenter, type DragEndEvent, useDroppable } from '@dnd-kit/core';
-import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
 import { FillFormModal } from '@/components/fill-form-modal';
+import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
 
 
 const SortableQuestionItem = ({
@@ -34,6 +35,7 @@ const SortableQuestionItem = ({
     onQuestionChange,
     users,
     profiles,
+    isDragging,
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
@@ -41,16 +43,16 @@ const SortableQuestionItem = ({
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
     users: any[];
     profiles: any[];
+    isDragging?: boolean;
 }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: question.id });
+    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        zIndex: isDragging ? 10 : 'auto',
     };
 
     return (
-        <div ref={setNodeRef} style={style} className="bg-card border rounded-lg overflow-hidden">
+        <div ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50')}>
             <Accordion type="single" collapsible>
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
@@ -69,7 +71,7 @@ const SortableQuestionItem = ({
                     </div>
                     <AccordionContent className="px-4 pb-4">
                         <QuestionSettingsPanel
-                            key={question.id} // Re-mount when question changes
+                            key={question.id}
                             question={question}
                             allQuestions={allQuestions}
                             onChange={onQuestionChange}
@@ -82,16 +84,6 @@ const SortableQuestionItem = ({
         </div>
     );
 }
-
-const DroppableQuestionArea = ({ children, id }: { children: React.ReactNode, id: string }) => {
-    const { setNodeRef } = useDroppable({ id });
-    return (
-        <div ref={setNodeRef} className="space-y-4">
-            {children}
-        </div>
-    );
-};
-
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -108,6 +100,21 @@ export default function FormBuilderPage() {
     const { toast } = useToast();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+    // DND state
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [overId, setOverId] = useState<string | null>(null);
+    const sensors = useSensors(useSensor(PointerSensor));
+
+    const activeQuestion = useMemo(() => {
+        if (!activeId || !String(activeId).startsWith('question-')) return null;
+        return internalTemplate?.questions?.find(q => q.id === activeId);
+    }, [activeId, internalTemplate?.questions]);
+
+    const activeType = useMemo(() => {
+        if (!activeId || !String(activeId).startsWith('new-question-')) return null;
+        return String(activeId).replace('new-question-', '') as FormQuestion['type'];
+    }, [activeId]);
     
     useEffect(() => {
         if(loading) return;
@@ -190,24 +197,19 @@ export default function FormBuilderPage() {
         }
     };
 
-    const handleAddQuestion = (type: FormQuestion['type'] = 'text', index?: number) => {
+    const handleAddQuestion = (type: FormQuestion['type'], index: number) => {
         if (!internalTemplate) return;
-        
-        let newQuestions = [...(internalTemplate.questions || [])];
         
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: "Nova Pergunta",
             type: type,
             isRequired: false,
-            order: 0 // Will be set in re-indexing
+            order: index
         };
 
-        if(index !== undefined) {
-            newQuestions.splice(index, 0, newQuestion);
-        } else {
-            newQuestions.push(newQuestion);
-        }
+        let newQuestions = [...(internalTemplate.questions || [])];
+        newQuestions.splice(index, 0, newQuestion);
         
         const reorderedQuestions = newQuestions.map((q, i) => ({ ...q, order: i }));
         handleTemplateChange({ questions: reorderedQuestions });
@@ -238,28 +240,33 @@ export default function FormBuilderPage() {
         }
     };
 
-
+    const handleDragStart = (event: DragStartEvent) => setActiveId(String(event.active.id));
+    const handleDragOver = (event: DragOverEvent) => setOverId(event.over ? String(event.over.id) : null);
+    
     const handleDragEnd = (event: DragEndEvent) => {
+        setActiveId(null);
+        setOverId(null);
+        
         const { active, over } = event;
         if (!over || !internalTemplate) return;
         
         const isNewQuestion = String(active.id).startsWith('new-question-');
-        const questions = internalTemplate.questions || [];
+        const questions = [...(internalTemplate.questions || [])].sort((a,b) => a.order - b.order);
 
         if (isNewQuestion) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-            const overId = over.id === 'question-drop-area' ? null : over.id;
-            
-            let newIndex = questions.length;
-            if (overId) {
-                const overIndex = questions.findIndex(q => q.id === overId);
-                newIndex = overIndex !== -1 ? overIndex : questions.length;
-            }
+            const overIndex = questions.findIndex(q => q.id === over.id);
+            const newIndex = overIndex !== -1 ? overIndex : questions.length;
             handleAddQuestion(questionType, newIndex);
         } else {
-            // Reordering existing question
             const oldIndex = questions.findIndex(q => q.id === active.id);
-            const newIndex = questions.findIndex(q => q.id === over.id);
+            let newIndex = questions.findIndex(q => q.id === over.id);
+
+            // Handle dropping over a placeholder
+            if (over.id.toString().startsWith('placeholder-')) {
+                newIndex = parseInt(over.id.toString().replace('placeholder-', ''), 10);
+                if (oldIndex < newIndex) newIndex--; // Adjust index if moving down
+            }
 
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
                  const reorderedQuestions = arrayMove(questions, oldIndex, newIndex);
@@ -287,9 +294,20 @@ export default function FormBuilderPage() {
              </div>
         )
     }
+    
+    const renderPlaceholder = () => {
+        if (!activeId || !overId) return null;
+        if (activeId === overId) return null;
+
+        const overIndex = sortedQuestions.findIndex(q => q.id === overId);
+        if (overIndex === -1) return null;
+
+        return <Placeholder index={overIndex} />;
+    };
+
 
     return (
-       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
             <div className="w-full h-full flex flex-col">
                 <header className="flex items-center justify-between p-4 border-b bg-card">
                     <div>
@@ -333,27 +351,36 @@ export default function FormBuilderPage() {
                 </header>
                 
                 <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-1 md:grid-cols-[1fr_350px] gap-6">
-                    <DroppableQuestionArea id="question-drop-area">
-                        <SortableContext items={sortedQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
-                            <div className="space-y-4">
-                            {sortedQuestions.map(q => (
-                                <SortableQuestionItem
-                                    key={q.id}
-                                    question={q}
-                                    allQuestions={internalTemplate?.questions || []}
-                                    onDelete={() => handleDeleteQuestion(q.id)}
-                                    onQuestionChange={handleQuestionChange}
-                                    users={users}
-                                    profiles={profiles}
-                                />
+                    <div className="space-y-4">
+                        <SortableContext items={sortedQuestions.map(q => q.id)}>
+                            {sortedQuestions.map((q, index) => (
+                                <React.Fragment key={q.id}>
+                                    {renderPlaceholder()}
+                                    <SortableQuestionItem
+                                        question={q}
+                                        allQuestions={internalTemplate?.questions || []}
+                                        onDelete={() => handleDeleteQuestion(q.id)}
+                                        onQuestionChange={handleQuestionChange}
+                                        users={users}
+                                        profiles={profiles}
+                                        isDragging={activeId === q.id}
+                                    />
+                                </React.Fragment>
                             ))}
-                            </div>
                         </SortableContext>
-                    </DroppableQuestionArea>
+                        {overId && !sortedQuestions.some(q => q.id === overId) && <Placeholder index={sortedQuestions.length} />}
+                    </div>
+
                     <aside className="h-full">
                         <FormBuilderSidebar />
                     </aside>
                 </main>
+
+                 <DragOverlay>
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} />}
+                    {activeType && <DraggableQuestionType type={activeType} isOverlay />}
+                </DragOverlay>
+
                 <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
@@ -378,5 +405,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-    

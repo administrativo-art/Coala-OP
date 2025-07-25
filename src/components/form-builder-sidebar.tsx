@@ -3,47 +3,18 @@
 
 import React, { useState } from 'react';
 import { type FormQuestion } from '@/types';
-import { Button } from './ui/button';
+import { DraggableQuestionType } from './form-builder-dnd';
 import { Input } from './ui/input';
-import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
-import { cn } from '@/lib/utils';
-import { Search, Type, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon } from 'lucide-react';
+import { Search } from 'lucide-react';
 
-const questionTypes: { type: FormQuestion['type'], label: string, icon: React.ElementType }[] = [
-    { type: 'text', label: 'Texto', icon: Text },
-    { type: 'number', label: 'Número', icon: Hash },
-    { type: 'yes-no', label: 'Sim/Não', icon: ToggleRight },
-    { type: 'single-choice', label: 'Escolha Única', icon: List },
-    { type: 'multiple-choice', label: 'Múltipla Escolha', icon: CheckSquare },
-    { type: 'file-attachment', label: 'Anexo', icon: FileIcon },
+const questionTypes: { type: FormQuestion['type'], label: string }[] = [
+    { type: 'text', label: 'Texto' },
+    { type: 'number', label: 'Número' },
+    { type: 'yes-no', label: 'Sim/Não' },
+    { type: 'single-choice', label: 'Escolha Única' },
+    { type: 'multiple-choice', label: 'Múltipla Escolha' },
+    { type: 'file-attachment', label: 'Anexo' },
 ];
-
-const DraggableQuestionType = ({ type, label, icon: Icon }: { type: FormQuestion['type'], label: string, icon: React.ElementType }) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-      id: `new-question-${type}`,
-      data: { type },
-    });
-  
-    const style = {
-      transform: CSS.Translate.toString(transform),
-      zIndex: isDragging ? 100 : 'auto',
-      opacity: isDragging ? 0.5 : 1,
-    };
-  
-    return (
-        <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-            <Button
-                variant="outline"
-                className="w-full justify-start h-12 cursor-grab"
-            >
-                <Icon className="mr-3 h-5 w-5 text-muted-foreground" />
-                {label}
-            </Button>
-      </div>
-    );
-  };
-  
 
 export function FormBuilderSidebar() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,11 +36,10 @@ export function FormBuilderSidebar() {
             />
         </div>
         <div className="grid grid-cols-1 gap-2">
-            {filteredQuestionTypes.map(({ type, label, icon: Icon }) => (
-                <DraggableQuestionType key={type} type={type} label={label} icon={Icon} />
+            {filteredQuestionTypes.map(({ type, label }) => (
+                <DraggableQuestionType key={type} type={type} label={label} />
             ))}
         </div>
     </div>
   );
 }
-
