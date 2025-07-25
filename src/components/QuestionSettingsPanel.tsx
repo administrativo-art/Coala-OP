@@ -44,6 +44,7 @@ const formQuestionSchema = z.object({
       value: z.string().min(1, "O valor da opção não pode ser vazio."),
       ramification: ramificationSchema.optional(),
   })).optional(),
+  ramifications: z.array(ramificationSchema).optional(), // This can be removed soon
 }).superRefine((data, ctx) => {
     if (data.options) {
         data.options.forEach((option, index) => {
@@ -232,6 +233,4 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     </Form>
   );
 }
-    
-
     

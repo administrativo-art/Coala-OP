@@ -376,7 +376,7 @@ export type FormQuestionCondition = {
 
 export type FormQuestionRamification = {
     id: string;
-    conditions: FormQuestionCondition[];
+    conditions?: FormQuestionCondition[]; // Optional for simplicity now
     action: 'show_question' | 'create_task';
     targetQuestionId?: string; // for 'show_question'
     taskAction?: FormTaskAction; // for 'create_task'
@@ -389,7 +389,7 @@ export type FormQuestion = {
     type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment';
     isRequired: boolean;
     order: number;
-    options?: { id: string; value: string; }[];
+    options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
     attachmentConfig?: {
         allowMultiple: boolean;
         allowedFileTypes: ('image' | 'pdf' | 'video')[];
