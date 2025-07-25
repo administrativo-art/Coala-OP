@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Undo2 } from 'lucide-react';
 import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
-import { SidebarProvider } from '@/hooks/use-sidebar-state';
 
 function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
     return (
@@ -87,26 +86,24 @@ export default function DashboardLayout({
   }
 
   return (
-    <SidebarProvider>
-        <div className={cn("grid min-h-screen w-full", isCollapsed ? "md:grid-cols-[80px_1fr]" : "md:grid-cols-[280px_1fr]")}>
-          <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-          <div className="flex flex-col min-w-0">
-            <Header tasks={legacyTasks} />
-            {originalUser && (
-              <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
-                <span>Você está navegando como <strong>{user?.username}</strong>.</span>
-                <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
-                  <Undo2 className="mr-1 h-4 w-4"/>
-                  Voltar para sua conta
-                </Button>
-              </div>
-            )}
-            <main className="p-4 lg:p-6 bg-background">
-              {children}
-            </main>
+    <div className={cn("grid min-h-screen w-full", isCollapsed ? "md:grid-cols-[80px_1fr]" : "md:grid-cols-[280px_1fr]")}>
+      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <div className="flex flex-col min-w-0">
+        <Header tasks={legacyTasks} />
+        {originalUser && (
+          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
+            <span>Você está navegando como <strong>{user?.username}</strong>.</span>
+            <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
+              <Undo2 className="mr-1 h-4 w-4"/>
+              Voltar para sua conta
+            </Button>
           </div>
-          {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
-        </div>
-    </SidebarProvider>
+        )}
+        <main className="p-4 lg:p-6 bg-background">
+          {children}
+        </main>
+      </div>
+      {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
+    </div>
   )
 }

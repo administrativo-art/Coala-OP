@@ -13,7 +13,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "./ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
-import { useSidebar } from '@/hooks/use-sidebar-state';
 import { Input } from './ui/input';
 import { ThemeToggle } from './theme-toggle';
 
@@ -38,7 +37,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const router = useRouter();
   const { permissions, loading, user } = useAuth()
   const { legacyTasks } = useAllTasks();
-  const { lastVisited, setLastVisited, prefetch, clearPrefetch } = useSidebar();
   const navRef = useRef<HTMLElement>(null);
   const [isScrolling, setIsScrolling] = React.useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -158,11 +156,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const renderLink = (item: Pick<NavItem, 'href'|'label'|'icon'>, isSubItem = false) => (
      <Link
         href={item.href}
-        onClick={() => setLastVisited(item.href)}
-        onMouseEnter={() => prefetch(item.href)}
-        onMouseLeave={clearPrefetch}
-        data-active={pathname.startsWith(item.href)}
-        data-last-visited={lastVisited === item.href}
         className={cn(
             "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative",
             isCollapsed ? "justify-center" : "justify-start",

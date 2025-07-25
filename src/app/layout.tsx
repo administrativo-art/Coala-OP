@@ -28,7 +28,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
 import { TaskProvider } from '@/components/task-provider';
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
-import { SidebarProvider } from '@/hooks/use-sidebar-state';
 import { StockAuditProvider } from '@/components/stock-audit-provider';
 
 export const metadata: Metadata = {
