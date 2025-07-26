@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -90,7 +91,6 @@ const SortableQuestionItem = ({
                 isOver && 'shadow-lg',
                 isHighlighted && 'animate-pulse-once'
             )}
-            // By changing the key, we force React to re-mount the component, thus re-triggering the CSS animation
             key={`${question.id}-${isHighlighted}`}
         >
             <Accordion type="single" collapsible>
@@ -235,24 +235,20 @@ export default function FormBuilderPage() {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
     
-        // Initialize an entry for every section to ensure they all appear
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
 
-        // Use a single loop to place questions
         internalTemplate.questions.forEach(q => {
-            // Ensure every question has a valid sectionId, defaulting to the first section
             const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
                 ? q.sectionId
                 : sortedSections[0]?.id;
 
-            if (sectionId) {
+            if (sectionId && result[sectionId]) {
                 result[sectionId].push({ ...q, sectionId });
             }
         });
     
-        // Sort questions within each section by their order property
         Object.keys(result).forEach(sectionId => {
             result[sectionId].sort((a, b) => a.order - b.order);
         });
@@ -267,7 +263,7 @@ export default function FormBuilderPage() {
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        setTimeout(() => setHighlightedQuestionId(null), 1500); // Animation duration matches CSS
+        setTimeout(() => setHighlightedQuestionId(null), 1500);
     };
 
     const handleTemplateChange = (updates: Partial<FormTemplate>) => {
@@ -355,8 +351,16 @@ export default function FormBuilderPage() {
             sectionId: sectionId
         };
         
-        const newQuestions = [...(internalTemplate.questions || [])];
-        newQuestions.splice(atIndex, 0, newQuestion);
+        let newQuestions = [...(internalTemplate.questions || [])];
+        
+        // Correctly handle insertion
+        const questionsInSection = questionsBySection[sectionId] || [];
+        if (atIndex < questionsInSection.length) {
+            const globalIndex = newQuestions.findIndex(q => q.id === questionsInSection[atIndex].id);
+            newQuestions.splice(globalIndex, 0, newQuestion);
+        } else {
+            newQuestions.push(newQuestion);
+        }
 
         handleTemplateChange({ questions: newQuestions });
         
@@ -411,6 +415,8 @@ export default function FormBuilderPage() {
             let targetSectionId: string;
             let targetIndex: number;
     
+            const questions = internalTemplate.questions || [];
+            
             if (over.data?.current?.type === 'section') {
                 targetSectionId = String(over.id);
                 targetIndex = questionsBySection[targetSectionId]?.length || 0;
@@ -423,43 +429,28 @@ export default function FormBuilderPage() {
                  targetIndex = 0;
             }
             
-            if (targetSectionId) {
+            if (targetSectionId !== undefined && targetIndex !== undefined) {
                 handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
-        } else if (active.id !== over.id) { // Reordering existing question
+        } else if (active.id !== over.id) {
             const questions = internalTemplate.questions || [];
-            
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            const overIsSection = over.data?.current?.type === 'section';
-    
-            let newIndex: number;
-            let targetSectionId: string;
-    
-            if (overIsSection) {
-                targetSectionId = String(over.id);
-                // Temporarily place at the end of all questions, the useEffect will fix it
-                newIndex = questions.length - 1; 
-            } else {
-                const overQuestion = over.data.current?.question;
-                if (!overQuestion) {
-                    setActiveId(null);
-                    setOverId(null);
-                    return;
-                }
-                newIndex = questions.findIndex((q) => q.id === over.id);
-                targetSectionId = overQuestion.sectionId;
-            }
-    
-            if (oldIndex !== -1 && newIndex !== -1) {
-                let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                
-                // Update sectionId for the moved question
-                const movedQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
-                if (movedQuestionIndex !== -1) {
-                     movedQuestions[movedQuestionIndex].sectionId = targetSectionId;
-                }
-                
+            
+            if (over.data?.current?.type === 'section') { // Dropped on a section
+                const targetSectionId = String(over.id);
+                const movedQuestions = questions.map(q => q.id === active.id ? { ...q, sectionId: targetSectionId } : q);
                 handleTemplateChange({ questions: movedQuestions });
+            } else if (over.data?.current?.type === 'question') { // Dropped on a question
+                const overQuestion = over.data.current.question;
+                const newIndex = questions.findIndex((q) => q.id === over.id);
+                if (oldIndex !== -1 && newIndex !== -1) {
+                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
+                    const movedQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
+                    if (movedQuestionIndex !== -1) {
+                        movedQuestions[movedQuestionIndex].sectionId = overQuestion.sectionId;
+                    }
+                    handleTemplateChange({ questions: movedQuestions });
+                }
             }
         }
     
@@ -467,33 +458,44 @@ export default function FormBuilderPage() {
         setOverId(null);
     };
 
-    // This effect ensures question order is always correct after any change
     useEffect(() => {
         if (!internalTemplate || !internalTemplate.sections || !internalTemplate.questions) return;
-
-        const reorderedBySection: Record<string, FormQuestion[]> = {};
-        sortedSections.forEach(s => reorderedBySection[s.id] = []);
-
-        internalTemplate.questions.forEach(q => {
-            const sectionId = q.sectionId || sortedSections[0].id;
-            if (reorderedBySection[sectionId]) {
-                reorderedBySection[sectionId].push(q);
-            }
-        });
-
+    
         const finalQuestions: FormQuestion[] = [];
+    
         sortedSections.forEach(section => {
-            reorderedBySection[section.id].forEach((q, index) => {
-                finalQuestions.push({ ...q, order: index, sectionId: section.id });
-            });
+            const sectionQuestions = (internalTemplate.questions || [])
+                .filter(q => q.sectionId === section.id)
+                .sort((a, b) => a.order - b.order)
+                .map((q, index) => ({ ...q, order: index })); // Re-order within section
+            
+            finalQuestions.push(...sectionQuestions);
         });
-
-        const hasChanges = JSON.stringify(finalQuestions) !== JSON.stringify(internalTemplate.questions);
-        if (hasChanges) {
-             setInternalTemplate(prev => ({ ...prev!, questions: finalQuestions }));
+    
+        // Ensure all questions are accounted for, assigning orphans to the first section
+        const accountedForIds = new Set(finalQuestions.map(q => q.id));
+        const orphanQuestions = (internalTemplate.questions || [])
+            .filter(q => !accountedForIds.has(q.id))
+            .map(q => ({ ...q, sectionId: sortedSections[0].id }));
+            
+        finalQuestions.push(...orphanQuestions);
+    
+        // Final re-sorting and re-ordering pass
+        const reorderedFinal: FormQuestion[] = [];
+        sortedSections.forEach(section => {
+            const sectionQuestions = finalQuestions
+                .filter(q => q.sectionId === section.id)
+                .sort((a,b) => a.order - b.order) // This might be redundant but safe
+                .map((q, index) => ({ ...q, order: index }));
+            
+            reorderedFinal.push(...sectionQuestions);
+        });
+    
+        if (JSON.stringify(reorderedFinal) !== JSON.stringify(internalTemplate.questions)) {
+            setInternalTemplate(prev => ({ ...prev!, questions: reorderedFinal }));
         }
-
-    }, [internalTemplate?.questions, internalTemplate?.sections]);
+    
+    }, [internalTemplate?.questions, sortedSections]);
 
 
     const handlePreviewSubmit = async () => {
@@ -655,3 +657,5 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
+    
