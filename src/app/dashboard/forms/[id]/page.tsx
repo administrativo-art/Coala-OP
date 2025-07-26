@@ -371,20 +371,7 @@ export default function FormBuilderPage() {
             return { ...q, ramifications: cleanedRamifications };
         });
 
-        const reorderedBySection: Record<string, FormQuestion[]> = {};
-        newQuestions.forEach(q => {
-            if (!q.sectionId || !reorderedBySection[q.sectionId]) reorderedBySection[q.sectionId!] = [];
-            reorderedBySection[q.sectionId!].push(q);
-        });
-
-        const finalQuestions: FormQuestion[] = [];
-        Object.values(reorderedBySection).forEach(sectionQuestions => {
-            sectionQuestions.sort((a,b) => a.order - b.order).forEach((q, index) => {
-                finalQuestions.push({ ...q, order: index });
-            });
-        });
-
-        handleTemplateChange({ questions: finalQuestions });
+        handleTemplateChange({ questions: newQuestions });
     };
 
     const handlePublish = async () => {
@@ -424,44 +411,58 @@ export default function FormBuilderPage() {
                 handleAddQuestion(questionType, String(targetSectionId));
             }
         } else { // Reordering existing question
-            if (active.id !== over.id) {
-                 const questions = internalTemplate.questions;
-                 const oldIndex = questions.findIndex((q) => q.id === active.id);
-                 const newIndex = questions.findIndex((q) => q.id === over.id);
-                 
-                 if (oldIndex !== -1 && newIndex !== -1) {
-                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                    
-                    const overIsSection = over.data?.current?.type === 'section';
-                    const targetSectionId = overIsSection ? over.id : over.data?.current?.question?.sectionId;
+            const questions = internalTemplate.questions || [];
+            const oldIndex = questions.findIndex((q) => q.id === active.id);
+            const newIndex = questions.findIndex((q) => q.id === over.id);
 
-                    if (targetSectionId) {
-                        movedQuestions[newIndex].sectionId = String(targetSectionId);
+            if (oldIndex !== -1 && newIndex !== -1 && active.id !== over.id) {
+                const movedQuestions = arrayMove(questions, oldIndex, newIndex);
+                
+                const overIsSection = over.data?.current?.type === 'section';
+                const targetSectionId = overIsSection ? String(over.id) : over.data?.current?.question?.sectionId;
+
+                if (targetSectionId) {
+                    const activeQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
+                    if (activeQuestionIndex !== -1) {
+                         movedQuestions[activeQuestionIndex].sectionId = targetSectionId;
                     }
-                    
-                    const reorderedBySection: Record<string, FormQuestion[]> = {};
-                    sortedSections.forEach(s => reorderedBySection[s.id] = []);
-                    
-                    movedQuestions.forEach(q => {
-                        const sectionId = q.sectionId || sortedSections[0].id;
-                        reorderedBySection[sectionId].push(q);
-                    });
-                    
-                    const finalQuestions: FormQuestion[] = [];
-                    sortedSections.forEach(section => {
-                        reorderedBySection[section.id].forEach((q, index) => {
-                             finalQuestions.push({ ...q, order: index, sectionId: section.id });
-                        });
-                    });
-                    
-                    handleTemplateChange({ questions: finalQuestions });
-                 }
+                }
+                
+                handleTemplateChange({ questions: movedQuestions });
             }
         }
         
         setActiveId(null);
         setOverId(null);
     };
+
+    // This effect ensures question order is always correct after any change
+    useEffect(() => {
+        if (!internalTemplate || !internalTemplate.sections || !internalTemplate.questions) return;
+
+        const reorderedBySection: Record<string, FormQuestion[]> = {};
+        sortedSections.forEach(s => reorderedBySection[s.id] = []);
+
+        internalTemplate.questions.forEach(q => {
+            const sectionId = q.sectionId || sortedSections[0].id;
+            if (reorderedBySection[sectionId]) {
+                reorderedBySection[sectionId].push(q);
+            }
+        });
+
+        const finalQuestions: FormQuestion[] = [];
+        sortedSections.forEach(section => {
+            reorderedBySection[section.id].forEach((q, index) => {
+                finalQuestions.push({ ...q, order: index, sectionId: section.id });
+            });
+        });
+
+        const hasChanges = JSON.stringify(finalQuestions) !== JSON.stringify(internalTemplate.questions);
+        if (hasChanges) {
+             setInternalTemplate(prev => ({ ...prev!, questions: finalQuestions }));
+        }
+
+    }, [internalTemplate?.questions, internalTemplate?.sections]);
 
 
     const handlePreviewSubmit = async () => {
@@ -583,8 +584,7 @@ export default function FormBuilderPage() {
                                         </AccordionContent>
                                     </AccordionItem>
                                 </Accordion>
-                            )
-                        })}
+                            )})}
                         <Button variant="outline" onClick={handleAddSection} className="w-full">
                             <PlusCircle className="mr-2" /> Adicionar Seção
                         </Button>
