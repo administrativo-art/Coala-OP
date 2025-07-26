@@ -275,6 +275,49 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
     );
 }
 
+function ThankYouScreen({ thanksMessage, showResetButton, onReset }: {
+  thanksMessage?: string;
+  showResetButton?: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-10 h-[60vh]">
+      <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-full mb-4">
+        <CheckIcon className="h-10 w-10 text-green-600 dark:text-green-400" />
+      </div>
+      <h2 className="text-2xl font-semibold mb-2">Formulário enviado</h2>
+      <p className="text-muted-foreground whitespace-pre-wrap mb-6 max-w-md">
+        {thanksMessage || "Obrigado! Suas respostas foram recebidas com sucesso."}
+      </p>
+
+      {showResetButton && (
+        <Button variant="outline" onClick={onReset}>
+          Preencher novamente
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function CheckIcon(props: React.ComponentProps<'svg'>) {
+    return (
+      <svg
+        {...props}
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    )
+}
+
 
 function QuestionRenderer({ questions, control }: { questions: FormQuestion[]; control: Control<any> }) {
   if (!questions || questions.length === 0) return null;
@@ -319,6 +362,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const { user } = useAuth();
     const { kiosks } = useKiosks();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSubmitted, setIsSubmitted] = useState(false);
     
     const visibleQuestions = useMemo(() => {
         return getAllQuestions(template.questions);
@@ -367,11 +411,17 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         defaultValues,
         mode: 'onChange',
     });
+    
+    const handleResetAndFillAgain = () => {
+        form.reset(defaultValues);
+        setIsSubmitted(false);
+    };
 
     useEffect(() => {
         if (open) {
             form.reset(defaultValues);
             setIsSubmitting(false);
+            setIsSubmitted(false);
         }
     }, [open, form, defaultValues]);
     
@@ -412,31 +462,46 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         };
 
         await addSubmission(submission, template);
-        onOpenChange(false);
+        setIsSubmitting(false);
+        setIsSubmitted(true);
+        
+        if (!template.showResetButton) {
+            setTimeout(() => onOpenChange(false), 3000); // Close modal after 3 seconds if no reset button
+        }
     };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>{template.name}</DialogTitle>
-        </DialogHeader>
+        {isSubmitted ? (
+             <ThankYouScreen 
+                thanksMessage={template.thanksMessage}
+                showResetButton={template.showResetButton}
+                onReset={handleResetAndFillAgain}
+             />
+        ) : (
+            <>
+                <DialogHeader>
+                <DialogTitle>{template.name}</DialogTitle>
+                </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <ScrollArea className="h-[60vh] p-4 -mx-4 pr-6">
-              <QuestionRenderer questions={visibleQuestions} control={form.control} />
-            </ScrollArea>
-            <DialogFooter className="pt-6 border-t flex justify-between w-full">
-              <div className="flex-grow flex justify-end">
-                <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
-                    {isSubmitting ? 'Enviando...' : 'Enviar formulário'}
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </Form>
+                <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)}>
+                    <ScrollArea className="h-[60vh] p-4 -mx-4 pr-6">
+                    <QuestionRenderer questions={visibleQuestions} control={form.control} />
+                    </ScrollArea>
+                    <DialogFooter className="pt-6 border-t flex justify-between w-full">
+                    <div className="flex-grow flex justify-end">
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
+                            {isSubmitting ? 'Enviando...' : 'Enviar formulário'}
+                        </Button>
+                    </div>
+                    </DialogFooter>
+                </form>
+                </Form>
+            </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -14,12 +14,17 @@ import { Button } from './ui/button';
 import { Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
+import { Textarea } from './ui/textarea';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 
 const settingsSchema = z.object({
   name: z.string().min(1, "O nome do formulário é obrigatório."),
   type: z.enum(['standard', 'operational_checklist']),
   moment: z.enum(['PRE_ABERTURA', 'ABERTURA', 'TROCA_FECHAMENTO', 'TROCA_ABERTURA', 'FECHAMENTO_FINAL']).nullable(),
   submissionTitleFormat: z.string().optional(),
+  thanksMessage: z.string().optional(),
+  showResetButton: z.boolean().optional(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -38,6 +43,8 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
       type: template.type,
       moment: template.moment,
       submissionTitleFormat: template.submissionTitleFormat || '',
+      thanksMessage: template.thanksMessage || '',
+      showResetButton: template.showResetButton || false,
     },
   });
   
@@ -48,6 +55,8 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
             type: template.type,
             moment: template.moment,
             submissionTitleFormat: template.submissionTitleFormat || '',
+            thanksMessage: template.thanksMessage || '',
+            showResetButton: template.showResetButton || false,
         });
     }, [template, form]);
 
@@ -68,7 +77,7 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
 
   return (
     <Form {...form}>
-        <form className="space-y-4 pt-4">
+        <form className="space-y-6 pt-4">
             <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem><FormLabel>Nome do Formulário</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
             )}/>
@@ -146,6 +155,25 @@ export function FormGeneralSettings({ template, onTemplateChange }: FormGeneralS
                     </FormItem>
                 )}/>
             )}
+             <div className="space-y-4 border-t pt-6">
+                <h3 className="text-lg font-semibold">Após o envio</h3>
+                <FormField control={form.control} name="thanksMessage" render={({ field }) => (
+                    <FormItem>
+                        <Label htmlFor="thanksMessage">Mensagem de agradecimento</Label>
+                        <Textarea
+                        id="thanksMessage"
+                        {...field}
+                        placeholder="Obrigado! Suas respostas foram enviadas com sucesso."
+                        />
+                    </FormItem>
+                )}/>
+                <FormField control={form.control} name="showResetButton" render={({ field }) => (
+                    <FormItem className="flex items-center space-x-2">
+                        <Checkbox id="showResetButton" checked={field.value} onCheckedChange={field.onChange} />
+                        <Label htmlFor="showResetButton">Mostrar botão “Preencher novamente”</Label>
+                    </FormItem>
+                )}/>
+            </div>
         </form>
     </Form>
   );

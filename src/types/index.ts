@@ -432,6 +432,8 @@ export type FormTemplate = {
     type: 'standard' | 'operational_checklist';
     moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null;
     status: 'draft' | 'published';
+    thanksMessage?: string;
+    showResetButton?: boolean;
 };
 
 export type FormAnswer = {
