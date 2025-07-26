@@ -86,7 +86,7 @@ const SortableQuestionItem = ({
     );
 }
 
-const DroppableQuestionArea = ({ children, id, showPlaceholder, isOver }: { children: React.ReactNode, id: string, showPlaceholder?: boolean, isOver?: boolean }) => {
+const DroppableQuestionArea = ({ children, id, showPlaceholder, isOver }: { children?: React.ReactNode, id: string, showPlaceholder?: boolean, isOver?: boolean }) => {
     const { setNodeRef } = useDroppable({ id });
     
     return (
@@ -139,8 +139,8 @@ export default function FormBuilderPage() {
         if (templateId === 'new') {
              const initialTemplate = {
                   name: 'Novo Formulário',
-                  type: 'standard',
-                  layout: 'continuous',
+                  type: 'standard' as const,
+                  layout: 'continuous' as const,
                   moment: null,
                   submissionTitleFormat: '',
                   questions: [],
@@ -304,7 +304,7 @@ export default function FormBuilderPage() {
             const oldIndex = questions.findIndex(q => q.id === active.id);
             let newIndex: number;
     
-            if (over.id === 'droppable-end-area') {
+            if (over.id === 'droppable-end-area' || over.id === 'droppable-empty-area') {
                 newIndex = questions.length - 1;
             } else {
                 newIndex = questions.findIndex(q => q.id === over.id);
@@ -406,12 +406,14 @@ export default function FormBuilderPage() {
                             ))}
                         </SortableContext>
                         
-                        {sortedQuestions.length > 0 && (
-                            <DroppableQuestionArea id="droppable-end-area" showPlaceholder={isDroppingAtEnd} />
-                        )}
+                        <DroppableQuestionArea 
+                            id="droppable-end-area"
+                            isOver={isDroppingAtEnd}
+                            showPlaceholder={isDroppingAtEnd}
+                        />
                         
                          {sortedQuestions.length === 0 && (
-                            <DroppableQuestionArea id="droppable-empty-area" isOver={overId === 'droppable-empty-area'}>
+                            <DroppableQuestionArea id="droppable-empty-area" isOver={overId === 'droppable-empty-area'} showPlaceholder={overId === 'droppable-empty-area'}>
                                 <div className="text-center py-16 border-2 border-dashed rounded-lg text-muted-foreground">
                                     <p>Arraste um campo da barra de ferramentas para começar.</p>
                                 </div>
@@ -453,4 +455,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
