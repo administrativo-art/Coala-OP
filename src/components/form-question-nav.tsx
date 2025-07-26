@@ -20,7 +20,7 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   'file-attachment': FileIcon,
 };
 
-const SortableNavItem = ({ question, isSelected, onSelect }: { question: FormQuestion; isSelected: boolean; onSelect: (id: string) => void }) => {
+const SortableNavItem = ({ question, index, isSelected, onSelect }: { question: FormQuestion; index: number; isSelected: boolean; onSelect: (id: string) => void }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: question.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -41,6 +41,7 @@ const SortableNavItem = ({ question, isSelected, onSelect }: { question: FormQue
       <Button variant="ghost" size="icon" className="cursor-grab h-8 w-8" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </Button>
+      <span className="font-mono text-xs w-6 text-muted-foreground">{index + 1}.</span>
       <Icon className="h-4 w-4 mr-2 shrink-0" />
       <span className="text-sm font-medium truncate flex-1">{question.label || 'Nova Pergunta'}</span>
     </div>
@@ -62,10 +63,11 @@ export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelec
       <ScrollArea className="h-[calc(100vh-16rem)]">
         <div ref={setNodeRef} className="space-y-1 pr-2">
             <SortableContext items={questions.map(q => q.id)}>
-                {questions.map((q) => (
+                {questions.map((q, index) => (
                     <SortableNavItem
                         key={q.id}
                         question={q}
+                        index={index}
                         isSelected={selectedQuestionId === q.id}
                         onSelect={onQuestionSelect}
                     />

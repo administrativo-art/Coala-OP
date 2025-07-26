@@ -90,7 +90,7 @@ const DroppableQuestionArea = ({ children, id, isOver }: { children?: React.Reac
     const { setNodeRef } = useDroppable({ id });
     
     return (
-        <div ref={setNodeRef} className={cn("w-full transition-colors", isOver && "bg-primary/10 rounded-lg p-2")}>
+        <div ref={setNodeRef} className={cn("w-full transition-colors", isOver && "bg-primary/10 rounded-lg")}>
             {children}
         </div>
     );
@@ -302,8 +302,8 @@ export default function FormBuilderPage() {
             const oldIndex = questions.findIndex(q => q.id === active.id);
             let newIndex: number;
     
-            if (String(over.id).startsWith('droppable-area')) {
-                newIndex = questions.length - 1;
+            if (String(over.id).startsWith('droppable-area-end')) {
+                newIndex = questions.length -1;
             } else {
                 newIndex = questions.findIndex(q => q.id === over.id);
             }
@@ -404,9 +404,7 @@ export default function FormBuilderPage() {
                             id="droppable-area-end"
                             isOver={overId === 'droppable-area-end'}
                         >
-                           <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
-                                <p>Arraste um campo aqui para adicioná-lo ao final.</p>
-                            </div>
+                           <div className="text-center py-8 border-2 border-dashed rounded-lg"></div>
                         </DroppableQuestionArea>
                     </div>
 
