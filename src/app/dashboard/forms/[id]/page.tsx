@@ -28,6 +28,17 @@ import { FillFormModal } from '@/components/fill-form-modal';
 import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
 import { FormQuestionNav } from '@/components/form-question-nav';
 
+const questionTypeLabels: Record<FormQuestion['type'], string> = {
+    'text': 'Texto',
+    'number': 'Número',
+    'yes-no': 'Sim/Não',
+    'single-choice': 'Escolha Única',
+    'multiple-choice': 'Múltipla Escolha',
+    'file-attachment': 'Anexo de Arquivo',
+    'range': 'Intervalo',
+    'rating': 'Avaliação',
+};
+
 
 const SortableQuestionItem = ({
     question,
@@ -63,7 +74,7 @@ const SortableQuestionItem = ({
                         <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
                              <div className="flex-1">
                                 <p className="font-semibold">{question.label}</p>
-                                <p className="text-xs text-muted-foreground uppercase">{question.type}</p>
+                                <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
                             </div>
                         </AccordionTrigger>
                         <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
