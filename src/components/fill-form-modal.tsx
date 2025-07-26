@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useMemo, useEffect, useState, useRef } from 'react';
@@ -19,7 +20,7 @@ import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAns
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { uploadFile } from '@/lib/storage';
-import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIcon, Video as VideoIcon } from 'lucide-react';
+import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIcon, Video as VideoIcon, DollarSign, Percent } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoCaptureModal } from './photo-capture-modal';
 
@@ -130,7 +131,20 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                         case 'text':
                             return <FormItem><FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel><FormControl><Textarea {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>;
                         case 'number':
-                            return <FormItem><FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}/></FormControl><FormMessage /></FormItem>;
+                            const format = question.numberConfig?.format || 'default';
+                            return <FormItem><FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                                <div className="relative">
+                                    {format === 'currency' && <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />}
+                                    <FormControl><Input type="number"
+                                        min={question.numberConfig?.min}
+                                        max={question.numberConfig?.max}
+                                        step={question.numberConfig?.step || 'any'}
+                                        className={format === 'currency' ? 'pl-8' : format === 'percentage' ? 'pr-8' : ''}
+                                        {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                    /></FormControl>
+                                    {format === 'percentage' && <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />}
+                                </div>
+                                <FormMessage /></FormItem>;
                         case 'yes-no':
                         case 'single-choice':
                             return <FormItem className="space-y-3"><FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
@@ -339,7 +353,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{template.name}</DialogTitle>
         </DialogHeader>

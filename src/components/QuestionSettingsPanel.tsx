@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type FormQuestion, type User, type Profile } from '@/types';
 import { Button } from './ui/button';
-import { PlusCircle, Trash2, GitBranch, X } from 'lucide-react';
+import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Switch } from './ui/switch';
@@ -16,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { nanoid } from 'nanoid';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
+import { Separator } from './ui/separator';
 
 
 const ramificationSchema = z.object({
@@ -44,6 +46,12 @@ const formQuestionSchema = z.object({
       value: z.string().min(1, "O valor da opção não pode ser vazio."),
       ramification: ramificationSchema.optional(),
   })).optional(),
+  numberConfig: z.object({
+      format: z.enum(['default', 'currency', 'percentage']).optional(),
+      min: z.coerce.number().optional(),
+      max: z.coerce.number().optional(),
+      step: z.coerce.number().optional(),
+  }).optional(),
   ramifications: z.array(ramificationSchema).optional(), // This can be removed soon
 }).superRefine((data, ctx) => {
     if (data.options) {
@@ -77,6 +85,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     defaultValues: {
       ...question,
       options: question.options || [],
+      numberConfig: question.numberConfig || {},
     }
   });
 
@@ -84,6 +93,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     form.reset({
         ...question,
         options: question.options || [],
+        numberConfig: question.numberConfig || {},
     });
   }, [question, form]);
 
@@ -155,6 +165,38 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                     <FormItem className="flex flex-col"><FormLabel>Obrigatório</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} className="mt-2"/></FormControl></FormItem>
                 )}/>
             </div>
+
+            {questionType === 'number' && (
+                <div className="space-y-4 pt-4 border-t">
+                    <FormLabel>Configuração do número</FormLabel>
+                    <div className="p-3 border rounded-lg bg-muted/50 space-y-4">
+                        <FormField control={form.control} name="numberConfig.format" render={({ field }) => (
+                             <FormItem><FormLabel>Formato</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || 'default'}>
+                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="default">Padrão</SelectItem>
+                                    <SelectItem value="currency">Moeda (R$)</SelectItem>
+                                    <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                </SelectContent>
+                                </Select><FormMessage/>
+                            </FormItem>
+                        )}/>
+                        <div className="grid grid-cols-3 gap-2">
+                            <FormField control={form.control} name="numberConfig.min" render={({ field }) => (
+                                <FormItem><FormLabel>Mínimo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                            )}/>
+                            <FormField control={form.control} name="numberConfig.max" render={({ field }) => (
+                                <FormItem><FormLabel>Máximo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                            )}/>
+                             <FormField control={form.control} name="numberConfig.step" render={({ field }) => (
+                                <FormItem><FormLabel>Incremento</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                            )}/>
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
             {showOptions && (
                 <div className="space-y-4 pt-4 border-t">

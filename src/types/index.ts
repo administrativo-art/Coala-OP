@@ -395,6 +395,12 @@ export type FormQuestion = {
         allowedFileTypes: ('image' | 'pdf' | 'video')[];
         allowCamera: boolean;
     };
+    numberConfig?: {
+        format?: 'default' | 'currency' | 'percentage';
+        min?: number;
+        max?: number;
+        step?: number;
+    };
     ramifications?: FormQuestionRamification[];
     customColor?: string;
 };
