@@ -371,4 +371,3 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
-

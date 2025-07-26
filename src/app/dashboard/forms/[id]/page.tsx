@@ -370,7 +370,7 @@ export default function FormBuilderPage() {
         handleTemplateChange({ questions: finalQuestions });
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-    }, [internalTemplate, handleTemplateChange]);
+    }, [internalTemplate]);
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
