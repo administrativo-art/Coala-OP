@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -66,6 +65,8 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
   setIsCollapsed: (collapsed: boolean) => void;
   questionIcons: Record<FormQuestion['type'], React.ElementType>;
 }) {
+  
+  let globalQuestionIndex = 0;
 
   return (
     <div className="p-4 border rounded-lg bg-card sticky top-6 flex flex-col h-[calc(100vh-3rem)]">
@@ -78,27 +79,33 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
       <ScrollArea className="flex-1 -mx-4">
         <div className="space-y-1 px-4">
             <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
-                {sections.map(section => (
-                    <AccordionItem value={section.id} key={section.id} className="border-none">
-                        <AccordionTrigger className="p-2 text-base hover:no-underline hover:bg-muted rounded-lg [&[data-state=open]>svg]:text-primary">
-                            <span className="font-semibold truncate flex-1 text-left">{section.name}</span>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-1 pl-4 border-l-2 ml-2">
-                             {(questionsBySection[section.id] || []).map((q, index) => (
-                                <SortableNavItem 
-                                    key={q.id}
-                                    q={q}
-                                    index={index}
-                                    isCollapsed={isCollapsed}
-                                    selectedQuestionId={selectedQuestionId}
-                                    onQuestionSelect={onQuestionSelect}
-                                    questionIcons={questionIcons}
-                                />
-                             ))}
-                             {(questionsBySection[section.id] || []).length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma pergunta nesta seção</p>}
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
+                {sections.map(section => {
+                    const sectionQuestions = questionsBySection[section.id] || [];
+                    const sectionStartIndex = globalQuestionIndex;
+                    globalQuestionIndex += sectionQuestions.length;
+                    
+                    return (
+                        <AccordionItem value={section.id} key={section.id} className="border-none">
+                            <AccordionTrigger className="p-2 text-base hover:no-underline hover:bg-muted rounded-lg [&[data-state=open]>svg]:text-primary">
+                                <span className="font-semibold truncate flex-1 text-left">{section.name}</span>
+                            </AccordionTrigger>
+                            <AccordionContent className="pt-1 pl-4 border-l-2 ml-2">
+                                 {sectionQuestions.map((q, index) => (
+                                    <SortableNavItem 
+                                        key={q.id}
+                                        q={q}
+                                        index={sectionStartIndex + index}
+                                        isCollapsed={isCollapsed}
+                                        selectedQuestionId={selectedQuestionId}
+                                        onQuestionSelect={onQuestionSelect}
+                                        questionIcons={questionIcons}
+                                    />
+                                 ))}
+                                 {sectionQuestions.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma pergunta nesta seção</p>}
+                            </AccordionContent>
+                        </AccordionItem>
+                    )
+                })}
             </Accordion>
         </div>
       </ScrollArea>

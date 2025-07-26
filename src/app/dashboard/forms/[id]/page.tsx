@@ -81,14 +81,14 @@ const SortableQuestionItem = ({
     };
 
     return (
-        <div 
-            id={`question-card-${question.id}`} 
-            ref={setNodeRef} 
-            style={style} 
+        <div
+            id={`question-card-${question.id}`}
+            ref={setNodeRef}
+            style={style}
             className={cn(
-                "bg-card border rounded-lg overflow-hidden", 
-                isDragging && 'opacity-50', 
-                isOver && 'shadow-lg', 
+                "bg-card border rounded-lg overflow-hidden",
+                isDragging && 'opacity-50',
+                isOver && 'shadow-lg',
                 isHighlighted && 'animate-pulse-once'
             )}
             // By changing the key, we force React to re-mount the component, thus re-triggering the CSS animation
@@ -236,24 +236,23 @@ export default function FormBuilderPage() {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
 
-        // Initialize sections in the result map to preserve order
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
-
-        // Assign questions to their sections
+    
         internalTemplate.questions.forEach(q => {
-            const sectionId = q.sectionId;
-            if (sectionId && result.hasOwnProperty(sectionId)) {
-                result[sectionId].push(q);
-            } else if (sortedSections.length > 0) {
-                // Assign orphaned questions to the first section
-                const firstSectionId = sortedSections[0].id;
-                result[firstSectionId].push({ ...q, sectionId: firstSectionId });
+            let sectionId = q.sectionId;
+            if (!sectionId || !result.hasOwnProperty(sectionId)) {
+                sectionId = sortedSections[0]?.id;
+            }
+            if(sectionId) {
+                 if (!result[sectionId]) {
+                    result[sectionId] = [];
+                }
+                result[sectionId].push({ ...q, sectionId });
             }
         });
 
-        // Sort questions within each section
         Object.keys(result).forEach(sectionId => {
             result[sectionId].sort((a, b) => a.order - b.order);
         });
@@ -304,7 +303,6 @@ export default function FormBuilderPage() {
         const newSections = internalTemplate.sections.filter(s => s.id !== sectionId);
         const newQuestions = internalTemplate.questions.filter(q => q.sectionId !== sectionId);
         
-        // Move questions from the deleted section to the first available section
         if (questionsInSection.length > 0 && newSections.length > 0) {
             const targetSectionId = newSections[0].id;
             const movedQuestions = questionsInSection.map(q => ({ ...q, sectionId: targetSectionId }));
@@ -372,7 +370,6 @@ export default function FormBuilderPage() {
             return { ...q, ramifications: cleanedRamifications };
         });
 
-        // Re-order remaining questions
         const reorderedBySection: Record<string, FormQuestion[]> = {};
         newQuestions.forEach(q => {
             if (!q.sectionId || !reorderedBySection[q.sectionId]) reorderedBySection[q.sectionId!] = [];
@@ -486,6 +483,8 @@ export default function FormBuilderPage() {
              </div>
         )
     }
+    
+    let globalQuestionIndex = 0;
 
     return (
        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
@@ -543,47 +542,52 @@ export default function FormBuilderPage() {
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
-                        {sortedSections.map(section => (
-                            <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
-                                <AccordionItem value="item-1" className="bg-card rounded-lg border">
-                                    <div className="flex items-center pr-4">
-                                        <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
-                                            <div className="flex-1 flex items-center gap-2">
-                                                <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
-                                            </div>
-                                        </AccordionTrigger>
-                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                    <AccordionContent className="border-t">
-                                        <DroppableArea id={section.id} isOver={overId === section.id}>
-                                            <SortableContext items={(questionsBySection[section.id] || []).map(q => q.id)}>
-                                                {(questionsBySection[section.id] || []).map((q, index) => (
-                                                    <SortableQuestionItem
-                                                        key={q.id}
-                                                        index={index}
-                                                        question={q}
-                                                        allQuestions={internalTemplate?.questions || []}
-                                                        onDelete={() => handleDeleteQuestion(q.id)}
-                                                        onQuestionChange={handleQuestionChange}
-                                                        users={users}
-                                                        profiles={profiles}
-                                                        isDragging={activeId === q.id}
-                                                        isHighlighted={highlightedQuestionId === q.id}
-                                                    />
-                                                ))}
-                                            </SortableContext>
-                                             {(questionsBySection[section.id] || []).length === 0 && (
-                                                <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
-                                                    Arraste um campo aqui
+                        {sortedSections.map(section => {
+                             const sectionQuestions = questionsBySection[section.id] || [];
+                             const sectionStartIndex = globalQuestionIndex;
+                             globalQuestionIndex += sectionQuestions.length;
+                            return (
+                                <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
+                                    <AccordionItem value="item-1" className="bg-card rounded-lg border">
+                                        <div className="flex items-center pr-4">
+                                            <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
+                                                <div className="flex-1 flex items-center gap-2">
+                                                    <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
                                                 </div>
-                                             )}
-                                        </DroppableArea>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            </Accordion>
-                        ))}
+                                            </AccordionTrigger>
+                                            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                        <AccordionContent className="border-t">
+                                            <DroppableArea id={section.id} isOver={overId === section.id}>
+                                                <SortableContext items={sectionQuestions.map(q => q.id)}>
+                                                    {sectionQuestions.map((q, index) => (
+                                                        <SortableQuestionItem
+                                                            key={q.id}
+                                                            index={sectionStartIndex + index}
+                                                            question={q}
+                                                            allQuestions={internalTemplate?.questions || []}
+                                                            onDelete={() => handleDeleteQuestion(q.id)}
+                                                            onQuestionChange={handleQuestionChange}
+                                                            users={users}
+                                                            profiles={profiles}
+                                                            isDragging={activeId === q.id}
+                                                            isHighlighted={highlightedQuestionId === q.id}
+                                                        />
+                                                    ))}
+                                                </SortableContext>
+                                                 {sectionQuestions.length === 0 && (
+                                                    <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                                                        Arraste um campo aqui
+                                                    </div>
+                                                 )}
+                                            </DroppableArea>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
+                            )
+                        })}
                         <Button variant="outline" onClick={handleAddSection} className="w-full">
                             <PlusCircle className="mr-2" /> Adicionar Seção
                         </Button>
@@ -623,3 +627,5 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
+    
