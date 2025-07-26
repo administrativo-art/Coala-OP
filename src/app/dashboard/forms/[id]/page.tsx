@@ -441,10 +441,10 @@ export default function FormBuilderPage() {
         }
     
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
-        const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-        
+        const overData = over.data?.current;
+
         if (isNewQuestionDrag) {
-            const overData = over.data?.current;
+            const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
 
             if (overData?.type === 'sub-question-droppable') {
                  const { parentQuestionId, optionId } = overData.droppableData;
@@ -456,18 +456,17 @@ export default function FormBuilderPage() {
                 const { sectionId, atIndex } = overData.dropzoneData;
                 handleAddQuestion(questionType, sectionId, atIndex);
             }
-            
-        } else if (active.id !== over.id && over.data.current) {
+        } else if (active.id !== over.id) {
              const questions = internalTemplate.questions || [];
              const oldIndex = questions.findIndex(q => q.id === active.id);
              let newIndex: number;
              let newSectionId: string;
-             const overQuestionData = over.data.current.type === 'question' ? over.data.current.question : null;
+             const overQuestionData = over.data.current?.type === 'question' ? over.data.current?.question : null;
 
              if (overQuestionData) {
                 newIndex = questions.findIndex(q => q.id === over.id);
                 newSectionId = overQuestionData.sectionId!;
-             } else if (over.data.current.type === 'question-dropzone') {
+             } else if (over.data.current?.type === 'question-dropzone') {
                 newSectionId = over.data.current.dropzoneData.sectionId;
                 const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
                 const lastQuestionInTarget = questionsInSection[questionsInSection.length - 1];
@@ -656,3 +655,5 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
+    
