@@ -52,7 +52,7 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
          </>
       ) : (
         <>
-          <span className="text-base font-bold w-8">{index + 1}.</span>
+          <span className="text-lg font-bold w-8">{index + 1}.</span>
           <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
           <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>
         </>
