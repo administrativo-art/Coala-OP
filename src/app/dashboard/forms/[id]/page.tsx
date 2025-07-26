@@ -46,14 +46,14 @@ const SortableQuestionItem = ({
     profiles: any[];
     isDragging?: boolean;
 }) => {
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: question.id, data: { type: 'question', question } });
+    const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
     };
 
     return (
-        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50')}>
+        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50', isOver && 'shadow-lg')}>
             <Accordion type="single" collapsible>
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
@@ -86,13 +86,12 @@ const SortableQuestionItem = ({
     );
 }
 
-const DroppableQuestionArea = ({ children, id, showPlaceholder, isOver }: { children?: React.ReactNode, id: string, showPlaceholder?: boolean, isOver?: boolean }) => {
+const DroppableQuestionArea = ({ children, id, isOver }: { children?: React.ReactNode, id: string, isOver?: boolean }) => {
     const { setNodeRef } = useDroppable({ id });
     
     return (
-        <div ref={setNodeRef} className={cn("w-full", isOver && "bg-primary/10 rounded-lg")}>
+        <div ref={setNodeRef} className={cn("w-full transition-colors", isOver && "bg-primary/10 rounded-lg p-2")}>
             {children}
-            {showPlaceholder && <Placeholder index={-1} />}
         </div>
     );
 };
@@ -239,7 +238,6 @@ export default function FormBuilderPage() {
         const reorderedQuestions = newQuestions.map((q, i) => ({ ...q, order: i }));
         handleTemplateChange({ questions: reorderedQuestions });
         
-        // Timeout to allow DOM to update before scrolling
         setTimeout(() => scrollToQuestion(newQuestion.id), 100);
     };
 
@@ -281,7 +279,6 @@ export default function FormBuilderPage() {
         setOverId(null);
 
         if (!over || !internalTemplate) return;
-        if (active.id === over.id) return;
     
         const isNewQuestion = String(active.id).startsWith('new-question-');
         const questions = sortedQuestions;
@@ -290,8 +287,8 @@ export default function FormBuilderPage() {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
             let newIndex = questions.length;
     
-            if (over.id === 'droppable-empty-area' || over.id === 'droppable-end-area') {
-                newIndex = questions.length;
+            if (String(over.id).startsWith('droppable-area')) {
+                 newIndex = questions.length;
             } else {
                 const overIndex = questions.findIndex(q => q.id === over.id);
                 if (overIndex !== -1) {
@@ -300,11 +297,12 @@ export default function FormBuilderPage() {
             }
             handleAddQuestion(questionType, newIndex);
 
-        } else { // Reordering existing question
+        } else { 
+            if (active.id === over.id) return;
             const oldIndex = questions.findIndex(q => q.id === active.id);
             let newIndex: number;
     
-            if (over.id === 'droppable-end-area' || over.id === 'droppable-empty-area') {
+            if (String(over.id).startsWith('droppable-area')) {
                 newIndex = questions.length - 1;
             } else {
                 newIndex = questions.findIndex(q => q.id === over.id);
@@ -333,8 +331,6 @@ export default function FormBuilderPage() {
              </div>
         )
     }
-    
-    const isDroppingAtEnd = overId === 'droppable-end-area';
 
     return (
        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
@@ -390,35 +386,28 @@ export default function FormBuilderPage() {
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
                         <SortableContext items={sortedQuestions.map(q => q.id)}>
-                            {sortedQuestions.map((q, index) => (
-                                <React.Fragment key={q.id}>
-                                     {overId === q.id && <Placeholder index={index} />}
-                                    <SortableQuestionItem
-                                        question={q}
-                                        allQuestions={internalTemplate?.questions || []}
-                                        onDelete={() => handleDeleteQuestion(q.id)}
-                                        onQuestionChange={handleQuestionChange}
-                                        users={users}
-                                        profiles={profiles}
-                                        isDragging={activeId === q.id}
-                                    />
-                                </React.Fragment>
+                            {sortedQuestions.map((q) => (
+                                <SortableQuestionItem
+                                    key={q.id}
+                                    question={q}
+                                    allQuestions={internalTemplate?.questions || []}
+                                    onDelete={() => handleDeleteQuestion(q.id)}
+                                    onQuestionChange={handleQuestionChange}
+                                    users={users}
+                                    profiles={profiles}
+                                    isDragging={activeId === q.id}
+                                />
                             ))}
                         </SortableContext>
                         
                         <DroppableQuestionArea 
-                            id="droppable-end-area"
-                            isOver={isDroppingAtEnd}
-                            showPlaceholder={isDroppingAtEnd}
-                        />
-                        
-                         {sortedQuestions.length === 0 && (
-                            <DroppableQuestionArea id="droppable-empty-area" isOver={overId === 'droppable-empty-area'} showPlaceholder={overId === 'droppable-empty-area'}>
-                                <div className="text-center py-16 border-2 border-dashed rounded-lg text-muted-foreground">
-                                    <p>Arraste um campo da barra de ferramentas para começar.</p>
-                                </div>
-                            </DroppableQuestionArea>
-                         )}
+                            id="droppable-area-end"
+                            isOver={overId === 'droppable-area-end'}
+                        >
+                           <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                                <p>Arraste um campo aqui para adicioná-lo ao final.</p>
+                            </div>
+                        </DroppableQuestionArea>
                     </div>
 
                     <aside className="h-full">
