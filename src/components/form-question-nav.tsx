@@ -36,7 +36,7 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full",
+        "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full gap-2",
         isSelected ? "bg-primary/20 text-primary-foreground" : "hover:bg-muted"
       )}
       onClick={() => onSelect(question.id)}
@@ -44,8 +44,8 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       <Button variant="ghost" size="icon" className="cursor-grab h-8 w-8" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </Button>
-      {!isCollapsed && <span className="text-base w-8 font-bold">{index + 1}.</span>}
-      <Icon className={cn("h-5 w-5 shrink-0 text-primary", !isCollapsed && "mr-3")}/>
+      <span className="text-base font-bold w-8">{index + 1}.</span>
+      <Icon className={cn("h-5 w-5 shrink-0 text-primary", !isCollapsed && "mr-2")}/>
       {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>}
     </div>
   );
@@ -79,8 +79,8 @@ export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelec
             <p className="text-sm text-muted-foreground mb-4">Clique para navegar ou arraste para reordenar.</p>
         </>
       )}
-      <ScrollArea className="flex-1">
-        <div ref={setNodeRef} className="space-y-1 pr-2">
+      <ScrollArea className="flex-1 -mx-4">
+        <div ref={setNodeRef} className="space-y-1 px-4">
             <SortableContext items={questions.map(q => q.id)}>
                 {questions.map((q, index) => (
                     <SortableNavItem

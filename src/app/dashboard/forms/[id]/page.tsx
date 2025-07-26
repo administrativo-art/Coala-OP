@@ -389,7 +389,7 @@ export default function FormBuilderPage() {
                     </div>
                 </header>
                 
-                <main className={cn("flex-1 min-h-0 bg-muted/40 p-6 grid gap-6 transition-all", isSummaryCollapsed ? "grid-cols-[80px_1fr_350px]" : "grid-cols-[280px_1fr_350px]")}>
+                <main className={cn("flex-1 min-h-0 bg-muted/40 p-6 grid gap-6 transition-all", isSummaryCollapsed ? "grid-cols-[120px_1fr_350px]" : "grid-cols-[280px_1fr_350px]")}>
                     <FormQuestionNav
                         questions={sortedQuestions}
                         selectedQuestionId={selectedQuestionId}
