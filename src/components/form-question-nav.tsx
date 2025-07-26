@@ -38,7 +38,7 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       className={cn(
         "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full",
         isCollapsed ? "justify-center gap-0" : "gap-2",
-        isSelected ? "bg-primary/20 text-primary-foreground" : "hover:bg-muted"
+        isSelected ? "bg-primary/20" : "hover:bg-muted"
       )}
       onClick={() => onSelect(question.id)}
     >
@@ -47,12 +47,12 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       </Button>
        {isCollapsed ? (
          <>
-          <span className="text-sm font-bold w-6 text-center">{index + 1}.</span>
-          <Icon className="h-5 w-5 shrink-0 text-primary"/>
+          <span className="text-xs font-bold w-6 text-center">{index + 1}.</span>
+          <Icon className="h-4 w-4 shrink-0 text-primary"/>
          </>
       ) : (
         <>
-          <span className="text-lg font-bold w-8">{index + 1}.</span>
+          <span className="text-base font-bold w-8">{index + 1}.</span>
           <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
           <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>
         </>
@@ -82,7 +82,7 @@ export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelec
   const { setNodeRef } = useDroppable({ id: 'question-nav-drop-area' });
 
   return (
-    <div className="p-4 border rounded-lg bg-card sticky top-6 flex flex-col h-full">
+    <div className="p-4 border rounded-lg bg-card sticky top-6 flex flex-col h-[calc(100vh-3rem)]">
       {!isCollapsed && (
         <>
             <h3 className="text-lg font-semibold mb-2">Sumário</h3>
@@ -105,7 +105,7 @@ export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelec
             </SortableContext>
         </div>
       </ScrollArea>
-       <div className="mt-auto pt-4 border-t">
+       <div className="mt-auto pt-4 border-t shrink-0">
             <Button variant="ghost" size={isCollapsed ? "icon" : "default"} className="w-full" onClick={() => setIsCollapsed(!isCollapsed)}>
                 {isCollapsed ? <ChevronsRight /> : <ChevronsLeft className="mr-2" />}
                 {!isCollapsed && <span>Recolher</span>}
