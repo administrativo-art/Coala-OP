@@ -37,7 +37,7 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       style={style}
       className={cn(
         "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full",
-        isCollapsed ? "justify-center gap-1" : "gap-2",
+        isCollapsed ? "justify-center gap-0" : "gap-2",
         isSelected ? "bg-primary/20 text-primary-foreground" : "hover:bg-muted"
       )}
       onClick={() => onSelect(question.id)}
