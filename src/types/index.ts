@@ -377,8 +377,9 @@ export type FormQuestionCondition = {
 export type FormQuestionRamification = {
     id: string;
     conditions?: FormQuestionCondition[]; // Optional for simplicity now
-    action: 'show_question' | 'create_task';
+    action: 'show_question' | 'create_task' | 'show_section';
     targetQuestionId?: string; // for 'show_question'
+    targetSectionId?: string; // for 'show_section'
     taskAction?: FormTaskAction; // for 'create_task'
 };
 

@@ -56,6 +56,7 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
 const SortableQuestionItem = ({
     question,
     allQuestions,
+    allSections,
     onDelete,
     onQuestionChange,
     users,
@@ -66,6 +67,7 @@ const SortableQuestionItem = ({
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
+    allSections: FormSection[],
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
     users: any[];
@@ -131,6 +133,7 @@ const SortableQuestionItem = ({
                             key={question.id}
                             question={question}
                             allQuestions={allQuestions}
+                            allSections={allSections}
                             onChange={onQuestionChange}
                             users={users}
                             profiles={profiles}
@@ -585,6 +588,7 @@ export default function FormBuilderPage() {
                                                                 index={sectionStartIndex + index}
                                                                 question={q}
                                                                 allQuestions={internalTemplate?.questions || []}
+                                                                allSections={internalTemplate?.sections || []}
                                                                 onDelete={() => handleDeleteQuestion(q.id)}
                                                                 onQuestionChange={handleQuestionChange}
                                                                 users={users}
@@ -615,7 +619,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} index={0} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 

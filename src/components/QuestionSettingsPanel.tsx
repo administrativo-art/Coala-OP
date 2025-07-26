@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { type FormQuestion, type User, type Profile } from '@/types';
+import { type FormQuestion, type User, type Profile, type FormSection } from '@/types';
 import { Button } from './ui/button';
 import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -21,8 +21,9 @@ import { Separator } from './ui/separator';
 
 const ramificationSchema = z.object({
     id: z.string(),
-    action: z.enum(['show_question', 'create_task']).optional(),
+    action: z.enum(['show_question', 'create_task', 'show_section']).optional(),
     targetQuestionId: z.string().optional(),
+    targetSectionId: z.string().optional(),
     taskAction: z.object({
         title: z.string(),
         assigneeType: z.enum(['user', 'profile']),
@@ -69,6 +70,13 @@ const formQuestionSchema = z.object({
                     message: "Selecione uma pergunta ou crie uma nova.",
                 });
             }
+             if (option.ramification?.action === 'show_section' && !option.ramification.targetSectionId) {
+                ctx.addIssue({
+                    code: 'custom',
+                    path: [`options.${index}.ramification.targetSectionId`],
+                    message: "Selecione uma seção.",
+                });
+            }
         });
     }
 });
@@ -79,12 +87,13 @@ type FormQuestionValues = z.infer<typeof formQuestionSchema>;
 interface QuestionSettingsPanelProps {
   question: FormQuestion;
   allQuestions: FormQuestion[];
+  allSections: FormSection[];
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
 }
 
-export function QuestionSettingsPanel({ question, allQuestions, users, profiles, onChange }: QuestionSettingsPanelProps) {
+export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange }: QuestionSettingsPanelProps) {
   
   const form = useForm<FormQuestionValues>({
     resolver: zodResolver(formQuestionSchema),
@@ -270,6 +279,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                                 <SelectContent>
                                                     <SelectItem value="none">Nenhuma ação</SelectItem>
                                                     <SelectItem value="show_question">Mostrar outra pergunta</SelectItem>
+                                                    <SelectItem value="show_section">Pular para seção</SelectItem>
                                                     <SelectItem value="create_task">Criar uma tarefa</SelectItem>
                                                 </SelectContent>
                                             </Select>
@@ -287,6 +297,21 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                                         </SelectItem>
                                                         {allQuestions.filter(q => q.id !== question.id).map(q => (
                                                             <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select><FormMessage/>
+                                            </FormItem>
+                                        )}/>
+                                    )}
+
+                                     {ramification.action === 'show_section' && (
+                                        <FormField control={form.control} name={`options.${index}.ramification.targetSectionId`} render={({field: targetField}) => (
+                                            <FormItem>
+                                                <Select onValueChange={targetField.onChange} value={targetField.value}>
+                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a seção..."/></SelectTrigger></FormControl>
+                                                    <SelectContent>
+                                                        {allSections.map(s => (
+                                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select><FormMessage/>
