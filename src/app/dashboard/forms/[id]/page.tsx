@@ -278,13 +278,14 @@ export default function FormBuilderPage() {
     
     const handleAddSection = () => {
         if (!internalTemplate) return;
+        const currentSections = internalTemplate.sections || [];
         const newSection: FormSection = {
             id: `section-${nanoid()}`,
-            name: `Nova Seção`,
-            order: (internalTemplate.sections || []).length,
+            name: `Seção ${currentSections.length + 1}`,
+            order: currentSections.length,
             questions: []
         };
-        const newSections = [...(internalTemplate.sections || []), newSection];
+        const newSections = [...currentSections, newSection];
         handleTemplateChange({ sections: newSections });
     };
 
@@ -624,5 +625,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-    
