@@ -66,7 +66,19 @@ const SortableQuestionItem = ({
     };
 
     return (
-        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50', isOver && 'shadow-lg', isHighlighted && 'animate-pulse-once')}>
+        <div 
+            id={`question-card-${question.id}`} 
+            ref={setNodeRef} 
+            style={style} 
+            className={cn(
+                "bg-card border rounded-lg overflow-hidden", 
+                isDragging && 'opacity-50', 
+                isOver && 'shadow-lg', 
+                isHighlighted && 'animate-pulse-once'
+            )}
+            // By changing the key, we force React to re-mount the component, thus re-triggering the CSS animation
+            key={`${question.id}-${isHighlighted}`}
+        >
             <Accordion type="single" collapsible>
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
@@ -202,7 +214,7 @@ export default function FormBuilderPage() {
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        setTimeout(() => setHighlightedQuestionId(null), 1500); // Animation duration
+        setTimeout(() => setHighlightedQuestionId(null), 1500); // Animation duration matches CSS
     };
 
     const handleTemplateChange = (updates: Partial<FormTemplate>) => {
