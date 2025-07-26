@@ -13,13 +13,14 @@ import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
-const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons }: {
+const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons, allQuestions }: {
     q: FormQuestion;
     index: number;
     isCollapsed: boolean;
     selectedQuestionId: string | null;
     onQuestionSelect: (id: string) => void;
     questionIcons: Record<FormQuestion['type'], React.ElementType>;
+    allQuestions: FormQuestion[];
 }) => {
     const Icon = questionIcons[q.type];
 
@@ -57,7 +58,7 @@ const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestion
 };
 
 
-export function FormQuestionNav({ sections, questionsBySection, selectedQuestionId, onQuestionSelect, isCollapsed, setIsCollapsed, questionIcons }: {
+export function FormQuestionNav({ sections, questionsBySection, selectedQuestionId, onQuestionSelect, isCollapsed, setIsCollapsed, questionIcons, allQuestions }: {
   sections: FormSection[];
   questionsBySection: Record<string, FormQuestion[]>;
   selectedQuestionId: string | null;
@@ -65,6 +66,7 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   questionIcons: Record<FormQuestion['type'], React.ElementType>;
+  allQuestions: FormQuestion[];
 }) {
   
   let globalQuestionIndex = 0;
@@ -98,6 +100,7 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                                             selectedQuestionId={selectedQuestionId}
                                             onQuestionSelect={onQuestionSelect}
                                             questionIcons={questionIcons}
+                                            allQuestions={allQuestions}
                                         />
                                      ))}
                                      {sectionQuestions.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma pergunta nesta seção</p>}
@@ -117,6 +120,7 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                             selectedQuestionId={selectedQuestionId}
                             onQuestionSelect={onQuestionSelect}
                             questionIcons={questionIcons}
+                            allQuestions={allQuestions}
                         />
                     ))}
                 </div>

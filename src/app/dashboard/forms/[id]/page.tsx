@@ -581,7 +581,6 @@ export default function FormBuilderPage() {
                         isCollapsed={isSummaryCollapsed}
                         setIsCollapsed={setIsSummaryCollapsed}
                         questionIcons={questionIcons}
-                        allQuestions={internalTemplate?.questions || []}
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
@@ -675,8 +674,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-    
-
-    
-
