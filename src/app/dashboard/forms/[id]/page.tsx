@@ -331,22 +331,23 @@ export default function FormBuilderPage() {
 
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
-            label: 'Nova Pergunta',
+            label: 'Nova Sub-pergunta',
             type: type,
             isRequired: false,
-            order: 0,
+            order: 0, 
             sectionId: parentQuestion.sectionId,
         };
-        
+
         const parentIndex = internalTemplate.questions.findIndex(q => q.id === parentQuestion.id);
         if (parentIndex === -1) return;
 
         let newQuestions = [...internalTemplate.questions];
+        
         newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
         
-        newQuestions = newQuestions.map((q, index) => ({...q, order: index}));
+        const finalQuestionsWithOrder = newQuestions.map((q, index) => ({...q, order: index}));
         
-        const finalQuestions = newQuestions.map(q => {
+        const finalQuestions = finalQuestionsWithOrder.map(q => {
             if (q.id === parentQuestion.id) {
                 return {
                     ...q,
@@ -371,6 +372,7 @@ export default function FormBuilderPage() {
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
     }, [internalTemplate]);
+
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
@@ -451,11 +453,9 @@ export default function FormBuilderPage() {
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
         let questions = internalTemplate.questions || [];
         const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-
+        const overData = over.data?.current;
 
         if (isNewQuestionDrag) {
-            const overData = over.data?.current;
-
             if (overData?.type === 'sub-question-droppable') {
                  const { parentQuestionId, optionId } = overData.droppableData;
                  const parentQuestion = questions.find(q => q.id === parentQuestionId);
