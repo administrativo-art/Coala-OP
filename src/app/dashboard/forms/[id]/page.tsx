@@ -440,28 +440,16 @@ export default function FormBuilderPage() {
         } else if (active.id !== over.id) {
             const questions = internalTemplate.questions || [];
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            let newIndex: number;
-            
-            let newSectionId = questions[oldIndex].sectionId;
+            const overQuestion = (over.data.current?.type === 'question' ? over.data.current.question : null) as FormQuestion | null;
 
-            if (over.data?.current?.type === 'question') {
-                newIndex = questions.findIndex((q) => q.id === over.id);
-                newSectionId = questions[newIndex].sectionId;
-            } else if (over.data?.current?.type === 'section') {
-                newSectionId = String(over.id);
-                const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
-                newIndex = oldIndex < questions.length - 1 ? questions.findIndex(q => q.sectionId === newSectionId) + questionsInSection.length : questions.length -1;
-            } else {
-                newIndex = oldIndex;
-            }
-            
-            if (oldIndex !== -1 && newIndex !== -1) {
-                let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                // Update sectionId of the moved question
-                const movedItem = movedQuestions[newIndex];
-                movedQuestions[newIndex] = { ...movedItem, sectionId: newSectionId };
-                
-                handleTemplateChange({ questions: movedQuestions });
+            if (oldIndex > -1 && overQuestion) {
+                 const newIndex = questions.findIndex((q) => q.id === over.id);
+                 if (newIndex > -1) {
+                    const newSectionId = overQuestion.sectionId!;
+                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
+                    movedQuestions[newIndex] = { ...movedQuestions[newIndex], sectionId: newSectionId };
+                    handleTemplateChange({ questions: movedQuestions });
+                 }
             }
         }
     
