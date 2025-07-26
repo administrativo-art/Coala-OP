@@ -32,8 +32,8 @@ const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestion
                 isCollapsed && "justify-center"
             )}
         >
-            <div className={cn("flex items-center gap-2", isCollapsed ? "gap-1" : "gap-2")}>
-                <span className={cn("font-bold", isCollapsed ? "text-sm" : "text-base w-8")}>{index + 1}.</span>
+            <div className={cn("flex items-center", isCollapsed ? "gap-0" : "gap-2")}>
+                <span className={cn("font-bold", isCollapsed ? "text-xs mr-1.5" : "text-base w-8")}>{index + 1}.</span>
                 <Icon className={cn("shrink-0 text-primary", isCollapsed ? "h-5 w-5" : "h-5 w-5")}/>
                 {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{q.label || 'Nova Pergunta'}</span>}
             </div>

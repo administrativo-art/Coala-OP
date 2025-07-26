@@ -234,19 +234,29 @@ export default function FormBuilderPage() {
     
     const questionsBySection = useMemo(() => {
         const result: Record<string, FormQuestion[]> = {};
-        if (!internalTemplate?.questions) return result;
+        if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
 
+        // Initialize sections in the result map to preserve order
         sortedSections.forEach(section => {
-            result[section.id] = (internalTemplate.questions || [])
-                .filter(q => q.sectionId === section.id)
-                .sort((a,b) => a.order - b.order);
+            result[section.id] = [];
         });
 
-        // Handle questions without a section
-        const orphanedQuestions = (internalTemplate.questions || []).filter(q => !q.sectionId);
-        if (orphanedQuestions.length > 0 && sortedSections.length > 0) {
-            result[sortedSections[0].id] = [...(result[sortedSections[0].id] || []), ...orphanedQuestions];
-        }
+        // Assign questions to their sections
+        internalTemplate.questions.forEach(q => {
+            const sectionId = q.sectionId;
+            if (sectionId && result[sectionId]) {
+                result[sectionId].push(q);
+            } else if (sortedSections.length > 0) {
+                // Assign orphaned questions to the first section
+                const firstSectionId = sortedSections[0].id;
+                result[firstSectionId].push({ ...q, sectionId: firstSectionId });
+            }
+        });
+
+        // Sort questions within each section
+        Object.keys(result).forEach(sectionId => {
+            result[sectionId].sort((a, b) => a.order - b.order);
+        });
 
         return result;
     }, [internalTemplate, sortedSections]);
