@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -59,7 +58,7 @@ const formQuestionSchema = z.object({
   ratingConfig: z.object({
       max: z.coerce.number().min(2).max(10).optional(),
   }).optional(),
-  ramifications: z.array(ramificationSchema).optional(), // This can be removed soon
+  ramifications: z.array(ramificationSchema).optional(),
 }).superRefine((data, ctx) => {
     if (data.options) {
         data.options.forEach((option, index) => {
@@ -133,7 +132,8 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
         }
     });
     return () => subscription.unsubscribe();
-  }, [form.watch, onSubmit, onChange, question]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.watch, onChange, question]);
 
 
   useEffect(() => {
@@ -150,9 +150,6 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
   return (
     <Form {...form}>
         <form className="space-y-6">
-            <FormField control={form.control} name="label" render={({ field }) => (
-                <FormItem><FormLabel>Rótulo da pergunta</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage/></FormItem>
-            )}/>
             <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem><FormLabel>Descrição (opcional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
             )}/>
@@ -313,4 +310,3 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
     </Form>
   );
 }
-    

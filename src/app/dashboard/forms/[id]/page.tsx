@@ -79,6 +79,14 @@ const SortableQuestionItem = ({
         transform: CSS.Transform.toString(transform),
         transition: transition || 'transform 250ms ease',
     };
+    
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (question.label === 'Nova Pergunta') {
+            inputRef.current?.select();
+        }
+    }, [question.label]);
 
     return (
         <div
@@ -103,7 +111,13 @@ const SortableQuestionItem = ({
                              <div className="flex-1 flex items-center gap-3">
                                 <span className="font-bold text-lg">{index + 1}.</span>
                                 <div className="flex-1">
-                                    <p className="font-semibold">{question.label}</p>
+                                    <Input
+                                        ref={inputRef}
+                                        value={question.label}
+                                        onChange={(e) => onQuestionChange({...question, label: e.target.value})}
+                                        className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
+                                        onClick={e => e.stopPropagation()}
+                                    />
                                     <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
                                 </div>
                             </div>
@@ -629,4 +643,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
