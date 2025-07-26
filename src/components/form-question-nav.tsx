@@ -72,9 +72,7 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
   return (
     <div className="p-4 border rounded-lg bg-card sticky top-6 flex flex-col h-[calc(100vh-3rem)]">
       {!isCollapsed && (
-        <>
-            <h3 className="text-lg font-semibold mb-2">Sumário</h3>
-        </>
+            <h3 className="text-lg font-semibold mb-4">Sumário</h3>
       )}
       <ScrollArea className="flex-1 -mx-4">
         <div className="space-y-1 px-4">
