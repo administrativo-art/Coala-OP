@@ -314,7 +314,7 @@ export default function FormBuilderPage() {
 
         const questionsInSection = questionsBySection[sectionId] || [];
         const newSections = internalTemplate.sections.filter(s => s.id !== sectionId);
-        const newQuestions = internalTemplate.questions.filter(q => q.sectionId !== sectionId);
+        let newQuestions = internalTemplate.questions.filter(q => q.sectionId !== sectionId);
         
         if (questionsInSection.length > 0 && newSections.length > 0) {
             const targetSectionId = newSections[0].id;
