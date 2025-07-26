@@ -91,9 +91,10 @@ interface QuestionSettingsPanelProps {
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
+  onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string) => void;
 }
 
-export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange }: QuestionSettingsPanelProps) {
+export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange, onCreateSubQuestion }: QuestionSettingsPanelProps) {
   
   const form = useForm<FormQuestionValues>({
     resolver: zodResolver(formQuestionSchema),
@@ -290,7 +291,15 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
                                              <FormItem>
                                                 <Select
-                                                    onValueChange={targetField.onChange}
+                                                    onValueChange={(val) => {
+                                                        if (val === '__CREATE_NEW__') {
+                                                            onCreateSubQuestion(question, field.id);
+                                                            // We don't set the value, because a new ID will be created and assigned in the parent.
+                                                            // The parent will re-render and the new question will be in the list.
+                                                        } else {
+                                                           targetField.onChange(val);
+                                                        }
+                                                    }}
                                                     value={targetField.value}
                                                     >
                                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>

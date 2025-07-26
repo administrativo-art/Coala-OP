@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,7 @@ const SortableQuestionItem = ({
     allSections,
     onDelete,
     onQuestionChange,
+    onCreateSubQuestion,
     users,
     profiles,
     isDragging,
@@ -69,6 +70,7 @@ const SortableQuestionItem = ({
     allSections: FormSection[],
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
+    onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string) => void;
     users: any[];
     profiles: any[];
     isDragging?: boolean;
@@ -134,6 +136,7 @@ const SortableQuestionItem = ({
                             allQuestions={allQuestions}
                             allSections={allSections}
                             onChange={onQuestionChange}
+                            onCreateSubQuestion={onCreateSubQuestion}
                             users={users}
                             profiles={profiles}
                         />
@@ -318,41 +321,59 @@ export default function FormBuilderPage() {
 
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
-
-    const handleQuestionChange = (updatedQuestion: FormQuestion) => {
+    
+    const handleCreateSubQuestion = useCallback((parentQuestion: FormQuestion, optionId: string) => {
         if (!internalTemplate) return;
 
-        let newQuestions = [...(internalTemplate.questions || [])];
-        const questionIndex = newQuestions.findIndex(q => q.id === updatedQuestion.id);
+        setInternalTemplate(currentTemplate => {
+            if (!currentTemplate) return null;
 
-        if (questionIndex === -1) return;
-
-        // Check if a sub-question needs to be created
-        const isCreatingNew = updatedQuestion.options?.some(opt => opt.ramification?.targetQuestionId === '__CREATE_NEW__');
-
-        if (isCreatingNew) {
             const newSubQuestion: FormQuestion = {
                 id: `question-${nanoid()}`,
                 label: 'Nova Pergunta',
                 type: 'text',
                 isRequired: false,
-                order: newQuestions.length,
-                sectionId: updatedQuestion.sectionId,
+                order: 0, // Placeholder, will be updated
+                sectionId: parentQuestion.sectionId,
             };
-            newQuestions.push(newSubQuestion);
+
+            const parentIndex = currentTemplate.questions.findIndex(q => q.id === parentQuestion.id);
+            if (parentIndex === -1) return currentTemplate;
+
+            const newQuestions = [...currentTemplate.questions];
+            newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
+            const reorderedQuestions = newQuestions.map((q, index) => ({ ...q, order: index }));
+
+            const finalQuestions = reorderedQuestions.map(q => {
+                if (q.id === parentQuestion.id) {
+                    return {
+                        ...q,
+                        options: (q.options || []).map(opt => {
+                            if (opt.id === optionId) {
+                                return {
+                                    ...opt,
+                                    ramification: {
+                                        ...opt.ramification,
+                                        targetQuestionId: newSubQuestion.id
+                                    }
+                                };
+                            }
+                            return opt;
+                        })
+                    };
+                }
+                return q;
+            });
             
-            const newOptions = updatedQuestion.options!.map(opt => 
-                opt.ramification?.targetQuestionId === '__CREATE_NEW__' 
-                    ? { ...opt, ramification: { ...opt.ramification, targetQuestionId: newSubQuestion.id } } 
-                    : opt
-            );
-            
-            const finalUpdatedQuestion = { ...updatedQuestion, options: newOptions };
-            newQuestions[questionIndex] = finalUpdatedQuestion;
-        } else {
-            newQuestions[questionIndex] = updatedQuestion;
-        }
-        
+            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+
+            return { ...currentTemplate, questions: finalQuestions };
+        });
+    }, [internalTemplate]);
+
+    const handleQuestionChange = (updatedQuestion: FormQuestion) => {
+        if (!internalTemplate) return;
+        const newQuestions = internalTemplate.questions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
         handleTemplateChange({ questions: newQuestions });
     };
 
@@ -597,6 +618,7 @@ export default function FormBuilderPage() {
                                                                 allSections={internalTemplate?.sections || []}
                                                                 onDelete={() => handleDeleteQuestion(q.id)}
                                                                 onQuestionChange={handleQuestionChange}
+                                                                onCreateSubQuestion={handleCreateSubQuestion}
                                                                 users={users}
                                                                 profiles={profiles}
                                                                 isDragging={activeId === q.id}
@@ -625,7 +647,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} index={0} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 
@@ -657,3 +679,4 @@ export default function FormBuilderPage() {
     
 
     
+
