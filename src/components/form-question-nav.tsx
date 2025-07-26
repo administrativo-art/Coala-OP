@@ -44,8 +44,8 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       <Button variant="ghost" size="icon" className="cursor-grab h-8 w-8" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </Button>
-      {!isCollapsed && <span className="font-mono text-xs w-6 text-muted-foreground">{index + 1}.</span>}
-      <Icon className={cn("h-4 w-4 shrink-0", !isCollapsed && "mr-2")}/>
+      {!isCollapsed && <span className="font-mono text-sm w-6 font-semibold">{index + 1}.</span>}
+      <Icon className={cn("h-5 w-5 shrink-0 text-primary", !isCollapsed && "mr-2")}/>
       {!isCollapsed && <span className="text-sm font-medium truncate flex-1">{question.label || 'Nova Pergunta'}</span>}
     </div>
   );
