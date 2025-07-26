@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -28,7 +29,13 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const qTemplates = query(collection(db, "formTemplates"));
     const unsubscribeTemplates = onSnapshot(qTemplates, async (querySnapshot) => {
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), status: doc.data().status || 'draft' } as FormTemplate));
+      const data = querySnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(), 
+        status: doc.data().status || 'draft',
+        sections: doc.data().sections || [],
+        questions: doc.data().questions || [],
+      } as FormTemplate));
       setTemplates(data);
       setLoading(false);
     }, (error) => {
@@ -178,3 +185,5 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
+
+    

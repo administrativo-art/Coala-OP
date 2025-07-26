@@ -368,15 +368,8 @@ export type FormTaskAction = {
     dueInDays?: number;
 };
 
-export type FormQuestionCondition = {
-    id: string;
-    value: string | number;
-    operator: 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte' | 'contains';
-}
-
 export type FormQuestionRamification = {
     id: string;
-    conditions?: FormQuestionCondition[]; // Optional for simplicity now
     action: 'show_question' | 'create_task' | 'show_section';
     targetQuestionId?: string; // for 'show_question'
     targetSectionId?: string; // for 'show_section'
@@ -410,8 +403,6 @@ export type FormQuestion = {
     ratingConfig?: {
       max: number;
     };
-    ramifications?: FormQuestionRamification[];
-    customColor?: string;
 };
 
 export type FormSection = {
@@ -419,7 +410,6 @@ export type FormSection = {
     name: string;
     description?: string;
     order: number;
-    questions: FormQuestion[];
 };
 
 export type FormTemplate = {
@@ -708,3 +698,5 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
+
+    

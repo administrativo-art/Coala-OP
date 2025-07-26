@@ -12,7 +12,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -161,7 +160,7 @@ export default function FormBuilderPage() {
     const params = useParams();
     const { id: templateId } = params;
 
-    const [internalTemplate, setInternalTemplate] = useState<FormTemplate | Omit<FormTemplate, 'id' | 'status'> | null>(null);
+    const [internalTemplate, setInternalTemplate] = useState<FormTemplate | null>(null);
     const [debouncedTemplate] = useDebounce(internalTemplate, 1500);
 
     const { users } = useAuth();
@@ -197,29 +196,22 @@ export default function FormBuilderPage() {
         if(loading) return;
 
         if (templateId === 'new') {
-             const initialSection: FormSection = { id: `section-${nanoid()}`, name: 'Seção 1', order: 0, questions: [] };
-             const initialTemplate = {
+             const newTemplate = {
                   name: 'Novo Formulário',
                   type: 'standard' as const,
                   layout: 'continuous' as const,
                   moment: null,
                   submissionTitleFormat: '',
                   questions: [],
-                  sections: [initialSection],
+                  sections: [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0 }],
               };
-            setInternalTemplate(initialTemplate);
+            setInternalTemplate(newTemplate as any);
         } else {
             const templateToEdit = templates.find(t => t.id === templateId);
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
                  if (!newTemplate.sections || newTemplate.sections.length === 0) {
-                     newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0, questions: [] }];
-                     // Assign all existing questions to the new section
-                     if (newTemplate.questions) {
-                        newTemplate.questions.forEach((q: FormQuestion) => {
-                            q.sectionId = newTemplate.sections[0].id;
-                        });
-                     }
+                     newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0 }];
                  }
                  setInternalTemplate(newTemplate);
             }
@@ -234,7 +226,7 @@ export default function FormBuilderPage() {
             if ('id' in debouncedTemplate) {
                 await updateTemplate({ ...debouncedTemplate, status: debouncedTemplate.status || 'draft' });
             } else {
-                const newId = await addTemplate({ ...debouncedTemplate, status: 'draft' });
+                const newId = await addTemplate({ ...debouncedTemplate, status: 'draft' } as Omit<FormTemplate, 'id'|'status'>);
                 if (newId) {
                     router.replace(`/dashboard/forms/${newId}`, { scroll: false });
                 }
@@ -293,11 +285,10 @@ export default function FormBuilderPage() {
     const handleAddSection = () => {
         if (!internalTemplate) return;
         const currentSections = internalTemplate.sections || [];
-        const newSection: FormSection = {
+        const newSection: Omit<FormSection, 'questions'> = {
             id: `section-${nanoid()}`,
             name: `Seção ${currentSections.length + 1}`,
             order: currentSections.length,
-            questions: []
         };
         const newSections = [...currentSections, newSection];
         handleTemplateChange({ sections: newSections });
@@ -331,7 +322,8 @@ export default function FormBuilderPage() {
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
 
-        const isCreatingNewQuestionFromRamification = updatedQuestion.ramifications?.some(r => r.targetQuestionId === '__CREATE_NEW__');
+        let newQuestions = [...(internalTemplate.questions || [])];
+        const isCreatingNewQuestionFromRamification = updatedQuestion.options?.some(opt => opt.ramification?.targetQuestionId === '__CREATE_NEW__');
 
         if (isCreatingNewQuestionFromRamification) {
             const newQuestion: FormQuestion = {
@@ -339,24 +331,28 @@ export default function FormBuilderPage() {
                 label: 'Nova Pergunta',
                 type: 'text',
                 isRequired: false,
-                order: (internalTemplate.questions || []).length,
+                order: newQuestions.length,
                 sectionId: updatedQuestion.sectionId,
             };
             
-            const newQuestions = [...(internalTemplate.questions || []), newQuestion];
+            newQuestions.push(newQuestion);
 
-            const newRamifications = updatedQuestion.ramifications!.map(r => 
-                r.targetQuestionId === '__CREATE_NEW__' ? { ...r, targetQuestionId: newQuestion.id } : r
+            const newOptions = updatedQuestion.options!.map(opt => 
+                opt.ramification?.targetQuestionId === '__CREATE_NEW__' 
+                    ? { ...opt, ramification: { ...opt.ramification, targetQuestionId: newQuestion.id } } 
+                    : opt
             );
+            
+            const finalUpdatedQuestion = { ...updatedQuestion, options: newOptions };
+            newQuestions = newQuestions.map(q => q.id === finalUpdatedQuestion.id ? finalUpdatedQuestion : q);
 
-            const finalUpdatedQuestion = { ...updatedQuestion, ramifications: newRamifications };
-
-            handleTemplateChange({ questions: newQuestions.map(q => q.id === finalUpdatedQuestion.id ? finalUpdatedQuestion : q) });
         } else {
-            const newQuestions = (internalTemplate.questions || []).map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
-            handleTemplateChange({ questions: newQuestions });
+             newQuestions = newQuestions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
         }
+        
+        handleTemplateChange({ questions: newQuestions });
     };
+
 
     const handleAddQuestion = (type: FormQuestion['type'], sectionId: string, atIndex: number) => {
         if (!internalTemplate) return;
@@ -386,9 +382,15 @@ export default function FormBuilderPage() {
         
         let newQuestions = (internalTemplate.questions || []).filter(q => q.id !== questionId)
         .map(q => {
-            if (!q.ramifications) return q;
-            const cleanedRamifications = q.ramifications.filter(r => r.targetQuestionId !== questionId);
-            return { ...q, ramifications: cleanedRamifications };
+            if (!q.options) return q;
+            const cleanedOptions = q.options.map(opt => {
+                if (opt.ramification && opt.ramification.targetQuestionId === questionId) {
+                    const { ramification, ...rest } = opt;
+                    return rest;
+                }
+                return opt;
+            });
+            return { ...q, options: cleanedOptions };
         });
 
         handleTemplateChange({ questions: newQuestions });
@@ -647,3 +649,5 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
+    
