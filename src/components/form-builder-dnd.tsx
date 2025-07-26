@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import { useDraggable } from '@dnd-kit/core';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { type FormQuestion } from '@/types';
 import { Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, GripVertical, Star, MoveHorizontal } from 'lucide-react';
@@ -48,5 +48,28 @@ export const Placeholder = ({ index }: { index: number }) => {
             id={`placeholder-${index}`}
             className="h-16 w-full rounded-lg border-2 border-dashed border-primary/50 bg-primary/10 my-2 transition-all duration-150 ease-in-out animate-in fade-in"
         />
+    );
+};
+
+export const QuestionDropzone = ({ sectionId, atIndex, overId }: { sectionId: string, atIndex: number, overId: string | null }) => {
+    const id = `dropzone-${sectionId}-${atIndex}`;
+    const { setNodeRef, isOver } = useDroppable({
+        id,
+        data: {
+            type: 'question-dropzone',
+            dropzoneData: { sectionId, atIndex },
+        },
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={cn(
+                "text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground transition-colors",
+                isOver ? "border-primary bg-primary/10 text-primary" : "border-muted-foreground/30 hover:border-primary hover:text-primary"
+            )}
+        >
+            Arraste um campo aqui
+        </div>
     );
 };

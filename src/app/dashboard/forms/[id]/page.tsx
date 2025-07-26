@@ -24,7 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
 import { FillFormModal } from '@/components/fill-form-modal';
-import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
+import { DraggableQuestionType, Placeholder, QuestionDropzone } from '@/components/form-builder-dnd';
 import { FormQuestionNav } from '@/components/form-question-nav';
 import { Input } from '@/components/ui/input';
 
@@ -149,16 +149,6 @@ const SortableQuestionItem = ({
         </div>
     );
 }
-
-const DroppableArea = ({ children, id, isOver }: { children?: React.ReactNode, id: string, isOver?: boolean }) => {
-    const { setNodeRef } = useDroppable({ id, data: { type: 'section-droppable', sectionId: id } });
-    
-    return (
-        <div ref={setNodeRef} className={cn("p-4 space-y-4 rounded-lg transition-colors", isOver && "bg-primary/10")}>
-            {children}
-        </div>
-    );
-};
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -451,42 +441,24 @@ export default function FormBuilderPage() {
         }
     
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
-        let questions = internalTemplate.questions || [];
         const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-        const overData = over.data?.current;
-
+        
         if (isNewQuestionDrag) {
+            const overData = over.data?.current;
+
             if (overData?.type === 'sub-question-droppable') {
                  const { parentQuestionId, optionId } = overData.droppableData;
-                 const parentQuestion = questions.find(q => q.id === parentQuestionId);
+                 const parentQuestion = internalTemplate.questions.find(q => q.id === parentQuestionId);
                  if (parentQuestion) {
                      handleCreateSubQuestion(parentQuestion, optionId, questionType);
                  }
-            } else {
-                 let targetSectionId: string | undefined;
-                 let targetIndex: number | undefined;
-
-                if (overData?.type === 'section-droppable') {
-                    targetSectionId = overData.sectionId;
-                    const questionsInSection = questions.filter(q => q.sectionId === targetSectionId);
-                    targetIndex = questionsInSection.length;
-                } else if (overData?.type === 'question') {
-                    const overQuestion = overData.question as FormQuestion;
-                    targetSectionId = overQuestion.sectionId!;
-                    targetIndex = overQuestion.order;
-                } else {
-                    const firstSectionId = sortedSections[0]?.id;
-                    if (firstSectionId) {
-                        targetSectionId = firstSectionId;
-                        targetIndex = 0;
-                    }
-                }
-                
-                if (targetSectionId !== undefined && targetIndex !== undefined) {
-                    handleAddQuestion(questionType, targetSectionId, targetIndex);
-                }
+            } else if (overData?.type === 'question-dropzone') {
+                const { sectionId, atIndex } = overData.dropzoneData;
+                handleAddQuestion(questionType, sectionId, atIndex);
             }
+            
         } else if (active.id !== over.id && over.data.current) {
+             const questions = internalTemplate.questions || [];
              const oldIndex = questions.findIndex(q => q.id === active.id);
              let newIndex: number;
              let newSectionId: string;
@@ -495,8 +467,8 @@ export default function FormBuilderPage() {
              if (overQuestionData) {
                 newIndex = questions.findIndex(q => q.id === over.id);
                 newSectionId = overQuestionData.sectionId!;
-             } else if (over.data.current.type === 'section-droppable') {
-                newSectionId = over.data.current.sectionId as string;
+             } else if (over.data.current.type === 'question-dropzone') {
+                newSectionId = over.data.current.dropzoneData.sectionId;
                 const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
                 const lastQuestionInTarget = questionsInSection[questionsInSection.length - 1];
                 newIndex = lastQuestionInTarget ? questions.findIndex(q => q.id === lastQuestionInTarget.id) + 1 : oldIndex;
@@ -615,7 +587,7 @@ export default function FormBuilderPage() {
                                             </div>
                                         )}
                                         <AccordionContent className={cn(sortedSections.length > 1 && "border-t")}>
-                                            <DroppableArea id={section.id} isOver={overId === section.id}>
+                                            <div className="p-4 space-y-4">
                                                 <SortableContext items={sectionQuestions.map(q => q.id)}>
                                                     <div className="space-y-2">
                                                     {sectionQuestions.map((q, index) => (
@@ -639,10 +611,8 @@ export default function FormBuilderPage() {
                                                     ))}
                                                     </div>
                                                 </SortableContext>
-                                                 <div className="text-center py-8 border-2 border-dashed border-muted-foreground/30 rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-                                                    Arraste um campo aqui
-                                                </div>
-                                            </DroppableArea>
+                                                <QuestionDropzone sectionId={section.id} atIndex={sectionQuestions.length} overId={overId} />
+                                            </div>
                                         </AccordionContent>
                                     </AccordionItem>
                                 </Accordion>
@@ -686,4 +656,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
