@@ -36,7 +36,8 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full gap-2",
+        "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full",
+        isCollapsed ? "justify-center gap-1" : "gap-2",
         isSelected ? "bg-primary/20 text-primary-foreground" : "hover:bg-muted"
       )}
       onClick={() => onSelect(question.id)}
@@ -44,9 +45,18 @@ const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }:
       <Button variant="ghost" size="icon" className="cursor-grab h-8 w-8" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </Button>
-      <span className="text-base font-bold w-8">{index + 1}.</span>
-      <Icon className={cn("h-5 w-5 shrink-0 text-primary", !isCollapsed && "mr-2")}/>
-      {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>}
+       {isCollapsed ? (
+         <>
+          <span className="text-sm font-bold w-6 text-center">{index + 1}.</span>
+          <Icon className="h-5 w-5 shrink-0 text-primary"/>
+         </>
+      ) : (
+        <>
+          <span className="text-base font-bold w-8">{index + 1}.</span>
+          <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
+          <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>
+        </>
+      )}
     </div>
   );
   
