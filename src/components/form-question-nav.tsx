@@ -7,54 +7,77 @@ import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { type FormQuestion, type FormSection } from '@/types';
-import { GripVertical, Hash, Text, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal } from 'lucide-react';
+import { GripVertical, Hash, Text, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal, GitBranch } from 'lucide-react';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
-const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons, allQuestions }: {
-    q: FormQuestion;
-    index: number;
+interface NavItemProps {
+    question: FormQuestion;
+    indexPrefix: string;
     isCollapsed: boolean;
     selectedQuestionId: string | null;
     onQuestionSelect: (id: string) => void;
     questionIcons: Record<FormQuestion['type'], React.ElementType>;
     allQuestions: FormQuestion[];
-}) => {
-    const Icon = questionIcons[q.type];
+    level?: number;
+}
+
+const NavItem = ({ question, indexPrefix, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons, allQuestions, level = 0 }: NavItemProps) => {
+    const Icon = questionIcons[question.type];
+    const hasSubQuestions = question.subPerguntas && question.subPerguntas.length > 0;
 
     const content = (
         <div 
-            onClick={() => onQuestionSelect(q.id)}
+            onClick={() => onQuestionSelect(question.id)}
             className={cn(
                 "flex items-center p-2 rounded-lg cursor-pointer w-full", 
-                selectedQuestionId === q.id ? "bg-primary/20" : "hover:bg-muted",
+                selectedQuestionId === question.id ? "bg-primary/20" : "hover:bg-muted",
                 isCollapsed && "justify-center"
             )}
+            style={{ paddingLeft: `${8 + level * 16}px` }}
         >
             <div className={cn("flex items-center", isCollapsed ? "gap-0" : "gap-2")}>
-                <span className={cn("font-bold", isCollapsed ? "text-xs mr-1.5" : "text-base w-8")}>{index + 1}.</span>
+                {level > 0 && <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />}
+                <span className={cn("font-bold text-muted-foreground", isCollapsed ? "text-xs" : "text-base w-6")}>{indexPrefix}</span>
                 <Icon className={cn("shrink-0 text-primary", isCollapsed ? "h-5 w-5" : "h-5 w-5")}/>
-                {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{q.label || 'Nova Pergunta'}</span>}
+                {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>}
             </div>
         </div>
     );
 
-    if (isCollapsed) {
-        return (
-            <TooltipProvider>
+    return (
+        <li>
+             <TooltipProvider>
                 <Tooltip delayDuration={100}>
                     <TooltipTrigger asChild>{content}</TooltipTrigger>
-                    <TooltipContent side="right" sideOffset={5}>
-                        <p>{q.label || 'Nova Pergunta'}</p>
-                    </TooltipContent>
+                    {isCollapsed && (
+                        <TooltipContent side="right" sideOffset={5}>
+                            <p>{question.label || 'Nova Pergunta'}</p>
+                        </TooltipContent>
+                    )}
                 </Tooltip>
             </TooltipProvider>
-        );
-    }
-    
-    return content;
+             {!isCollapsed && hasSubQuestions && (
+                <ul className="mt-1 space-y-1">
+                    {question.subPerguntas!.map((sub, subIndex) => (
+                        <NavItem 
+                            key={sub.id}
+                            question={sub}
+                            indexPrefix={`${indexPrefix}${subIndex + 1}.`}
+                            isCollapsed={isCollapsed}
+                            selectedQuestionId={selectedQuestionId}
+                            onQuestionSelect={onQuestionSelect}
+                            questionIcons={questionIcons}
+                            allQuestions={allQuestions}
+                            level={level + 1}
+                        />
+                    ))}
+                </ul>
+            )}
+        </li>
+    );
 };
 
 
@@ -92,10 +115,10 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                                 </AccordionTrigger>
                                 <AccordionContent className="pt-1 pl-4 border-l-2 ml-2">
                                      {sectionQuestions.map((q, index) => (
-                                        <SortableNavItem 
+                                        <NavItem 
                                             key={q.id}
-                                            q={q}
-                                            index={sectionStartIndex + index}
+                                            question={q}
+                                            indexPrefix={`${sectionStartIndex + index + 1}.`}
                                             isCollapsed={isCollapsed}
                                             selectedQuestionId={selectedQuestionId}
                                             onQuestionSelect={onQuestionSelect}
@@ -110,12 +133,12 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                     })}
                 </Accordion>
             ) : (
-                <div className="space-y-1">
+                <ul className="space-y-1">
                     {(Object.values(questionsBySection).flat()).map((q, index) => (
-                         <SortableNavItem 
+                         <NavItem 
                             key={q.id}
-                            q={q}
-                            index={index}
+                            question={q}
+                            indexPrefix={`${index + 1}.`}
                             isCollapsed={isCollapsed}
                             selectedQuestionId={selectedQuestionId}
                             onQuestionSelect={onQuestionSelect}
@@ -123,7 +146,7 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                             allQuestions={allQuestions}
                         />
                     ))}
-                </div>
+                </ul>
             )}
         </div>
       </ScrollArea>

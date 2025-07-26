@@ -317,31 +317,31 @@ export default function FormBuilderPage() {
     };
     
     const handleCreateSubQuestion = useCallback((parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => {
-        if (!internalTemplate) return;
+        setInternalTemplate(currentTemplate => {
+            if (!currentTemplate) return null;
 
-        const newSubQuestion: FormQuestion = {
-            id: `question-${nanoid()}`,
-            label: 'Nova Sub-pergunta',
-            type: type,
-            isRequired: false,
-            order: 0, 
-            sectionId: parentQuestion.sectionId,
-        };
+            const newSubQuestion: FormQuestion = {
+                id: `question-${nanoid()}`,
+                label: 'Nova Sub-pergunta',
+                type: type,
+                isRequired: false,
+                order: 0, // This will be recalculated later if needed for display, but it's not a root question.
+                sectionId: parentQuestion.sectionId,
+                excluidaDoSumario: true,
+            };
 
-        const parentIndex = internalTemplate.questions.findIndex(q => q.id === parentQuestion.id);
-        if (parentIndex === -1) return;
-
-        let newQuestions = [...internalTemplate.questions];
-        
-        newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
-        
-        const finalQuestionsWithOrder = newQuestions.map((q, index) => ({...q, order: index}));
-        
-        const finalQuestions = finalQuestionsWithOrder.map(q => {
-            if (q.id === parentQuestion.id) {
-                return {
-                    ...q,
-                    options: (q.options || []).map(opt => {
+            const newQuestions = currentTemplate.questions.map(q => {
+                if (q.id === parentQuestion.id) {
+                    const updatedParent = { ...q };
+                    
+                    // Add to subPerguntas array
+                    if (!updatedParent.subPerguntas) {
+                        updatedParent.subPerguntas = [];
+                    }
+                    updatedParent.subPerguntas.push(newSubQuestion);
+                    
+                    // Add to options ramification
+                    updatedParent.options = (updatedParent.options || []).map(opt => {
                         if (opt.id === optionId) {
                             return {
                                 ...opt,
@@ -352,16 +352,17 @@ export default function FormBuilderPage() {
                             };
                         }
                         return opt;
-                    })
-                };
-            }
-            return q;
+                    });
+                    
+                    return updatedParent;
+                }
+                return q;
+            });
+
+            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+            return { ...currentTemplate, questions: newQuestions };
         });
-        
-        handleTemplateChange({ questions: finalQuestions });
-        
-        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-    }, [internalTemplate]);
+    }, []);
 
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
@@ -655,5 +656,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-    

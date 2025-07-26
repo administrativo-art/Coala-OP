@@ -384,7 +384,9 @@ export type FormQuestion = {
     isRequired: boolean;
     order: number;
     sectionId?: string;
+    excluidaDoSumario?: boolean;
     options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
+    subPerguntas?: FormQuestion[];
     attachmentConfig?: {
         allowMultiple: boolean;
         allowedFileTypes: ('image' | 'pdf' | 'video')[];
@@ -698,5 +700,3 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
-
-    
