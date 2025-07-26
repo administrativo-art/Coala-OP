@@ -67,7 +67,7 @@
     @apply bg-background text-foreground;
   }
   .animate-pulse-once {
-    animation: pulse 1s ease-in-out;
+    animation: pulse-once 1.2s ease-in-out;
   }
   
   .animate-shake {
@@ -84,6 +84,13 @@
     -moz-appearance: textfield;
   }
 }
+
+@keyframes pulse-once {
+  0% { background-color: hsl(var(--card)); box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7); }
+  50% { background-color: hsl(var(--primary) / 0.1); box-shadow: 0 0 0 4px hsl(var(--primary) / 0); }
+  100% { background-color: hsl(var(--card)); box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+}
+
 
 @keyframes btn-shake {
   0%,100% { transform: translateX(0); }

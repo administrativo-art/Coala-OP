@@ -48,6 +48,7 @@ const SortableQuestionItem = ({
     users,
     profiles,
     isDragging,
+    isHighlighted,
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
@@ -56,6 +57,7 @@ const SortableQuestionItem = ({
     users: any[];
     profiles: any[];
     isDragging?: boolean;
+    isHighlighted?: boolean;
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
@@ -64,7 +66,7 @@ const SortableQuestionItem = ({
     };
 
     return (
-        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50', isOver && 'shadow-lg')}>
+        <div id={`question-card-${question.id}`} ref={setNodeRef} style={style} className={cn("bg-card border rounded-lg overflow-hidden", isDragging && 'opacity-50', isOver && 'shadow-lg', isHighlighted && 'animate-pulse-once')}>
             <Accordion type="single" collapsible>
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
@@ -131,6 +133,7 @@ export default function FormBuilderPage() {
     
     // Navigation state
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+    const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
     const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
 
@@ -194,10 +197,12 @@ export default function FormBuilderPage() {
     
     const scrollToQuestion = (questionId: string) => {
         setSelectedQuestionId(questionId);
+        setHighlightedQuestionId(questionId);
         const element = document.getElementById(`question-card-${questionId}`);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
+        setTimeout(() => setHighlightedQuestionId(null), 1500); // Animation duration
     };
 
     const handleTemplateChange = (updates: Partial<FormTemplate>) => {
@@ -411,6 +416,7 @@ export default function FormBuilderPage() {
                                     users={users}
                                     profiles={profiles}
                                     isDragging={activeId === q.id}
+                                    isHighlighted={highlightedQuestionId === q.id}
                                 />
                             ))}
                         </SortableContext>
