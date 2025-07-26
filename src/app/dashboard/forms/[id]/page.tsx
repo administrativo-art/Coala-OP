@@ -121,6 +121,8 @@ export default function FormBuilderPage() {
     // Navigation state
     const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
+    const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
+
 
     const activeQuestion = useMemo(() => {
         if (!activeId || !String(activeId).startsWith('question-')) return null;
@@ -376,12 +378,14 @@ export default function FormBuilderPage() {
                     </div>
                 </header>
                 
-                <main className="flex-1 min-h-0 bg-muted/40 p-6 grid grid-cols-[280px_1fr_350px] gap-6">
+                <main className={cn("flex-1 min-h-0 bg-muted/40 p-6 grid gap-6 transition-all", isSummaryCollapsed ? "grid-cols-[80px_1fr_350px]" : "grid-cols-[280px_1fr_350px]")}>
                     <FormQuestionNav
                         questions={sortedQuestions}
                         selectedQuestionId={selectedQuestionId}
                         onQuestionSelect={scrollToQuestion}
                         onReorder={(reordered) => handleTemplateChange({ questions: reordered })}
+                        isCollapsed={isSummaryCollapsed}
+                        setIsCollapsed={setIsSummaryCollapsed}
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
