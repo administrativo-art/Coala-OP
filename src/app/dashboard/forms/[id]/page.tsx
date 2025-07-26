@@ -406,14 +406,16 @@ export default function FormBuilderPage() {
     
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
-        setActiveId(null);
-        setOverId(null);
-
-        if (!over || !internalTemplate) return;
-
-        const isNewQuestion = String(active.id).startsWith('new-question-');
         
-        if (isNewQuestion) {
+        if (!over || !internalTemplate) {
+            setActiveId(null);
+            setOverId(null);
+            return;
+        }
+
+        const isNewQuestionDrag = String(active.id).startsWith('new-question-');
+        
+        if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
             const targetSectionId = over.data?.current?.type === 'section' ? over.id : over.data?.current?.question?.sectionId;
             
@@ -421,49 +423,42 @@ export default function FormBuilderPage() {
                 handleAddQuestion(questionType, String(targetSectionId));
             }
         } else { // Reordering existing question
-            const question = active.data?.current?.question as FormQuestion;
-            const overIsSection = over.data?.current?.type === 'section';
-            const targetSectionId = overIsSection ? over.id : over.data?.current?.question?.sectionId;
+            if (active.id !== over.id) {
+                 const oldIndex = internalTemplate.questions.findIndex((q) => q.id === active.id);
+                 const newIndex = internalTemplate.questions.findIndex((q) => q.id === over.id);
 
-            if (!question || !targetSectionId) return;
-
-            const oldSectionId = question.sectionId;
-            const newSectionId = String(targetSectionId);
-            
-            const newQuestions = [...internalTemplate.questions];
-            const movedQuestionIndex = newQuestions.findIndex(q => q.id === active.id);
-            if (movedQuestionIndex === -1) return;
-            
-            newQuestions[movedQuestionIndex] = { ...newQuestions[movedQuestionIndex], sectionId: newSectionId };
-
-            // Re-order questions within affected sections
-            const oldSectionQuestions = newQuestions.filter(q => q.sectionId === oldSectionId).sort((a,b) => a.order - b.order);
-            const newSectionQuestions = newQuestions.filter(q => q.sectionId === newSectionId).sort((a,b) => a.order - b.order);
-
-            const finalQuestions = [...internalTemplate.questions.filter(q => q.sectionId !== oldSectionId && q.sectionId !== newSectionId)];
-
-            oldSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
-            if (oldSectionId !== newSectionId) {
-                const overQuestion = over.data?.current?.question;
-                const newIndex = overIsSection ? newSectionQuestions.length : newSectionQuestions.findIndex(q => q.id === over.id);
-                if (newIndex !== -1) {
-                    const reordered = arrayMove(newSectionQuestions, newSectionQuestions.findIndex(q => q.id === active.id), newIndex);
-                    reordered.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
-                } else {
-                     newSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
-                }
-            } else { // reordering within the same section
-                 const oldIndex = oldSectionQuestions.findIndex(q => q.id === active.id);
-                 const newIndex = oldSectionQuestions.findIndex(q => q.id === over.id);
                  if (oldIndex !== -1 && newIndex !== -1) {
-                    const reordered = arrayMove(oldSectionQuestions, oldIndex, newIndex);
-                    reordered.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
-                 } else {
-                     oldSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+                    const movedQuestions = arrayMove(internalTemplate.questions, oldIndex, newIndex);
+                    
+                    const overIsSection = over.data?.current?.type === 'section';
+                    const targetSectionId = overIsSection ? over.id : over.data?.current?.question?.sectionId;
+
+                    if (targetSectionId) {
+                        movedQuestions[newIndex].sectionId = String(targetSectionId);
+                    }
+                    
+                    const reorderedBySection: Record<string, FormQuestion[]> = {};
+                    sortedSections.forEach(s => reorderedBySection[s.id] = []);
+                    
+                    movedQuestions.forEach(q => {
+                        const sectionId = q.sectionId || sortedSections[0].id;
+                        reorderedBySection[sectionId].push(q);
+                    });
+                    
+                    const finalQuestions: FormQuestion[] = [];
+                    sortedSections.forEach(section => {
+                        reorderedBySection[section.id].forEach((q, index) => {
+                             finalQuestions.push({ ...q, order: index, sectionId: section.id });
+                        });
+                    });
+                    
+                    handleTemplateChange({ questions: finalQuestions });
                  }
             }
-            handleTemplateChange({ questions: finalQuestions });
         }
+        
+        setActiveId(null);
+        setOverId(null);
     };
 
 
