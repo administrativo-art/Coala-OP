@@ -244,7 +244,7 @@ export default function FormBuilderPage() {
         // Assign questions to their sections
         internalTemplate.questions.forEach(q => {
             const sectionId = q.sectionId;
-            if (sectionId && result[sectionId]) {
+            if (sectionId && result.hasOwnProperty(sectionId)) {
                 result[sectionId].push(q);
             } else if (sortedSections.length > 0) {
                 // Assign orphaned questions to the first section
