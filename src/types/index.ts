@@ -386,7 +386,7 @@ export type FormQuestion = {
     id: string;
     label: string;
     description?: string;
-    type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment';
+    type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment' | 'range' | 'rating';
     isRequired: boolean;
     order: number;
     options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
@@ -400,6 +400,13 @@ export type FormQuestion = {
         min?: number;
         max?: number;
         step?: number;
+    };
+    rangeConfig?: {
+      minLabel?: string;
+      maxLabel?: string;
+    };
+    ratingConfig?: {
+      max: number;
     };
     ramifications?: FormQuestionRamification[];
     customColor?: string;

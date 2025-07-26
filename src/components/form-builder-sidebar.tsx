@@ -10,6 +10,8 @@ import { Search } from 'lucide-react';
 const questionTypes: { type: FormQuestion['type'], label: string }[] = [
     { type: 'text', label: 'Texto' },
     { type: 'number', label: 'Número' },
+    { type: 'range', label: 'Intervalo (numérico)'},
+    { type: 'rating', label: 'Avaliação (escala)'},
     { type: 'yes-no', label: 'Sim/Não' },
     { type: 'single-choice', label: 'Escolha Única' },
     { type: 'multiple-choice', label: 'Múltipla Escolha' },

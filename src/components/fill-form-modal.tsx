@@ -19,9 +19,12 @@ import { type FormTemplate, type FormQuestion, type FormSubmission, type FormAns
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { uploadFile } from '@/lib/storage';
-import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIcon, Video as VideoIcon, DollarSign, Percent } from 'lucide-react';
+import { Camera, File as FileIcon, Loader2, Paperclip, Trash2, Image as ImageIcon, Video as VideoIcon, DollarSign, Percent, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoCaptureModal } from './photo-capture-modal';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+import { cn } from '@/lib/utils';
+
 
 const getAllQuestions = (questions: FormQuestion[]): FormQuestion[] => {
     return questions;
@@ -53,7 +56,14 @@ const generateSchema = (allQuestions: FormQuestion[]) => {
                 schemaObject[question.id] = z.string().optional();
                 break;
             case 'number':
+            case 'rating':
                 schemaObject[question.id] = z.coerce.number().optional().or(z.literal(''));
+                break;
+            case 'range':
+                schemaObject[question.id] = z.object({
+                    min: z.coerce.number().optional().or(z.literal('')),
+                    max: z.coerce.number().optional().or(z.literal('')),
+                }).optional();
                 break;
             case 'yes-no':
             case 'single-choice':
@@ -144,6 +154,46 @@ function RenderedQuestion({ question, control }: { question: FormQuestion; contr
                                     {format === 'percentage' && <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />}
                                 </div>
                                 <FormMessage /></FormItem>;
+                        case 'range':
+                             return (
+                                <FormItem>
+                                    <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                                    <div className="flex items-center gap-4">
+                                        <FormField
+                                            control={control}
+                                            name={`${question.id}.min`}
+                                            render={({ field: minField }) => (
+                                                <FormItem className="flex-1"><FormLabel className="text-sm text-muted-foreground">{question.rangeConfig?.minLabel || 'Mínimo'}</FormLabel><FormControl><Input type="number" {...minField} /></FormControl><FormMessage /></FormItem>
+                                            )}
+                                        />
+                                         <FormField
+                                            control={control}
+                                            name={`${question.id}.max`}
+                                            render={({ field: maxField }) => (
+                                                <FormItem className="flex-1"><FormLabel className="text-sm text-muted-foreground">{question.rangeConfig?.maxLabel || 'Máximo'}</FormLabel><FormControl><Input type="number" {...maxField} /></FormControl><FormMessage /></FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                </FormItem>
+                             );
+                        case 'rating':
+                            const maxRating = question.ratingConfig?.max || 5;
+                            return (
+                                <FormItem>
+                                    <FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel>
+                                    <FormControl>
+                                        <ToggleGroup type="single" value={String(field.value)} onValueChange={(value) => field.onChange(value ? Number(value) : '')} className="flex-wrap justify-start">
+                                            {Array.from({ length: maxRating }, (_, i) => i + 1).map(val => (
+                                                <ToggleGroupItem key={val} value={String(val)} className={cn("flex-col h-14 w-14", field.value === val && 'bg-primary/20')}>
+                                                    <Star className="h-5 w-5 mb-1" />
+                                                    {val}
+                                                </ToggleGroupItem>
+                                            ))}
+                                        </ToggleGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            );
                         case 'yes-no':
                         case 'single-choice':
                             return <FormItem className="space-y-3"><FormLabel>{question.label}{question.isRequired && <span className="text-destructive">*</span>}</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-1">
@@ -242,7 +292,12 @@ const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>
     const results: FormAnswer[] = [];
 
     questions.forEach(q => {
-        const value = formValues[q.id];
+        let value = formValues[q.id];
+
+        if (q.type === 'range') {
+            value = (value?.min || value?.max) ? `${value.min || ''} - ${value.max || ''}` : '';
+        }
+
         const hasValue = value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
 
         if (hasValue) {
@@ -272,7 +327,14 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const defaultValues = useMemo(() => {
         const values: Record<string, any> = {};
         visibleQuestions.forEach(q => {
-            values[q.id] = q.type === 'multiple-choice' || q.type === 'file-attachment' ? [] : '';
+            if (q.type === 'multiple-choice' || q.type === 'file-attachment') {
+                 values[q.id] = [];
+            } else if (q.type === 'range') {
+                values[q.id] = { min: '', max: '' };
+            }
+             else {
+                 values[q.id] = '';
+            }
         });
         return values;
     }, [visibleQuestions]);
@@ -284,7 +346,10 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             visibleQuestions.forEach(question => {
                 if (question.isRequired && visibleIds.has(question.id)) {
                     const value = data[question.id];
-                    const isEmpty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+                    let isEmpty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+                    if (question.type === 'range') {
+                        isEmpty = (value?.min === '' && value?.max === '');
+                    }
                     if (isEmpty) {
                         ctx.addIssue({
                             code: z.ZodIssueCode.custom,

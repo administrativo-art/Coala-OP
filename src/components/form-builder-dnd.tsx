@@ -5,7 +5,7 @@ import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { type FormQuestion } from '@/types';
-import { Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, GripVertical } from 'lucide-react';
+import { Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, GripVertical, Star, MoveHorizontal } from 'lucide-react';
 
 const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   text: Text,
@@ -14,6 +14,8 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   'single-choice': List,
   'multiple-choice': CheckSquare,
   'file-attachment': FileIcon,
+  range: MoveHorizontal,
+  rating: Star,
 };
 
 export const DraggableQuestionType = ({ type, label, isOverlay }: { type: FormQuestion['type']; label?: string; isOverlay?: boolean }) => {

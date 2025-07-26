@@ -39,7 +39,7 @@ const ramificationSchema = z.object({
 const formQuestionSchema = z.object({
   label: z.string().min(1, "O rótulo é obrigatório."),
   description: z.string().optional(),
-  type: z.enum(['text', 'number', 'yes-no', 'single-choice', 'multiple-choice', 'file-attachment']),
+  type: z.enum(['text', 'number', 'yes-no', 'single-choice', 'multiple-choice', 'file-attachment', 'range', 'rating']),
   isRequired: z.boolean(),
   options: z.array(z.object({
       id: z.string(),
@@ -51,6 +51,13 @@ const formQuestionSchema = z.object({
       min: z.coerce.number().optional(),
       max: z.coerce.number().optional(),
       step: z.coerce.number().optional(),
+  }).optional(),
+  rangeConfig: z.object({
+      minLabel: z.string().optional(),
+      maxLabel: z.string().optional(),
+  }).optional(),
+  ratingConfig: z.object({
+      max: z.coerce.number().min(2).max(10).optional(),
   }).optional(),
   ramifications: z.array(ramificationSchema).optional(), // This can be removed soon
 }).superRefine((data, ctx) => {
@@ -86,6 +93,8 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
       ...question,
       options: question.options || [],
       numberConfig: question.numberConfig || {},
+      rangeConfig: question.rangeConfig || { minLabel: 'Mínimo', maxLabel: 'Máximo'},
+      ratingConfig: question.ratingConfig || { max: 5 },
     }
   });
 
@@ -94,6 +103,8 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
         ...question,
         options: question.options || [],
         numberConfig: question.numberConfig || {},
+        rangeConfig: question.rangeConfig || { minLabel: 'Mínimo', maxLabel: 'Máximo'},
+        ratingConfig: question.ratingConfig || { max: 5 },
     });
   }, [question, form]);
 
@@ -153,6 +164,8 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                         <SelectContent>
                             <SelectItem value="text">Texto</SelectItem>
                             <SelectItem value="number">Número</SelectItem>
+                            <SelectItem value="range">Intervalo (numérico)</SelectItem>
+                            <SelectItem value="rating">Avaliação (escala)</SelectItem>
                             <SelectItem value="yes-no">Sim/Não</SelectItem>
                             <SelectItem value="single-choice">Escolha Única</SelectItem>
                             <SelectItem value="multiple-choice">Múltipla Escolha</SelectItem>
@@ -165,6 +178,31 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                     <FormItem className="flex flex-col"><FormLabel>Obrigatório</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} className="mt-2"/></FormControl></FormItem>
                 )}/>
             </div>
+            
+            {questionType === 'range' && (
+                <div className="space-y-4 pt-4 border-t">
+                    <FormLabel>Configuração do intervalo</FormLabel>
+                     <div className="p-3 border rounded-lg bg-muted/50 grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="rangeConfig.minLabel" render={({ field }) => (
+                            <FormItem><FormLabel>Rótulo Mínimo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                        )}/>
+                        <FormField control={form.control} name="rangeConfig.maxLabel" render={({ field }) => (
+                            <FormItem><FormLabel>Rótulo Máximo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                        )}/>
+                     </div>
+                </div>
+            )}
+            
+            {questionType === 'rating' && (
+                 <div className="space-y-4 pt-4 border-t">
+                    <FormLabel>Configuração da avaliação</FormLabel>
+                     <div className="p-3 border rounded-lg bg-muted/50">
+                         <FormField control={form.control} name="ratingConfig.max" render={({ field }) => (
+                            <FormItem><FormLabel>Valor máximo da escala (2 a 10)</FormLabel><FormControl><Input type="number" min="2" max="10" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                        )}/>
+                     </div>
+                </div>
+            )}
 
             {questionType === 'number' && (
                 <div className="space-y-4 pt-4 border-t">
