@@ -67,7 +67,7 @@
     @apply bg-background text-foreground;
   }
   .animate-pulse-once {
-    animation: pulse-once 1.2s ease-in-out;
+    animation: pulse-once 1.5s ease-in-out;
   }
   
   .animate-shake {
