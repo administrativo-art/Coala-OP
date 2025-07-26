@@ -5,7 +5,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { type FormTemplate, type FormQuestion } from '@/types';
+import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
 import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,18 +25,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
 import { FillFormModal } from '@/components/fill-form-modal';
-import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
+import { DraggableQuestionType } from '@/components/form-builder-dnd';
 import { FormQuestionNav } from '@/components/form-question-nav';
+import { Input } from '@/components/ui/input';
+
 
 const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'text': 'Texto',
     'number': 'Número',
+    'range': 'Intervalo',
+    'rating': 'Avaliação',
     'yes-no': 'Sim/Não',
     'single-choice': 'Escolha Única',
     'multiple-choice': 'Múltipla Escolha',
     'file-attachment': 'Anexo de Arquivo',
-    'range': 'Intervalo',
-    'rating': 'Avaliação',
 };
 
 
@@ -111,16 +113,15 @@ const SortableQuestionItem = ({
     );
 }
 
-const DroppableQuestionArea = ({ children, id, isOver }: { children?: React.ReactNode, id: string, isOver?: boolean }) => {
-    const { setNodeRef } = useDroppable({ id });
+const DroppableArea = ({ children, id, isOver }: { children?: React.ReactNode, id: string, isOver?: boolean }) => {
+    const { setNodeRef } = useDroppable({ id, data: { type: 'section' } });
     
     return (
-        <div ref={setNodeRef} className={cn("w-full transition-colors", isOver && "bg-primary/10 rounded-lg")}>
+        <div ref={setNodeRef} className={cn("p-4 space-y-4 rounded-lg", isOver && "bg-primary/10")}>
             {children}
         </div>
     );
 };
-
 
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
@@ -164,6 +165,7 @@ export default function FormBuilderPage() {
         if(loading) return;
 
         if (templateId === 'new') {
+             const initialSection: FormSection = { id: `section-${nanoid()}`, name: 'Seção 1', order: 0 };
              const initialTemplate = {
                   name: 'Novo Formulário',
                   type: 'standard' as const,
@@ -171,13 +173,20 @@ export default function FormBuilderPage() {
                   moment: null,
                   submissionTitleFormat: '',
                   questions: [],
-                  sections: [],
+                  sections: [initialSection],
               };
             setInternalTemplate(initialTemplate);
         } else {
             const templateToEdit = templates.find(t => t.id === templateId);
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
+                 if (!newTemplate.sections || newTemplate.sections.length === 0) {
+                     newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0 }];
+                     // Assign all existing questions to the new section
+                     newTemplate.questions.forEach((q: FormQuestion) => {
+                         q.sectionId = newTemplate.sections[0].id;
+                     });
+                 }
                  setInternalTemplate(newTemplate);
             }
         }
@@ -202,11 +211,30 @@ export default function FormBuilderPage() {
         autoSave();
     }, [debouncedTemplate, addTemplate, updateTemplate, router]);
     
-    const sortedQuestions = useMemo(() => {
-        if (!internalTemplate?.questions) return [];
-        return [...internalTemplate.questions].sort((a,b) => a.order - b.order);
+    const sortedSections = useMemo(() => {
+        if (!internalTemplate?.sections) return [];
+        return [...internalTemplate.sections].sort((a,b) => a.order - b.order);
     }, [internalTemplate]);
     
+    const questionsBySection = useMemo(() => {
+        const result: Record<string, FormQuestion[]> = {};
+        if (!internalTemplate?.questions) return result;
+
+        sortedSections.forEach(section => {
+            result[section.id] = (internalTemplate.questions || [])
+                .filter(q => q.sectionId === section.id)
+                .sort((a,b) => a.order - b.order);
+        });
+
+        // Handle questions without a section
+        const orphanedQuestions = (internalTemplate.questions || []).filter(q => !q.sectionId);
+        if (orphanedQuestions.length > 0 && sortedSections.length > 0) {
+            result[sortedSections[0].id] = [...(result[sortedSections[0].id] || []), ...orphanedQuestions];
+        }
+
+        return result;
+    }, [internalTemplate, sortedSections]);
+
     const scrollToQuestion = (questionId: string) => {
         setSelectedQuestionId(questionId);
         setHighlightedQuestionId(questionId);
@@ -221,6 +249,43 @@ export default function FormBuilderPage() {
         if (!internalTemplate) return;
         setInternalTemplate(prev => ({ ...prev!, ...updates }));
     };
+    
+    const handleAddSection = () => {
+        if (!internalTemplate) return;
+        const newSection: FormSection = {
+            id: `section-${nanoid()}`,
+            name: `Nova Seção`,
+            order: (internalTemplate.sections || []).length,
+        };
+        const newSections = [...(internalTemplate.sections || []), newSection];
+        handleTemplateChange({ sections: newSections });
+    };
+
+    const handleSectionChange = (sectionId: string, newName: string) => {
+         if (!internalTemplate) return;
+        const newSections = internalTemplate.sections.map(s => s.id === sectionId ? { ...s, name: newName } : s);
+        handleTemplateChange({ sections: newSections });
+    };
+
+    const handleDeleteSection = (sectionId: string) => {
+        if (!internalTemplate || internalTemplate.sections.length <= 1) {
+            toast({ variant: 'destructive', title: 'Não é possível remover a única seção.' });
+            return;
+        }
+
+        const questionsInSection = questionsBySection[sectionId] || [];
+        const newSections = internalTemplate.sections.filter(s => s.id !== sectionId);
+        const newQuestions = internalTemplate.questions.filter(q => q.sectionId !== sectionId);
+        
+        // Move questions from the deleted section to the first available section
+        if (questionsInSection.length > 0 && newSections.length > 0) {
+            const targetSectionId = newSections[0].id;
+            const movedQuestions = questionsInSection.map(q => ({ ...q, sectionId: targetSectionId }));
+            newQuestions.push(...movedQuestions);
+        }
+
+        handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
+    };
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
@@ -233,7 +298,8 @@ export default function FormBuilderPage() {
                 label: 'Nova Pergunta',
                 type: 'text',
                 isRequired: false,
-                order: (internalTemplate.questions || []).length
+                order: (internalTemplate.questions || []).length,
+                sectionId: updatedQuestion.sectionId,
             };
             
             const newQuestions = [...(internalTemplate.questions || []), newQuestion];
@@ -251,7 +317,7 @@ export default function FormBuilderPage() {
         }
     };
 
-    const handleAddQuestion = (type: FormQuestion['type'], index: number) => {
+    const handleAddQuestion = (type: FormQuestion['type'], sectionId: string) => {
         if (!internalTemplate) return;
         
         const newQuestion: FormQuestion = {
@@ -259,14 +325,12 @@ export default function FormBuilderPage() {
             label: "Nova Pergunta",
             type: type,
             isRequired: false,
-            order: index
+            order: (internalTemplate.questions || []).filter(q => q.sectionId === sectionId).length,
+            sectionId: sectionId
         };
 
-        let newQuestions = [...(internalTemplate.questions || [])];
-        newQuestions.splice(index, 0, newQuestion);
-        
-        const reorderedQuestions = newQuestions.map((q, i) => ({ ...q, order: i }));
-        handleTemplateChange({ questions: reorderedQuestions });
+        const newQuestions = [...(internalTemplate.questions || []), newQuestion];
+        handleTemplateChange({ questions: newQuestions });
         
         setTimeout(() => scrollToQuestion(newQuestion.id), 100);
     };
@@ -281,8 +345,21 @@ export default function FormBuilderPage() {
             return { ...q, ramifications: cleanedRamifications };
         });
 
-        newQuestions = newQuestions.sort((a,b) => a.order - b.order).map((q, index) => ({...q, order: index}));
-        handleTemplateChange({ questions: newQuestions });
+        // Re-order remaining questions
+        const reorderedBySection: Record<string, FormQuestion[]> = {};
+        newQuestions.forEach(q => {
+            if (!reorderedBySection[q.sectionId!]) reorderedBySection[q.sectionId!] = [];
+            reorderedBySection[q.sectionId!].push(q);
+        });
+
+        const finalQuestions: FormQuestion[] = [];
+        Object.values(reorderedBySection).forEach(sectionQuestions => {
+            sectionQuestions.sort((a,b) => a.order - b.order).forEach((q, index) => {
+                finalQuestions.push({ ...q, order: index });
+            });
+        });
+
+        handleTemplateChange({ questions: finalQuestions });
     };
 
     const handlePublish = async () => {
@@ -309,41 +386,62 @@ export default function FormBuilderPage() {
         setOverId(null);
 
         if (!over || !internalTemplate) return;
-    
+
         const isNewQuestion = String(active.id).startsWith('new-question-');
-        const questions = sortedQuestions;
-    
+        
         if (isNewQuestion) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-            let newIndex = questions.length;
-    
-            if (String(over.id).startsWith('droppable-area')) {
-                 newIndex = questions.length;
-            } else {
-                const overIndex = questions.findIndex(q => q.id === over.id);
-                if (overIndex !== -1) {
-                    newIndex = overIndex;
-                }
-            }
-            handleAddQuestion(questionType, newIndex);
-
-        } else { 
-            if (active.id === over.id) return;
-            const oldIndex = questions.findIndex(q => q.id === active.id);
-            let newIndex: number;
-    
-            if (String(over.id).startsWith('droppable-area-end')) {
-                newIndex = questions.length -1;
-            } else {
-                newIndex = questions.findIndex(q => q.id === over.id);
-            }
+            const targetSectionId = over.data?.current?.type === 'section' ? over.id : over.data?.current?.question?.sectionId;
             
-            if (oldIndex !== -1 && newIndex !== -1) {
-                const reordered = arrayMove(questions, oldIndex, newIndex);
-                handleTemplateChange({ questions: reordered.map((q, i) => ({ ...q, order: i })) });
+            if (targetSectionId) {
+                handleAddQuestion(questionType, String(targetSectionId));
             }
+        } else { // Reordering existing question
+            const question = active.data?.current?.question as FormQuestion;
+            const overIsSection = over.data?.current?.type === 'section';
+            const targetSectionId = overIsSection ? over.id : over.data?.current?.question?.sectionId;
+
+            if (!question || !targetSectionId) return;
+
+            const oldSectionId = question.sectionId;
+            const newSectionId = String(targetSectionId);
+            
+            const newQuestions = [...internalTemplate.questions];
+            const movedQuestionIndex = newQuestions.findIndex(q => q.id === active.id);
+            if (movedQuestionIndex === -1) return;
+            
+            newQuestions[movedQuestionIndex] = { ...newQuestions[movedQuestionIndex], sectionId: newSectionId };
+
+            // Re-order questions within affected sections
+            const oldSectionQuestions = newQuestions.filter(q => q.sectionId === oldSectionId).sort((a,b) => a.order - b.order);
+            const newSectionQuestions = newQuestions.filter(q => q.sectionId === newSectionId).sort((a,b) => a.order - b.order);
+
+            const finalQuestions = [...internalTemplate.questions.filter(q => q.sectionId !== oldSectionId && q.sectionId !== newSectionId)];
+
+            oldSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+            if (oldSectionId !== newSectionId) {
+                const overQuestion = over.data?.current?.question;
+                const newIndex = overIsSection ? newSectionQuestions.length : newSectionQuestions.findIndex(q => q.id === over.id);
+                if (newIndex !== -1) {
+                    const reordered = arrayMove(newSectionQuestions, newSectionQuestions.findIndex(q => q.id === active.id), newIndex);
+                    reordered.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+                } else {
+                     newSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+                }
+            } else { // reordering within the same section
+                 const oldIndex = oldSectionQuestions.findIndex(q => q.id === active.id);
+                 const newIndex = oldSectionQuestions.findIndex(q => q.id === over.id);
+                 if (oldIndex !== -1 && newIndex !== -1) {
+                    const reordered = arrayMove(oldSectionQuestions, oldIndex, newIndex);
+                    reordered.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+                 } else {
+                     oldSectionQuestions.forEach((q, i) => finalQuestions.push({ ...q, order: i }));
+                 }
+            }
+            handleTemplateChange({ questions: finalQuestions });
         }
     };
+
 
     const handlePreviewSubmit = async () => {
         toast({
@@ -408,37 +506,56 @@ export default function FormBuilderPage() {
                 
                 <main className={cn("flex-1 min-h-0 bg-muted/40 p-6 grid gap-6 transition-all", isSummaryCollapsed ? "grid-cols-[120px_1fr_350px]" : "grid-cols-[280px_1fr_350px]")}>
                     <FormQuestionNav
-                        questions={sortedQuestions}
+                        sections={sortedSections}
+                        questionsBySection={questionsBySection}
                         selectedQuestionId={selectedQuestionId}
                         onQuestionSelect={scrollToQuestion}
-                        onReorder={(reordered) => handleTemplateChange({ questions: reordered })}
                         isCollapsed={isSummaryCollapsed}
                         setIsCollapsed={setIsSummaryCollapsed}
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
-                        <SortableContext items={sortedQuestions.map(q => q.id)}>
-                            {sortedQuestions.map((q) => (
-                                <SortableQuestionItem
-                                    key={q.id}
-                                    question={q}
-                                    allQuestions={internalTemplate?.questions || []}
-                                    onDelete={() => handleDeleteQuestion(q.id)}
-                                    onQuestionChange={handleQuestionChange}
-                                    users={users}
-                                    profiles={profiles}
-                                    isDragging={activeId === q.id}
-                                    isHighlighted={highlightedQuestionId === q.id}
-                                />
-                            ))}
-                        </SortableContext>
-                        
-                        <DroppableQuestionArea 
-                            id="droppable-area-end"
-                            isOver={overId === 'droppable-area-end'}
-                        >
-                           <div className="text-center py-8 border-2 border-dashed rounded-lg"></div>
-                        </DroppableQuestionArea>
+                        {sortedSections.map(section => (
+                            <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
+                                <AccordionItem value="item-1" className="bg-card rounded-lg border">
+                                    <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
+                                        <div className="flex-1 flex items-center gap-2">
+                                            <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
+                                        </div>
+                                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="border-t">
+                                        <DroppableArea id={section.id} isOver={overId === section.id}>
+                                            <SortableContext items={(questionsBySection[section.id] || []).map(q => q.id)}>
+                                                {(questionsBySection[section.id] || []).map((q) => (
+                                                    <SortableQuestionItem
+                                                        key={q.id}
+                                                        question={q}
+                                                        allQuestions={internalTemplate?.questions || []}
+                                                        onDelete={() => handleDeleteQuestion(q.id)}
+                                                        onQuestionChange={handleQuestionChange}
+                                                        users={users}
+                                                        profiles={profiles}
+                                                        isDragging={activeId === q.id}
+                                                        isHighlighted={highlightedQuestionId === q.id}
+                                                    />
+                                                ))}
+                                            </SortableContext>
+                                             {(questionsBySection[section.id] || []).length === 0 && (
+                                                <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                                                    Arraste um campo aqui
+                                                </div>
+                                             )}
+                                        </DroppableArea>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        ))}
+                        <Button variant="outline" onClick={handleAddSection} className="w-full">
+                            <PlusCircle className="mr-2" /> Adicionar Seção
+                        </Button>
                     </div>
 
                     <aside className="h-full">

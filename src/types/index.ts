@@ -389,6 +389,7 @@ export type FormQuestion = {
     type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment' | 'range' | 'rating';
     isRequired: boolean;
     order: number;
+    sectionId?: string;
     options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
     attachmentConfig?: {
         allowMultiple: boolean;
@@ -417,7 +418,6 @@ export type FormSection = {
     name: string;
     description?: string;
     order: number;
-    questions?: FormQuestion[];
 };
 
 export type FormTemplate = {

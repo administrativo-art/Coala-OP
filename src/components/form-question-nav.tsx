@@ -6,11 +6,12 @@ import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
-import { type FormQuestion } from '@/types';
+import { type FormQuestion, type FormSection } from '@/types';
 import { GripVertical, Hash, Text, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal } from 'lucide-react';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   text: Text,
@@ -23,63 +24,14 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   rating: Star,
 };
 
-const SortableNavItem = ({ question, index, isSelected, onSelect, isCollapsed }: { question: FormQuestion; index: number; isSelected: boolean; onSelect: (id: string) => void; isCollapsed: boolean; }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: question.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-  const Icon = questionIcons[question.type];
-  
-  const content = (
-     <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "flex items-center p-2 rounded-lg cursor-pointer transition-colors w-full",
-        isCollapsed ? "justify-center gap-0" : "gap-2",
-        isSelected ? "bg-primary/20" : "hover:bg-muted"
-      )}
-      onClick={() => onSelect(question.id)}
-    >
-      <Button variant="ghost" size="icon" className="cursor-grab h-8 w-8" {...listeners} {...attributes}>
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </Button>
-       {isCollapsed ? (
-         <>
-          <span className="text-xs font-bold w-6 text-center">{index + 1}.</span>
-          <Icon className="h-4 w-4 shrink-0 text-primary"/>
-         </>
-      ) : (
-        <>
-          <span className="text-base font-bold w-8">{index + 1}.</span>
-          <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
-          <span className="text-sm font-normal truncate flex-1">{question.label || 'Nova Pergunta'}</span>
-        </>
-      )}
-    </div>
-  );
-  
-  if (isCollapsed) {
-    return (
-        <TooltipProvider><Tooltip delayDuration={100}><TooltipTrigger asChild>
-            {content}
-        </TooltipTrigger><TooltipContent side="right"><p>{index + 1}. {question.label || 'Nova Pergunta'}</p></TooltipContent></Tooltip></TooltipProvider>
-    )
-  }
-
-  return content;
-};
-
-export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelect, onReorder, isCollapsed, setIsCollapsed }: {
-  questions: FormQuestion[];
+export function FormQuestionNav({ sections, questionsBySection, selectedQuestionId, onQuestionSelect, isCollapsed, setIsCollapsed }: {
+  sections: FormSection[];
+  questionsBySection: Record<string, FormQuestion[]>;
   selectedQuestionId: string | null;
   onQuestionSelect: (id: string) => void;
-  onReorder: (reorderedQuestions: FormQuestion[]) => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
 }) {
-  const { setNodeRef } = useDroppable({ id: 'question-nav-drop-area' });
 
   return (
     <div className="p-4 border rounded-lg bg-card sticky top-6 flex flex-col h-[calc(100vh-3rem)]">
@@ -90,19 +42,33 @@ export function FormQuestionNav({ questions, selectedQuestionId, onQuestionSelec
         </>
       )}
       <ScrollArea className="flex-1 -mx-4">
-        <div ref={setNodeRef} className="space-y-1 px-4">
-            <SortableContext items={questions.map(q => q.id)}>
-                {questions.map((q, index) => (
-                    <SortableNavItem
-                        key={q.id}
-                        question={q}
-                        index={index}
-                        isSelected={selectedQuestionId === q.id}
-                        onSelect={onQuestionSelect}
-                        isCollapsed={isCollapsed}
-                    />
+        <div className="space-y-1 px-4">
+            <Accordion type="multiple" defaultValue={sections.map(s => s.id)} className="w-full">
+                {sections.map(section => (
+                    <AccordionItem value={section.id} key={section.id} className="border-none">
+                        <AccordionTrigger className="p-2 text-base hover:no-underline hover:bg-muted rounded-lg [&[data-state=open]>svg]:text-primary">
+                            <span className="font-semibold truncate flex-1 text-left">{section.name}</span>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-1 pl-4 border-l-2 ml-2">
+                             {(questionsBySection[section.id] || []).map((q, index) => {
+                                 const Icon = questionIcons[q.type];
+                                 return (
+                                    <div 
+                                        key={q.id}
+                                        onClick={() => onQuestionSelect(q.id)}
+                                        className={cn("flex items-center p-2 rounded-lg cursor-pointer", selectedQuestionId === q.id ? "bg-primary/20" : "hover:bg-muted")}
+                                    >
+                                        <span className="text-base font-bold w-8">{index + 1}.</span>
+                                        <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
+                                        <span className="text-sm font-normal truncate flex-1">{q.label || 'Nova Pergunta'}</span>
+                                    </div>
+                                )
+                             })}
+                             {(questionsBySection[section.id] || []).length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma pergunta nesta seção</p>}
+                        </AccordionContent>
+                    </AccordionItem>
                 ))}
-            </SortableContext>
+            </Accordion>
         </div>
       </ScrollArea>
        <div className="mt-auto pt-4 border-t shrink-0">
