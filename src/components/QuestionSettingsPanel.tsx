@@ -288,8 +288,18 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     
                                     {ramification.action === 'show_question' && (
                                         <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
-                                            <FormItem>
-                                                <Select onValueChange={targetField.onChange} value={targetField.value}>
+                                             <FormItem>
+                                                <Select
+                                                    onValueChange={(value) => {
+                                                        targetField.onChange(value);
+                                                        // This is the fix: trigger the parent form's onChange
+                                                        // immediately when the special value is selected.
+                                                        if (value === '__CREATE_NEW__') {
+                                                          setTimeout(onSubmit, 100);
+                                                        }
+                                                    }}
+                                                    value={targetField.value}
+                                                    >
                                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
                                                     <SelectContent>
                                                         <SelectItem value="__CREATE_NEW__">
