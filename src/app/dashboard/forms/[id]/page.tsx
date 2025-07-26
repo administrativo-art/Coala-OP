@@ -25,7 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { FormGeneralSettings } from '@/components/form-general-settings';
 import { useDebounce } from 'use-debounce';
 import { FillFormModal } from '@/components/fill-form-modal';
-import { DraggableQuestionType } from '@/components/form-builder-dnd';
+import { DraggableQuestionType, Placeholder } from '@/components/form-builder-dnd';
 import { FormQuestionNav } from '@/components/form-question-nav';
 import { Input } from '@/components/ui/input';
 
@@ -129,7 +129,7 @@ const SortableQuestionItem = ({
 }
 
 const DroppableArea = ({ children, id, isOver }: { children?: React.ReactNode, id: string, isOver?: boolean }) => {
-    const { setNodeRef } = useDroppable({ id, data: { type: 'section' } });
+    const { setNodeRef } = useDroppable({ id, data: { type: 'section-droppable', sectionId: id } });
     
     return (
         <div ref={setNodeRef} className={cn("p-4 space-y-4 rounded-lg", isOver && "bg-primary/10")}>
@@ -354,9 +354,13 @@ export default function FormBuilderPage() {
         };
         
         let currentQuestions = [...(internalTemplate.questions || [])];
-        currentQuestions.splice(atIndex, 0, newQuestion);
         
-        const finalQuestions = currentQuestions.map((q, index) => ({...q, order: index}));
+        const sectionQuestions = currentQuestions.filter(q => q.sectionId === sectionId).sort((a,b) => a.order - b.order);
+        const nonSectionQuestions = currentQuestions.filter(q => q.sectionId !== sectionId);
+
+        sectionQuestions.splice(atIndex, 0, newQuestion);
+        
+        const finalQuestions = [...nonSectionQuestions, ...sectionQuestions].map((q, index) => ({...q, order: index}));
 
         handleTemplateChange({ questions: finalQuestions });
         
@@ -404,7 +408,7 @@ export default function FormBuilderPage() {
         }
     
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
-        const questions = internalTemplate.questions || [];
+        let questions = internalTemplate.questions || [];
 
         if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
@@ -412,8 +416,8 @@ export default function FormBuilderPage() {
             let targetSectionId: string;
             let targetIndex: number;
     
-            if (over.data?.current?.type === 'section') {
-                targetSectionId = String(over.id);
+            if (over.data?.current?.type === 'section-droppable') {
+                targetSectionId = over.data.current.sectionId;
                 targetIndex = questionsBySection[targetSectionId]?.length || 0;
             } else if (over.data?.current?.type === 'question') {
                 const overQuestion = over.data.current.question as FormQuestion;
@@ -425,24 +429,28 @@ export default function FormBuilderPage() {
             }
             
             if (targetSectionId !== undefined) {
-                handleAddQuestion(questionType, targetSectionId, targetIndex);
+                const sectionQuestions = questions.filter(q => q.sectionId === targetSectionId).sort((a,b) => a.order - b.order);
+                const realIndex = sectionQuestions[targetIndex]?.order ?? questions.length;
+                handleAddQuestion(questionType, targetSectionId, realIndex);
             }
 
-        } else if (active.id !== over.id) {
+        } else if (active.id !== over.id && over.data.current) {
              const oldIndex = questions.findIndex(q => q.id === active.id);
-             let newIndex: number;
+             let newIndex : number;
              let newSectionId: string;
- 
-             if (over.data.current?.type === 'question') {
-                 newIndex = questions.findIndex(q => q.id === over.id);
-                 newSectionId = (over.data.current?.question as FormQuestion).sectionId!;
-             } else if (over.data.current?.type === 'section') {
-                 newSectionId = String(over.id);
-                 const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
-                 newIndex = questions.findIndex(q => q.id === questionsInSection[questionsInSection.length - 1]?.id) + 1;
+
+             if (over.data.current.type === 'question') {
+                const overQuestion = over.data.current.question as FormQuestion;
+                newIndex = questions.findIndex(q => q.id === over.id);
+                newSectionId = overQuestion.sectionId!;
+             } else if (over.data.current.type === 'section-droppable') {
+                newSectionId = over.data.current.sectionId as string;
+                newIndex = questions.length; // Drop at the end of the section
              } else {
-                 newIndex = questions.length;
-                 newSectionId = sortedSections[sortedSections.length - 1].id;
+                // Should not happen, but as a fallback:
+                setActiveId(null);
+                setOverId(null);
+                return;
              }
  
              if (oldIndex > -1 && newIndex > -1) {
@@ -556,25 +564,25 @@ export default function FormBuilderPage() {
                                             <DroppableArea id={section.id} isOver={overId === section.id}>
                                                 <SortableContext items={sectionQuestions.map(q => q.id)}>
                                                     {sectionQuestions.map((q, index) => (
-                                                        <SortableQuestionItem
-                                                            key={q.id}
-                                                            index={sectionStartIndex + index}
-                                                            question={q}
-                                                            allQuestions={internalTemplate?.questions || []}
-                                                            onDelete={() => handleDeleteQuestion(q.id)}
-                                                            onQuestionChange={handleQuestionChange}
-                                                            users={users}
-                                                            profiles={profiles}
-                                                            isDragging={activeId === q.id}
-                                                            isHighlighted={highlightedQuestionId === q.id}
-                                                        />
+                                                        <React.Fragment key={q.id}>
+                                                            {activeType && overId === q.id && <Placeholder index={index} />}
+                                                            <SortableQuestionItem
+                                                                index={sectionStartIndex + index}
+                                                                question={q}
+                                                                allQuestions={internalTemplate?.questions || []}
+                                                                onDelete={() => handleDeleteQuestion(q.id)}
+                                                                onQuestionChange={handleQuestionChange}
+                                                                users={users}
+                                                                profiles={profiles}
+                                                                isDragging={activeId === q.id}
+                                                                isHighlighted={highlightedQuestionId === q.id}
+                                                            />
+                                                        </React.Fragment>
                                                     ))}
                                                 </SortableContext>
-                                                 {sectionQuestions.length === 0 && (
-                                                    <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
-                                                        Arraste um campo aqui
-                                                    </div>
-                                                 )}
+                                                 <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                                                    Arraste um campo aqui
+                                                </div>
                                             </DroppableArea>
                                         </AccordionContent>
                                     </AccordionItem>
