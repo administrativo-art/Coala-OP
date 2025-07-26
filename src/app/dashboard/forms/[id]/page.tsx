@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -344,7 +343,7 @@ export default function FormBuilderPage() {
         }
     };
 
-    const handleAddQuestion = (type: FormQuestion['type'], sectionId: string) => {
+    const handleAddQuestion = (type: FormQuestion['type'], sectionId: string, atIndex: number) => {
         if (!internalTemplate) return;
         
         const newQuestion: FormQuestion = {
@@ -352,11 +351,13 @@ export default function FormBuilderPage() {
             label: "Nova Pergunta",
             type: type,
             isRequired: false,
-            order: (internalTemplate.questions || []).filter(q => q.sectionId === sectionId).length,
+            order: atIndex,
             sectionId: sectionId
         };
+        
+        const newQuestions = [...(internalTemplate.questions || [])];
+        newQuestions.splice(atIndex, 0, newQuestion);
 
-        const newQuestions = [...(internalTemplate.questions || []), newQuestion];
         handleTemplateChange({ questions: newQuestions });
         
         setTimeout(() => scrollToQuestion(newQuestion.id), 100);
@@ -395,44 +396,73 @@ export default function FormBuilderPage() {
     
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
-        
+    
         if (!over || !internalTemplate) {
             setActiveId(null);
             setOverId(null);
             return;
         }
-
+    
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
-        
+    
         if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-            const targetSectionId = over.data?.current?.type === 'section' ? over.id : over.data?.current?.question?.sectionId;
+            
+            let targetSectionId: string;
+            let targetIndex: number;
+    
+            if (over.data?.current?.type === 'section') {
+                targetSectionId = String(over.id);
+                targetIndex = questionsBySection[targetSectionId]?.length || 0;
+            } else if (over.data?.current?.type === 'question') {
+                const overQuestion = over.data.current.question;
+                targetSectionId = overQuestion.sectionId;
+                targetIndex = overQuestion.order;
+            } else {
+                 targetSectionId = sortedSections[0].id;
+                 targetIndex = 0;
+            }
             
             if (targetSectionId) {
-                handleAddQuestion(questionType, String(targetSectionId));
+                handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
-        } else { // Reordering existing question
+        } else if (active.id !== over.id) { // Reordering existing question
             const questions = internalTemplate.questions || [];
+            
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            const newIndex = questions.findIndex((q) => q.id === over.id);
-
-            if (oldIndex !== -1 && newIndex !== -1 && active.id !== over.id) {
-                const movedQuestions = arrayMove(questions, oldIndex, newIndex);
+            const overIsSection = over.data?.current?.type === 'section';
+    
+            let newIndex: number;
+            let targetSectionId: string;
+    
+            if (overIsSection) {
+                targetSectionId = String(over.id);
+                // Temporarily place at the end of all questions, the useEffect will fix it
+                newIndex = questions.length - 1; 
+            } else {
+                const overQuestion = over.data.current?.question;
+                if (!overQuestion) {
+                    setActiveId(null);
+                    setOverId(null);
+                    return;
+                }
+                newIndex = questions.findIndex((q) => q.id === over.id);
+                targetSectionId = overQuestion.sectionId;
+            }
+    
+            if (oldIndex !== -1 && newIndex !== -1) {
+                let movedQuestions = arrayMove(questions, oldIndex, newIndex);
                 
-                const overIsSection = over.data?.current?.type === 'section';
-                const targetSectionId = overIsSection ? String(over.id) : over.data?.current?.question?.sectionId;
-
-                if (targetSectionId) {
-                    const activeQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
-                    if (activeQuestionIndex !== -1) {
-                         movedQuestions[activeQuestionIndex].sectionId = targetSectionId;
-                    }
+                // Update sectionId for the moved question
+                const movedQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
+                if (movedQuestionIndex !== -1) {
+                     movedQuestions[movedQuestionIndex].sectionId = targetSectionId;
                 }
                 
                 handleTemplateChange({ questions: movedQuestions });
             }
         }
-        
+    
         setActiveId(null);
         setOverId(null);
     };
