@@ -198,9 +198,11 @@ export default function FormBuilderPage() {
                  if (!newTemplate.sections || newTemplate.sections.length === 0) {
                      newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0, questions: [] }];
                      // Assign all existing questions to the new section
-                     newTemplate.questions.forEach((q: FormQuestion) => {
-                         q.sectionId = newTemplate.sections[0].id;
-                     });
+                     if (newTemplate.questions) {
+                        newTemplate.questions.forEach((q: FormQuestion) => {
+                            q.sectionId = newTemplate.sections[0].id;
+                        });
+                     }
                  }
                  setInternalTemplate(newTemplate);
             }
@@ -351,16 +353,12 @@ export default function FormBuilderPage() {
             sectionId: sectionId
         };
         
-        let newQuestions = [...(internalTemplate.questions || [])];
-        
-        const allQuestionsInSection = questionsBySection[sectionId] || [];
-        if(atIndex >= 0 && atIndex < allQuestionsInSection.length) {
-            const questionToInsertBefore = allQuestionsInSection[atIndex];
-            const globalIndex = newQuestions.findIndex(q => q.id === questionToInsertBefore.id);
-            newQuestions.splice(globalIndex, 0, newQuestion);
-        } else {
-            newQuestions.push(newQuestion);
-        }
+        const currentQuestions = internalTemplate.questions || [];
+        const newQuestions = [
+            ...currentQuestions.slice(0, atIndex),
+            newQuestion,
+            ...currentQuestions.slice(atIndex)
+        ];
 
         handleTemplateChange({ questions: newQuestions });
         
@@ -423,26 +421,37 @@ export default function FormBuilderPage() {
                 targetSectionId = overQuestion.sectionId!;
                 targetIndex = overQuestion.order;
             } else {
-                 targetSectionId = sortedSections[0].id;
-                 targetIndex = 0;
+                targetSectionId = sortedSections[0].id;
+                targetIndex = 0;
             }
             
             if (targetSectionId !== undefined) {
-                handleAddQuestion(questionType, targetSectionId, targetIndex);
+                const questions = internalTemplate.questions || [];
+                const globalIndex = questions.filter(q => q.sectionId === targetSectionId).findIndex(q => q.order === targetIndex);
+                const finalIndex = globalIndex !== -1 ? globalIndex : questions.filter(q => q.sectionId === targetSectionId).length;
+                handleAddQuestion(questionType, targetSectionId, finalIndex);
             }
         } else if (active.id !== over.id) {
             const questions = internalTemplate.questions || [];
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            let newIndex = questions.findIndex((q) => q.id === over.id);
+            let newIndex: number;
 
+            let newSectionId = questions[oldIndex].sectionId;
+
+            if(over.data.current?.type === 'question') {
+                 newIndex = questions.findIndex((q) => q.id === over.id);
+                 newSectionId = questions[newIndex].sectionId;
+            } else if (over.data.current?.type === 'section') {
+                newSectionId = String(over.id);
+                const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
+                newIndex = questions.length; // Will be placed at the end of all questions, then reordered by section
+            } else {
+                newIndex = oldIndex;
+            }
+            
             if (oldIndex !== -1 && newIndex !== -1) {
                 let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                
-                const overQuestion = questions.find(q => q.id === over.id);
-                if (overQuestion) {
-                    movedQuestions[newIndex].sectionId = overQuestion.sectionId;
-                }
-                
+                movedQuestions[newIndex] = { ...movedQuestions[newIndex], sectionId: newSectionId };
                 handleTemplateChange({ questions: movedQuestions });
             }
         }
@@ -454,41 +463,43 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (!internalTemplate || !internalTemplate.sections || !internalTemplate.questions) return;
     
-        const finalQuestions: FormQuestion[] = [];
-    
+        let reorderedQuestions: FormQuestion[] = [];
+        let globalIndex = 0;
+        
         sortedSections.forEach(section => {
             const sectionQuestions = (internalTemplate.questions || [])
-                .filter(q => q.sectionId === section.id)
+                .filter(q => q.sectionId === section.id || (!q.sectionId && section.order === 0))
                 .sort((a, b) => a.order - b.order)
-                .map((q, index) => ({ ...q, order: index })); // Re-order within section
+                .map((q, index) => ({ 
+                    ...q, 
+                    sectionId: section.id, 
+                    order: index 
+                }));
             
-            finalQuestions.push(...sectionQuestions);
+            reorderedQuestions.push(...sectionQuestions);
         });
-    
-        // Ensure all questions are accounted for, assigning orphans to the first section
-        const accountedForIds = new Set(finalQuestions.map(q => q.id));
-        const orphanQuestions = (internalTemplate.questions || [])
-            .filter(q => !accountedForIds.has(q.id))
-            .map(q => ({ ...q, sectionId: sortedSections[0].id }));
+
+        const unaccountedFor = internalTemplate.questions.filter(q => !reorderedQuestions.find(rq => rq.id === q.id));
+        if (unaccountedFor.length > 0 && sortedSections.length > 0) {
+            const firstSectionId = sortedSections[0].id;
+            const updatedOrphans = unaccountedFor.map(q => ({ ...q, sectionId: firstSectionId }));
+            reorderedQuestions.push(...updatedOrphans);
             
-        finalQuestions.push(...orphanQuestions);
-    
-        // Final re-sorting and re-ordering pass
-        const reorderedFinal: FormQuestion[] = [];
-        sortedSections.forEach(section => {
-            const sectionQuestions = finalQuestions
-                .filter(q => q.sectionId === section.id)
-                .sort((a,b) => a.order - b.order) // This might be redundant but safe
+            // Re-run the ordering for the first section
+            const firstSectionQuestions = reorderedQuestions
+                .filter(q => q.sectionId === firstSectionId)
+                .sort((a, b) => a.order - b.order)
                 .map((q, index) => ({ ...q, order: index }));
-            
-            reorderedFinal.push(...sectionQuestions);
-        });
-    
-        if (JSON.stringify(reorderedFinal) !== JSON.stringify(internalTemplate.questions)) {
-            setInternalTemplate(prev => ({ ...prev!, questions: reorderedFinal }));
+
+            const otherQuestions = reorderedQuestions.filter(q => q.sectionId !== firstSectionId);
+            reorderedQuestions = [...firstSectionQuestions, ...otherQuestions];
         }
     
-    }, [internalTemplate?.questions, sortedSections]);
+        if (JSON.stringify(reorderedQuestions) !== JSON.stringify(internalTemplate.questions)) {
+            setInternalTemplate(prev => ({ ...prev!, questions: reorderedQuestions }));
+        }
+    
+    }, [internalTemplate?.questions, sortedSections, internalTemplate?.sections]);
 
 
     const handlePreviewSubmit = async () => {
@@ -573,17 +584,19 @@ export default function FormBuilderPage() {
                             return (
                                 <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
                                     <AccordionItem value="item-1" className="bg-card rounded-lg border">
-                                        <div className="flex items-center pr-4">
-                                            <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
-                                                <div className="flex-1 flex items-center gap-2">
-                                                    <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
-                                                </div>
-                                            </AccordionTrigger>
-                                            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                        <AccordionContent className="border-t">
+                                        {sortedSections.length > 1 && (
+                                            <div className="flex items-center pr-4">
+                                                <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
+                                                    <div className="flex-1 flex items-center gap-2">
+                                                        <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
+                                                    </div>
+                                                </AccordionTrigger>
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
+                                        <AccordionContent className={cn(sortedSections.length > 1 && "border-t")}>
                                             <DroppableArea id={section.id} isOver={overId === section.id}>
                                                 <SortableContext items={sectionQuestions.map(q => q.id)}>
                                                     {sectionQuestions.map((q, index) => (
@@ -650,3 +663,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
