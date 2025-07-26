@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type FormTemplate, type FormSubmission, type Task } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, getDocs, where } from 'firebase/firestore';
 
 export interface FormContextType {
   templates: FormTemplate[];
@@ -77,10 +77,40 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTemplate = useCallback(async (templateId: string) => {
     try {
-      await deleteDoc(doc(db, "formTemplates", templateId));
+        const batch = writeBatch(db);
+
+        // Delete the template itself
+        const templateRef = doc(db, "formTemplates", templateId);
+        batch.delete(templateRef);
+
+        // Find and delete all submissions related to this template
+        const submissionsQuery = query(collection(db, "formSubmissions"), where("templateId", "==", templateId));
+        const submissionsSnapshot = await getDocs(submissionsQuery);
+        
+        const submissionIds = submissionsSnapshot.docs.map(doc => doc.id);
+        
+        for (const subDoc of submissionsSnapshot.docs) {
+            batch.delete(subDoc.ref);
+        }
+
+        // Find and delete all tasks related to this template's submissions
+        if (submissionIds.length > 0) {
+            // Firestore 'in' query supports up to 30 elements
+            for (let i = 0; i < submissionIds.length; i += 30) {
+                const chunk = submissionIds.slice(i, i + 30);
+                const tasksQuery = query(collection(db, "tasks"), where("origin.submissionId", "in", chunk));
+                const tasksSnapshot = await getDocs(tasksQuery);
+                for (const taskDoc of tasksSnapshot.docs) {
+                    batch.delete(taskDoc.ref);
+                }
+            }
+        }
+        
+        await batch.commit();
+
     } catch (error) {
-      console.error("Error deleting template:", error);
-      throw error;
+        console.error("Error deleting template and associated data:", error);
+        throw error;
     }
   }, []);
   
