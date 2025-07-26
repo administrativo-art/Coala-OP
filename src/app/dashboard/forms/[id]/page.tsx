@@ -63,19 +63,21 @@ const SortableQuestionItem = ({
     profiles,
     isDragging,
     isHighlighted,
-    index
+    index,
+    overId,
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
     allSections: FormSection[],
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string) => void;
+    onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
     users: any[];
     profiles: any[];
     isDragging?: boolean;
     isHighlighted?: boolean;
     index: number;
+    overId: string | null;
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
@@ -139,6 +141,7 @@ const SortableQuestionItem = ({
                             onCreateSubQuestion={onCreateSubQuestion}
                             users={users}
                             profiles={profiles}
+                            overId={overId}
                         />
                     </AccordionContent>
                 </AccordionItem>
@@ -186,9 +189,10 @@ export default function FormBuilderPage() {
 
 
     const activeQuestion = useMemo(() => {
-        if (!activeId || !String(activeId).startsWith('question-')) return null;
-        return internalTemplate?.questions?.find(q => q.id === activeId);
-    }, [activeId, internalTemplate?.questions]);
+        if (!activeId || !internalTemplate) return null;
+        if (String(activeId).startsWith('new-question-')) return null;
+        return internalTemplate.questions.find(q => q.id === activeId);
+    }, [activeId, internalTemplate]);
 
     const activeType = useMemo(() => {
         if (!activeId || !String(activeId).startsWith('new-question-')) return null;
@@ -322,54 +326,51 @@ export default function FormBuilderPage() {
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
     
-    const handleCreateSubQuestion = useCallback((parentQuestion: FormQuestion, optionId: string) => {
+    const handleCreateSubQuestion = useCallback((parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => {
         if (!internalTemplate) return;
 
-        setInternalTemplate(currentTemplate => {
-            if (!currentTemplate) return null;
+        const newSubQuestion: FormQuestion = {
+            id: `question-${nanoid()}`,
+            label: 'Nova Pergunta',
+            type: type,
+            isRequired: false,
+            order: 0,
+            sectionId: parentQuestion.sectionId,
+        };
+        
+        const parentIndex = internalTemplate.questions.findIndex(q => q.id === parentQuestion.id);
+        if (parentIndex === -1) return;
 
-            const newSubQuestion: FormQuestion = {
-                id: `question-${nanoid()}`,
-                label: 'Nova Pergunta',
-                type: 'text',
-                isRequired: false,
-                order: 0, // Placeholder, will be updated
-                sectionId: parentQuestion.sectionId,
-            };
-
-            const parentIndex = currentTemplate.questions.findIndex(q => q.id === parentQuestion.id);
-            if (parentIndex === -1) return currentTemplate;
-
-            const newQuestions = [...currentTemplate.questions];
-            newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
-            const reorderedQuestions = newQuestions.map((q, index) => ({ ...q, order: index }));
-
-            const finalQuestions = reorderedQuestions.map(q => {
-                if (q.id === parentQuestion.id) {
-                    return {
-                        ...q,
-                        options: (q.options || []).map(opt => {
-                            if (opt.id === optionId) {
-                                return {
-                                    ...opt,
-                                    ramification: {
-                                        ...opt.ramification,
-                                        targetQuestionId: newSubQuestion.id
-                                    }
-                                };
-                            }
-                            return opt;
-                        })
-                    };
-                }
-                return q;
-            });
-            
-            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-
-            return { ...currentTemplate, questions: finalQuestions };
+        let newQuestions = [...internalTemplate.questions];
+        newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
+        
+        newQuestions = newQuestions.map((q, index) => ({...q, order: index}));
+        
+        const finalQuestions = newQuestions.map(q => {
+            if (q.id === parentQuestion.id) {
+                return {
+                    ...q,
+                    options: (q.options || []).map(opt => {
+                        if (opt.id === optionId) {
+                            return {
+                                ...opt,
+                                ramification: {
+                                    ...(opt.ramification || { id: `ram-${nanoid()}` }),
+                                    targetQuestionId: newSubQuestion.id
+                                }
+                            };
+                        }
+                        return opt;
+                    })
+                };
+            }
+            return q;
         });
-    }, [internalTemplate]);
+        
+        handleTemplateChange({ questions: finalQuestions });
+        
+        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+    }, [internalTemplate, handleTemplateChange]);
 
     const handleQuestionChange = (updatedQuestion: FormQuestion) => {
         if (!internalTemplate) return;
@@ -449,33 +450,42 @@ export default function FormBuilderPage() {
     
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
         let questions = internalTemplate.questions || [];
+        const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
+
 
         if (isNewQuestionDrag) {
-            const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-            
-            let targetSectionId: string | undefined;
-            let targetIndex: number | undefined;
-    
-            if (over.data?.current?.type === 'section-droppable') {
-                targetSectionId = over.data.current.sectionId;
-                const questionsInSection = questions.filter(q => q.sectionId === targetSectionId);
-                targetIndex = questionsInSection.length;
-            } else if (over.data?.current?.type === 'question') {
-                const overQuestion = over.data.current.question as FormQuestion;
-                targetSectionId = overQuestion.sectionId!;
-                targetIndex = overQuestion.order;
-            } else {
-                 const firstSectionId = sortedSections[0]?.id;
-                 if (firstSectionId) {
-                     targetSectionId = firstSectionId;
-                     targetIndex = 0;
-                 }
-            }
-            
-            if (targetSectionId !== undefined && targetIndex !== undefined) {
-                handleAddQuestion(questionType, targetSectionId, targetIndex);
-            }
+            const overData = over.data?.current;
 
+            if (overData?.type === 'sub-question-droppable') {
+                 const { parentQuestionId, optionId } = overData.droppableData;
+                 const parentQuestion = questions.find(q => q.id === parentQuestionId);
+                 if (parentQuestion) {
+                     handleCreateSubQuestion(parentQuestion, optionId, questionType);
+                 }
+            } else {
+                 let targetSectionId: string | undefined;
+                 let targetIndex: number | undefined;
+
+                if (overData?.type === 'section-droppable') {
+                    targetSectionId = overData.sectionId;
+                    const questionsInSection = questions.filter(q => q.sectionId === targetSectionId);
+                    targetIndex = questionsInSection.length;
+                } else if (overData?.type === 'question') {
+                    const overQuestion = overData.question as FormQuestion;
+                    targetSectionId = overQuestion.sectionId!;
+                    targetIndex = overQuestion.order;
+                } else {
+                    const firstSectionId = sortedSections[0]?.id;
+                    if (firstSectionId) {
+                        targetSectionId = firstSectionId;
+                        targetIndex = 0;
+                    }
+                }
+                
+                if (targetSectionId !== undefined && targetIndex !== undefined) {
+                    handleAddQuestion(questionType, targetSectionId, targetIndex);
+                }
+            }
         } else if (active.id !== over.id && over.data.current) {
              const oldIndex = questions.findIndex(q => q.id === active.id);
              let newIndex: number;
@@ -581,6 +591,7 @@ export default function FormBuilderPage() {
                         isCollapsed={isSummaryCollapsed}
                         setIsCollapsed={setIsSummaryCollapsed}
                         questionIcons={questionIcons}
+                        allQuestions={internalTemplate.questions || []}
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
@@ -622,6 +633,7 @@ export default function FormBuilderPage() {
                                                                 profiles={profiles}
                                                                 isDragging={activeId === q.id}
                                                                 isHighlighted={highlightedQuestionId === q.id}
+                                                                overId={overId}
                                                             />
                                                         </React.Fragment>
                                                     ))}
@@ -646,7 +658,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} index={0} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} index={0} overId={null}/>}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 
@@ -674,3 +686,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+

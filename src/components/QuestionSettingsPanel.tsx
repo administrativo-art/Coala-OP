@@ -17,6 +17,8 @@ import { nanoid } from 'nanoid';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
+import { useDroppable } from '@dnd-kit/core';
+import { cn } from '@/lib/utils';
 
 
 const ramificationSchema = z.object({
@@ -63,13 +65,6 @@ const formQuestionSchema = z.object({
 }).superRefine((data, ctx) => {
     if (data.options) {
         data.options.forEach((option, index) => {
-            if (option.ramification?.action === 'show_question' && !option.ramification.targetQuestionId) {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: [`options.${index}.ramification.targetQuestionId`],
-                    message: "Selecione uma pergunta ou crie uma nova.",
-                });
-            }
              if (option.ramification?.action === 'show_section' && !option.ramification.targetSectionId) {
                 ctx.addIssue({
                     code: 'custom',
@@ -84,6 +79,35 @@ const formQuestionSchema = z.object({
 
 type FormQuestionValues = z.infer<typeof formQuestionSchema>;
 
+interface SubQuestionDropzoneProps {
+    parentQuestionId: string;
+    optionId: string;
+    overId: string | null;
+}
+
+function SubQuestionDropzone({ parentQuestionId, optionId, overId }: SubQuestionDropzoneProps) {
+    const id = `sub-question-${parentQuestionId}-${optionId}`;
+    const { setNodeRef, isOver } = useDroppable({
+        id: id,
+        data: {
+            type: 'sub-question-droppable',
+            droppableData: { parentQuestionId, optionId },
+        },
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={cn(
+                "w-full h-16 border-2 border-dashed rounded-lg flex items-center justify-center text-sm text-muted-foreground transition-colors",
+                isOver ? "border-primary bg-primary/10 text-primary" : "border-muted-foreground/30 hover:border-primary hover:text-primary"
+            )}
+        >
+            Arraste um campo aqui
+        </div>
+    );
+}
+
 interface QuestionSettingsPanelProps {
   question: FormQuestion;
   allQuestions: FormQuestion[];
@@ -91,10 +115,11 @@ interface QuestionSettingsPanelProps {
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
-  onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string) => void;
+  onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+  overId: string | null;
 }
 
-export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange, onCreateSubQuestion }: QuestionSettingsPanelProps) {
+export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange, onCreateSubQuestion, overId }: QuestionSettingsPanelProps) {
   
   const form = useForm<FormQuestionValues>({
     resolver: zodResolver(formQuestionSchema),
@@ -288,25 +313,15 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     )}/>
                                     
                                     {ramification.action === 'show_question' && (
+                                        <>
                                         <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
                                              <FormItem>
                                                 <Select
-                                                    onValueChange={(val) => {
-                                                        if (val === '__CREATE_NEW__') {
-                                                            onCreateSubQuestion(question, field.id);
-                                                            // We don't set the value, because a new ID will be created and assigned in the parent.
-                                                            // The parent will re-render and the new question will be in the list.
-                                                        } else {
-                                                           targetField.onChange(val);
-                                                        }
-                                                    }}
+                                                    onValueChange={targetField.onChange}
                                                     value={targetField.value}
                                                     >
                                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
                                                     <SelectContent>
-                                                        <SelectItem value="__CREATE_NEW__">
-                                                            <span className="flex items-center"><PlusCircle className="mr-2 h-4 w-4" /> Criar nova pergunta...</span>
-                                                        </SelectItem>
                                                         {allQuestions.filter(q => q.id !== question.id).map(q => (
                                                             <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
                                                         ))}
@@ -314,6 +329,12 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 </Select><FormMessage/>
                                             </FormItem>
                                         )}/>
+                                        <div className="relative">
+                                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
+                                            <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">OU</span></div>
+                                        </div>
+                                        <SubQuestionDropzone parentQuestionId={question.id} optionId={field.id} overId={overId} />
+                                        </>
                                     )}
 
                                      {ramification.action === 'show_section' && (
@@ -350,3 +371,4 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
+
