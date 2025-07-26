@@ -150,6 +150,62 @@ const SortableQuestionItem = ({
     );
 }
 
+// Recursive component to render questions and their sub-questions
+const RecursiveQuestionRenderer = ({ 
+    questions, 
+    level = 0, 
+    ...props 
+}: { 
+    questions: FormQuestion[];
+    level?: number;
+    sectionStartIndex: number;
+    allQuestions: FormQuestion[];
+    allSections: FormSection[];
+    onDelete: (id: string) => void;
+    onQuestionChange: (q: FormQuestion) => void;
+    onCreateSubQuestion: (parent: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+    users: any[];
+    profiles: any[];
+    activeId: string | null;
+    overId: string | null;
+    highlightedQuestionId: string | null;
+    activeType: FormQuestion['type'] | null;
+}) => {
+    return (
+        <div className="space-y-2">
+            {questions.map((q, index) => (
+                <div key={q.id} style={{ paddingLeft: `${level * 20}px`}}>
+                    {props.activeType && props.overId === q.id && <Placeholder index={index} />}
+                    <SortableQuestionItem
+                        index={props.sectionStartIndex + index}
+                        question={q}
+                        allQuestions={props.allQuestions}
+                        allSections={props.allSections}
+                        onDelete={() => props.onDelete(q.id)}
+                        onQuestionChange={props.onQuestionChange}
+                        onCreateSubQuestion={props.onCreateSubQuestion}
+                        users={props.users}
+                        profiles={props.profiles}
+                        isDragging={props.activeId === q.id}
+                        isHighlighted={props.highlightedQuestionId === q.id}
+                        overId={props.overId}
+                    />
+                    {q.subPerguntas && q.subPerguntas.length > 0 && (
+                        <div className="mt-2">
+                             <RecursiveQuestionRenderer 
+                                questions={q.subPerguntas}
+                                level={level + 1}
+                                {...props}
+                            />
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
+    )
+};
+
+
 export default function FormBuilderPage() {
     const { addTemplate, updateTemplate, templates, loading } = useFormHook();
     const router = useRouter();
@@ -589,27 +645,21 @@ export default function FormBuilderPage() {
                                         <AccordionContent className={cn(sortedSections.length > 1 && "border-t")}>
                                             <div className="p-4 space-y-4">
                                                 <SortableContext items={sectionQuestions.map(q => q.id)}>
-                                                    <div className="space-y-2">
-                                                    {sectionQuestions.map((q, index) => (
-                                                        <React.Fragment key={q.id}>
-                                                            {activeType && overId === q.id && <Placeholder index={index} />}
-                                                            <SortableQuestionItem
-                                                                index={sectionStartIndex + index}
-                                                                question={q}
-                                                                allQuestions={internalTemplate?.questions || []}
-                                                                allSections={internalTemplate?.sections || []}
-                                                                onDelete={() => handleDeleteQuestion(q.id)}
-                                                                onQuestionChange={handleQuestionChange}
-                                                                onCreateSubQuestion={handleCreateSubQuestion}
-                                                                users={users}
-                                                                profiles={profiles}
-                                                                isDragging={activeId === q.id}
-                                                                isHighlighted={highlightedQuestionId === q.id}
-                                                                overId={overId}
-                                                            />
-                                                        </React.Fragment>
-                                                    ))}
-                                                    </div>
+                                                     <RecursiveQuestionRenderer 
+                                                        questions={sectionQuestions} 
+                                                        sectionStartIndex={sectionStartIndex}
+                                                        allQuestions={internalTemplate?.questions || []}
+                                                        allSections={internalTemplate?.sections || []}
+                                                        onDelete={handleDeleteQuestion}
+                                                        onQuestionChange={handleQuestionChange}
+                                                        onCreateSubQuestion={handleCreateSubQuestion}
+                                                        users={users}
+                                                        profiles={profiles}
+                                                        activeId={activeId}
+                                                        overId={overId}
+                                                        highlightedQuestionId={highlightedQuestionId}
+                                                        activeType={activeType}
+                                                    />
                                                 </SortableContext>
                                                 <QuestionDropzone sectionId={section.id} atIndex={sectionQuestions.length} overId={overId} />
                                             </div>
