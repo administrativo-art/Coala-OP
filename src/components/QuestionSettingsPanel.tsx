@@ -9,7 +9,7 @@ import { type FormQuestion, type User, type Profile, type FormSection } from '@/
 import { Button } from './ui/button';
 import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+import { Input } from './ui/input';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -137,7 +137,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   useEffect(() => {
     const subscription = form.watch((value, { name, type }) => {
         if (type === 'change') {
-            const timeoutId = setTimeout(() => onSubmit(), 500);
+            const timeoutId = setTimeout(onSubmit, 500);
             return () => clearTimeout(timeoutId);
         }
     });
@@ -290,14 +290,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
                                              <FormItem>
                                                 <Select
-                                                    onValueChange={(value) => {
-                                                        targetField.onChange(value);
-                                                        // This is the fix: trigger the parent form's onChange
-                                                        // immediately when the special value is selected.
-                                                        if (value === '__CREATE_NEW__') {
-                                                          setTimeout(onSubmit, 100);
-                                                        }
-                                                    }}
+                                                    onValueChange={targetField.onChange}
                                                     value={targetField.value}
                                                     >
                                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>

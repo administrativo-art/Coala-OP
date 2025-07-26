@@ -323,10 +323,15 @@ export default function FormBuilderPage() {
         if (!internalTemplate) return;
 
         let newQuestions = [...(internalTemplate.questions || [])];
-        const isCreatingNewQuestionFromRamification = updatedQuestion.options?.some(opt => opt.ramification?.targetQuestionId === '__CREATE_NEW__');
+        const questionIndex = newQuestions.findIndex(q => q.id === updatedQuestion.id);
 
-        if (isCreatingNewQuestionFromRamification) {
-            const newQuestion: FormQuestion = {
+        if (questionIndex === -1) return;
+
+        // Check if a sub-question needs to be created
+        const isCreatingNew = updatedQuestion.options?.some(opt => opt.ramification?.targetQuestionId === '__CREATE_NEW__');
+
+        if (isCreatingNew) {
+            const newSubQuestion: FormQuestion = {
                 id: `question-${nanoid()}`,
                 label: 'Nova Pergunta',
                 type: 'text',
@@ -334,20 +339,18 @@ export default function FormBuilderPage() {
                 order: newQuestions.length,
                 sectionId: updatedQuestion.sectionId,
             };
+            newQuestions.push(newSubQuestion);
             
-            newQuestions.push(newQuestion);
-
             const newOptions = updatedQuestion.options!.map(opt => 
                 opt.ramification?.targetQuestionId === '__CREATE_NEW__' 
-                    ? { ...opt, ramification: { ...opt.ramification, targetQuestionId: newQuestion.id } } 
+                    ? { ...opt, ramification: { ...opt.ramification, targetQuestionId: newSubQuestion.id } } 
                     : opt
             );
             
             const finalUpdatedQuestion = { ...updatedQuestion, options: newOptions };
-            newQuestions = newQuestions.map(q => q.id === finalUpdatedQuestion.id ? finalUpdatedQuestion : q);
-
+            newQuestions[questionIndex] = finalUpdatedQuestion;
         } else {
-             newQuestions = newQuestions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
+            newQuestions[questionIndex] = updatedQuestion;
         }
         
         handleTemplateChange({ questions: newQuestions });
