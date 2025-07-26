@@ -62,6 +62,7 @@ const SortableQuestionItem = ({
     profiles,
     isDragging,
     isHighlighted,
+    index
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
@@ -71,6 +72,7 @@ const SortableQuestionItem = ({
     profiles: any[];
     isDragging?: boolean;
     isHighlighted?: boolean;
+    index: number;
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
@@ -99,9 +101,12 @@ const SortableQuestionItem = ({
                             <GripVertical className="h-5 w-5 text-muted-foreground" />
                         </Button>
                         <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
-                             <div className="flex-1">
-                                <p className="font-semibold">{question.label}</p>
-                                <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+                             <div className="flex-1 flex items-center gap-3">
+                                <span className="font-bold text-lg">{index + 1}.</span>
+                                <div className="flex-1">
+                                    <p className="font-semibold">{question.label}</p>
+                                    <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+                                </div>
                             </div>
                         </AccordionTrigger>
                         <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
@@ -544,9 +549,10 @@ export default function FormBuilderPage() {
                                     <AccordionContent className="border-t">
                                         <DroppableArea id={section.id} isOver={overId === section.id}>
                                             <SortableContext items={(questionsBySection[section.id] || []).map(q => q.id)}>
-                                                {(questionsBySection[section.id] || []).map((q) => (
+                                                {(questionsBySection[section.id] || []).map((q, index) => (
                                                     <SortableQuestionItem
                                                         key={q.id}
+                                                        index={index}
                                                         question={q}
                                                         allQuestions={internalTemplate?.questions || []}
                                                         onDelete={() => handleDeleteQuestion(q.id)}
@@ -579,7 +585,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 
