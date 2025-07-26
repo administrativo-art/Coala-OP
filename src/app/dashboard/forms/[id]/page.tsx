@@ -353,10 +353,10 @@ export default function FormBuilderPage() {
         
         let newQuestions = [...(internalTemplate.questions || [])];
         
-        // Correctly handle insertion
-        const questionsInSection = questionsBySection[sectionId] || [];
-        if (atIndex < questionsInSection.length) {
-            const globalIndex = newQuestions.findIndex(q => q.id === questionsInSection[atIndex].id);
+        const allQuestionsInSection = questionsBySection[sectionId] || [];
+        if(atIndex >= 0 && atIndex < allQuestionsInSection.length) {
+            const questionToInsertBefore = allQuestionsInSection[atIndex];
+            const globalIndex = newQuestions.findIndex(q => q.id === questionToInsertBefore.id);
             newQuestions.splice(globalIndex, 0, newQuestion);
         } else {
             newQuestions.push(newQuestion);
@@ -415,42 +415,35 @@ export default function FormBuilderPage() {
             let targetSectionId: string;
             let targetIndex: number;
     
-            const questions = internalTemplate.questions || [];
-            
             if (over.data?.current?.type === 'section') {
                 targetSectionId = String(over.id);
                 targetIndex = questionsBySection[targetSectionId]?.length || 0;
             } else if (over.data?.current?.type === 'question') {
-                const overQuestion = over.data.current.question;
-                targetSectionId = overQuestion.sectionId;
+                const overQuestion = over.data.current.question as FormQuestion;
+                targetSectionId = overQuestion.sectionId!;
                 targetIndex = overQuestion.order;
             } else {
                  targetSectionId = sortedSections[0].id;
                  targetIndex = 0;
             }
             
-            if (targetSectionId !== undefined && targetIndex !== undefined) {
+            if (targetSectionId !== undefined) {
                 handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
         } else if (active.id !== over.id) {
             const questions = internalTemplate.questions || [];
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            
-            if (over.data?.current?.type === 'section') { // Dropped on a section
-                const targetSectionId = String(over.id);
-                const movedQuestions = questions.map(q => q.id === active.id ? { ...q, sectionId: targetSectionId } : q);
-                handleTemplateChange({ questions: movedQuestions });
-            } else if (over.data?.current?.type === 'question') { // Dropped on a question
-                const overQuestion = over.data.current.question;
-                const newIndex = questions.findIndex((q) => q.id === over.id);
-                if (oldIndex !== -1 && newIndex !== -1) {
-                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                    const movedQuestionIndex = movedQuestions.findIndex(q => q.id === active.id);
-                    if (movedQuestionIndex !== -1) {
-                        movedQuestions[movedQuestionIndex].sectionId = overQuestion.sectionId;
-                    }
-                    handleTemplateChange({ questions: movedQuestions });
+            let newIndex = questions.findIndex((q) => q.id === over.id);
+
+            if (oldIndex !== -1 && newIndex !== -1) {
+                let movedQuestions = arrayMove(questions, oldIndex, newIndex);
+                
+                const overQuestion = questions.find(q => q.id === over.id);
+                if (overQuestion) {
+                    movedQuestions[newIndex].sectionId = overQuestion.sectionId;
                 }
+                
+                handleTemplateChange({ questions: movedQuestions });
             }
         }
     
@@ -657,5 +650,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-    
