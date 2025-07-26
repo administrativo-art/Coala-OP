@@ -236,7 +236,7 @@ export default function FormBuilderPage() {
     const questionsBySection = useMemo(() => {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
-    
+
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
@@ -250,11 +250,11 @@ export default function FormBuilderPage() {
                 result[sectionId].push({ ...q, sectionId });
             }
         });
-    
+
         Object.keys(result).forEach(sectionId => {
             result[sectionId].sort((a, b) => a.order - b.order);
         });
-    
+
         return result;
     }, [internalTemplate, sortedSections]);
 
@@ -354,11 +354,17 @@ export default function FormBuilderPage() {
         };
         
         const currentQuestions = internalTemplate.questions || [];
-        const newQuestions = [
-            ...currentQuestions.slice(0, atIndex),
-            newQuestion,
-            ...currentQuestions.slice(atIndex)
-        ];
+        
+        const questionsInSection = currentQuestions.filter(q => q.sectionId === sectionId);
+        
+        const newQuestions = [...currentQuestions];
+        if (atIndex < questionsInSection.length) {
+            const targetQuestion = questionsInSection[atIndex];
+            const globalIndex = currentQuestions.findIndex(q => q.id === targetQuestion.id);
+            newQuestions.splice(globalIndex, 0, newQuestion);
+        } else {
+             newQuestions.push(newQuestion);
+        }
 
         handleTemplateChange({ questions: newQuestions });
         
@@ -413,6 +419,8 @@ export default function FormBuilderPage() {
             let targetSectionId: string;
             let targetIndex: number;
     
+            const questions = internalTemplate.questions || [];
+            
             if (over.data?.current?.type === 'section') {
                 targetSectionId = String(over.id);
                 targetIndex = questionsBySection[targetSectionId]?.length || 0;
@@ -426,32 +434,33 @@ export default function FormBuilderPage() {
             }
             
             if (targetSectionId !== undefined) {
-                const questions = internalTemplate.questions || [];
-                const globalIndex = questions.filter(q => q.sectionId === targetSectionId).findIndex(q => q.order === targetIndex);
-                const finalIndex = globalIndex !== -1 ? globalIndex : questions.filter(q => q.sectionId === targetSectionId).length;
-                handleAddQuestion(questionType, targetSectionId, finalIndex);
+                handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
+
         } else if (active.id !== over.id) {
             const questions = internalTemplate.questions || [];
             const oldIndex = questions.findIndex((q) => q.id === active.id);
             let newIndex: number;
-
+            
             let newSectionId = questions[oldIndex].sectionId;
 
-            if(over.data.current?.type === 'question') {
-                 newIndex = questions.findIndex((q) => q.id === over.id);
-                 newSectionId = questions[newIndex].sectionId;
-            } else if (over.data.current?.type === 'section') {
+            if (over.data?.current?.type === 'question') {
+                newIndex = questions.findIndex((q) => q.id === over.id);
+                newSectionId = questions[newIndex].sectionId;
+            } else if (over.data?.current?.type === 'section') {
                 newSectionId = String(over.id);
                 const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
-                newIndex = questions.length; // Will be placed at the end of all questions, then reordered by section
+                newIndex = oldIndex < questions.length - 1 ? questions.findIndex(q => q.sectionId === newSectionId) + questionsInSection.length : questions.length -1;
             } else {
                 newIndex = oldIndex;
             }
             
             if (oldIndex !== -1 && newIndex !== -1) {
                 let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                movedQuestions[newIndex] = { ...movedQuestions[newIndex], sectionId: newSectionId };
+                // Update sectionId of the moved question
+                const movedItem = movedQuestions[newIndex];
+                movedQuestions[newIndex] = { ...movedItem, sectionId: newSectionId };
+                
                 handleTemplateChange({ questions: movedQuestions });
             }
         }
@@ -464,7 +473,6 @@ export default function FormBuilderPage() {
         if (!internalTemplate || !internalTemplate.sections || !internalTemplate.questions) return;
     
         let reorderedQuestions: FormQuestion[] = [];
-        let globalIndex = 0;
         
         sortedSections.forEach(section => {
             const sectionQuestions = (internalTemplate.questions || [])
@@ -483,11 +491,9 @@ export default function FormBuilderPage() {
         if (unaccountedFor.length > 0 && sortedSections.length > 0) {
             const firstSectionId = sortedSections[0].id;
             const updatedOrphans = unaccountedFor.map(q => ({ ...q, sectionId: firstSectionId }));
-            reorderedQuestions.push(...updatedOrphans);
             
             // Re-run the ordering for the first section
-            const firstSectionQuestions = reorderedQuestions
-                .filter(q => q.sectionId === firstSectionId)
+            const firstSectionQuestions = [...reorderedQuestions.filter(q => q.sectionId === firstSectionId), ...updatedOrphans]
                 .sort((a, b) => a.order - b.order)
                 .map((q, index) => ({ ...q, order: index }));
 
@@ -663,4 +669,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
