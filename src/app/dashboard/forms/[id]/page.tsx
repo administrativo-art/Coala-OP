@@ -414,7 +414,7 @@ export default function FormBuilderPage() {
     
             if (over.data?.current?.type === 'section') {
                 targetSectionId = String(over.id);
-                targetIndex = questions.filter(q => q.sectionId === targetSectionId).length;
+                targetIndex = questionsBySection[targetSectionId]?.length || 0;
             } else if (over.data?.current?.type === 'question') {
                 const overQuestion = over.data.current.question as FormQuestion;
                 targetSectionId = overQuestion.sectionId!;
@@ -429,47 +429,29 @@ export default function FormBuilderPage() {
             }
 
         } else if (active.id !== over.id) {
-            const oldIndex = questions.findIndex((q) => q.id === active.id);
-            const overIsQuestion = over.data.current?.type === 'question';
-            const overIsSection = over.data.current?.type === 'section';
-
-            if (oldIndex > -1) {
-                let newIndex: number;
-                let newSectionId: string;
-
-                if (overIsQuestion) {
-                    newIndex = questions.findIndex(q => q.id === over.id);
-                    newSectionId = (over.data.current?.question as FormQuestion).sectionId!;
-                } else if (overIsSection) {
-                    newSectionId = String(over.id);
-                    newIndex = questions.filter(q => q.sectionId === newSectionId).length;
-                    // Adjust index to be global
-                    let globalIndex = 0;
-                    for (const section of sortedSections) {
-                        const sectionQuestions = questions.filter(q => q.sectionId === section.id);
-                        if (section.id === newSectionId) {
-                           newIndex += globalIndex;
-                           break;
-                        }
-                        globalIndex += sectionQuestions.length;
-                    }
-                } else {
-                    setActiveId(null);
-                    setOverId(null);
-                    return;
-                }
-
-                 if (newIndex > -1) {
-                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                    
-                    const movedItem = { ...movedQuestions[newIndex], sectionId: newSectionId };
-                    movedQuestions[newIndex] = movedItem;
-
-                    const finalQuestions = movedQuestions.map((q, index) => ({...q, order: index}));
-                    
-                    handleTemplateChange({ questions: finalQuestions });
-                 }
-            }
+             const oldIndex = questions.findIndex(q => q.id === active.id);
+             let newIndex: number;
+             let newSectionId: string;
+ 
+             if (over.data.current?.type === 'question') {
+                 newIndex = questions.findIndex(q => q.id === over.id);
+                 newSectionId = (over.data.current?.question as FormQuestion).sectionId!;
+             } else if (over.data.current?.type === 'section') {
+                 newSectionId = String(over.id);
+                 const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
+                 newIndex = questions.findIndex(q => q.id === questionsInSection[questionsInSection.length - 1]?.id) + 1;
+             } else {
+                 newIndex = questions.length;
+                 newSectionId = sortedSections[sortedSections.length - 1].id;
+             }
+ 
+             if (oldIndex > -1 && newIndex > -1) {
+                 let reorderedQuestions = arrayMove(questions, oldIndex, newIndex);
+                 const movedQuestion = { ...reorderedQuestions[newIndex], sectionId: newSectionId };
+                 reorderedQuestions[newIndex] = movedQuestion;
+                 
+                 handleTemplateChange({ questions: reorderedQuestions.map((q, i) => ({ ...q, order: i })) });
+             }
         }
     
         setActiveId(null);
