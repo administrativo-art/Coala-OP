@@ -113,6 +113,7 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
   });
 
   const questionType = form.watch('type');
+  const numberFormat = form.watch('numberConfig.format');
   const watchedOptions = form.watch('options');
   const showOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
 
@@ -217,17 +218,19 @@ export function QuestionSettingsPanel({ question, allQuestions, users, profiles,
                                 </Select><FormMessage/>
                             </FormItem>
                         )}/>
-                        <div className="grid grid-cols-3 gap-2">
-                            <FormField control={form.control} name="numberConfig.min" render={({ field }) => (
-                                <FormItem><FormLabel>Mínimo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
-                            )}/>
-                            <FormField control={form.control} name="numberConfig.max" render={({ field }) => (
-                                <FormItem><FormLabel>Máximo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
-                            )}/>
-                             <FormField control={form.control} name="numberConfig.step" render={({ field }) => (
-                                <FormItem><FormLabel>Incremento</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
-                            )}/>
-                        </div>
+                        {numberFormat !== 'default' && (
+                             <div className="grid grid-cols-3 gap-2">
+                                <FormField control={form.control} name="numberConfig.min" render={({ field }) => (
+                                    <FormItem><FormLabel>Mínimo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                                )}/>
+                                <FormField control={form.control} name="numberConfig.max" render={({ field }) => (
+                                    <FormItem><FormLabel>Máximo</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                                )}/>
+                                <FormField control={form.control} name="numberConfig.step" render={({ field }) => (
+                                    <FormItem><FormLabel>Incremento</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage/></FormItem>
+                                )}/>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
