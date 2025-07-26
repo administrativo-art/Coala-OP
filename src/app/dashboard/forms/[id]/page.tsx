@@ -355,12 +355,9 @@ export default function FormBuilderPage() {
         
         let currentQuestions = [...(internalTemplate.questions || [])];
         
-        const sectionQuestions = currentQuestions.filter(q => q.sectionId === sectionId).sort((a,b) => a.order - b.order);
-        const nonSectionQuestions = currentQuestions.filter(q => q.sectionId !== sectionId);
-
-        sectionQuestions.splice(atIndex, 0, newQuestion);
+        currentQuestions.splice(atIndex, 0, newQuestion);
         
-        const finalQuestions = [...nonSectionQuestions, ...sectionQuestions].map((q, index) => ({...q, order: index}));
+        const finalQuestions = currentQuestions.map((q, index) => ({...q, order: index}));
 
         handleTemplateChange({ questions: finalQuestions });
         
@@ -418,7 +415,7 @@ export default function FormBuilderPage() {
     
             if (over.data?.current?.type === 'section-droppable') {
                 targetSectionId = over.data.current.sectionId;
-                targetIndex = questionsBySection[targetSectionId]?.length || 0;
+                targetIndex = questions.filter(q => q.sectionId === targetSectionId).length;
             } else if (over.data?.current?.type === 'question') {
                 const overQuestion = over.data.current.question as FormQuestion;
                 targetSectionId = overQuestion.sectionId!;
@@ -429,9 +426,7 @@ export default function FormBuilderPage() {
             }
             
             if (targetSectionId !== undefined) {
-                const sectionQuestions = questions.filter(q => q.sectionId === targetSectionId).sort((a,b) => a.order - b.order);
-                const realIndex = sectionQuestions[targetIndex]?.order ?? questions.length;
-                handleAddQuestion(questionType, targetSectionId, realIndex);
+                handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
 
         } else if (active.id !== over.id && over.data.current) {
