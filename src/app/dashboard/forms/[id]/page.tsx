@@ -353,20 +353,12 @@ export default function FormBuilderPage() {
             sectionId: sectionId
         };
         
-        const currentQuestions = internalTemplate.questions || [];
+        let currentQuestions = [...(internalTemplate.questions || [])];
+        currentQuestions.splice(atIndex, 0, newQuestion);
         
-        const questionsInSection = currentQuestions.filter(q => q.sectionId === sectionId);
-        
-        const newQuestions = [...currentQuestions];
-        if (atIndex < questionsInSection.length) {
-            const targetQuestion = questionsInSection[atIndex];
-            const globalIndex = currentQuestions.findIndex(q => q.id === targetQuestion.id);
-            newQuestions.splice(globalIndex, 0, newQuestion);
-        } else {
-             newQuestions.push(newQuestion);
-        }
+        const finalQuestions = currentQuestions.map((q, index) => ({...q, order: index}));
 
-        handleTemplateChange({ questions: newQuestions });
+        handleTemplateChange({ questions: finalQuestions });
         
         setTimeout(() => scrollToQuestion(newQuestion.id), 100);
     };
@@ -412,18 +404,17 @@ export default function FormBuilderPage() {
         }
     
         const isNewQuestionDrag = String(active.id).startsWith('new-question-');
-    
+        const questions = internalTemplate.questions || [];
+
         if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
             
             let targetSectionId: string;
             let targetIndex: number;
     
-            const questions = internalTemplate.questions || [];
-            
             if (over.data?.current?.type === 'section') {
                 targetSectionId = String(over.id);
-                targetIndex = questionsBySection[targetSectionId]?.length || 0;
+                targetIndex = questions.filter(q => q.sectionId === targetSectionId).length;
             } else if (over.data?.current?.type === 'question') {
                 const overQuestion = over.data.current.question as FormQuestion;
                 targetSectionId = overQuestion.sectionId!;
@@ -438,17 +429,45 @@ export default function FormBuilderPage() {
             }
 
         } else if (active.id !== over.id) {
-            const questions = internalTemplate.questions || [];
             const oldIndex = questions.findIndex((q) => q.id === active.id);
-            const overQuestion = (over.data.current?.type === 'question' ? over.data.current.question : null) as FormQuestion | null;
+            const overIsQuestion = over.data.current?.type === 'question';
+            const overIsSection = over.data.current?.type === 'section';
 
-            if (oldIndex > -1 && overQuestion) {
-                 const newIndex = questions.findIndex((q) => q.id === over.id);
+            if (oldIndex > -1) {
+                let newIndex: number;
+                let newSectionId: string;
+
+                if (overIsQuestion) {
+                    newIndex = questions.findIndex(q => q.id === over.id);
+                    newSectionId = (over.data.current?.question as FormQuestion).sectionId!;
+                } else if (overIsSection) {
+                    newSectionId = String(over.id);
+                    newIndex = questions.filter(q => q.sectionId === newSectionId).length;
+                    // Adjust index to be global
+                    let globalIndex = 0;
+                    for (const section of sortedSections) {
+                        const sectionQuestions = questions.filter(q => q.sectionId === section.id);
+                        if (section.id === newSectionId) {
+                           newIndex += globalIndex;
+                           break;
+                        }
+                        globalIndex += sectionQuestions.length;
+                    }
+                } else {
+                    setActiveId(null);
+                    setOverId(null);
+                    return;
+                }
+
                  if (newIndex > -1) {
-                    const newSectionId = overQuestion.sectionId!;
                     let movedQuestions = arrayMove(questions, oldIndex, newIndex);
-                    movedQuestions[newIndex] = { ...movedQuestions[newIndex], sectionId: newSectionId };
-                    handleTemplateChange({ questions: movedQuestions });
+                    
+                    const movedItem = { ...movedQuestions[newIndex], sectionId: newSectionId };
+                    movedQuestions[newIndex] = movedItem;
+
+                    const finalQuestions = movedQuestions.map((q, index) => ({...q, order: index}));
+                    
+                    handleTemplateChange({ questions: finalQuestions });
                  }
             }
         }
@@ -456,45 +475,6 @@ export default function FormBuilderPage() {
         setActiveId(null);
         setOverId(null);
     };
-
-    useEffect(() => {
-        if (!internalTemplate || !internalTemplate.sections || !internalTemplate.questions) return;
-    
-        let reorderedQuestions: FormQuestion[] = [];
-        
-        sortedSections.forEach(section => {
-            const sectionQuestions = (internalTemplate.questions || [])
-                .filter(q => q.sectionId === section.id || (!q.sectionId && section.order === 0))
-                .sort((a, b) => a.order - b.order)
-                .map((q, index) => ({ 
-                    ...q, 
-                    sectionId: section.id, 
-                    order: index 
-                }));
-            
-            reorderedQuestions.push(...sectionQuestions);
-        });
-
-        const unaccountedFor = internalTemplate.questions.filter(q => !reorderedQuestions.find(rq => rq.id === q.id));
-        if (unaccountedFor.length > 0 && sortedSections.length > 0) {
-            const firstSectionId = sortedSections[0].id;
-            const updatedOrphans = unaccountedFor.map(q => ({ ...q, sectionId: firstSectionId }));
-            
-            // Re-run the ordering for the first section
-            const firstSectionQuestions = [...reorderedQuestions.filter(q => q.sectionId === firstSectionId), ...updatedOrphans]
-                .sort((a, b) => a.order - b.order)
-                .map((q, index) => ({ ...q, order: index }));
-
-            const otherQuestions = reorderedQuestions.filter(q => q.sectionId !== firstSectionId);
-            reorderedQuestions = [...firstSectionQuestions, ...otherQuestions];
-        }
-    
-        if (JSON.stringify(reorderedQuestions) !== JSON.stringify(internalTemplate.questions)) {
-            setInternalTemplate(prev => ({ ...prev!, questions: reorderedQuestions }));
-        }
-    
-    }, [internalTemplate?.questions, sortedSections, internalTemplate?.sections]);
-
 
     const handlePreviewSubmit = async () => {
         toast({
@@ -657,3 +637,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
