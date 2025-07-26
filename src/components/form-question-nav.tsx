@@ -13,24 +13,58 @@ import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
-const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
-  text: Text,
-  number: Hash,
-  'yes-no': ToggleRight,
-  'single-choice': List,
-  'multiple-choice': CheckSquare,
-  'file-attachment': FileIcon,
-  range: MoveHorizontal,
-  rating: Star,
+const SortableNavItem = ({ q, index, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons }: {
+    q: FormQuestion;
+    index: number;
+    isCollapsed: boolean;
+    selectedQuestionId: string | null;
+    onQuestionSelect: (id: string) => void;
+    questionIcons: Record<FormQuestion['type'], React.ElementType>;
+}) => {
+    const Icon = questionIcons[q.type];
+
+    const content = (
+        <div 
+            onClick={() => onQuestionSelect(q.id)}
+            className={cn(
+                "flex items-center p-2 rounded-lg cursor-pointer w-full", 
+                selectedQuestionId === q.id ? "bg-primary/20" : "hover:bg-muted",
+                isCollapsed && "justify-center"
+            )}
+        >
+            <div className={cn("flex items-center gap-2", isCollapsed ? "gap-1" : "gap-2")}>
+                <span className={cn("font-bold", isCollapsed ? "text-sm" : "text-base w-8")}>{index + 1}.</span>
+                <Icon className={cn("shrink-0 text-primary", isCollapsed ? "h-5 w-5" : "h-5 w-5")}/>
+                {!isCollapsed && <span className="text-sm font-normal truncate flex-1">{q.label || 'Nova Pergunta'}</span>}
+            </div>
+        </div>
+    );
+
+    if (isCollapsed) {
+        return (
+            <TooltipProvider>
+                <Tooltip delayDuration={100}>
+                    <TooltipTrigger asChild>{content}</TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={5}>
+                        <p>{q.label || 'Nova Pergunta'}</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+    
+    return content;
 };
 
-export function FormQuestionNav({ sections, questionsBySection, selectedQuestionId, onQuestionSelect, isCollapsed, setIsCollapsed }: {
+
+export function FormQuestionNav({ sections, questionsBySection, selectedQuestionId, onQuestionSelect, isCollapsed, setIsCollapsed, questionIcons }: {
   sections: FormSection[];
   questionsBySection: Record<string, FormQuestion[]>;
   selectedQuestionId: string | null;
   onQuestionSelect: (id: string) => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
+  questionIcons: Record<FormQuestion['type'], React.ElementType>;
 }) {
 
   return (
@@ -50,20 +84,17 @@ export function FormQuestionNav({ sections, questionsBySection, selectedQuestion
                             <span className="font-semibold truncate flex-1 text-left">{section.name}</span>
                         </AccordionTrigger>
                         <AccordionContent className="pt-1 pl-4 border-l-2 ml-2">
-                             {(questionsBySection[section.id] || []).map((q, index) => {
-                                 const Icon = questionIcons[q.type];
-                                 return (
-                                    <div 
-                                        key={q.id}
-                                        onClick={() => onQuestionSelect(q.id)}
-                                        className={cn("flex items-center p-2 rounded-lg cursor-pointer", selectedQuestionId === q.id ? "bg-primary/20" : "hover:bg-muted")}
-                                    >
-                                        <span className="text-base font-bold w-8">{index + 1}.</span>
-                                        <Icon className="h-5 w-5 shrink-0 text-primary mr-2"/>
-                                        <span className="text-sm font-normal truncate flex-1">{q.label || 'Nova Pergunta'}</span>
-                                    </div>
-                                )
-                             })}
+                             {(questionsBySection[section.id] || []).map((q, index) => (
+                                <SortableNavItem 
+                                    key={q.id}
+                                    q={q}
+                                    index={index}
+                                    isCollapsed={isCollapsed}
+                                    selectedQuestionId={selectedQuestionId}
+                                    onQuestionSelect={onQuestionSelect}
+                                    questionIcons={questionIcons}
+                                />
+                             ))}
                              {(questionsBySection[section.id] || []).length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma pergunta nesta seção</p>}
                         </AccordionContent>
                     </AccordionItem>

@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye } from 'lucide-react';
+import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -39,6 +39,17 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'single-choice': 'Escolha Única',
     'multiple-choice': 'Múltipla Escolha',
     'file-attachment': 'Anexo de Arquivo',
+};
+
+const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
+  text: Text,
+  number: Hash,
+  'yes-no': ToggleRight,
+  'single-choice': List,
+  'multiple-choice': CheckSquare,
+  'file-attachment': FileIcon,
+  range: MoveHorizontal,
+  rating: Star,
 };
 
 
@@ -165,7 +176,7 @@ export default function FormBuilderPage() {
         if(loading) return;
 
         if (templateId === 'new') {
-             const initialSection: FormSection = { id: `section-${nanoid()}`, name: 'Seção 1', order: 0 };
+             const initialSection: FormSection = { id: `section-${nanoid()}`, name: 'Seção 1', order: 0, questions: [] };
              const initialTemplate = {
                   name: 'Novo Formulário',
                   type: 'standard' as const,
@@ -181,7 +192,7 @@ export default function FormBuilderPage() {
             if(templateToEdit) {
                  const newTemplate = JSON.parse(JSON.stringify(templateToEdit));
                  if (!newTemplate.sections || newTemplate.sections.length === 0) {
-                     newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0 }];
+                     newTemplate.sections = [{ id: `section-${nanoid()}`, name: 'Seção 1', order: 0, questions: [] }];
                      // Assign all existing questions to the new section
                      newTemplate.questions.forEach((q: FormQuestion) => {
                          q.sectionId = newTemplate.sections[0].id;
@@ -256,6 +267,7 @@ export default function FormBuilderPage() {
             id: `section-${nanoid()}`,
             name: `Nova Seção`,
             order: (internalTemplate.sections || []).length,
+            questions: []
         };
         const newSections = [...(internalTemplate.sections || []), newSection];
         handleTemplateChange({ sections: newSections });
@@ -348,7 +360,7 @@ export default function FormBuilderPage() {
         // Re-order remaining questions
         const reorderedBySection: Record<string, FormQuestion[]> = {};
         newQuestions.forEach(q => {
-            if (!reorderedBySection[q.sectionId!]) reorderedBySection[q.sectionId!] = [];
+            if (!q.sectionId || !reorderedBySection[q.sectionId]) reorderedBySection[q.sectionId!] = [];
             reorderedBySection[q.sectionId!].push(q);
         });
 
@@ -512,20 +524,23 @@ export default function FormBuilderPage() {
                         onQuestionSelect={scrollToQuestion}
                         isCollapsed={isSummaryCollapsed}
                         setIsCollapsed={setIsSummaryCollapsed}
+                        questionIcons={questionIcons}
                     />
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
                         {sortedSections.map(section => (
                             <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
                                 <AccordionItem value="item-1" className="bg-card rounded-lg border">
-                                    <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                                        <div className="flex-1 flex items-center gap-2">
-                                            <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
-                                        </div>
-                                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
+                                    <div className="flex items-center pr-4">
+                                        <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
+                                            <div className="flex-1 flex items-center gap-2">
+                                                <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
-                                    </AccordionTrigger>
+                                    </div>
                                     <AccordionContent className="border-t">
                                         <DroppableArea id={section.id} isOver={overId === section.id}>
                                             <SortableContext items={(questionsBySection[section.id] || []).map(q => q.id)}>

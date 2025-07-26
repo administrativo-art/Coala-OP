@@ -418,6 +418,7 @@ export type FormSection = {
     name: string;
     description?: string;
     order: number;
+    questions: FormQuestion[];
 };
 
 export type FormTemplate = {
