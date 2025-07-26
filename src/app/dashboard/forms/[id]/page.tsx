@@ -77,7 +77,7 @@ const SortableQuestionItem = ({
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: transition || 'transform 250ms ease',
     };
 
     return (
@@ -86,8 +86,8 @@ const SortableQuestionItem = ({
             ref={setNodeRef}
             style={style}
             className={cn(
-                "bg-card border rounded-lg overflow-hidden",
-                isDragging && 'opacity-50',
+                "bg-card border rounded-lg overflow-hidden transition-shadow",
+                isDragging && 'opacity-50 z-50 shadow-2xl',
                 isOver && 'shadow-lg',
                 isHighlighted && 'animate-pulse-once'
             )}
@@ -132,7 +132,7 @@ const DroppableArea = ({ children, id, isOver }: { children?: React.ReactNode, i
     const { setNodeRef } = useDroppable({ id, data: { type: 'section-droppable', sectionId: id } });
     
     return (
-        <div ref={setNodeRef} className={cn("p-4 space-y-4 rounded-lg", isOver && "bg-primary/10")}>
+        <div ref={setNodeRef} className={cn("p-4 space-y-4 rounded-lg transition-colors", isOver && "bg-primary/10")}>
             {children}
         </div>
     );
@@ -410,39 +410,44 @@ export default function FormBuilderPage() {
         if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
             
-            let targetSectionId: string;
-            let targetIndex: number;
+            let targetSectionId: string | undefined;
+            let targetIndex: number | undefined;
     
             if (over.data?.current?.type === 'section-droppable') {
                 targetSectionId = over.data.current.sectionId;
-                targetIndex = questions.filter(q => q.sectionId === targetSectionId).length;
+                const questionsInSection = questions.filter(q => q.sectionId === targetSectionId);
+                targetIndex = questionsInSection.length;
             } else if (over.data?.current?.type === 'question') {
                 const overQuestion = over.data.current.question as FormQuestion;
                 targetSectionId = overQuestion.sectionId!;
                 targetIndex = overQuestion.order;
             } else {
-                targetSectionId = sortedSections[0].id;
-                targetIndex = 0;
+                 const firstSectionId = sortedSections[0]?.id;
+                 if (firstSectionId) {
+                     targetSectionId = firstSectionId;
+                     targetIndex = 0;
+                 }
             }
             
-            if (targetSectionId !== undefined) {
+            if (targetSectionId !== undefined && targetIndex !== undefined) {
                 handleAddQuestion(questionType, targetSectionId, targetIndex);
             }
 
         } else if (active.id !== over.id && over.data.current) {
              const oldIndex = questions.findIndex(q => q.id === active.id);
-             let newIndex : number;
+             let newIndex: number;
              let newSectionId: string;
+             const overQuestionData = over.data.current.type === 'question' ? over.data.current.question : null;
 
-             if (over.data.current.type === 'question') {
-                const overQuestion = over.data.current.question as FormQuestion;
+             if (overQuestionData) {
                 newIndex = questions.findIndex(q => q.id === over.id);
-                newSectionId = overQuestion.sectionId!;
+                newSectionId = overQuestionData.sectionId!;
              } else if (over.data.current.type === 'section-droppable') {
                 newSectionId = over.data.current.sectionId as string;
-                newIndex = questions.length; // Drop at the end of the section
+                const questionsInSection = questions.filter(q => q.sectionId === newSectionId);
+                const lastQuestionInTarget = questionsInSection[questionsInSection.length - 1];
+                newIndex = lastQuestionInTarget ? questions.findIndex(q => q.id === lastQuestionInTarget.id) + 1 : oldIndex;
              } else {
-                // Should not happen, but as a fallback:
                 setActiveId(null);
                 setOverId(null);
                 return;
@@ -558,6 +563,7 @@ export default function FormBuilderPage() {
                                         <AccordionContent className={cn(sortedSections.length > 1 && "border-t")}>
                                             <DroppableArea id={section.id} isOver={overId === section.id}>
                                                 <SortableContext items={sectionQuestions.map(q => q.id)}>
+                                                    <div className="space-y-2">
                                                     {sectionQuestions.map((q, index) => (
                                                         <React.Fragment key={q.id}>
                                                             {activeType && overId === q.id && <Placeholder index={index} />}
@@ -574,8 +580,9 @@ export default function FormBuilderPage() {
                                                             />
                                                         </React.Fragment>
                                                     ))}
+                                                    </div>
                                                 </SortableContext>
-                                                 <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                                                 <div className="text-center py-8 border-2 border-dashed border-muted-foreground/30 rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors">
                                                     Arraste um campo aqui
                                                 </div>
                                             </DroppableArea>

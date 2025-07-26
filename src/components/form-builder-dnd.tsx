@@ -46,7 +46,7 @@ export const Placeholder = ({ index }: { index: number }) => {
     return (
         <div
             id={`placeholder-${index}`}
-            className="h-14 w-full rounded-lg border-2 border-dashed border-primary bg-primary/10 my-2"
+            className="h-16 w-full rounded-lg border-2 border-dashed border-primary/50 bg-primary/10 my-2 transition-all duration-150 ease-in-out animate-in fade-in"
         />
     );
 };
