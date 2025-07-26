@@ -235,28 +235,29 @@ export default function FormBuilderPage() {
     const questionsBySection = useMemo(() => {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
-
+    
+        // Initialize an entry for every section to ensure they all appear
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
-    
+
+        // Use a single loop to place questions
         internalTemplate.questions.forEach(q => {
-            let sectionId = q.sectionId;
-            if (!sectionId || !result.hasOwnProperty(sectionId)) {
-                sectionId = sortedSections[0]?.id;
-            }
-            if(sectionId) {
-                 if (!result[sectionId]) {
-                    result[sectionId] = [];
-                }
+            // Ensure every question has a valid sectionId, defaulting to the first section
+            const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
+                ? q.sectionId
+                : sortedSections[0]?.id;
+
+            if (sectionId) {
                 result[sectionId].push({ ...q, sectionId });
             }
         });
-
+    
+        // Sort questions within each section by their order property
         Object.keys(result).forEach(sectionId => {
             result[sectionId].sort((a, b) => a.order - b.order);
         });
-
+    
         return result;
     }, [internalTemplate, sortedSections]);
 
@@ -424,11 +425,12 @@ export default function FormBuilderPage() {
             }
         } else { // Reordering existing question
             if (active.id !== over.id) {
-                 const oldIndex = internalTemplate.questions.findIndex((q) => q.id === active.id);
-                 const newIndex = internalTemplate.questions.findIndex((q) => q.id === over.id);
-
+                 const questions = internalTemplate.questions;
+                 const oldIndex = questions.findIndex((q) => q.id === active.id);
+                 const newIndex = questions.findIndex((q) => q.id === over.id);
+                 
                  if (oldIndex !== -1 && newIndex !== -1) {
-                    const movedQuestions = arrayMove(internalTemplate.questions, oldIndex, newIndex);
+                    let movedQuestions = arrayMove(questions, oldIndex, newIndex);
                     
                     const overIsSection = over.data?.current?.type === 'section';
                     const targetSectionId = overIsSection ? over.id : over.data?.current?.question?.sectionId;
