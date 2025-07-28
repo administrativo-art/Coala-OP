@@ -415,6 +415,7 @@ export default function FormBuilderPage() {
                             ...opt,
                             ramification: {
                                 ...(opt.ramification || { id: `ram-${nanoid()}` }),
+                                action: 'add_question',
                                 targetQuestionId: newSubQuestion.id
                             }
                         };

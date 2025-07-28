@@ -141,7 +141,6 @@ const SubQuestionItem = ({ question, parentQuestionId, onDeleteSubQuestion, ...p
                     <div className="flex items-center p-2 pr-3">
                          <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
                              <div className="flex-1 flex items-center gap-3">
-                                 <GitBranch className="h-4 w-4 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
                                     <Input
                                         value={question.label}
@@ -362,7 +361,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                        const subQuestion = ramification?.targetQuestionId ? allQuestionsMap.get(ramification.targetQuestionId) : null;
                         return (
                         <div key={field.id} className="relative">
-                            <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
+                             <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
                                 <div className="flex items-center gap-2">
                                     <FormField control={form.control} name={`options.${index}.value`} render={({ field: optionField }) => (
                                         <FormItem className="flex-grow">
@@ -399,9 +398,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         )}/>
                                         
                                         {ramification.action === 'add_question' && !subQuestion && (
-                                            <Button type="button" size="sm" className="w-full" onClick={() => onCreateSubQuestion(question, field.id, 'text')}>
-                                                <PlusCircle className="mr-2 h-4 w-4"/> Adicionar sub-pergunta
-                                            </Button>
+                                            <SubQuestionDropzone parentQuestionId={question.id} optionId={field.id} overId={overId} />
                                         )}
                                         
                                         {ramification.action === 'show_question' && (
@@ -444,10 +441,10 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                 )}
                             </div>
                             
-                            {subQuestion && (
+                             {subQuestion && (
                                 <div className="relative pl-8 pt-4">
-                                    <div className="absolute left-4 top-0 bottom-2 w-px bg-border -translate-x-1/2"></div>
-                                    <div className="absolute left-4 top-8 h-px w-4 bg-border -translate-x-1/2"></div>
+                                    <div className="absolute left-4 top-0 bottom-2 w-px bg-border/70 border-dashed -translate-x-1/2"></div>
+                                    <div className="absolute left-4 top-8 h-px w-4 bg-border/70 border-dashed -translate-x-1/2"></div>
                                     <SubQuestionItem
                                         question={subQuestion}
                                         parentQuestionId={question.id}
