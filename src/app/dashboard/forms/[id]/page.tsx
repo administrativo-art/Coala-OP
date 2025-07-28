@@ -64,7 +64,6 @@ const SortableQuestionItem = ({
     isDragging,
     isHighlighted,
     index,
-    overId,
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
@@ -78,7 +77,6 @@ const SortableQuestionItem = ({
     isDragging?: boolean;
     isHighlighted?: boolean;
     index: number;
-    overId: string | null;
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
@@ -107,7 +105,7 @@ const SortableQuestionItem = ({
             )}
             key={`${question.id}-${isHighlighted}`}
         >
-            <Accordion type="single" collapsible>
+            <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value={question.id} className="border-b-0">
                     <div className="flex items-center p-2 pr-3">
                         <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
@@ -143,7 +141,6 @@ const SortableQuestionItem = ({
                             onDeleteSubQuestion={onDeleteSubQuestion}
                             users={users}
                             profiles={profiles}
-                            overId={overId}
                         />
                     </AccordionContent>
                 </AccordionItem>
@@ -171,13 +168,12 @@ const RecursiveQuestionRenderer = ({
     activeId: string | null;
     overId: string | null;
     highlightedQuestionId: string | null;
-    activeType: FormQuestion['type'] | null;
 }) => {
     return (
         <div className="space-y-4">
             {questions.map((q, index) => (
                  <div key={q.id}>
-                    {props.activeType && props.overId === q.id && <Placeholder index={index} />}
+                    {props.activeId && props.overId === q.id && <Placeholder index={index} />}
                     <SortableQuestionItem
                         index={props.sectionStartIndex + index}
                         question={q}
@@ -191,7 +187,6 @@ const RecursiveQuestionRenderer = ({
                         profiles={props.profiles}
                         isDragging={props.activeId === q.id}
                         isHighlighted={props.highlightedQuestionId === q.id}
-                        overId={props.overId}
                     />
                 </div>
             ))}
@@ -232,7 +227,7 @@ export default function FormBuilderPage() {
         if (String(activeId).startsWith('new-question-')) return null;
         return internalTemplate.questions.find(q => q.id === activeId);
     }, [activeId, internalTemplate]);
-
+    
     const activeType = useMemo(() => {
         if (!activeId || !String(activeId).startsWith('new-question-')) return null;
         return String(activeId).replace('new-question-', '') as FormQuestion['type'];
@@ -559,14 +554,8 @@ export default function FormBuilderPage() {
 
         if (isNewQuestionDrag) {
             const questionType = String(active.id).replace('new-question-', '') as FormQuestion['type'];
-
-            if (overData?.type === 'sub-question-droppable') {
-                 const { parentQuestionId, optionId } = overData.droppableData;
-                 const parentQuestion = internalTemplate.questions.find(q => q.id === parentQuestionId);
-                 if (parentQuestion) {
-                     handleCreateSubQuestion(parentQuestion, optionId, questionType);
-                 }
-            } else if (overData?.type === 'question-dropzone') {
+            
+            if (overData?.type === 'question-dropzone') {
                 const { sectionId, atIndex } = overData.dropzoneData;
                 handleAddQuestion(questionType, sectionId, atIndex);
             }
@@ -710,7 +699,6 @@ export default function FormBuilderPage() {
                                                 activeId={activeId}
                                                 overId={overId}
                                                 highlightedQuestionId={highlightedQuestionId}
-                                                activeType={activeType}
                                             />
                                         </SortableContext>
                                         <QuestionDropzone sectionId={section.id} atIndex={sectionQuestions.length} overId={overId} />
@@ -728,7 +716,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} overId={null}/>}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 

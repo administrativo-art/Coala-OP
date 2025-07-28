@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type FormQuestion, type User, type Profile, type FormSection } from '@/types';
 import { Button } from './ui/button';
-import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent, Star, MoveHorizontal, Text, Hash, ToggleRight, List, CheckSquare, FileIcon } from 'lucide-react';
+import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent, Star, MoveHorizontal, Text, Hash, ToggleRight, List, CheckSquare, FileIcon, MessageSquareQuestion } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
@@ -21,6 +21,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { SortableContext, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 
 
 const ramificationSchema = z.object({
@@ -87,35 +88,6 @@ const formQuestionSchema = z.object({
 
 type FormQuestionValues = z.infer<typeof formQuestionSchema>;
 
-interface SubQuestionDropzoneProps {
-    parentQuestionId: string;
-    optionId: string;
-    overId: string | null;
-}
-
-function SubQuestionDropzone({ parentQuestionId, optionId, overId }: SubQuestionDropzoneProps) {
-    const id = `sub-question-${parentQuestionId}-${optionId}`;
-    const { setNodeRef, isOver } = useDroppable({
-        id: id,
-        data: {
-            type: 'sub-question-droppable',
-            droppableData: { parentQuestionId, optionId },
-        },
-    });
-
-    return (
-        <div
-            ref={setNodeRef}
-            className={cn(
-                "w-full h-16 border-2 border-dashed rounded-lg flex items-center justify-center text-sm text-muted-foreground transition-colors",
-                isOver ? "border-primary bg-primary/10 text-primary" : "border-muted-foreground/30 hover:border-primary hover:text-primary"
-            )}
-        >
-            Arraste um campo aqui
-        </div>
-    );
-}
-
 const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   text: Text,
   number: Hash,
@@ -178,10 +150,9 @@ interface QuestionSettingsPanelProps {
   onChange: (updatedQuestion: FormQuestion) => void;
   onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
   onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
-  overId: string | null;
 }
 
-export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange, onCreateSubQuestion, onDeleteSubQuestion, overId }: QuestionSettingsPanelProps) {
+export function QuestionSettingsPanel({ question, allQuestions, allSections, users, profiles, onChange, onCreateSubQuestion, onDeleteSubQuestion }: QuestionSettingsPanelProps) {
   
   const form = useForm<FormQuestionValues>({
     resolver: zodResolver(formQuestionSchema),
@@ -398,7 +369,22 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         )}/>
                                         
                                         {ramification.action === 'add_question' && !subQuestion && (
-                                            <SubQuestionDropzone parentQuestionId={question.id} optionId={field.id} overId={overId} />
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button type="button" variant="outline" size="sm" className="w-full">
+                                                        <MessageSquareQuestion className="mr-2" />
+                                                        Adicionar sub-pergunta
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent>
+                                                    {Object.entries(questionIcons).map(([type, Icon]) => (
+                                                        <DropdownMenuItem key={type} onSelect={() => onCreateSubQuestion(question, field.id, type as FormQuestion['type'])}>
+                                                            <Icon className="mr-2 h-4 w-4" />
+                                                            <span>{(type.charAt(0).toUpperCase() + type.slice(1)).replace('-', ' ')}</span>
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         )}
                                         
                                         {ramification.action === 'show_question' && (
@@ -455,7 +441,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         allSections={allSections}
                                         users={users}
                                         profiles={profiles}
-                                        overId={overId}
                                         questionTypeLabels={questionIcons}
                                         {...props}
                                     />
