@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -107,8 +107,11 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'file-attachment': 'Anexo de Arquivo',
 };
 
-// Sub-component to avoid prop drilling issues in recursion
-const SubQuestionRenderer = ({ question, parentQuestionId, onDeleteSubQuestion, ...props }: any) => {
+const SubQuestionDisplay = ({ parentQuestionId, subQuestionId, onDeleteSubQuestion, ...props }: any) => {
+    const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
+    
+    if(!question) return null;
+
     return (
         <div className="relative pl-8 pt-4">
             <div className="absolute left-4 top-0 bottom-2 w-px bg-border/70 border-dashed -translate-x-1/2"></div>
@@ -435,14 +438,14 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                             </div>
                             
                             {subQuestion && (
-                                <SubQuestionRenderer
-                                    question={subQuestion}
+                                <SubQuestionDisplay
                                     parentQuestionId={question.id}
+                                    subQuestionId={subQuestion.id}
+                                    allQuestions={allQuestions}
+                                    allSections={allSections}
                                     onQuestionChange={onChange}
                                     onDeleteSubQuestion={onDeleteSubQuestion}
                                     onCreateSubQuestion={onCreateSubQuestion}
-                                    allQuestions={allQuestions}
-                                    allSections={allSections}
                                     users={users}
                                     profiles={profiles}
                                 />
@@ -460,4 +463,3 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
-

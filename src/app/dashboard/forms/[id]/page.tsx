@@ -51,7 +51,7 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   rating: Star,
 };
 
-const SortableQuestionItem = ({
+const SortableQuestionItem = React.memo(({
     question,
     allQuestions,
     allSections,
@@ -147,18 +147,16 @@ const SortableQuestionItem = ({
             </Accordion>
         </div>
     );
-}
+});
+SortableQuestionItem.displayName = 'SortableQuestionItem';
 
 const RecursiveQuestionRenderer = ({ 
-    questions,
-    parentQuestion, 
+    questionIds,
     level = 0, 
     ...props 
 }: { 
-    questions: FormQuestion[];
-    parentQuestion?: FormQuestion;
+    questionIds: string[];
     level?: number;
-    sectionStartIndex: number;
     allQuestions: FormQuestion[];
     allSections: FormSection[];
     onDelete: (id: string) => void;
@@ -170,14 +168,18 @@ const RecursiveQuestionRenderer = ({
     activeId: string | null;
     overId: string | null;
     highlightedQuestionId: string | null;
+    globalIndex: number;
 }) => {
+    const questionMap = useMemo(() => new Map(props.allQuestions.map(q => [q.id, q])), [props.allQuestions]);
+    const questionsToRender = useMemo(() => questionIds.map(id => questionMap.get(id)).filter(q => !!q) as FormQuestion[], [questionIds, questionMap]);
+    
     return (
         <div className="space-y-4">
-            {questions.map((q, index) => (
+            {questionsToRender.map((q, index) => (
                  <div key={q.id}>
                     {props.activeId && props.overId === q.id && <Placeholder index={index} />}
                     <SortableQuestionItem
-                        index={props.sectionStartIndex + index}
+                        index={props.globalIndex + index}
                         question={q}
                         allQuestions={props.allQuestions}
                         allSections={props.allSections}
@@ -285,9 +287,12 @@ export default function FormBuilderPage() {
         return [...internalTemplate.sections].sort((a,b) => a.order - b.order);
     }, [internalTemplate]);
     
-    const questionsBySection = useMemo(() => {
+    const { questionsBySection, topLevelQuestionsBySection } = useMemo(() => {
         const result: Record<string, FormQuestion[]> = {};
-        if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
+        const topLevelResult: Record<string, FormQuestion[]> = {};
+        if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) {
+            return { questionsBySection: result, topLevelQuestionsBySection: topLevelResult };
+        }
 
         const allQuestions = internalTemplate.questions;
         const subQuestionIds = new Set<string>();
@@ -300,28 +305,31 @@ export default function FormBuilderPage() {
                 })
             }
         });
-        
-        const topLevelQuestions = allQuestions.filter(q => !subQuestionIds.has(q.id));
 
         sortedSections.forEach(section => {
             result[section.id] = [];
+            topLevelResult[section.id] = [];
         });
 
-        topLevelQuestions.forEach(q => {
-             const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
+        allQuestions.forEach(q => {
+            const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
                 ? q.sectionId
                 : sortedSections[0]?.id;
-
-            if (sectionId && result[sectionId]) {
+            
+            if(sectionId && result[sectionId]) {
                 result[sectionId].push({ ...q, sectionId });
+                if(!subQuestionIds.has(q.id)) {
+                    topLevelResult[sectionId].push({ ...q, sectionId });
+                }
             }
         });
-
+        
         Object.keys(result).forEach(sectionId => {
             result[sectionId].sort((a, b) => a.order - b.order);
+            topLevelResult[sectionId].sort((a, b) => a.order - b.order);
         });
 
-        return result;
+        return { questionsBySection: result, topLevelQuestionsBySection };
     }, [internalTemplate, sortedSections]);
 
     const scrollToQuestion = (questionId: string) => {
@@ -663,7 +671,7 @@ export default function FormBuilderPage() {
 
                     <div ref={mainContentRef} className="space-y-4 h-[calc(100vh-10rem)] overflow-y-auto pr-2">
                         {sortedSections.map(section => {
-                             const sectionQuestions = questionsBySection[section.id] || [];
+                             const sectionQuestions = topLevelQuestionsBySection[section.id] || [];
                              const sectionStartIndex = globalQuestionIndex;
                              globalQuestionIndex += sectionQuestions.length;
                             return (
@@ -679,8 +687,8 @@ export default function FormBuilderPage() {
                                     <div className="space-y-4">
                                         <SortableContext items={sectionQuestions.map(q => q.id)}>
                                              <RecursiveQuestionRenderer 
-                                                questions={sectionQuestions} 
-                                                sectionStartIndex={sectionStartIndex}
+                                                questionIds={sectionQuestions.map(q => q.id)} 
+                                                globalIndex={sectionStartIndex}
                                                 allQuestions={internalTemplate?.questions || []}
                                                 allSections={internalTemplate?.sections || []}
                                                 onDelete={handleDeleteQuestion}
@@ -737,4 +745,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
