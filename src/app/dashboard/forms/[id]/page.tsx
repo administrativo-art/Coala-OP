@@ -150,7 +150,7 @@ const SortableQuestionItem = React.memo(({
 });
 SortableQuestionItem.displayName = 'SortableQuestionItem';
 
-const RecursiveQuestionRenderer = ({ 
+const RecursiveQuestionRenderer = React.memo(({ 
     questionIds,
     level = 0, 
     ...props 
@@ -161,7 +161,7 @@ const RecursiveQuestionRenderer = ({
     allSections: FormSection[];
     onDelete: (id: string) => void;
     onQuestionChange: (q: FormQuestion) => void;
-    onCreateSubQuestion: (parent: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
@@ -196,7 +196,8 @@ const RecursiveQuestionRenderer = ({
             ))}
         </div>
     )
-};
+});
+RecursiveQuestionRenderer.displayName = 'RecursiveQuestionRenderer';
 
 
 export default function FormBuilderPage() {
@@ -329,7 +330,7 @@ export default function FormBuilderPage() {
             topLevelResult[sectionId].sort((a, b) => a.order - b.order);
         });
 
-        return { questionsBySection: result, topLevelQuestionsBySection };
+        return { questionsBySection: result, topLevelQuestionsBySection: topLevelResult };
     }, [internalTemplate, sortedSections]);
 
     const scrollToQuestion = (questionId: string) => {
@@ -745,3 +746,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
