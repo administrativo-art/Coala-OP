@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal } from 'lucide-react';
+import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal, GitBranch } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -51,7 +51,6 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   rating: Star,
 };
 
-
 const SortableQuestionItem = ({
     question,
     allQuestions,
@@ -59,6 +58,7 @@ const SortableQuestionItem = ({
     onDelete,
     onQuestionChange,
     onCreateSubQuestion,
+    onDeleteSubQuestion,
     users,
     profiles,
     isDragging,
@@ -72,6 +72,7 @@ const SortableQuestionItem = ({
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
     onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+    onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
     isDragging?: boolean;
@@ -139,6 +140,7 @@ const SortableQuestionItem = ({
                             allSections={allSections}
                             onChange={onQuestionChange}
                             onCreateSubQuestion={onCreateSubQuestion}
+                            onDeleteSubQuestion={onDeleteSubQuestion}
                             users={users}
                             profiles={profiles}
                             overId={overId}
@@ -150,7 +152,6 @@ const SortableQuestionItem = ({
     );
 }
 
-// Recursive component to render questions and their sub-questions
 const RecursiveQuestionRenderer = ({ 
     questions, 
     level = 0, 
@@ -164,6 +165,7 @@ const RecursiveQuestionRenderer = ({
     onDelete: (id: string) => void;
     onQuestionChange: (q: FormQuestion) => void;
     onCreateSubQuestion: (parent: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+    onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
     activeId: string | null;
@@ -172,9 +174,9 @@ const RecursiveQuestionRenderer = ({
     activeType: FormQuestion['type'] | null;
 }) => {
     return (
-        <div className="space-y-2">
+        <div className="space-y-4">
             {questions.map((q, index) => (
-                <div key={q.id} style={{ paddingLeft: `${level * 20}px`}}>
+                 <div key={q.id}>
                     {props.activeType && props.overId === q.id && <Placeholder index={index} />}
                     <SortableQuestionItem
                         index={props.sectionStartIndex + index}
@@ -184,21 +186,13 @@ const RecursiveQuestionRenderer = ({
                         onDelete={() => props.onDelete(q.id)}
                         onQuestionChange={props.onQuestionChange}
                         onCreateSubQuestion={props.onCreateSubQuestion}
+                        onDeleteSubQuestion={props.onDeleteSubQuestion}
                         users={props.users}
                         profiles={props.profiles}
                         isDragging={props.activeId === q.id}
                         isHighlighted={props.highlightedQuestionId === q.id}
                         overId={props.overId}
                     />
-                    {q.subPerguntas && q.subPerguntas.length > 0 && (
-                        <div className="mt-2">
-                             <RecursiveQuestionRenderer 
-                                questions={q.subPerguntas}
-                                level={level + 1}
-                                {...props}
-                            />
-                        </div>
-                    )}
                 </div>
             ))}
         </div>
@@ -232,7 +226,6 @@ export default function FormBuilderPage() {
     const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
     const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
-
 
     const activeQuestion = useMemo(() => {
         if (!activeId || !internalTemplate) return null;
@@ -299,17 +292,41 @@ export default function FormBuilderPage() {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
 
+        const allQuestionsMap = new Map(internalTemplate.questions.map(q => [q.id, q]));
+        
+        const getSubQuestionIds = (question: FormQuestion): string[] => {
+            let ids: string[] = [];
+            if (question.options) {
+                question.options.forEach(opt => {
+                    if (opt.ramification?.targetQuestionId) {
+                        const subQ = allQuestionsMap.get(opt.ramification.targetQuestionId);
+                        if(subQ) {
+                            ids.push(subQ.id, ...getSubQuestionIds(subQ));
+                        }
+                    }
+                });
+            }
+            return ids;
+        };
+
+        const topLevelQuestionIds = new Set(internalTemplate.questions.map(q => q.id));
+        internalTemplate.questions.forEach(q => {
+            getSubQuestionIds(q).forEach(subId => topLevelQuestionIds.delete(subId));
+        });
+
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
 
         internalTemplate.questions.forEach(q => {
-            const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
-                ? q.sectionId
-                : sortedSections[0]?.id;
+             if (topLevelQuestionIds.has(q.id)) {
+                const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
+                    ? q.sectionId
+                    : sortedSections[0]?.id;
 
-            if (sectionId && result[sectionId]) {
-                result[sectionId].push({ ...q, sectionId });
+                if (sectionId && result[sectionId]) {
+                    result[sectionId].push({ ...q, sectionId });
+                }
             }
         });
 
@@ -381,41 +398,60 @@ export default function FormBuilderPage() {
                 label: 'Nova Sub-pergunta',
                 type: type,
                 isRequired: false,
-                order: 0, // This will be recalculated later if needed for display, but it's not a root question.
+                order: 999,
                 sectionId: parentQuestion.sectionId,
                 excluidaDoSumario: true,
             };
 
-            const newQuestions = currentTemplate.questions.map(q => {
-                if (q.id === parentQuestion.id) {
-                    const updatedParent = { ...q };
-                    
-                    // Add to subPerguntas array
-                    if (!updatedParent.subPerguntas) {
-                        updatedParent.subPerguntas = [];
-                    }
-                    updatedParent.subPerguntas.push(newSubQuestion);
-                    
-                    // Add to options ramification
-                    updatedParent.options = (updatedParent.options || []).map(opt => {
-                        if (opt.id === optionId) {
-                            return {
-                                ...opt,
-                                ramification: {
-                                    ...(opt.ramification || { id: `ram-${nanoid()}` }),
-                                    targetQuestionId: newSubQuestion.id
-                                }
-                            };
-                        }
-                        return opt;
-                    });
-                    
-                    return updatedParent;
-                }
-                return q;
-            });
+            const newQuestions = [...currentTemplate.questions];
+            let parentIndex = newQuestions.findIndex(q => q.id === parentQuestion.id);
 
+            if (parentIndex !== -1) {
+                let updatedParent = { ...newQuestions[parentIndex] };
+                
+                updatedParent.options = (updatedParent.options || []).map(opt => {
+                    if (opt.id === optionId) {
+                        return {
+                            ...opt,
+                            ramification: {
+                                ...(opt.ramification || { id: `ram-${nanoid()}` }),
+                                targetQuestionId: newSubQuestion.id
+                            }
+                        };
+                    }
+                    return opt;
+                });
+                
+                newQuestions[parentIndex] = updatedParent;
+                newQuestions.push(newSubQuestion);
+            }
+            
             setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+            return { ...currentTemplate, questions: newQuestions };
+        });
+    }, []);
+
+    const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
+        setInternalTemplate(currentTemplate => {
+            if (!currentTemplate) return null;
+
+            // Remove the sub-question from the main questions array
+            let newQuestions = currentTemplate.questions.filter(q => q.id !== subQuestionId);
+
+            // Find the parent and remove the ramification link
+            const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
+            if (parentIndex !== -1) {
+                const parent = { ...newQuestions[parentIndex] };
+                parent.options = (parent.options || []).map(opt => {
+                    if (opt.ramification?.targetQuestionId === subQuestionId) {
+                        const { ramification, ...restOfOption } = opt;
+                        return restOfOption;
+                    }
+                    return opt;
+                });
+                newQuestions[parentIndex] = parent;
+            }
+            
             return { ...currentTemplate, questions: newQuestions };
         });
     }, []);
@@ -454,18 +490,38 @@ export default function FormBuilderPage() {
     const handleDeleteQuestion = (questionId: string) => {
         if (!internalTemplate) return;
         
-        let newQuestions = (internalTemplate.questions || []).filter(q => q.id !== questionId)
-        .map(q => {
-            if (!q.options) return q;
-            const cleanedOptions = q.options.map(opt => {
-                if (opt.ramification && opt.ramification.targetQuestionId === questionId) {
-                    const { ramification, ...rest } = opt;
-                    return rest;
-                }
-                return opt;
+        const questionToDelete = internalTemplate.questions.find(q => q.id === questionId);
+        if (!questionToDelete) return;
+
+        let allIdsToDelete = new Set([questionId]);
+        const queue = [questionToDelete];
+
+        while(queue.length > 0) {
+            const current = queue.shift();
+            if (current?.options) {
+                current.options.forEach(opt => {
+                    if (opt.ramification?.targetQuestionId) {
+                        allIdsToDelete.add(opt.ramification.targetQuestionId);
+                        const subQ = internalTemplate.questions.find(q => q.id === opt.ramification.targetQuestionId);
+                        if(subQ) queue.push(subQ);
+                    }
+                })
+            }
+        }
+        
+        let newQuestions = internalTemplate.questions
+            .filter(q => !allIdsToDelete.has(q.id))
+            .map(q => {
+                if (!q.options) return q;
+                const cleanedOptions = q.options.map(opt => {
+                    if (opt.ramification && allIdsToDelete.has(opt.ramification.targetQuestionId!)) {
+                        const { ramification, ...rest } = opt;
+                        return rest;
+                    }
+                    return opt;
+                });
+                return { ...q, options: cleanedOptions };
             });
-            return { ...q, options: cleanedOptions };
-        });
 
         handleTemplateChange({ questions: newQuestions });
     };
@@ -628,44 +684,37 @@ export default function FormBuilderPage() {
                              const sectionStartIndex = globalQuestionIndex;
                              globalQuestionIndex += sectionQuestions.length;
                             return (
-                                <Accordion type="single" collapsible key={section.id} defaultValue="item-1" className="border-b-0">
-                                    <AccordionItem value="item-1" className="bg-card rounded-lg border">
-                                        {sortedSections.length > 1 && (
-                                            <div className="flex items-center pr-4">
-                                                <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
-                                                    <div className="flex-1 flex items-center gap-2">
-                                                        <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-lg font-semibold border-none focus-visible:ring-1"/>
-                                                    </div>
-                                                </AccordionTrigger>
-                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        )}
-                                        <AccordionContent className={cn(sortedSections.length > 1 && "border-t")}>
-                                            <div className="p-4 space-y-4">
-                                                <SortableContext items={sectionQuestions.map(q => q.id)}>
-                                                     <RecursiveQuestionRenderer 
-                                                        questions={sectionQuestions} 
-                                                        sectionStartIndex={sectionStartIndex}
-                                                        allQuestions={internalTemplate?.questions || []}
-                                                        allSections={internalTemplate?.sections || []}
-                                                        onDelete={handleDeleteQuestion}
-                                                        onQuestionChange={handleQuestionChange}
-                                                        onCreateSubQuestion={handleCreateSubQuestion}
-                                                        users={users}
-                                                        profiles={profiles}
-                                                        activeId={activeId}
-                                                        overId={overId}
-                                                        highlightedQuestionId={highlightedQuestionId}
-                                                        activeType={activeType}
-                                                    />
-                                                </SortableContext>
-                                                <QuestionDropzone sectionId={section.id} atIndex={sectionQuestions.length} overId={overId} />
-                                            </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
+                                <div key={section.id}>
+                                    {sortedSections.length > 1 && (
+                                        <div className="flex items-center mb-4">
+                                            <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-xl font-bold border-none focus-visible:ring-1 flex-grow bg-transparent p-1"/>
+                                            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                     )}
+                                    <div className="space-y-4">
+                                        <SortableContext items={sectionQuestions.map(q => q.id)}>
+                                             <RecursiveQuestionRenderer 
+                                                questions={sectionQuestions} 
+                                                sectionStartIndex={sectionStartIndex}
+                                                allQuestions={internalTemplate?.questions || []}
+                                                allSections={internalTemplate?.sections || []}
+                                                onDelete={handleDeleteQuestion}
+                                                onQuestionChange={handleQuestionChange}
+                                                onCreateSubQuestion={handleCreateSubQuestion}
+                                                onDeleteSubQuestion={handleDeleteSubQuestion}
+                                                users={users}
+                                                profiles={profiles}
+                                                activeId={activeId}
+                                                overId={overId}
+                                                highlightedQuestionId={highlightedQuestionId}
+                                                activeType={activeType}
+                                            />
+                                        </SortableContext>
+                                        <QuestionDropzone sectionId={section.id} atIndex={sectionQuestions.length} overId={overId} />
+                                    </div>
+                                </div>
                             )})}
                         <Button variant="outline" onClick={handleAddSection} className="w-full">
                             <PlusCircle className="mr-2" /> Adicionar Seção
@@ -678,7 +727,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} index={0} overId={null}/>}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} overId={null}/>}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 

@@ -370,7 +370,7 @@ export type FormTaskAction = {
 
 export type FormQuestionRamification = {
     id: string;
-    action: 'show_question' | 'create_task' | 'show_section';
+    action: 'show_question' | 'create_task' | 'show_section' | 'add_question';
     targetQuestionId?: string; // for 'show_question'
     targetSectionId?: string; // for 'show_section'
     taskAction?: FormTaskAction; // for 'create_task'
@@ -386,7 +386,6 @@ export type FormQuestion = {
     sectionId?: string;
     excluidaDoSumario?: boolean;
     options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
-    subPerguntas?: FormQuestion[];
     attachmentConfig?: {
         allowMultiple: boolean;
         allowedFileTypes: ('image' | 'pdf' | 'video')[];
