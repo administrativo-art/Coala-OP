@@ -403,7 +403,8 @@ export type FormQuestion = {
       maxLabel?: string;
     };
     ratingConfig?: {
-      max: number;
+      min?: number;
+      max?: number;
     };
 };
 
