@@ -706,7 +706,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={[]} profiles={[]} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={users} profiles={profiles} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 
