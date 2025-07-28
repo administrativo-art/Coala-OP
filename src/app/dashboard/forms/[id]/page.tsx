@@ -184,7 +184,7 @@ const RecursiveQuestionRenderer = ({
                         onDelete={() => props.onDelete(q.id)}
                         onQuestionChange={props.onQuestionChange}
                         onCreateSubQuestion={props.onCreateSubQuestion}
-                        users={props.users}
+                        users={users}
                         profiles={props.profiles}
                         isDragging={props.activeId === q.id}
                         isHighlighted={props.highlightedQuestionId === q.id}

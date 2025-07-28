@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 const ramificationSchema = z.object({
     id: z.string(),
-    action: z.enum(['show_question', 'create_task', 'show_section']).optional(),
+    action: z.enum(['show_question', 'create_task', 'show_section', 'add_question']).optional(),
     targetQuestionId: z.string().optional(),
     targetSectionId: z.string().optional(),
     taskAction: z.object({
@@ -304,7 +304,8 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Nenhuma ação"/></SelectTrigger></FormControl>
                                                 <SelectContent>
                                                     <SelectItem value="none">Nenhuma ação</SelectItem>
-                                                    <SelectItem value="show_question">Mostrar outra pergunta</SelectItem>
+                                                    <SelectItem value="add_question">Adicionar nova pergunta</SelectItem>
+                                                    <SelectItem value="show_question">Pular para outra pergunta</SelectItem>
                                                     <SelectItem value="show_section">Pular para seção</SelectItem>
                                                     <SelectItem value="create_task">Criar uma tarefa</SelectItem>
                                                 </SelectContent>
@@ -312,8 +313,13 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         </FormItem>
                                     )}/>
                                     
+                                     {ramification.action === 'add_question' && (
+                                        <Button type="button" size="sm" className="w-full" onClick={() => onCreateSubQuestion(question, field.id, 'text')}>
+                                            <PlusCircle className="mr-2 h-4 w-4"/> Adicionar sub-pergunta
+                                        </Button>
+                                    )}
+                                    
                                     {ramification.action === 'show_question' && (
-                                        <>
                                         <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
                                              <FormItem>
                                                 <Select
@@ -329,12 +335,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 </Select><FormMessage/>
                                             </FormItem>
                                         )}/>
-                                        <div className="relative">
-                                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
-                                            <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">OU</span></div>
-                                        </div>
-                                        <SubQuestionDropzone parentQuestionId={question.id} optionId={field.id} overId={overId} />
-                                        </>
                                     )}
 
                                      {ramification.action === 'show_section' && (
