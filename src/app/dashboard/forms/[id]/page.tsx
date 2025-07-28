@@ -287,41 +287,31 @@ export default function FormBuilderPage() {
         const result: Record<string, FormQuestion[]> = {};
         if (!internalTemplate || !internalTemplate.questions || !internalTemplate.sections) return result;
 
-        const allQuestionsMap = new Map(internalTemplate.questions.map(q => [q.id, q]));
-        
-        const getSubQuestionIds = (question: FormQuestion): string[] => {
-            let ids: string[] = [];
-            if (question.options) {
-                question.options.forEach(opt => {
+        const allQuestions = internalTemplate.questions;
+        const subQuestionIds = new Set<string>();
+        allQuestions.forEach(q => {
+            if(q.options) {
+                q.options.forEach(opt => {
                     if (opt.ramification?.targetQuestionId) {
-                        const subQ = allQuestionsMap.get(opt.ramification.targetQuestionId);
-                        if(subQ) {
-                            ids.push(subQ.id, ...getSubQuestionIds(subQ));
-                        }
+                        subQuestionIds.add(opt.ramification.targetQuestionId);
                     }
-                });
+                })
             }
-            return ids;
-        };
-
-        const topLevelQuestionIds = new Set(internalTemplate.questions.map(q => q.id));
-        internalTemplate.questions.forEach(q => {
-            getSubQuestionIds(q).forEach(subId => topLevelQuestionIds.delete(subId));
         });
+        
+        const topLevelQuestions = allQuestions.filter(q => !subQuestionIds.has(q.id));
 
         sortedSections.forEach(section => {
             result[section.id] = [];
         });
 
-        internalTemplate.questions.forEach(q => {
-             if (topLevelQuestionIds.has(q.id)) {
-                const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
-                    ? q.sectionId
-                    : sortedSections[0]?.id;
+        topLevelQuestions.forEach(q => {
+             const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
+                ? q.sectionId
+                : sortedSections[0]?.id;
 
-                if (sectionId && result[sectionId]) {
-                    result[sectionId].push({ ...q, sectionId });
-                }
+            if (sectionId && result[sectionId]) {
+                result[sectionId].push({ ...q, sectionId });
             }
         });
 
