@@ -26,19 +26,29 @@ interface NavItemProps {
 
 const NavItem = ({ question, indexPrefix, isCollapsed, selectedQuestionId, onQuestionSelect, questionIcons, allQuestions, level = 0 }: NavItemProps) => {
     const Icon = questionIcons[question.type];
-    const hasSubQuestions = question.subPerguntas && question.subPerguntas.length > 0;
+    
+    const allQuestionsMap = React.useMemo(() => new Map(allQuestions.map(q => [q.id, q])), [allQuestions]);
+
+    const subQuestions = React.useMemo(() => {
+        if (!question.options) return [];
+        return question.options
+            .map(opt => opt.ramification?.targetQuestionId ? allQuestionsMap.get(opt.ramification.targetQuestionId) : null)
+            .filter((q): q is FormQuestion => !!q);
+    }, [question.options, allQuestionsMap]);
+    
+    const hasSubQuestions = subQuestions.length > 0;
 
     const content = (
         <div 
             onClick={() => onQuestionSelect(question.id)}
             className={cn(
-                "flex items-center p-2 rounded-lg cursor-pointer w-full", 
+                "flex items-center p-2 rounded-lg cursor-pointer w-full text-left", 
                 selectedQuestionId === question.id ? "bg-primary/20" : "hover:bg-muted",
                 isCollapsed && "justify-center"
             )}
             style={{ paddingLeft: `${8 + level * 16}px` }}
         >
-            <div className={cn("flex items-center", isCollapsed ? "gap-0" : "gap-2")}>
+            <div className={cn("flex items-center flex-1", isCollapsed ? "gap-0" : "gap-2")}>
                 {level > 0 && <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />}
                 <span className={cn("font-bold text-muted-foreground", isCollapsed ? "text-xs" : "text-base w-6")}>{indexPrefix}</span>
                 <Icon className={cn("shrink-0 text-primary", isCollapsed ? "h-5 w-5" : "h-5 w-5")}/>
@@ -61,7 +71,7 @@ const NavItem = ({ question, indexPrefix, isCollapsed, selectedQuestionId, onQue
             </TooltipProvider>
              {!isCollapsed && hasSubQuestions && (
                 <ul className="mt-1 space-y-1">
-                    {question.subPerguntas!.map((sub, subIndex) => (
+                    {subQuestions.map((sub, subIndex) => (
                         <NavItem 
                             key={sub.id}
                             question={sub}

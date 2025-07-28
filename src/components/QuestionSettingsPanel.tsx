@@ -99,6 +99,17 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   rating: Star,
 };
 
+const questionTypeLabels: Record<FormQuestion['type'], string> = {
+    'text': 'Texto',
+    'number': 'Número',
+    'range': 'Intervalo',
+    'rating': 'Avaliação',
+    'yes-no': 'Sim/Não',
+    'single-choice': 'Escolha Única',
+    'multiple-choice': 'Múltipla Escolha',
+    'file-attachment': 'Anexo de Arquivo',
+};
+
 const SubQuestionItem = ({ question, parentQuestionId, onDeleteSubQuestion, ...props }: any) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
@@ -120,7 +131,7 @@ const SubQuestionItem = ({ question, parentQuestionId, onDeleteSubQuestion, ...p
                                         className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
                                         onClick={e => e.stopPropagation()}
                                     />
-                                    <p className="text-xs text-muted-foreground uppercase">{props.questionTypeLabels[question.type] || question.type}</p>
+                                    <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
                                 </div>
                             </div>
                         </AccordionTrigger>
@@ -331,7 +342,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                        const ramification = watchedOptions?.[index]?.ramification;
                        const subQuestion = ramification?.targetQuestionId ? allQuestionsMap.get(ramification.targetQuestionId) : null;
                         return (
-                        <div key={field.id} className="relative">
+                        <div key={field.id}>
                              <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
                                 <div className="flex items-center gap-2">
                                     <FormField control={form.control} name={`options.${index}.value`} render={({ field: optionField }) => (
@@ -380,7 +391,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                     {Object.entries(questionIcons).map(([type, Icon]) => (
                                                         <DropdownMenuItem key={type} onSelect={() => onCreateSubQuestion(question, field.id, type as FormQuestion['type'])}>
                                                             <Icon className="mr-2 h-4 w-4" />
-                                                            <span>{(type.charAt(0).toUpperCase() + type.slice(1)).replace('-', ' ')}</span>
+                                                            <span>{questionTypeLabels[type as FormQuestion['type']]}</span>
                                                         </DropdownMenuItem>
                                                     ))}
                                                 </DropdownMenuContent>
@@ -441,7 +452,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         allSections={allSections}
                                         users={users}
                                         profiles={profiles}
-                                        questionTypeLabels={questionIcons}
                                         {...props}
                                     />
                                 </div>
