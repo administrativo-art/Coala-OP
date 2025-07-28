@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type FormQuestion, type User, type Profile, type FormSection } from '@/types';
 import { Button } from './ui/button';
-import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent, Star, MoveHorizontal, Text, Hash, ToggleRight, List, CheckSquare, FileIcon, MessageSquareQuestion } from 'lucide-react';
+import { PlusCircle, Trash2, GitBranch, X, DollarSign, Percent, Star, MoveHorizontal, Text, Hash, ToggleRight, List, CheckSquare, FileIcon, MessageSquarePlus } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
@@ -372,7 +372,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button type="button" variant="outline" size="sm" className="w-full">
-                                                        <MessageSquareQuestion className="mr-2" />
+                                                        <MessageSquarePlus className="mr-2" />
                                                         Adicionar sub-pergunta
                                                     </Button>
                                                 </DropdownMenuTrigger>
