@@ -150,11 +150,13 @@ const SortableQuestionItem = ({
 }
 
 const RecursiveQuestionRenderer = ({ 
-    questions, 
+    questions,
+    parentQuestion, 
     level = 0, 
     ...props 
 }: { 
     questions: FormQuestion[];
+    parentQuestion?: FormQuestion;
     level?: number;
     sectionStartIndex: number;
     allQuestions: FormQuestion[];
@@ -383,16 +385,17 @@ export default function FormBuilderPage() {
                 label: 'Nova Sub-pergunta',
                 type: type,
                 isRequired: false,
-                order: 999,
+                order: 999, // Will be re-ordered later if needed
                 sectionId: parentQuestion.sectionId,
                 excluidaDoSumario: true,
             };
 
-            const newQuestions = [...currentTemplate.questions];
+            let newQuestions = [...currentTemplate.questions];
             let parentIndex = newQuestions.findIndex(q => q.id === parentQuestion.id);
 
             if (parentIndex !== -1) {
-                let updatedParent = { ...newQuestions[parentIndex] };
+                // Deep copy parent question to modify it
+                let updatedParent = JSON.parse(JSON.stringify(newQuestions[parentIndex]));
                 
                 updatedParent.options = (updatedParent.options || []).map(opt => {
                     if (opt.id === optionId) {
@@ -734,3 +737,4 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+

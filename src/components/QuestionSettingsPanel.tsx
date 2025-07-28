@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,10 +17,7 @@ import { nanoid } from 'nanoid';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
-import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
-import { SortableContext, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 
 
@@ -110,43 +107,42 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'file-attachment': 'Anexo de Arquivo',
 };
 
-const SubQuestionItem = ({ question, parentQuestionId, onDeleteSubQuestion, ...props }: any) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition: transition || 'transform 250ms ease',
-    };
-
+// Sub-component to avoid prop drilling issues in recursion
+const SubQuestionRenderer = ({ question, parentQuestionId, onDeleteSubQuestion, ...props }: any) => {
     return (
-        <div ref={setNodeRef} style={style} className="bg-card border rounded-lg overflow-hidden">
-             <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value={question.id} className="border-b-0">
-                    <div className="flex items-center p-2 pr-3">
-                         <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
-                             <div className="flex-1 flex items-center gap-3">
-                                <div className="flex-1">
-                                    <Input
-                                        value={question.label}
-                                        onChange={(e) => props.onQuestionChange({...question, label: e.target.value})}
-                                        className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
-                                        onClick={e => e.stopPropagation()}
-                                    />
-                                    <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+        <div className="relative pl-8 pt-4">
+            <div className="absolute left-4 top-0 bottom-2 w-px bg-border/70 border-dashed -translate-x-1/2"></div>
+            <div className="absolute left-4 top-8 h-px w-4 bg-border/70 border-dashed -translate-x-1/2"></div>
+            <div className="bg-card border rounded-lg overflow-hidden">
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value={question.id} className="border-b-0">
+                        <div className="flex items-center p-2 pr-3">
+                            <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
+                                <div className="flex-1 flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <Input
+                                            value={question.label}
+                                            onChange={(e) => props.onQuestionChange({...question, label: e.target.value})}
+                                            className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                        <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </AccordionTrigger>
-                        <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDeleteSubQuestion(parentQuestionId, question.id);}}>
-                            <Trash2 className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                    <AccordionContent className="px-4 pb-4">
-                        <QuestionSettingsPanel
-                            {...props}
-                            question={question}
-                        />
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
+                            </AccordionTrigger>
+                            <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDeleteSubQuestion(parentQuestionId, question.id);}}>
+                                <Trash2 className="h-4 w-4"/>
+                            </Button>
+                        </div>
+                        <AccordionContent className="px-4 pb-4">
+                            <QuestionSettingsPanel
+                                {...props}
+                                question={question}
+                            />
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </div>
         </div>
     );
 };
@@ -438,23 +434,18 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                 )}
                             </div>
                             
-                             {subQuestion && (
-                                <div className="relative pl-8 pt-4">
-                                    <div className="absolute left-4 top-0 bottom-2 w-px bg-border/70 border-dashed -translate-x-1/2"></div>
-                                    <div className="absolute left-4 top-8 h-px w-4 bg-border/70 border-dashed -translate-x-1/2"></div>
-                                    <SubQuestionItem
-                                        question={subQuestion}
-                                        parentQuestionId={question.id}
-                                        onQuestionChange={onChange}
-                                        onDeleteSubQuestion={onDeleteSubQuestion}
-                                        onCreateSubQuestion={onCreateSubQuestion}
-                                        allQuestions={allQuestions}
-                                        allSections={allSections}
-                                        users={users}
-                                        profiles={profiles}
-                                        {...props}
-                                    />
-                                </div>
+                            {subQuestion && (
+                                <SubQuestionRenderer
+                                    question={subQuestion}
+                                    parentQuestionId={question.id}
+                                    onQuestionChange={onChange}
+                                    onDeleteSubQuestion={onDeleteSubQuestion}
+                                    onCreateSubQuestion={onCreateSubQuestion}
+                                    allQuestions={allQuestions}
+                                    allSections={allSections}
+                                    users={users}
+                                    profiles={profiles}
+                                />
                             )}
                         </div>
                     )})}
@@ -469,3 +460,4 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
+
