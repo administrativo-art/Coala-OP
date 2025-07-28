@@ -107,7 +107,7 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'file-attachment': 'Anexo de Arquivo',
 };
 
-const SubQuestionDisplay = ({ parentQuestionId, subQuestionId, onDeleteSubQuestion, ...props }: any) => {
+const SubQuestionDisplay = React.memo(({ parentQuestionId, subQuestionId, onDeleteSubQuestion, ...props }: any) => {
     const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
     
     if(!question) return null;
@@ -148,7 +148,8 @@ const SubQuestionDisplay = ({ parentQuestionId, subQuestionId, onDeleteSubQuesti
             </div>
         </div>
     );
-};
+});
+SubQuestionDisplay.displayName = 'SubQuestionDisplay';
 
 
 interface QuestionSettingsPanelProps {
@@ -158,7 +159,7 @@ interface QuestionSettingsPanelProps {
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
-  onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+  onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
   onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
 }
 
@@ -388,7 +389,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent>
                                                     {Object.entries(questionIcons).map(([type, Icon]) => (
-                                                        <DropdownMenuItem key={type} onSelect={() => onCreateSubQuestion(question, field.id, type as FormQuestion['type'])}>
+                                                        <DropdownMenuItem key={type} onSelect={() => onCreateSubQuestion(question.id, field.id, type as FormQuestion['type'])}>
                                                             <Icon className="mr-2 h-4 w-4" />
                                                             <span>{questionTypeLabels[type as FormQuestion['type']]}</span>
                                                         </DropdownMenuItem>

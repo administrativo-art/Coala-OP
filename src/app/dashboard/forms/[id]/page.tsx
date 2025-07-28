@@ -70,7 +70,7 @@ const SortableQuestionItem = React.memo(({
     allSections: FormSection[],
     onDelete: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
