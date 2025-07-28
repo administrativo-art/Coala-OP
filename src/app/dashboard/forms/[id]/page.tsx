@@ -313,7 +313,7 @@ export default function FormBuilderPage() {
         });
 
         allQuestions.forEach(q => {
-            const sectionId = q.sectionId && result.hasOwnProperty(q.sectionId)
+            const sectionId = q.sectionId && Object.prototype.hasOwnProperty.call(result, q.sectionId)
                 ? q.sectionId
                 : sortedSections[0]?.id;
             
@@ -385,9 +385,12 @@ export default function FormBuilderPage() {
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
     
-    const handleCreateSubQuestion = useCallback((parentQuestion: FormQuestion, optionId: string, type: FormQuestion['type']) => {
+    const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type']) => {
         setInternalTemplate(currentTemplate => {
             if (!currentTemplate) return null;
+
+            const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
+            if (!parentQuestion) return currentTemplate;
 
             const newSubQuestion: FormQuestion = {
                 id: `question-${nanoid()}`,
@@ -399,14 +402,14 @@ export default function FormBuilderPage() {
                 excluidaDoSumario: true,
             };
 
-            let newQuestions = [...currentTemplate.questions];
-            let parentIndex = newQuestions.findIndex(q => q.id === parentQuestion.id);
+            const newQuestions = [...currentTemplate.questions];
+            const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
 
             if (parentIndex !== -1) {
                 // Deep copy parent question to modify it
-                let updatedParent = JSON.parse(JSON.stringify(newQuestions[parentIndex]));
+                const updatedParent = JSON.parse(JSON.stringify(newQuestions[parentIndex]));
                 
-                updatedParent.options = (updatedParent.options || []).map(opt => {
+                updatedParent.options = (updatedParent.options || []).map((opt: any) => {
                     if (opt.id === optionId) {
                         return {
                             ...opt,
