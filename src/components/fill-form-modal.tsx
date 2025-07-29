@@ -341,7 +341,7 @@ function CheckIcon(props: React.ComponentProps<'svg'>) {
         xmlns="http://www.w3.org/2000/svg"
         width="24"
         height="24"
-        viewBox="0 0 24 24"
+        viewBox="0 0 24"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -419,20 +419,28 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     
     const allQuestions = useMemo(() => template.questions || [], [template]);
     
-    const form = useForm({ mode: 'onChange' });
+    const form = useForm({
+        mode: 'onChange',
+        resolver: (data, context, options) => {
+            const visibleIds = getVisibleQuestionIds(allQuestions, data);
+            const schema = generateSchema(allQuestions, visibleIds);
+            return zodResolver(schema)(data, context, options);
+        },
+    });
+    
     const formValues = useWatch({ control: form.control });
-    
-    const visibleQuestionIds = useMemo(() => getVisibleQuestionIds(allQuestions, formValues), [allQuestions, formValues]);
-    
-    const visibleQuestions = useMemo(() => {
-        return allQuestions.filter(q => visibleQuestionIds.has(q.id)).sort((a,b) => a.order - b.order);
-    }, [allQuestions, visibleQuestionIds]);
-    
-    const { resolver } = form.control.options;
 
+    // This useMemo is correct as it calculates the currently visible questions for rendering
+    const visibleQuestions = useMemo(() => {
+        const visibleIds = getVisibleQuestionIds(allQuestions, formValues);
+        return allQuestions.filter(q => visibleIds.has(q.id)).sort((a,b) => a.order - b.order);
+    }, [allQuestions, formValues]);
+    
+    // Trigger re-validation when formValues change
     useEffect(() => {
-        (form.control as any).resolver = zodResolver(generateSchema(allQuestions, visibleQuestionIds));
-    }, [visibleQuestionIds, allQuestions, form.control]);
+        form.trigger();
+    }, [formValues, form]);
+
 
     const handleResetAndFillAgain = () => {
         form.reset();
