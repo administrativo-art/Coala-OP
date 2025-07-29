@@ -537,52 +537,48 @@ export default function FormBuilderPage() {
     };
     
      const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type'] = 'text') => {
-        if (!internalTemplate) return;
+        setInternalTemplate(currentTemplate => {
+            if (!currentTemplate) return null;
 
-        const newSubQuestion: FormQuestion = {
-            id: `question-${nanoid()}`,
-            label: 'Nova Sub-pergunta',
-            type,
-            isRequired: false,
-            order: 0,
-            sectionId: '',
-            excluidaDoSumario: true,
-        };
-
-        const questions = [...internalTemplate.questions];
-        const parentIndex = questions.findIndex(q => q.id === parentQuestionId);
-        if (parentIndex === -1) return;
-
-        const parentQuestion = { ...questions[parentIndex] };
-        newSubQuestion.sectionId = parentQuestion.sectionId;
-        
-        // Ensure options array exists
-        parentQuestion.options = parentQuestion.options || [];
-
-        const updatedOptions = parentQuestion.options.map(opt => {
-            if (opt.id !== optionId) return opt;
-            return {
-                ...opt,
-                ramification: {
-                    id: `ram-${nanoid()}`,
-                    action: 'add_question',
-                    targetQuestionId: newSubQuestion.id
-                }
+            const newSubQuestion: FormQuestion = {
+                id: `question-${nanoid()}`,
+                label: 'Nova Sub-pergunta',
+                type,
+                isRequired: false,
+                order: 0, 
+                sectionId: '',
+                excluidaDoSumario: true,
             };
+
+            const questions = [...currentTemplate.questions];
+            const parentIndex = questions.findIndex(q => q.id === parentQuestionId);
+            if (parentIndex === -1) return currentTemplate;
+
+            const parentQuestion = { ...questions[parentIndex] };
+            newSubQuestion.sectionId = parentQuestion.sectionId;
+            
+            parentQuestion.options = (parentQuestion.options || []).map(opt => {
+                if (opt.id !== optionId) return opt;
+                return {
+                    ...opt,
+                    ramification: {
+                        id: `ram-${nanoid()}`,
+                        action: 'add_question',
+                        targetQuestionId: newSubQuestion.id
+                    }
+                };
+            });
+            
+            questions[parentIndex] = parentQuestion;
+            questions.splice(parentIndex + 1, 0, newSubQuestion);
+
+            const finalQuestions = questions.map((q, index) => ({ ...q, order: index }));
+            
+            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+
+            return { ...currentTemplate, questions: finalQuestions };
         });
-        parentQuestion.options = updatedOptions;
-        
-        questions[parentIndex] = parentQuestion;
-        
-        // Insert the new sub-question right after the parent
-        questions.splice(parentIndex + 1, 0, newSubQuestion);
-
-        const finalQuestions = questions.map((q, index) => ({ ...q, order: index }));
-
-        setInternalTemplate({ ...internalTemplate, questions: finalQuestions });
-        
-        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-    }, [internalTemplate, scrollToQuestion]);
+    }, [scrollToQuestion]);
 
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
@@ -596,7 +592,6 @@ export default function FormBuilderPage() {
                 const parent = { ...newQuestions[parentIndex] };
                 parent.options = (parent.options || []).map(opt => {
                     if (opt.ramification?.targetQuestionId === subQuestionId) {
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { ramification, ...rest } = opt;
                         return rest;
                     }
@@ -623,7 +618,7 @@ export default function FormBuilderPage() {
         const newQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: "Nova Pergunta",
-            type: type,
+            type: type || 'text',
             isRequired: false,
             order: atIndex,
             sectionId: sectionId
