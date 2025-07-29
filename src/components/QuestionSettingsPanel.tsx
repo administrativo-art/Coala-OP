@@ -112,7 +112,9 @@ const SubQuestionDisplay = React.memo(({
     parentQuestionId, 
     subQuestionId, 
     onDeleteSubQuestion, 
-    ...props 
+    onChange,
+    onCreateSubQuestion,
+    ...props
 }: {
     parentQuestionId: string;
     subQuestionId: string;
@@ -141,7 +143,7 @@ const SubQuestionDisplay = React.memo(({
                                     <div className="flex-1">
                                         <Input
                                             value={question.label}
-                                            onChange={(e) => props.onChange({...question, label: e.target.value})}
+                                            onChange={(e) => onChange({...question, label: e.target.value})}
                                             className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
                                             onClick={e => e.stopPropagation()}
                                         />
@@ -159,8 +161,8 @@ const SubQuestionDisplay = React.memo(({
                                 allSections={props.allSections}
                                 users={props.users}
                                 profiles={props.profiles}
-                                onChange={props.onChange}
-                                onCreateSubQuestion={props.onCreateSubQuestion}
+                                onChange={onChange}
+                                onCreateSubQuestion={onCreateSubQuestion}
                                 onDeleteSubQuestion={onDeleteSubQuestion}
                                 question={question}
                             />
@@ -356,12 +358,18 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                 </div>
             )}
 
-
             {showOptions && (
-                <div className="space-y-4 pt-4 border-t">
-                    <FormLabel>Opções e Ramificações</FormLabel>
+              <>
+                <div className="relative">
+                    <Separator />
+                    <h3 className="absolute left-1/2 -translate-x-1/2 -top-3 bg-card px-2 text-sm font-semibold text-muted-foreground">Lógica e Ramificações</h3>
+                </div>
+                <div className="space-y-4">
                     {optionFields.map((field, index) => {
                        const ramification = watchedOptions?.[index]?.ramification;
+                       const subQuestionId = ramification?.targetQuestionId;
+                       const subQuestion = subQuestionId ? allQuestionsMap.get(subQuestionId) : null;
+
                         return (
                         <div key={field.id}>
                              <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
@@ -400,7 +408,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                             </FormItem>
                                         )}/>
                                         
-                                        {ramification.action === 'add_question' && !ramification.targetQuestionId && (
+                                        {ramification.action === 'add_question' && !subQuestionId && (
                                             <Button 
                                                 type="button" 
                                                 variant="outline" 
@@ -452,6 +460,19 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     </Button>
                                 )}
                             </div>
+                            {subQuestion && (
+                                 <SubQuestionDisplay
+                                    parentQuestionId={question.id}
+                                    subQuestionId={subQuestionId}
+                                    allQuestions={allQuestions}
+                                    allSections={allSections}
+                                    users={users}
+                                    profiles={profiles}
+                                    onChange={onChange}
+                                    onCreateSubQuestion={onCreateSubQuestion}
+                                    onDeleteSubQuestion={onDeleteSubQuestion}
+                                />
+                            )}
                         </div>
                     )})}
                     {questionType !== 'yes-no' && (
@@ -460,6 +481,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                         </Button>
                     )}
                 </div>
+              </>
             )}
         </form>
     </Form>
