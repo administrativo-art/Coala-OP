@@ -172,20 +172,21 @@ const SortableQuestionItem = React.memo(({
              {subQuestions.length > 0 && (
                 <div className="pt-4 space-y-4">
                     {subQuestions.map((subQ, subIndex) => (
-                         <SortableQuestionItem
+                         <SubQuestionDisplay
                             key={subQ.id}
-                            question={subQ}
+                            parentQuestionId={question.id}
+                            subQuestionId={subQ.id}
                             allQuestions={allQuestions}
                             allSections={allSections}
-                            onDelete={() => onDeleteSubQuestion(question.id, subQ.id)}
-                            onDuplicate={() => { /* Not implemented for sub-questions yet */ }}
                             onQuestionChange={onQuestionChange}
-                            onCreateSubQuestion={onCreateSubQuestion}
                             onDeleteSubQuestion={onDeleteSubQuestion}
+                            onCreateSubQuestion={onCreateSubQuestion}
+                            onDuplicate={() => { /* Not implemented for sub-questions yet */ }}
                             users={users}
                             profiles={profiles}
                             index={subIndex}
                             level={level + 1}
+                            globalIndex={index}
                         />
                     ))}
                 </div>
@@ -217,7 +218,7 @@ const RecursiveQuestionRenderer = React.memo(({
     level?: number;
 }) => {
     const questionMap = useMemo(() => new Map(props.allQuestions.map(q => [q.id, q])), [props.allQuestions]);
-    const questionsToRender = useMemo(() => questionIds.map(id => questionMap.get(id)).filter(q => !!q) as FormQuestion[], [questionIds, questionMap]);
+    const questionsToRender = useMemo(() => questionIds.map(id => questionMap.get(id)).filter(q => !!q && !q.excluidaDoSumario) as FormQuestion[], [questionIds, questionMap]);
     
     return (
         <div className={cn("space-y-4", level > 0 && "pt-4")}>
@@ -440,16 +441,18 @@ export default function FormBuilderPage() {
             label: 'Nova Sub-pergunta',
             type: type,
             isRequired: false,
-            order: 999,
+            order: 999, // Will be re-ordered
             sectionId: parentQuestion.sectionId,
             excluidaDoSumario: true,
         };
         
-        const newQuestions = currentTemplate.questions.map(q => {
-            if (q.id !== parentQuestionId) return q;
-            return {
-                ...q,
-                options: (q.options || []).map(opt => {
+        const newQuestions = [...currentTemplate.questions];
+        const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
+        
+        if (parentIndex !== -1) {
+            newQuestions[parentIndex] = {
+                ...newQuestions[parentIndex],
+                options: (newQuestions[parentIndex].options || []).map(opt => {
                     if (opt.id !== optionId) return opt;
                     return {
                         ...opt,
@@ -461,13 +464,24 @@ export default function FormBuilderPage() {
                     };
                 })
             };
-        });
+        }
+        
+        let lastSubTreeIndex = parentIndex;
+        for (let i = parentIndex + 1; i < newQuestions.length; i++) {
+             if(newQuestions[i].excluidaDoSumario) {
+                lastSubTreeIndex = i;
+            } else {
+                break;
+            }
+        }
 
-        newQuestions.push(newSubQuestion);
+        newQuestions.splice(lastSubTreeIndex + 1, 0, newSubQuestion);
+        
+        const finalQuestions = newQuestions.map((q, index) => ({...q, order: index}));
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
 
-        return { ...currentTemplate, questions: newQuestions };
+        return { ...currentTemplate, questions: finalQuestions };
       });
     }, [scrollToQuestion]);
 
@@ -787,9 +801,8 @@ export default function FormBuilderPage() {
                                 </span>
                             )}
                         </div>
-                        <Button variant="outline" size="icon" onClick={() => setIsPreviewOpen(true)}>
-                            <Eye className="h-5 w-5" />
-                            <span className="sr-only">Preview</span>
+                        <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                            <Eye className="mr-2 h-4 w-4" /> Preview
                         </Button>
                         <Button onClick={handlePublish} disabled={isSaving || !('id' in internalTemplate)}>
                             <FileUp className="mr-2 h-4 w-4" />
@@ -819,7 +832,11 @@ export default function FormBuilderPage() {
                                 <div key={section.id}>
                                     {sortedSections.length > 1 && (
                                         <div className="flex items-center mb-4">
-                                            <Input value={section.name} onChange={e => handleSectionChange(section.id, e.target.value)} className="text-xl font-bold border-none focus-visible:ring-1 flex-grow bg-transparent p-1"/>
+                                            <Input 
+                                                value={section.name} 
+                                                onChange={e => handleSectionChange(section.id, e.target.value)} 
+                                                className="text-xl font-bold border-none focus-visible:ring-1 flex-grow bg-transparent p-1 h-auto"
+                                            />
                                             <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
