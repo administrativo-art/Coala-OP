@@ -541,105 +541,92 @@ export default function FormBuilderPage() {
       optionId: string,
       type: FormQuestion['type'] = 'text'
     ) => {
-      setInternalTemplate(currentTemplate => {
-        if (!currentTemplate) return null;
+        if (!internalTemplate) return;
 
-        let allQuestions = [...currentTemplate.questions];
-        const parentIndex = allQuestions.findIndex(q => q.id === parentQuestionId);
-        if (parentIndex === -1) return currentTemplate;
-        
-        const parentQuestion = allQuestions[parentIndex];
-        
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: 'Nova Sub-pergunta',
             type,
             isRequired: false,
-            order: 0, // Placeholder
-            sectionId: parentQuestion.sectionId,
+            order: 0, // Will be set later
+            sectionId: '', // Will be set later
             excluidaDoSumario: true,
         };
-        
+
+        let questions = [...internalTemplate.questions];
+        const parentIndex = questions.findIndex(q => q.id === parentQuestionId);
+        if (parentIndex === -1) return;
+
+        const parentQuestion = { ...questions[parentIndex] };
+        newSubQuestion.sectionId = parentQuestion.sectionId;
+
         // Update parent question's option with ramification
-        const updatedParentQuestion = {
-            ...parentQuestion,
-            options: (parentQuestion.options || []).map(opt => {
-                if (opt.id !== optionId) return opt;
-                return {
-                    ...opt,
-                    ramification: {
-                        id: `ram-${nanoid()}`,
-                        action: 'add_question',
-                        targetQuestionId: newSubQuestion.id
-                    }
-                };
-            })
-        };
-
-        allQuestions[parentIndex] = updatedParentQuestion;
-
-        // Find the correct insertion index
-        let lastSubQuestionIndex = parentIndex;
-        const parentSubTreeIds = new Set<string>();
+        parentQuestion.options = (parentQuestion.options || []).map(opt => {
+            if (opt.id !== optionId) return opt;
+            return {
+                ...opt,
+                ramification: {
+                    id: `ram-${nanoid()}`,
+                    action: 'add_question',
+                    targetQuestionId: newSubQuestion.id
+                }
+            };
+        });
+        
+        questions[parentIndex] = parentQuestion;
+        
+        // Find last child of parent to insert after
+        let lastDescendantIndex = parentIndex;
+        const processed = new Set<string>();
         const queue = [parentQuestion.id];
-        const visited = new Set<string>();
+        
+        while(queue.length > 0){
+            const currentId = queue.shift();
+            if(!currentId || processed.has(currentId)) continue;
+            processed.add(currentId);
 
-        while (queue.length > 0) {
-            const currentId = queue.shift()!;
-            if(visited.has(currentId)) continue;
-            visited.add(currentId);
+            const currentIndex = questions.findIndex(q => q.id === currentId);
+            if(currentIndex > lastDescendantIndex) {
+                lastDescendantIndex = currentIndex;
+            }
 
-            const currentQ = allQuestions.find(q => q.id === currentId);
-            if(currentQ?.options){
-                for(const opt of currentQ.options){
-                    if(opt.ramification?.targetQuestionId){
-                        parentSubTreeIds.add(opt.ramification.targetQuestionId);
+            const currentQuestion = questions[currentIndex];
+            if(currentQuestion.options){
+                currentQuestion.options.forEach(opt => {
+                    if(opt.ramification?.targetQuestionId) {
                         queue.push(opt.ramification.targetQuestionId);
                     }
-                }
+                });
             }
         }
         
-        for (let i = parentIndex + 1; i < allQuestions.length; i++) {
-            if (parentSubTreeIds.has(allQuestions[i].id)) {
-                lastSubQuestionIndex = i;
-            } else {
-                break;
-            }
-        }
-        
-        // Insert new sub-question
-        allQuestions.splice(lastSubQuestionIndex + 1, 0, newSubQuestion);
-        
-        const finalQuestions = allQuestions.map((q, index) => ({...q, order: index}));
+        // Insert new sub-question right after the parent or its last descendant
+        questions.splice(lastDescendantIndex + 1, 0, newSubQuestion);
+
+        // Re-order everything
+        const finalQuestions = questions.map((q, index) => ({ ...q, order: index }));
+
+        setInternalTemplate(prev => ({ ...prev!, questions: finalQuestions }));
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-
-        return { ...currentTemplate, questions: finalQuestions };
-      });
-    }, [scrollToQuestion]);
+    }, [internalTemplate, scrollToQuestion]);
 
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
         setInternalTemplate(currentTemplate => {
             if (!currentTemplate) return null;
 
-            // Remove the sub-question from the main questions array
             let newQuestions = currentTemplate.questions.filter(q => q.id !== subQuestionId);
 
-            // Find the parent and remove the ramification link
             const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
             if (parentIndex !== -1) {
                 const parent = { ...newQuestions[parentIndex] };
                 parent.options = (parent.options || []).map(opt => {
                     if (opt.ramification?.targetQuestionId === subQuestionId) {
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        const { ramification, ...restOfOption } = opt;
-                        // Important: setting ramification to undefined to clear it.
-                        return { ...restOfOption, ramification: undefined };
+                        return { ...opt, ramification: undefined };
                     }
                     return opt;
-                }).filter(opt => opt.ramification !== undefined || !opt.ramification); // Clean up fully empty options if needed
+                });
                 newQuestions[parentIndex] = parent;
             }
             
