@@ -152,11 +152,9 @@ SortableQuestionItem.displayName = 'SortableQuestionItem';
 
 const RecursiveQuestionRenderer = React.memo(({ 
     questionIds,
-    level = 0, 
     ...props 
 }: { 
     questionIds: string[];
-    level?: number;
     allQuestions: FormQuestion[];
     allSections: FormSection[];
     onDelete: (id: string) => void;
@@ -386,52 +384,51 @@ export default function FormBuilderPage() {
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
     
-const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type']) => {
-  setInternalTemplate(currentTemplate => {
-    if (!currentTemplate) return null;
+    const handleCreateSubQuestion = useCallback((
+      parentQuestionId: string, 
+      optionId: string, 
+      type: FormQuestion['type']
+    ) => {
+      setInternalTemplate(currentTemplate => {
+        if (!currentTemplate) return null;
 
-    const parentSectionId = currentTemplate.questions.find(q => q.id === parentQuestionId)?.sectionId;
+        const parentSectionId = currentTemplate.questions.find(q => q.id === parentQuestionId)?.sectionId;
 
-    const newSubQuestion: FormQuestion = {
-        id: `question-${nanoid()}`,
-        label: 'Nova Sub-pergunta',
-        type: type,
-        isRequired: false,
-        order: 999, // High order to not interfere with main sorting
-        sectionId: parentSectionId,
-        excluidaDoSumario: true,
-    };
-    
-    const newQuestions = currentTemplate.questions.map(q => {
-        if (q.id !== parentQuestionId) {
-            return q;
-        }
-        return {
-            ...q,
-            options: (q.options || []).map(opt => {
-                if (opt.id !== optionId) {
-                    return opt;
-                }
-                return {
-                    ...opt,
-                    ramification: {
-                        id: `ram-${nanoid()}`,
-                        action: 'add_question',
-                        targetQuestionId: newSubQuestion.id
-                    }
-                };
-            })
+        const newSubQuestion: FormQuestion = {
+            id: `question-${nanoid()}`,
+            label: 'Nova Sub-pergunta',
+            type: type,
+            isRequired: false,
+            order: 999,
+            sectionId: parentSectionId,
+            excluidaDoSumario: true,
         };
-    });
-    
-    newQuestions.push(newSubQuestion);
-    
-    // Defer the scroll action to after the state update has been processed
-    setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
 
-    return { ...currentTemplate, questions: newQuestions };
-  });
-}, []); // eslint-disable-line react-hooks/exhaustive-deps
+        const newQuestions = currentTemplate.questions.map(q => {
+            if (q.id !== parentQuestionId) return q;
+            return {
+                ...q,
+                options: (q.options || []).map(opt => {
+                    if (opt.id !== optionId) return opt;
+                    return {
+                        ...opt,
+                        ramification: {
+                            id: `ram-${nanoid()}`,
+                            action: 'add_question',
+                            targetQuestionId: newSubQuestion.id
+                        }
+                    };
+                })
+            };
+        });
+
+        newQuestions.push(newSubQuestion);
+        
+        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+
+        return { ...currentTemplate, questions: newQuestions };
+      });
+    }, [scrollToQuestion]);
 
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
@@ -666,7 +663,7 @@ const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId:
                 <main className={cn("flex-1 min-h-0 bg-muted/40 p-6 grid gap-6 transition-all", isSummaryCollapsed ? "grid-cols-[120px_1fr_350px]" : "grid-cols-[280px_1fr_350px]")}>
                     <FormQuestionNav
                         sections={sortedSections}
-                        questionsBySection={questionsBySection}
+                        questionsBySection={topLevelQuestionsBySection}
                         selectedQuestionId={selectedQuestionId}
                         onQuestionSelect={scrollToQuestion}
                         isCollapsed={isSummaryCollapsed}
