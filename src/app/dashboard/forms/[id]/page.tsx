@@ -633,6 +633,7 @@ export default function FormBuilderPage() {
                 const parent = { ...newQuestions[parentIndex] };
                 parent.options = (parent.options || []).map(opt => {
                     if (opt.ramification?.targetQuestionId === subQuestionId) {
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { ramification, ...restOfOption } = opt;
                         // Important: setting ramification to undefined to clear it.
                         return { ...restOfOption, ramification: undefined };
@@ -1040,6 +1041,3 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
-
-
-

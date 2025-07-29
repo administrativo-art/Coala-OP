@@ -170,13 +170,19 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   }, [questionType, replaceOptions, form]);
   
   const onAddRamification = (optionIndex: number) => {
-    const currentOption = watchedOptions[optionIndex];
-    updateOption(optionIndex, {
-        ...currentOption,
-        ramification: {
-            id: `ram-${nanoid()}`
-        }
-    });
+    const currentOption = { ...watchedOptions[optionIndex] };
+    const newRamification = { id: `ram-${nanoid()}` };
+    currentOption.ramification = newRamification;
+    updateOption(optionIndex, currentOption);
+  }
+
+  const handleRemoveRamification = (optionIndex: number) => {
+    const currentOption = { ...watchedOptions[optionIndex] };
+    if(currentOption.ramification?.targetQuestionId){
+        onDeleteSubQuestion(question.id, currentOption.ramification.targetQuestionId);
+    }
+    delete currentOption.ramification;
+    updateOption(optionIndex, currentOption);
   }
 
   return (
@@ -319,11 +325,11 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                 )}
                             </div>
                             
-                            {ramification && ramification.action !== 'add_question' && (
+                            {ramification && ramification.action !== 'add_question' ? (
                                 <div className="p-3 border rounded-lg space-y-3 bg-card">
                                     <div className="flex justify-between items-center">
                                         <p className="font-medium text-sm flex items-center gap-2"><GitBranch className="h-4 w-4"/> Lógica Condicional</p>
-                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}><X className="h-4 w-4"/></Button>
+                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => handleRemoveRamification(index)}><X className="h-4 w-4"/></Button>
                                     </div>
                                     <p className="font-medium text-sm">SE a resposta for “{watchedOptions?.[index]?.value}” ENTÃO...</p>
 
@@ -370,28 +376,31 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         )}/>
                                     )}
                                 </div>
-                            )}
-
-                             {ramification?.action === 'add_question' ? (
+                            ) : ramification?.action === 'add_question' ? (
                                 <div className="flex items-center justify-between">
                                     <div className="text-sm text-muted-foreground flex items-center gap-2">
                                         <GitBranch className="h-4 w-4" />
                                         <span>Exibe uma sub-pergunta.</span>
                                     </div>
-                                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
-                                        onDeleteSubQuestion(question.id, ramification.targetQuestionId!)
-                                    }}>Remover sub-pergunta</Button>
+                                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleRemoveRamification(index)}>Remover sub-pergunta</Button>
                                 </div>
-                            ) : ramification === undefined ? (
-                                <div className="flex justify-end gap-2">
-                                    <Button type="button" variant="outline" size="sm" onClick={() => onAddRamification(index)}>
-                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
-                                    </Button>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => onCreateSubQuestion(question.id, field.id, 'text')}>
-                                        <MessageSquarePlus className="mr-2 h-4 w-4" /> Adicionar sub-pergunta
-                                    </Button>
-                                </div>
-                            ) : null }
+                            ) : (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button type="button" variant="outline" size="sm">
+                                            <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onSelect={() => onAddRamification(index)}>
+                                            Pular para pergunta/seção
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={() => onCreateSubQuestion(question.id, field.id, 'text')}>
+                                            Adicionar sub-pergunta
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
 
                         </div>
                     )})}
@@ -407,4 +416,3 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
-
