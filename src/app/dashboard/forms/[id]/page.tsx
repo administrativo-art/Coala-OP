@@ -536,66 +536,70 @@ export default function FormBuilderPage() {
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
     
-     const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type'] = 'text') => {
-        if (!internalTemplate) return;
+     const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type']) => {
+        setInternalTemplate(currentTemplate => {
+            if (!currentTemplate) return null;
 
-        const newSubQuestion: FormQuestion = {
-            id: `question-${nanoid()}`,
-            label: 'Nova Sub-pergunta',
-            type,
-            isRequired: false,
-            order: 0,
-            sectionId: '',
-            excluidaDoSumario: true,
-        };
-
-        const currentQuestions = [...internalTemplate.questions];
-        const parentIndex = currentQuestions.findIndex(q => q.id === parentQuestionId);
-        if (parentIndex === -1) return;
-
-        const parentQuestion = { ...currentQuestions[parentIndex] };
-        newSubQuestion.sectionId = parentQuestion.sectionId!;
-        parentQuestion.options = (parentQuestion.options || []).map(opt => {
-            if (opt.id !== optionId) return opt;
-            return {
-                ...opt,
-                ramification: {
-                    id: `ram-${nanoid()}`,
-                    action: 'add_question',
-                    targetQuestionId: newSubQuestion.id,
-                },
+            const newSubQuestion: FormQuestion = {
+                id: `question-${nanoid()}`,
+                label: 'Nova Sub-pergunta',
+                type: type,
+                isRequired: false,
+                order: 0, 
+                sectionId: '', 
+                excluidaDoSumario: true,
             };
+
+            const newQuestions = [...currentTemplate.questions];
+            const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
+            if (parentIndex === -1) return currentTemplate;
+
+            const parentQuestion = { ...newQuestions[parentIndex] };
+            newSubQuestion.sectionId = parentQuestion.sectionId!;
+            
+            parentQuestion.options = (parentQuestion.options || []).map(opt => {
+                if (opt.id !== optionId) return opt;
+                return {
+                    ...opt,
+                    ramification: {
+                        id: `ram-${nanoid()}`,
+                        action: 'add_question',
+                        targetQuestionId: newSubQuestion.id,
+                    },
+                };
+            });
+
+            newQuestions[parentIndex] = parentQuestion;
+            newQuestions.splice(parentIndex + 1, 0, newSubQuestion);
+
+            const reorderedQuestions = newQuestions.map((q, index) => ({ ...q, order: index }));
+
+            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+
+            return { ...currentTemplate, questions: reorderedQuestions };
         });
-
-        currentQuestions[parentIndex] = parentQuestion;
-        currentQuestions.splice(parentIndex + 1, 0, newSubQuestion);
-
-        const finalQuestions = currentQuestions.map((q, index) => ({ ...q, order: index }));
-
-        setInternalTemplate({ ...internalTemplate, questions: finalQuestions });
-
-        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-    }, [internalTemplate, scrollToQuestion]);
+    }, [scrollToQuestion]);
 
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
         setInternalTemplate(currentTemplate => {
             if (!currentTemplate) return null;
 
-            let newQuestions = currentTemplate.questions.filter(q => q.id !== subQuestionId);
-
-            const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
-            if (parentIndex !== -1) {
-                const parent = { ...newQuestions[parentIndex] };
-                parent.options = (parent.options || []).map(opt => {
-                    if (opt.ramification?.targetQuestionId === subQuestionId) {
-                        const { ramification, ...rest } = opt;
-                        return rest;
+            const newQuestions = currentTemplate.questions
+                .filter(q => q.id !== subQuestionId)
+                .map(q => {
+                    if (q.id === parentQuestionId) {
+                        const newOptions = (q.options || []).map(opt => {
+                            if (opt.ramification?.targetQuestionId === subQuestionId) {
+                                const { ramification, ...rest } = opt;
+                                return rest;
+                            }
+                            return opt;
+                        });
+                        return { ...q, options: newOptions };
                     }
-                    return opt;
+                    return q;
                 });
-                newQuestions[parentIndex] = parent;
-            }
             
             return { ...currentTemplate, questions: newQuestions.map((q, i) => ({ ...q, order: i })) };
         });
