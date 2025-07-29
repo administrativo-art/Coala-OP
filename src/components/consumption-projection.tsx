@@ -77,15 +77,28 @@ export function ConsumptionProjection() {
             // 3. Calculate days remaining
             const daysRemaining = Math.max(0, differenceInDays(parseISO(lot.expiryDate), new Date()));
             
-            // 4. Calculate projected consumption
+            // 4. Calculate projected consumption in the base unit
             const projectedConsumption = dailyAvg * daysRemaining;
             
             // 5. Convert lot quantity to base unit
             let lotQtyInBaseUnit = 0;
             try {
-                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                // Scenario 1: Product and BaseProduct have the same category (e.g., Massa -> Massa)
+                if (product.category === baseProduct.category) {
+                    const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                } 
+                // Scenario 2: Product has a secondary unit defined for conversion (e.g., Unidade -> Massa)
+                else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                } else {
+                    // Cannot convert if categories differ and no secondary unit is provided
+                    return null;
+                }
             } catch (err) {
+                 console.error("Error converting lot quantity for projection:", err);
                  return null; // Cannot convert
             }
             
