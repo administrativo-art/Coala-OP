@@ -154,6 +154,8 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
 
 
   useEffect(() => {
+    const hasOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
+
     if (questionType === 'yes-no') {
         const yesNoOptions = [{ id: `opt-${nanoid()}`, value: 'Sim' }, { id: `opt-${nanoid()}`, value: 'Não' }];
         const currentOptions = form.getValues('options') || [];
@@ -164,7 +166,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
         });
 
         replaceOptions(optionsToSet);
-    } else if (questionType !== 'single-choice' && questionType !== 'multiple-choice') {
+    } else if (!hasOptions) {
         replaceOptions([]);
     }
   }, [questionType, replaceOptions, form]);
@@ -177,6 +179,12 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
         delete currentOption.ramification;
         updateOption(optionIndex, currentOption);
     }
+  }
+
+  const handleAddRamification = (optionIndex: number) => {
+    const updatedOptions = [...watchedOptions];
+    updatedOptions[optionIndex].ramification = { id: `ram-${nanoid()}` };
+    replaceOptions(updatedOptions);
   }
 
   return (
@@ -292,18 +300,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                 <div className="space-y-4">
                     {optionFields.map((field, index) => {
                        const ramification = watchedOptions?.[index]?.ramification;
-                       const jumpToAction = ramification?.action === 'show_question' || ramification?.action === 'show_section';
-
-                       let jumpToLabel = '';
-                       if (ramification?.action === 'show_question' && ramification.targetQuestionId) {
-                           const targetQ = allQuestions.find(q => q.id === ramification.targetQuestionId);
-                           if (targetQ) {
-                               const targetIndex = allQuestions.filter(q => !q.excluidaDoSumario).findIndex(q => q.id === targetQ.id) + 1;
-                               jumpToLabel = `${targetIndex}. ${targetQ.label}`;
-                           }
-                       } else if (ramification?.action === 'show_section' && ramification.targetSectionId) {
-                           jumpToLabel = allSections.find(s => s.id === ramification.targetSectionId)?.name || '';
-                       }
 
                         return (
                         <div key={field.id} className="p-3 border rounded-lg bg-muted/50 space-y-3">
@@ -386,11 +382,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={() => {
-                                            const updatedOptions = [...watchedOptions];
-                                            updatedOptions[index].ramification = { id: `ram-${nanoid()}` };
-                                            replaceOptions(updatedOptions);
-                                        }}>
+                                        <DropdownMenuItem onSelect={() => handleAddRamification(index)}>
                                             Pular para pergunta/seção
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onSelect={() => onCreateSubQuestion(question.id, field.id, 'text')}>
