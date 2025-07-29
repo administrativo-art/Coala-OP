@@ -108,28 +108,23 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'file-attachment': 'Anexo de Arquivo',
 };
 
-const SubQuestionDisplay = React.memo(({
-  parentQuestionId,
-  subQuestionId,
-  allQuestions,
-  allSections,
-  users,
-  profiles,
-  onChange,
-  onCreateSubQuestion,
-  onDeleteSubQuestion,
+const SubQuestionDisplay = React.memo(({ 
+    parentQuestionId, 
+    subQuestionId, 
+    onDeleteSubQuestion, 
+    ...props 
 }: {
-  parentQuestionId: string;
-  subQuestionId: string;
-  allQuestions: FormQuestion[];
-  allSections: FormSection[];
-  users: User[];
-  profiles: Profile[];
-  onChange: (updatedQuestion: FormQuestion) => void;
-  onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
-  onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
+    parentQuestionId: string;
+    subQuestionId: string;
+    allQuestions: FormQuestion[];
+    allSections: FormSection[];
+    users: User[];
+    profiles: Profile[];
+    onChange: (updatedQuestion: FormQuestion) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+    onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
 }) => {
-    const question = useMemo(() => allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, allQuestions]);
+    const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
     
     if(!question) return null;
 
@@ -146,7 +141,7 @@ const SubQuestionDisplay = React.memo(({
                                     <div className="flex-1">
                                         <Input
                                             value={question.label}
-                                            onChange={(e) => onChange({...question, label: e.target.value})}
+                                            onChange={(e) => props.onChange({...question, label: e.target.value})}
                                             className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
                                             onClick={e => e.stopPropagation()}
                                         />
@@ -159,15 +154,15 @@ const SubQuestionDisplay = React.memo(({
                             </Button>
                         </div>
                         <AccordionContent className="px-4 pb-4">
-                             <QuestionSettingsPanel
-                                question={question}
-                                allQuestions={allQuestions}
-                                allSections={allSections}
-                                users={users}
-                                profiles={profiles}
-                                onChange={onChange}
-                                onCreateSubQuestion={onCreateSubQuestion}
+                            <QuestionSettingsPanel
+                                allQuestions={props.allQuestions}
+                                allSections={props.allSections}
+                                users={props.users}
+                                profiles={props.profiles}
+                                onChange={props.onChange}
+                                onCreateSubQuestion={props.onCreateSubQuestion}
                                 onDeleteSubQuestion={onDeleteSubQuestion}
+                                question={question}
                             />
                         </AccordionContent>
                     </AccordionItem>
@@ -367,7 +362,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                     <FormLabel>Opções e Ramificações</FormLabel>
                     {optionFields.map((field, index) => {
                        const ramification = watchedOptions?.[index]?.ramification;
-                       const subQuestion = ramification?.targetQuestionId ? allQuestionsMap.get(ramification.targetQuestionId) : null;
                         return (
                         <div key={field.id}>
                              <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
@@ -406,7 +400,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                             </FormItem>
                                         )}/>
                                         
-                                        {ramification.action === 'add_question' && !subQuestion && (
+                                        {ramification.action === 'add_question' && !ramification.targetQuestionId && (
                                             <Button 
                                                 type="button" 
                                                 variant="outline" 
@@ -458,20 +452,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     </Button>
                                 )}
                             </div>
-                            
-                            {subQuestion && (
-                                <SubQuestionDisplay
-                                    parentQuestionId={question.id}
-                                    subQuestionId={subQuestion.id}
-                                    allQuestions={allQuestions}
-                                    allSections={allSections}
-                                    users={users}
-                                    profiles={profiles}
-                                    onChange={onChange}
-                                    onCreateSubQuestion={onCreateSubQuestion}
-                                    onDeleteSubQuestion={onDeleteSubQuestion}
-                                />
-                            )}
                         </div>
                     )})}
                     {questionType !== 'yes-no' && (

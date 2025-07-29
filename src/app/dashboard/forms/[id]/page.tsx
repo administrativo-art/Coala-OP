@@ -64,6 +64,7 @@ const SortableQuestionItem = React.memo(({
     isDragging,
     isHighlighted,
     index,
+    level = 0
 }: {
     question: FormQuestion,
     allQuestions: FormQuestion[],
@@ -77,11 +78,13 @@ const SortableQuestionItem = React.memo(({
     isDragging?: boolean;
     isHighlighted?: boolean;
     index: number;
+    level?: number;
 }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isOver } = useSortable({ id: question.id, data: { type: 'question', question } });
     const style = {
         transform: CSS.Transform.toString(transform),
         transition: transition || 'transform 250ms ease',
+        marginLeft: `${level * 2}rem`
     };
     
     const inputRef = useRef<HTMLInputElement>(null);
@@ -93,58 +96,62 @@ const SortableQuestionItem = React.memo(({
     }, [question.label]);
 
     return (
-        <div
-            id={`question-card-${question.id}`}
-            ref={setNodeRef}
-            style={style}
-            className={cn(
-                "bg-card border rounded-lg overflow-hidden transition-shadow",
-                isDragging && 'opacity-50 z-50 shadow-2xl',
-                isOver && 'shadow-lg',
-                isHighlighted && 'animate-pulse-once'
-            )}
-            key={`${question.id}-${isHighlighted}`}
-        >
-            <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value={question.id} className="border-b-0">
-                    <div className="flex items-center p-2 pr-3">
-                        <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
-                            <GripVertical className="h-5 w-5 text-muted-foreground" />
-                        </Button>
-                        <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
-                             <div className="flex-1 flex items-center gap-3">
-                                <span className="font-bold text-lg">{index + 1}.</span>
-                                <div className="flex-1">
-                                    <Input
-                                        ref={inputRef}
-                                        value={question.label}
-                                        onChange={(e) => onQuestionChange({...question, label: e.target.value})}
-                                        className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
-                                        onClick={e => e.stopPropagation()}
-                                    />
-                                    <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+         <div className="relative">
+             {level > 0 && <div className="absolute left-4 -top-4 bottom-0 w-px bg-border -translate-x-1/2"></div>}
+             {level > 0 && <div className="absolute left-4 top-1/2 h-px w-4 bg-border -translate-x-1/2"></div>}
+            <div
+                id={`question-card-${question.id}`}
+                ref={setNodeRef}
+                style={style}
+                className={cn(
+                    "bg-card border rounded-lg overflow-hidden transition-shadow relative",
+                    isDragging && 'opacity-50 z-50 shadow-2xl',
+                    isOver && 'shadow-lg',
+                    isHighlighted && 'animate-pulse-once'
+                )}
+                key={`${question.id}-${isHighlighted}`}
+            >
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value={question.id} className="border-b-0">
+                        <div className="flex items-center p-2 pr-3">
+                            <Button {...listeners} {...attributes} variant="ghost" size="icon" className="cursor-grab h-10 w-10">
+                                <GripVertical className="h-5 w-5 text-muted-foreground" />
+                            </Button>
+                            <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
+                                <div className="flex-1 flex items-center gap-3">
+                                    <span className="font-bold text-lg">{index + 1}.</span>
+                                    <div className="flex-1">
+                                        <Input
+                                            ref={inputRef}
+                                            value={question.label}
+                                            onChange={(e) => onQuestionChange({...question, label: e.target.value})}
+                                            className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                        <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </AccordionTrigger>
-                        <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
-                            <Trash2 className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                    <AccordionContent className="px-4 pb-4">
-                        <QuestionSettingsPanel
-                            key={question.id}
-                            question={question}
-                            allQuestions={allQuestions}
-                            allSections={allSections}
-                            onChange={onQuestionChange}
-                            onCreateSubQuestion={onCreateSubQuestion}
-                            onDeleteSubQuestion={onDeleteSubQuestion}
-                            users={users}
-                            profiles={profiles}
-                        />
-                    </AccordionContent>
-                </AccordionItem>
-            </Accordion>
+                            </AccordionTrigger>
+                            <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
+                                <Trash2 className="h-4 w-4"/>
+                            </Button>
+                        </div>
+                        <AccordionContent className="px-4 pb-4">
+                            <QuestionSettingsPanel
+                                key={question.id}
+                                question={question}
+                                allQuestions={allQuestions}
+                                allSections={allSections}
+                                onChange={onQuestionChange}
+                                onCreateSubQuestion={onCreateSubQuestion}
+                                onDeleteSubQuestion={onDeleteSubQuestion}
+                                users={users}
+                                profiles={profiles}
+                            />
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </div>
         </div>
     );
 });
@@ -152,6 +159,7 @@ SortableQuestionItem.displayName = 'SortableQuestionItem';
 
 const RecursiveQuestionRenderer = React.memo(({ 
     questionIds,
+    level = 0,
     ...props 
 }: { 
     questionIds: string[];
@@ -167,13 +175,19 @@ const RecursiveQuestionRenderer = React.memo(({
     overId: string | null;
     highlightedQuestionId: string | null;
     globalIndex: number;
+    level?: number;
 }) => {
     const questionMap = useMemo(() => new Map(props.allQuestions.map(q => [q.id, q])), [props.allQuestions]);
     const questionsToRender = useMemo(() => questionIds.map(id => questionMap.get(id)).filter(q => !!q) as FormQuestion[], [questionIds, questionMap]);
     
     return (
-        <div className="space-y-4">
-            {questionsToRender.map((q, index) => (
+        <div className={cn("space-y-4", level > 0 && "pt-4")}>
+            {questionsToRender.map((q, index) => {
+                 const subQuestionIds = (q.options || [])
+                    .map(opt => opt.ramification?.targetQuestionId)
+                    .filter((id): id is string => !!id && !!questionMap.get(id));
+                    
+                return (
                  <div key={q.id}>
                     {props.activeId && props.overId === q.id && <Placeholder index={index} />}
                     <SortableQuestionItem
@@ -189,9 +203,18 @@ const RecursiveQuestionRenderer = React.memo(({
                         profiles={props.profiles}
                         isDragging={props.activeId === q.id}
                         isHighlighted={props.highlightedQuestionId === q.id}
+                        level={level}
                     />
+                    {subQuestionIds.length > 0 && (
+                        <RecursiveQuestionRenderer 
+                            {...props}
+                            questionIds={subQuestionIds}
+                            level={level + 1}
+                        />
+                    )}
                 </div>
-            ))}
+                )
+            })}
         </div>
     )
 });
@@ -387,7 +410,7 @@ export default function FormBuilderPage() {
 
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
-            label: 'Nova Sub-pergunta',
+            label: 'Nova Pergunta',
             type: type,
             isRequired: false,
             order: 999,
