@@ -122,7 +122,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     });
   }, [question, form]);
 
-  const { fields: optionFields, append: appendOption, remove: removeOption, replace: replaceOptions } = useFieldArray({
+  const { fields: optionFields, append: appendOption, remove: removeOption, replace: replaceOptions, update: updateOption } = useFieldArray({
     control: form.control,
     name: "options"
   });
@@ -155,7 +155,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
 
   useEffect(() => {
     if (questionType === 'yes-no') {
-        const yesNoOptions = [{ id: 'yes', value: 'Sim' }, { id: 'no', value: 'Não' }];
+        const yesNoOptions = [{ id: `opt-${nanoid()}`, value: 'Sim' }, { id: `opt-${nanoid()}`, value: 'Não' }];
         const currentOptions = form.getValues('options') || [];
         
         const optionsToSet = yesNoOptions.map(defaultOpt => {
@@ -168,6 +168,16 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
         replaceOptions([]);
     }
   }, [questionType, replaceOptions, form]);
+  
+  const onAddRamification = (optionIndex: number) => {
+    const currentOption = watchedOptions[optionIndex];
+    updateOption(optionIndex, {
+        ...currentOption,
+        ramification: {
+            id: `ram-${nanoid()}`
+        }
+    });
+  }
 
   return (
     <Form {...form}>
@@ -312,7 +322,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                             {ramification && ramification.action !== 'add_question' && (
                                 <div className="p-3 border rounded-lg space-y-3 bg-card">
                                     <div className="flex justify-between items-center">
-                                        <p className="font-medium text-sm flex items-center gap-2"><GitBranch className="h-4 w-4"/> Ramificação</p>
+                                        <p className="font-medium text-sm flex items-center gap-2"><GitBranch className="h-4 w-4"/> Lógica Condicional</p>
                                         <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}><X className="h-4 w-4"/></Button>
                                     </div>
                                     <p className="font-medium text-sm">SE a resposta for “{watchedOptions?.[index]?.value}” ENTÃO...</p>
@@ -372,19 +382,16 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         onDeleteSubQuestion(question.id, ramification.targetQuestionId!)
                                     }}>Remover sub-pergunta</Button>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-between">
-                                    {jumpToAction && jumpToLabel ? (
-                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                            <GitBranch className="h-4 w-4" />
-                                            <span className="truncate">Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
-                                        </div>
-                                    ) : <div />}
+                            ) : ramification === undefined ? (
+                                <div className="flex justify-end gap-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={() => onAddRamification(index)}>
+                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
+                                    </Button>
                                     <Button type="button" variant="outline" size="sm" onClick={() => onCreateSubQuestion(question.id, field.id, 'text')}>
-                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar sub-pergunta
+                                        <MessageSquarePlus className="mr-2 h-4 w-4" /> Adicionar sub-pergunta
                                     </Button>
                                 </div>
-                            )}
+                            ) : null }
 
                         </div>
                     )})}
@@ -400,3 +407,4 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
+
