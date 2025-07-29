@@ -633,12 +633,12 @@ export default function FormBuilderPage() {
                 const parent = { ...newQuestions[parentIndex] };
                 parent.options = (parent.options || []).map(opt => {
                     if (opt.ramification?.targetQuestionId === subQuestionId) {
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { ramification, ...restOfOption } = opt;
-                        return restOfOption;
+                        // Important: setting ramification to undefined to clear it.
+                        return { ...restOfOption, ramification: undefined };
                     }
                     return opt;
-                });
+                }).filter(opt => opt.ramification !== undefined || !opt.ramification); // Clean up fully empty options if needed
                 newQuestions[parentIndex] = parent;
             }
             
@@ -988,8 +988,8 @@ export default function FormBuilderPage() {
                                                 onDelete={handleDeleteQuestion}
                                                 onDuplicate={handleDuplicateQuestion}
                                                 onQuestionChange={handleQuestionChange}
-                                                onCreateSubQuestion={onCreateSubQuestion}
-                                                onDeleteSubQuestion={onDeleteSubQuestion}
+                                                onCreateSubQuestion={handleCreateSubQuestion}
+                                                onDeleteSubQuestion={handleDeleteSubQuestion}
                                                 users={users}
                                                 profiles={profiles}
                                                 activeId={activeId}
@@ -1040,5 +1040,6 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
 
 
