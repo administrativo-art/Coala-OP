@@ -37,18 +37,30 @@ export function ConsumptionProjection() {
     const projectionResults = useMemo((): ProjectionResult[] => {
         if (!selectedKioskId || loading) return [];
 
-        // 1. Calculate daily average consumption for the selected kiosk
+        // 1. Calculate daily average consumption
         const dailyAverages = new Map<string, number>(); // Map<baseProductId, dailyAvg>
-        const kioskReports = consumptionHistory.filter(report => report.kioskId === selectedKioskId);
         
+        // If Matriz is selected, use all reports. Otherwise, filter by kiosk.
+        const reportsForAnalysis = selectedKioskId === 'matriz'
+            ? consumptionHistory
+            : consumptionHistory.filter(report => report.kioskId === selectedKioskId);
+
         baseProducts.forEach(bp => {
-            const totalConsumption = kioskReports.reduce((sum, report) => {
+            const consumptionData: { [monthYear: string]: number } = {};
+
+            reportsForAnalysis.forEach(report => {
                 const item = report.results.find(res => res.baseProductId === bp.id);
-                return sum + (item?.consumedQuantity || 0);
-            }, 0);
+                if (item) {
+                    const key = `${report.year}-${report.month}`;
+                    consumptionData[key] = (consumptionData[key] || 0) + (item.consumedQuantity || 0);
+                }
+            });
             
-            if (kioskReports.length > 0) {
-                const monthlyAvg = totalConsumption / kioskReports.length;
+            const monthsWithConsumption = Object.values(consumptionData);
+            const totalConsumption = monthsWithConsumption.reduce((sum, qty) => sum + qty, 0);
+
+            if (monthsWithConsumption.length > 0) {
+                const monthlyAvg = totalConsumption / monthsWithConsumption.length;
                 dailyAverages.set(bp.id, monthlyAvg / 30);
             }
         });
@@ -83,23 +95,19 @@ export function ConsumptionProjection() {
             // 5. Convert lot quantity to base unit
             let lotQtyInBaseUnit = 0;
             try {
-                // Scenario 1: Product and BaseProduct have the same category (e.g., Massa -> Massa)
-                if (product.category === baseProduct.category) {
-                    const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                } 
-                // Scenario 2: Product has a secondary unit defined for conversion (e.g., Unidade -> Massa)
-                else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                     const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
                     const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                     lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                } else if (product.category === baseProduct.category) {
+                    const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
                 } else {
-                    // Cannot convert if categories differ and no secondary unit is provided
                     return null;
                 }
             } catch (err) {
                  console.error("Error converting lot quantity for projection:", err);
-                 return null; // Cannot convert
+                 return null;
             }
             
             // 6. Compare and determine status
