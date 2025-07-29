@@ -295,17 +295,7 @@ export default function FormBuilderPage() {
         }
 
         const allQuestions = internalTemplate.questions;
-        const subQuestionIds = new Set<string>();
-        allQuestions.forEach(q => {
-            if(q.options) {
-                q.options.forEach(opt => {
-                    if (opt.ramification?.targetQuestionId) {
-                        subQuestionIds.add(opt.ramification.targetQuestionId);
-                    }
-                })
-            }
-        });
-
+        
         sortedSections.forEach(section => {
             result[section.id] = [];
             topLevelResult[section.id] = [];
@@ -318,7 +308,7 @@ export default function FormBuilderPage() {
             
             if(sectionId && result[sectionId]) {
                 result[sectionId].push({ ...q, sectionId });
-                if(!subQuestionIds.has(q.id)) {
+                if(!q.excluidaDoSumario) {
                     topLevelResult[sectionId].push({ ...q, sectionId });
                 }
             }
@@ -332,7 +322,7 @@ export default function FormBuilderPage() {
         return { questionsBySection: result, topLevelQuestionsBySection: topLevelResult };
     }, [internalTemplate, sortedSections]);
 
-    const scrollToQuestion = (questionId: string) => {
+    const scrollToQuestion = useCallback((questionId: string) => {
         setSelectedQuestionId(questionId);
         setHighlightedQuestionId(questionId);
         const element = document.getElementById(`question-card-${questionId}`);
@@ -340,7 +330,7 @@ export default function FormBuilderPage() {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         setTimeout(() => setHighlightedQuestionId(null), 1500);
-    };
+    }, []);
 
     const handleTemplateChange = (updates: Partial<FormTemplate>) => {
         if (!internalTemplate) return;
@@ -392,7 +382,8 @@ export default function FormBuilderPage() {
       setInternalTemplate(currentTemplate => {
         if (!currentTemplate) return null;
 
-        const parentSectionId = currentTemplate.questions.find(q => q.id === parentQuestionId)?.sectionId;
+        const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
+        if(!parentQuestion) return currentTemplate;
 
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
@@ -400,7 +391,7 @@ export default function FormBuilderPage() {
             type: type,
             isRequired: false,
             order: 999,
-            sectionId: parentSectionId,
+            sectionId: parentQuestion.sectionId,
             excluidaDoSumario: true,
         };
 
