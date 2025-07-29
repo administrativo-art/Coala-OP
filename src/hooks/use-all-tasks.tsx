@@ -1,9 +1,9 @@
 
+
 "use client";
 
 import React, { createContext, useContext, useMemo } from 'react';
 import { useAuth } from './use-auth';
-import { useTasks } from './use-tasks';
 import { useItemAddition } from './use-item-addition';
 import { useStockCount } from './use-stock-count';
 import { useReturnRequests } from './use-return-requests';
@@ -24,15 +24,11 @@ export interface LegacyTask {
 }
 
 interface AllTasksContextType {
-  allTasks: (Task | LegacyTask)[];
-  formTasks: Task[];
   legacyTasks: LegacyTask[];
   loading: boolean;
 }
 
 const AllTasksContext = createContext<AllTasksContextType>({
-  allTasks: [],
-  formTasks: [],
   legacyTasks: [],
   loading: true,
 });
@@ -41,14 +37,13 @@ export const useAllTasks = () => useContext(AllTasksContext);
 
 export const AllTasksProvider = ({ children }: { children: React.ReactNode }) => {
   const { user, permissions, loading: authLoading } = useAuth();
-  const { tasks: formTasks, loading: formTasksLoading } = useTasks();
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { auditSessions, loading: auditLoading } = useStockAudit(); // Obter sessões de auditoria
 
-  const loading = authLoading || formTasksLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading;
+  const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading;
 
   const legacyTasks = useMemo((): LegacyTask[] => {
     if (!user || !permissions || loading) return [];
@@ -161,13 +156,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities, auditSessions, loading]);
   
-  const allTasks = useMemo(() => {
-    return [...formTasks, ...legacyTasks].sort((a,b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
-  }, [formTasks, legacyTasks]);
-
   const value = {
-    allTasks,
-    formTasks,
     legacyTasks,
     loading
   };

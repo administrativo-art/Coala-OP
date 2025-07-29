@@ -58,7 +58,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 }, []);
 
   const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
-  const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
   const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform || permissions.audit.start);
   const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
   const canUseHelp = !loading && permissions.help.view;
@@ -71,7 +70,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, group: 'operacao', notificationCount: legacyTasks.length, show: canViewTasks },
-    { href: '/dashboard/forms', label: 'Formulários e processos', icon: ClipboardList, group: 'operacao', show: canViewForms },
     { 
         href: '/dashboard/stock', 
         label: 'Gestão de estoque', 
@@ -93,7 +91,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: BookOpen, group: 'suporte', show: canUseHelp },
-  ], [legacyTasks.length, canViewTasks, canViewForms, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
+  ], [legacyTasks.length, canViewTasks, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
   
   const filteredNavItems = useMemo(() => {
     if (!searchTerm) return navItems.filter(item => item.show !== false);

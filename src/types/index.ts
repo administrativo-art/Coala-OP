@@ -213,7 +213,6 @@ export type PermissionSet = {
     users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
     kiosks: { add: boolean; delete: boolean; };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
-    forms: { manage: boolean; fill: boolean; viewHistory: boolean; deleteHistory: boolean; };
     stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
@@ -322,132 +321,6 @@ export type StockAuditSession = {
     startedAt: string; // ISO String
     completedAt?: string; // ISO String
     items: StockAuditItem[];
-};
-
-export type TaskHistoryItem = {
-    timestamp: string; // ISO date string
-    author: {
-        id: string;
-        name: string;
-    };
-    action: string; // e.g., 'created', 'reopened', 'completed'
-    details?: string; // e.g., justification for reopening
-};
-
-export type Task = {
-    id: string;
-    title: string;
-    description?: string;
-    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
-    assigneeType: 'user' | 'profile';
-    assigneeId: string;
-    requiresApproval: boolean;
-    approverType?: 'user' | 'profile';
-    approverId?: string; // userId or profileId
-    origin: {
-        type: 'form_submission';
-        submissionId: string;
-        questionId: string;
-        optionId?: string; // Optional for non-option based actions
-    };
-    createdAt: string;
-    updatedAt: string;
-    dueDate?: string;
-    completedAt?: string;
-    history: TaskHistoryItem[];
-};
-
-export type FormTaskAction = {
-    title: string;
-    assigneeType: 'user' | 'profile';
-    assigneeId: string; // userId or profileId
-    requiresApproval: boolean;
-    approverType?: 'user' | 'profile';
-    approverId?: string; // userId or profileId
-    description?: string;
-    dueInDays?: number;
-};
-
-export type FormQuestionRamification = {
-    id: string;
-    action: 'show_question' | 'create_task' | 'show_section' | 'add_question';
-    targetQuestionId?: string; // for 'show_question'
-    targetSectionId?: string; // for 'show_section'
-    taskAction?: FormTaskAction; // for 'create_task'
-};
-
-export type FormQuestion = {
-    id: string;
-    label: string;
-    description?: string;
-    type: 'text' | 'number' | 'yes-no' | 'single-choice' | 'multiple-choice' | 'file-attachment' | 'range' | 'rating';
-    isRequired: boolean;
-    order: number;
-    sectionId?: string;
-    excluidaDoSumario?: boolean;
-    options?: { id: string; value: string; ramification?: FormQuestionRamification }[];
-    attachmentConfig?: {
-        allowMultiple: boolean;
-        allowedFileTypes: ('image' | 'pdf' | 'video')[];
-        allowCamera: boolean;
-    };
-    numberConfig?: {
-        format?: 'default' | 'currency' | 'percentage';
-        min?: number;
-        max?: number;
-        step?: number;
-    };
-    rangeConfig?: {
-      minLabel?: string;
-      maxLabel?: string;
-    };
-    ratingConfig?: {
-      min?: number;
-      max?: number;
-    };
-};
-
-export type FormSection = {
-    id: string;
-    name: string;
-    description?: string;
-    order: number;
-};
-
-export type FormTemplate = {
-    id: string;
-    name: string;
-    description?: string;
-    layout: 'continuous' | 'paginated' | 'flow';
-    sections: FormSection[];
-    questions: FormQuestion[];
-    submissionTitleFormat?: string;
-    type: 'standard' | 'operational_checklist';
-    moment: 'PRE_ABERTURA' | 'ABERTURA' | 'TROCA_FECHAMENTO' | 'TROCA_ABERTURA' | 'FECHAMENTO_FINAL' | null;
-    status: 'draft' | 'published';
-    thanksMessage?: string;
-    showResetButton?: boolean;
-};
-
-export type FormAnswer = {
-    questionId: string;
-    questionLabel: string;
-    value: string | number | string[] | { name: string; url: string; type: string }[];
-    subAnswers?: FormAnswer[];
-};
-
-export type FormSubmission = {
-    id: string;
-    templateId: string;
-    templateName: string;
-    title: string;
-    status: 'completed' | 'in_progress';
-    userId: string;
-    username: string;
-    kioskId: string;
-    kioskName: string;
-    createdAt: string; // ISO string
-    answers: FormAnswer[];
 };
 
 export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
@@ -639,7 +512,6 @@ export const defaultGuestPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
-    forms: { manage: false, fill: false, viewHistory: false, deleteHistory: false },
     stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     returns: { add: false, updateStatus: false, delete: false },
@@ -659,7 +531,6 @@ export const defaultUserPermissions: PermissionSet = {
     products: { add: true, edit: false, delete: false },
     lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
     predefinedLists: { add: true, edit: true, delete: false },
-    forms: { manage: false, fill: true, viewHistory: true, deleteHistory: false },
     stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
@@ -675,7 +546,6 @@ export const defaultAdminPermissions: PermissionSet = {
     users: { add: true, edit: true, delete: true, impersonate: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
-    forms: { manage: true, fill: true, viewHistory: true, deleteHistory: true },
     stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     returns: { add: true, updateStatus: true, delete: true },

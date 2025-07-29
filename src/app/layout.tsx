@@ -10,7 +10,6 @@ import { LocationsProvider } from '@/components/locations-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
-import { FormProvider } from '@/components/form-provider';
 import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
@@ -26,7 +25,6 @@ import { RepositionProvider } from '@/components/reposition-provider';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
-import { TaskProvider } from '@/components/task-provider';
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
 import { StockAuditProvider } from '@/components/stock-audit-provider';
 
@@ -70,31 +68,27 @@ export default function RootLayout({
                             <ProductSimulationProvider>
                               <ExpiryProductsProvider>
                                 <PredefinedListsProvider>
-                                  <FormProvider>
-                                    <TaskProvider>
-                                      <ConsumptionAnalysisProvider>
-                                        <MovementHistoryProvider>
-                                          <ReturnsProvider>
-                                            <ScheduleProvider>
-                                              <MonthlyScheduleProvider>
-                                                  <RepositionProvider>
-                                                    <ItemAdditionProvider>
-                                                      <StockCountProvider>
-                                                        <StockAuditProvider>
-                                                          <AllTasksProvider>
-                                                            {children}
-                                                          </AllTasksProvider>
-                                                        </StockAuditProvider>
-                                                      </StockCountProvider>
-                                                    </ItemAdditionProvider>
-                                                  </RepositionProvider>
-                                              </MonthlyScheduleProvider>
-                                            </ScheduleProvider>
-                                          </ReturnsProvider>
-                                        </MovementHistoryProvider>
-                                      </ConsumptionAnalysisProvider>
-                                    </TaskProvider>
-                                  </FormProvider>
+                                    <ConsumptionAnalysisProvider>
+                                      <MovementHistoryProvider>
+                                        <ReturnsProvider>
+                                          <ScheduleProvider>
+                                            <MonthlyScheduleProvider>
+                                                <RepositionProvider>
+                                                  <ItemAdditionProvider>
+                                                    <StockCountProvider>
+                                                      <StockAuditProvider>
+                                                        <AllTasksProvider>
+                                                          {children}
+                                                        </AllTasksProvider>
+                                                      </StockAuditProvider>
+                                                    </StockCountProvider>
+                                                  </ItemAdditionProvider>
+                                                </RepositionProvider>
+                                            </MonthlyScheduleProvider>
+                                          </ScheduleProvider>
+                                        </ReturnsProvider>
+                                      </MovementHistoryProvider>
+                                    </ConsumptionAnalysisProvider>
                                 </PredefinedListsProvider>
                               </ExpiryProductsProvider>
                             </ProductSimulationProvider>

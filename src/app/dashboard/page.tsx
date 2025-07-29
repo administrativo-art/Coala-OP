@@ -8,7 +8,6 @@ import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
-import { useForm } from "@/hooks/use-form"; // Import the useForm hook
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -24,7 +23,6 @@ import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { EditScheduleModal } from "@/components/edit-schedule-modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ReportsDashboard } from "@/components/reports-dashboard"
 import { PricingDashboard } from "@/components/pricing-dashboard"
 import { useProductSimulation } from "@/hooks/use-product-simulation"
 import { useCompanySettings } from "@/hooks/use-company-settings"
@@ -124,7 +122,6 @@ function OperationalDashboard() {
   const { getProductFullName, products } = useProducts();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
-  const { generateDailyChecklist } = useForm();
   
   const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
   const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
@@ -133,17 +130,6 @@ function OperationalDashboard() {
   
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
-  
-  useEffect(() => {
-    if (todaySchedule && kiosks.length > 0 && permissions.forms.fill) {
-        kiosks.forEach(kiosk => {
-            if (kiosk.id !== 'matriz') {
-                // This is the trigger for the automatic form generation
-                // generateDailyChecklist(kiosk.id, kiosk.name, todayISO, todaySchedule);
-            }
-        });
-    }
-  }, [todaySchedule, kiosks, permissions.forms.fill, generateDailyChecklist, todayISO]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -479,7 +465,6 @@ function PricingReportDashboard() {
 export default function DashboardPage() {
     const { user, permissions } = useAuth();
     const canAuditStock = permissions.audit.start || permissions.audit.approve;
-    const canViewTasks = permissions.tasks.view;
     
     return (
         <div className="space-y-6">
@@ -489,11 +474,10 @@ export default function DashboardPage() {
             </div>
             
             <Tabs defaultValue="operational" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3">
                     <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>
                     <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>
                     {canAuditStock && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>}
-                    {canViewTasks && <TabsTrigger value="tasks"><ListTodo className="mr-2" /> Tarefas e Formulários</TabsTrigger>}
                 </TabsList>
                 <TabsContent value="operational" className="mt-6 space-y-6">
                     <OperationalDashboard />
@@ -504,12 +488,6 @@ export default function DashboardPage() {
                 {canAuditStock && (
                      <TabsContent value="audit" className="mt-6">
                         <AuditDashboard />
-                    </TabsContent>
-                )}
-                 {canViewTasks && (
-                    <TabsContent value="tasks" className="mt-6 space-y-6">
-                        <PendingTasksDashboard />
-                        <ReportsDashboard />
                     </TabsContent>
                 )}
             </Tabs>

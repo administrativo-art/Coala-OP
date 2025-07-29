@@ -22,24 +22,18 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
     const { permissions, loading, user } = useAuth()
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
-    const canViewForms = !loading && permissions.forms && (permissions.forms.fill || permissions.forms.manage || permissions.forms.viewHistory);
-    
-    const canManageLots = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory);
-    const canAnalyzeStock = !loading && (permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory);
-    const canManageStock = canManageLots || canAnalyzeStock || (permissions.purchasing.suggest || permissions.purchasing.approve);
+    const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory || permissions.purchasing.suggest || permissions.purchasing.approve);
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const canUseHelp = !loading && permissions.help.view;
     const isMasterUser = user?.username === 'Tiago Brasil';
     const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
     const canSimulatePricing = !loading && permissions.pricing.simulate;
     const canViewTasks = !loading && permissions.tasks.view;
-    const canViewReports = !loading && permissions.reports.view;
 
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
         { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: canViewTasks },
-        { href: '/dashboard/forms', label: 'Formulários', icon: ClipboardList, show: canViewForms },
         { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: canRegister },
         { href: '/dashboard/stock', label: 'Gestão de estoque', icon: ClipboardCheck, show: canManageStock },
         { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, show: canManageTeam },
