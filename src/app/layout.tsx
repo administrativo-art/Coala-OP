@@ -27,6 +27,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
 import { StockAuditProvider } from '@/components/stock-audit-provider';
+import { TaskProvider } from '@/components/task-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
