@@ -1,5 +1,3 @@
-
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -422,6 +420,7 @@ export type PurchaseSession = {
   userId: string;
   entityId?: string;
   baseProductIds: string[];
+  type: 'manual' | 'automatic';
   status: 'open' | 'closed';
   createdAt: string; // ISO String
   closedAt?: string; // ISO String

@@ -1,13 +1,12 @@
-
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo } from 'react';
 import { useAuth } from "@/hooks/use-auth";
-import { usePurchase } from "@/hooks/use-purchase";
 import { useEntities } from "@/hooks/use-entities";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { usePurchase } from "@/hooks/use-purchase";
 import { convertValue } from "@/lib/conversion";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,10 +117,15 @@ export function AutomaticPurchaseList() {
                             </AccordionTrigger>
                             <AccordionContent className="p-4">
                                  <PriceComparisonTable
-                                    baseProductId={result.baseProduct.id}
-                                    items={purchaseItems}
+                                    baseProduct={result.baseProduct}
+                                    items={purchaseItems.filter(item => {
+                                        const product = products.find(p => p.id === item.productId);
+                                        return product?.baseProductId === result.baseProduct.id && item.sessionId === 'automatic';
+                                    })}
                                     sessionId="automatic"
                                     isSessionClosed={false}
+                                    selectedItems={new Set()}
+                                    onSelectionChange={() => {}}
                                 />
                             </AccordionContent>
                         </Card>

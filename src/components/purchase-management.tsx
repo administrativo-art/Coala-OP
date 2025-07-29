@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -21,7 +20,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <Wand2 className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Compra Matriz</CardTitle>
-                    <CardDescription>Lista de compras automática com base no estoque mínimo da matriz.</CardDescription>
+                    <CardDescription>Crie uma sessão de compra com base no estoque mínimo da matriz.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                     <Button className="w-full" onClick={() => setActiveView('automatic')}>
@@ -91,7 +90,7 @@ export function PurchaseManagement() {
     
     const getDescription = () => {
         switch (activeView) {
-            case 'automatic': return "Lista de compras automática com base no estoque mínimo da matriz.";
+            case 'automatic': return "Crie uma sessão de compra com base no estoque mínimo da matriz.";
             case 'manual': return "Crie e gerencie pesquisas de preço manuais para cotações específicas.";
             case 'history': return "Consulte o histórico de todos os preços de compra que foram efetivados.";
             case 'menu':

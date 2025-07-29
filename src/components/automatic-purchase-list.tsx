@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -9,14 +8,17 @@ import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { usePurchase } from "@/hooks/use-purchase";
 import { convertValue } from "@/lib/conversion";
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from '@/components/ui/button';
-import { Inbox, ShoppingCart } from "lucide-react";
+import { Inbox, ShoppingCart, PlusCircle, Trash2 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PriceComparisonTable } from "./price-comparison-table";
-import { type PurchaseItem } from '@/types';
+import { type PurchaseItem, type PurchaseSession } from '@/types';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 interface AnalysisResult {
   baseProduct: import('@/types').BaseProduct;
@@ -29,9 +31,12 @@ export function AutomaticPurchaseList() {
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { products, loading: loadingProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
-    const { items: purchaseItems, loading: purchaseLoading, confirmPurchase } = usePurchase();
+    const { sessions, items: purchaseItems, loading: purchaseLoading, addSession, closeSession, deleteSession, confirmPurchase } = usePurchase();
+    const { user } = useAuth();
     const { toast } = useToast();
+    
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [sessionToDelete, setSessionToDelete] = useState<PurchaseSession | null>(null);
 
     const loading = loadingBaseProducts || loadingProducts || lotsLoading || purchaseLoading;
 
@@ -82,6 +87,13 @@ export function AutomaticPurchaseList() {
             };
         }).filter(result => result.restockNeeded > 0);
     }, [loading, baseProducts, products, lots]);
+
+    const handleCreateSession = () => {
+        if (!user) return;
+        const baseProductIds = analysisResults.map(r => r.baseProduct.id);
+        const description = `Compra Matriz - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+        addSession({ description, baseProductIds, type: 'automatic' });
+    };
 
     const handleSelectionChange = (itemId: string, isSelected: boolean) => {
         setSelectedItems(prev => {
@@ -141,62 +153,114 @@ export function AutomaticPurchaseList() {
         });
         setSelectedItems(new Set());
     };
+    
+    const handleDeleteSession = () => {
+        if (sessionToDelete) {
+            deleteSession(sessionToDelete.id);
+            setSessionToDelete(null);
+        }
+    };
+    
+    const handleCloseSession = (sessionId: string) => {
+        closeSession(sessionId);
+    }
+    
+    const openAutomaticSession = useMemo(() => {
+        return sessions.find(s => s.type === 'automatic' && s.status === 'open');
+    }, [sessions]);
 
     if (loading) {
         return (
             <div className="space-y-4">
+                <Skeleton className="h-10 w-48" />
                 <Skeleton className="h-24 w-full" />
                 <Skeleton className="h-24 w-full" />
             </div>
         );
     }
-    
-    if (analysisResults.length === 0) {
+
+    if (openAutomaticSession) {
+        const sessionBaseProducts = baseProducts.filter(bp => openAutomaticSession.baseProductIds.includes(bp.id));
+        const sessionItems = purchaseItems.filter(i => i.sessionId === openAutomaticSession.id);
+        const isSessionClosed = openAutomaticSession.status === 'closed';
+
         return (
-            <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
-                <Inbox className="h-12 w-12 mb-4" />
-                <p className="font-semibold">Nenhuma necessidade de compra encontrada.</p>
-                <p className="text-sm">O estoque da Matriz está de acordo com as metas definidas.</p>
-            </div>
+            <>
+                <Card>
+                    <CardHeader>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>{openAutomaticSession.description}</CardTitle>
+                                <CardDescription>Criado por {user?.username} em {format(new Date(openAutomaticSession.createdAt), 'dd/MM/yyyy HH:mm', {locale: ptBR})}</CardDescription>
+                            </div>
+                            <div>
+                                <Button variant="destructive" size="sm" onClick={() => setSessionToDelete(openAutomaticSession)}>
+                                    <Trash2 className="mr-2 h-4 w-4" /> Cancelar Compra
+                                </Button>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                         <Accordion type="multiple" className="w-full space-y-3">
+                            {sessionBaseProducts.map(bp => (
+                                <AccordionItem value={bp.id} key={bp.id} className="border-none">
+                                    <Card className="bg-background/50">
+                                        <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
+                                            {bp.name}
+                                        </AccordionTrigger>
+                                        <AccordionContent className="p-4">
+                                            <PriceComparisonTable
+                                                baseProduct={bp}
+                                                items={sessionItems.filter(i => {
+                                                    const product = products.find(p => p.id === i.productId);
+                                                    return product?.baseProductId === bp.id;
+                                                })}
+                                                sessionId={openAutomaticSession.id}
+                                                isSessionClosed={isSessionClosed}
+                                                selectedItems={selectedItems}
+                                                onSelectionChange={handleSelectionChange}
+                                            />
+                                        </AccordionContent>
+                                    </Card>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    </CardContent>
+                    <CardFooter className="justify-between border-t pt-4">
+                        <Button variant="outline" onClick={() => handleCloseSession(openAutomaticSession.id)}>Concluir e Salvar Pesquisa</Button>
+                        <Button onClick={handleConfirmSelected} disabled={selectedItems.size === 0}>
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            Salvar e Efetivar Compra ({selectedItems.size})
+                        </Button>
+                    </CardFooter>
+                </Card>
+                <DeleteConfirmationDialog 
+                    open={!!sessionToDelete}
+                    onOpenChange={setSessionToDelete}
+                    onConfirm={handleDeleteSession}
+                    itemName={`a compra "${sessionToDelete?.description}"`}
+                    description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta compra serão perdidos."
+                />
+            </>
         )
     }
 
     return (
         <div className="space-y-4">
-            <Accordion type="multiple" className="w-full space-y-3">
-                {analysisResults.map(result => (
-                    <AccordionItem value={result.baseProduct.id} key={result.baseProduct.id} className="border-none">
-                        <Card className="bg-card/40">
-                             <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                                <div className="flex justify-between w-full items-center">
-                                    <span>{result.baseProduct.name}</span>
-                                    <span className="text-sm font-normal text-destructive">Comprar: {result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} {result.baseProduct.unit}</span>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4">
-                                 <PriceComparisonTable
-                                    baseProduct={result.baseProduct}
-                                    items={purchaseItems.filter(i => {
-                                        const product = products.find(p => p.id === i.productId);
-                                        return i.sessionId === 'automatic' && product?.baseProductId === result.baseProduct.id;
-                                    })}
-                                    sessionId="automatic"
-                                    isSessionClosed={false}
-                                    selectedItems={selectedItems}
-                                    onSelectionChange={handleSelectionChange}
-                                />
-                            </AccordionContent>
-                        </Card>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-            {analysisResults.length > 0 && (
-                <CardFooter className="justify-end border-t pt-4">
-                    <Button onClick={handleConfirmSelected} disabled={selectedItems.size === 0}>
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        Salvar e Efetivar Compra ({selectedItems.size})
-                    </Button>
-                </CardFooter>
+            <Button onClick={handleCreateSession} disabled={analysisResults.length === 0}>
+                <PlusCircle className="mr-2" /> Criar nova compra na matriz
+            </Button>
+            {analysisResults.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
+                    <Inbox className="h-12 w-12 mb-4" />
+                    <p className="font-semibold">Nenhuma necessidade de compra encontrada.</p>
+                    <p className="text-sm">O estoque da Matriz está de acordo com as metas definidas.</p>
+                </div>
+            ) : (
+                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
+                    <Inbox className="h-12 w-12 mb-4" />
+                    <p className="font-semibold">Clique em "Criar nova compra" para iniciar.</p>
+                </div>
             )}
         </div>
     );

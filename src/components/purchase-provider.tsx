@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,7 +12,7 @@ export interface PurchaseContextType {
   items: PurchaseItem[];
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
-  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'entityId'>) => Promise<void>;
+  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
@@ -65,14 +64,14 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-     const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'entityId'>) => {
+     const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => {
         if (!user) return;
-        const { entityId, ...restOfData } = data as any; // Exclude entityId
-        const newSession: Omit<PurchaseSession, 'id' | 'entityId'> = {
+        const { entityId, ...restOfData } = data as any; 
+        const newSession: Omit<PurchaseSession, 'id' | 'entityId' | 'closedAt'> = {
             ...restOfData,
             userId: user.id,
             status: 'open',
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
         };
         try {
             await addDoc(collection(db, "purchaseSessions"), newSession);
@@ -112,10 +111,8 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const savePrice = useCallback(async (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => {
         try {
             if (itemId) {
-                // Update existing item
                 await updateDoc(doc(db, "purchaseItems", itemId), data);
             } else {
-                // Add new item
                 const newItem: Omit<PurchaseItem, 'id'> = {
                     sessionId: data.sessionId!,
                     productId: data.productId!,
@@ -153,7 +150,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             const batch = writeBatch(db);
             const now = new Date().toISOString();
             
-            // 1. Update the purchase item
             const itemRef = doc(db, "purchaseItems", itemId);
             batch.update(itemRef, {
                 isConfirmed: true,
@@ -161,7 +157,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 confirmedAt: now,
             });
 
-            // 2. Update the base product with the last effective price
             const baseProductRef = doc(db, "baseProducts", baseProductId);
             batch.update(baseProductRef, {
                 'lastEffectivePrice.pricePerUnit': pricePerUnit,
@@ -170,7 +165,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 'lastEffectivePrice.updatedAt': now
             });
             
-            // 3. Log the price to the history collection
             const historyRef = doc(collection(db, "priceHistory"));
             const historyEntry: Omit<PriceHistoryEntry, 'id'> = {
                 baseProductId: baseProductId,
