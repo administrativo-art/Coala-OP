@@ -1,20 +1,22 @@
 
 "use client";
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from "@/hooks/use-auth";
-import { useEntities } from "@/hooks/use-entities";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { usePurchase } from "@/hooks/use-purchase";
 import { convertValue } from "@/lib/conversion";
+import { useToast } from '@/hooks/use-toast';
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { Inbox } from "lucide-react";
+import { Button } from '@/components/ui/button';
+import { Inbox, ShoppingCart } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card } from "@/components/ui/card";
+import { Card, CardFooter } from "@/components/ui/card";
 import { PriceComparisonTable } from "./price-comparison-table";
+import { type PurchaseItem } from '@/types';
 
 interface AnalysisResult {
   baseProduct: import('@/types').BaseProduct;
@@ -27,7 +29,9 @@ export function AutomaticPurchaseList() {
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { products, loading: loadingProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
-    const { items: purchaseItems, loading: purchaseLoading } = usePurchase();
+    const { items: purchaseItems, loading: purchaseLoading, confirmPurchase } = usePurchase();
+    const { toast } = useToast();
+    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
     const loading = loadingBaseProducts || loadingProducts || lotsLoading || purchaseLoading;
 
@@ -79,6 +83,65 @@ export function AutomaticPurchaseList() {
         }).filter(result => result.restockNeeded > 0);
     }, [loading, baseProducts, products, lots]);
 
+    const handleSelectionChange = (itemId: string, isSelected: boolean) => {
+        setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            if (isSelected) {
+                newSet.add(itemId);
+            } else {
+                newSet.delete(itemId);
+            }
+            return newSet;
+        });
+    };
+    
+    const findPricePerUnit = (item: PurchaseItem): number | null => {
+        const product = products.find(p => p.id === item.productId);
+        const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
+
+        if (product && baseProduct && item.price > 0) {
+            try {
+                const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                if (convertedQty > 0) {
+                    return item.price / convertedQty;
+                }
+            } catch (e) { console.error("Conversion error", e); }
+        }
+        return null;
+    }
+
+    const handleConfirmSelected = async () => {
+        if (selectedItems.size === 0) {
+            toast({
+                variant: "destructive",
+                title: "Nenhum item selecionado",
+                description: "Por favor, marque os itens que deseja efetivar."
+            });
+            return;
+        }
+
+        let confirmedCount = 0;
+        for (const itemId of selectedItems) {
+            const item = purchaseItems.find(i => i.id === itemId);
+            if (!item) continue;
+            
+            const product = products.find(p => p.id === item.productId);
+            if (!product?.baseProductId) continue;
+            
+            const pricePerUnit = findPricePerUnit(item);
+            if (pricePerUnit !== null) {
+                await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
+                confirmedCount++;
+            }
+        }
+        
+        toast({
+            title: "Compra efetivada!",
+            description: `${confirmedCount} item(s) tiveram seus preços atualizados.`
+        });
+        setSelectedItems(new Set());
+    };
+
     if (loading) {
         return (
             <div className="space-y-4">
@@ -119,12 +182,22 @@ export function AutomaticPurchaseList() {
                                     })}
                                     sessionId="automatic"
                                     isSessionClosed={false}
+                                    selectedItems={selectedItems}
+                                    onSelectionChange={handleSelectionChange}
                                 />
                             </AccordionContent>
                         </Card>
                     </AccordionItem>
                 ))}
             </Accordion>
+            {analysisResults.length > 0 && (
+                <CardFooter className="justify-end border-t pt-4">
+                    <Button onClick={handleConfirmSelected} disabled={selectedItems.size === 0}>
+                        <ShoppingCart className="mr-2 h-4 w-4" />
+                        Salvar e Efetivar Compra ({selectedItems.size})
+                    </Button>
+                </CardFooter>
+            )}
         </div>
     );
 }

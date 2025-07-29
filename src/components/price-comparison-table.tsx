@@ -10,18 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Product, type PurchaseItem, type BaseProduct, type Entity } from "@/types";
-import { Star, CheckCircle, AlertTriangle, Trash2, PlusCircle } from "lucide-react";
+import { Star, CheckCircle, Trash2, PlusCircle } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import { useProducts } from "@/hooks/use-products";
 import { useEntities } from "@/hooks/use-entities";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "./ui/checkbox";
 
 interface PriceComparisonTableProps {
     baseProduct: BaseProduct;
     items: PurchaseItem[];
     sessionId: string;
     isSessionClosed: boolean;
+    selectedItems: Set<string>;
+    onSelectionChange: (itemId: string, isSelected: boolean) => void;
 }
 
 interface PriceRow {
@@ -31,10 +34,10 @@ interface PriceRow {
     isBestPrice: boolean;
 }
 
-export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionClosed }: PriceComparisonTableProps) {
+export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionClosed, selectedItems, onSelectionChange }: PriceComparisonTableProps) {
     const { getProductFullName, products } = useProducts();
     const { entities } = useEntities();
-    const { savePrice, confirmPurchase, deletePurchaseItem } = usePurchase();
+    const { savePrice, deletePurchaseItem } = usePurchase();
     const { permissions } = useAuth();
     
     const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
@@ -128,7 +131,7 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                             <TableHead>Preço (R$)</TableHead>
                             <TableHead>R$ / {baseProduct.unit}</TableHead>
                             <TableHead className="text-center">Status</TableHead>
-                            <TableHead className="w-[120px] text-right">Ação</TableHead>
+                            <TableHead className="w-[150px] text-right">Ação</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -185,13 +188,13 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
-                                        <Button 
-                                            size="sm"
-                                            onClick={() => confirmPurchase(row.purchaseItem.id, baseProduct.id, row.pricePerUnit!)}
-                                            disabled={!canApprove || !row.pricePerUnit || row.purchaseItem.isConfirmed}
-                                        >
-                                            Efetivar
-                                        </Button>
+                                        <Checkbox
+                                            id={`select-${row.purchaseItem.id}`}
+                                            checked={selectedItems.has(row.purchaseItem.id)}
+                                            onCheckedChange={(checked) => onSelectionChange(row.purchaseItem.id, !!checked)}
+                                            disabled={!canApprove || row.purchaseItem.isConfirmed || !row.pricePerUnit}
+                                            aria-label="Selecionar para compra"
+                                        />
                                          <Button
                                             variant="ghost"
                                             size="icon"
