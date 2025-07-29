@@ -386,35 +386,29 @@ export default function FormBuilderPage() {
     };
     
     const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type']) => {
-        setInternalTemplate(currentTemplate => {
-            if (!currentTemplate) return null;
+        if (!internalTemplate) return;
 
-            const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
-            if (!parentQuestion) return currentTemplate;
+        const parentQuestion = internalTemplate.questions.find(q => q.id === parentQuestionId);
+        if (!parentQuestion) return;
 
-            const newSubQuestion: FormQuestion = {
-                id: `question-${nanoid()}`,
-                label: 'Nova Sub-pergunta',
-                type: type,
-                isRequired: false,
-                order: 999, // Will be re-ordered later if needed
-                sectionId: parentQuestion.sectionId,
-                excluidaDoSumario: true,
-            };
+        const newSubQuestion: FormQuestion = {
+            id: `question-${nanoid()}`,
+            label: 'Nova Sub-pergunta',
+            type: type,
+            isRequired: false,
+            order: 999,
+            sectionId: parentQuestion.sectionId,
+            excluidaDoSumario: true,
+        };
 
-            const newQuestions = [...currentTemplate.questions];
-            const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
-
-            if (parentIndex !== -1) {
-                // Deep copy parent question to modify it
-                const updatedParent = JSON.parse(JSON.stringify(newQuestions[parentIndex]));
-                
-                updatedParent.options = (updatedParent.options || []).map((opt: any) => {
+        const newQuestions = internalTemplate.questions.map(q => {
+            if (q.id === parentQuestionId) {
+                const newOptions = (q.options || []).map(opt => {
                     if (opt.id === optionId) {
                         return {
                             ...opt,
                             ramification: {
-                                ...(opt.ramification || { id: `ram-${nanoid()}` }),
+                                id: `ram-${nanoid()}`,
                                 action: 'add_question',
                                 targetQuestionId: newSubQuestion.id
                             }
@@ -422,15 +416,17 @@ export default function FormBuilderPage() {
                     }
                     return opt;
                 });
-                
-                newQuestions[parentIndex] = updatedParent;
-                newQuestions.push(newSubQuestion);
+                return { ...q, options: newOptions };
             }
-            
-            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-            return { ...currentTemplate, questions: newQuestions };
+            return q;
         });
-    }, []);
+
+        newQuestions.push(newSubQuestion);
+        
+        handleTemplateChange({ questions: newQuestions });
+        
+        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+    }, [internalTemplate]);
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
         setInternalTemplate(currentTemplate => {
