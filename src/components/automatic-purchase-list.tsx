@@ -144,7 +144,7 @@ export function AutomaticPurchaseList() {
             }
         }
         
-        await closeSession(session.id);
+        await closeSession(session.id, Array.from(selectedItems));
 
         toast({
             title: "Sessão de compra finalizada!",

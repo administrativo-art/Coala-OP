@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -420,6 +421,7 @@ export type PurchaseSession = {
   userId: string;
   entityId?: string;
   baseProductIds: string[];
+  confirmedItemIds?: string[]; // Array of PurchaseItem IDs that were bought
   type: 'manual' | 'automatic';
   status: 'open' | 'closed';
   createdAt: string; // ISO String

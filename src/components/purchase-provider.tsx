@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,7 +14,7 @@ export interface PurchaseContextType {
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
   addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => Promise<void>;
-  closeSession: (sessionId: string) => Promise<void>;
+  closeSession: (sessionId: string, confirmedItemIds: string[]) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
   deletePurchaseItem: (itemId: string) => Promise<void>;
@@ -67,7 +68,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
      const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => {
         if (!user) return;
         const { entityId, ...restOfData } = data as any; 
-        const newSession: Omit<PurchaseSession, 'id' | 'entityId' | 'closedAt'> = {
+        const newSession: Omit<PurchaseSession, 'id' | 'entityId' | 'closedAt' | 'confirmedItemIds'> = {
             ...restOfData,
             userId: user.id,
             status: 'open',
@@ -80,11 +81,12 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         }
     }, [user]);
 
-    const closeSession = useCallback(async (sessionId: string) => {
+    const closeSession = useCallback(async (sessionId: string, confirmedItemIds: string[]) => {
         try {
             await updateDoc(doc(db, "purchaseSessions", sessionId), {
                 status: 'closed',
-                closedAt: new Date().toISOString()
+                closedAt: new Date().toISOString(),
+                confirmedItemIds: confirmedItemIds
             });
         } catch (error) {
             console.error("Error closing session:", error);
