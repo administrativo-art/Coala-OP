@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { type PriceHistoryEntry } from "@/types";
-import { Inbox, Search, Package, Building, Eraser, Trash2 } from "lucide-react";
+import { Inbox, Search, Package, Building, Eraser, Trash2, Eye } from "lucide-react";
 import { useProducts } from "@/hooks/use-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
@@ -32,6 +32,7 @@ function PriceHistoryList() {
     const [productFilter, setProductFilter] = useState('all');
     const [entityFilter, setEntityFilter] = useState('all');
     const [entryToDelete, setEntryToDelete] = useState<PriceHistoryEntry | null>(null);
+    const [priceLimit, setPriceLimit] = useState<string>('3');
 
     const enrichedHistory = useMemo(() => {
         return priceHistory.map(entry => {
@@ -49,7 +50,7 @@ function PriceHistoryList() {
     }, [priceHistory, products, entities, users, getProductFullName]);
 
     const filteredHistory = useMemo(() => {
-        return enrichedHistory.filter(entry => {
+        const initialFilter = enrichedHistory.filter(entry => {
             const searchLower = searchTerm.toLowerCase();
             const searchMatch = entry.productName.toLowerCase().includes(searchLower) ||
                                 entry.entityName.toLowerCase().includes(searchLower) ||
@@ -60,7 +61,30 @@ function PriceHistoryList() {
 
             return searchMatch && productMatch && entityMatch;
         });
-    }, [enrichedHistory, searchTerm, productFilter, entityFilter]);
+
+        if (priceLimit === 'all') {
+            return initialFilter;
+        }
+
+        const limit = parseInt(priceLimit, 10);
+        const grouped = new Map<string, PriceHistoryEntry[]>();
+
+        initialFilter.forEach(entry => {
+            const key = `${entry.productId}-${entry.entityId}`;
+            if (!grouped.has(key)) {
+                grouped.set(key, []);
+            }
+            grouped.get(key)!.push(entry);
+        });
+
+        const limitedResult: PriceHistoryEntry[] = [];
+        grouped.forEach(group => {
+            limitedResult.push(...group.slice(0, limit));
+        });
+        
+        return limitedResult.sort((a,b) => new Date(b.confirmedAt).getTime() - new Date(a.confirmedAt).getTime());
+
+    }, [enrichedHistory, searchTerm, productFilter, entityFilter, priceLimit]);
     
     const handleDeleteConfirm = () => {
         if(entryToDelete) {
@@ -108,7 +132,18 @@ function PriceHistoryList() {
                         {uniqueEntities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Button variant="ghost" onClick={() => { setSearchTerm(''); setProductFilter('all'); setEntityFilter('all'); }}>
+                 <Select value={priceLimit} onValueChange={setPriceLimit}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                        <SelectValue placeholder="Visibilidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="1"><Eye className="mr-2 h-4 w-4"/>Último preço</SelectItem>
+                        <SelectItem value="3"><Eye className="mr-2 h-4 w-4"/>Últimos 3</SelectItem>
+                        <SelectItem value="5"><Eye className="mr-2 h-4 w-4"/>Últimos 5</SelectItem>
+                        <SelectItem value="all"><Eye className="mr-2 h-4 w-4"/>Todos</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button variant="ghost" onClick={() => { setSearchTerm(''); setProductFilter('all'); setEntityFilter('all'); setPriceLimit('3'); }}>
                     <Eraser className="mr-2 h-4 w-4" />
                     Limpar
                 </Button>
