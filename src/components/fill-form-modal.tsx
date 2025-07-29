@@ -26,59 +26,94 @@ import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { cn } from '@/lib/utils';
 
 
-const getAllQuestions = (questions: FormQuestion[]): FormQuestion[] => {
-    return questions;
-};
-
-const getVisibleQuestionIds = (questions: FormQuestion[], formValues: Record<string, any>): Set<string> => {
+const getVisibleQuestionIds = (allQuestions: FormQuestion[], formValues: Record<string, any>): Set<string> => {
     const visibleIds = new Set<string>();
-    const questionMap = new Map(questions.map(q => [q.id, q]));
-
-    questions.forEach(q => {
-        // A question is visible by default unless a condition hides it (not implemented, but good practice)
-        visibleIds.add(q.id);
-    });
+    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
     
-    // A mais advanced implementation would traverse the graph:
-    // 1. Start with root questions.
-    // 2. For each answered question, evaluate its ramifications.
-    // 3. If a ramification shows a new question, add it to a "to-visit" queue.
-    // 4. Continue until all visible paths are explored.
+    // Always add top-level questions
+    allQuestions.forEach(q => {
+        if (!q.excluidaDoSumario) {
+            visibleIds.add(q.id);
+        }
+    });
+
+    const queue = [...allQuestions.filter(q => !q.excluidaDoSumario)];
+    const processed = new Set<string>();
+
+    while(queue.length > 0) {
+        const question = queue.shift();
+        if (!question || processed.has(question.id)) continue;
+        processed.add(question.id);
+
+        if (question.options) {
+            const answer = formValues[question.id];
+            
+            question.options.forEach(opt => {
+                const ramification = opt.ramification;
+                let isConditionMet = false;
+
+                if (Array.isArray(answer)) { // Multiple choice
+                    isConditionMet = answer.includes(opt.value);
+                } else { // Single choice / Yes-No
+                    isConditionMet = answer === opt.value;
+                }
+
+                if (isConditionMet && ramification && ramification.targetQuestionId) {
+                    const targetQuestion = questionMap.get(ramification.targetQuestionId);
+                    if (targetQuestion) {
+                        visibleIds.add(targetQuestion.id);
+                        if (!processed.has(targetQuestion.id)) {
+                            queue.push(targetQuestion);
+                        }
+                    }
+                }
+            });
+        }
+    }
 
     return visibleIds;
 };
 
-const generateSchema = (allQuestions: FormQuestion[]) => {
+const generateSchema = (allQuestions: FormQuestion[], visibleIds: Set<string>) => {
     let schemaObject: { [key: string]: z.ZodType<any, any> } = {};
     allQuestions.forEach(question => {
+        const isVisible = visibleIds.has(question.id);
+        let validator: z.ZodType<any, any> | null = null;
         switch (question.type) {
             case 'text':
-                schemaObject[question.id] = z.string().optional();
+                validator = z.string();
                 break;
             case 'number':
             case 'rating':
-                schemaObject[question.id] = z.coerce.number().optional().or(z.literal(''));
+                validator = z.coerce.number();
                 break;
             case 'range':
-                schemaObject[question.id] = z.object({
-                    min: z.coerce.number().optional().or(z.literal('')),
-                    max: z.coerce.number().optional().or(z.literal('')),
-                }).optional();
+                validator = z.object({ min: z.coerce.number(), max: z.coerce.number() });
                 break;
             case 'yes-no':
             case 'single-choice':
-                schemaObject[question.id] = z.string().optional();
+                validator = z.string();
                 break;
             case 'multiple-choice':
-                schemaObject[question.id] = z.array(z.string()).optional();
+                 validator = z.array(z.string());
                 break;
             case 'file-attachment':
-                schemaObject[question.id] = z.array(z.object({
-                    name: z.string(),
-                    url: z.string(),
-                    type: z.string(),
-                })).optional();
+                validator = z.array(z.object({ name: z.string(), url: z.string(), type: z.string() }));
                 break;
+        }
+
+        if(validator) {
+            if (question.isRequired && isVisible) {
+                if (validator instanceof z.ZodString) {
+                    schemaObject[question.id] = validator.min(1, "Campo obrigatório");
+                } else if (validator instanceof z.ZodArray) {
+                    schemaObject[question.id] = validator.min(1, "Selecione ao menos uma opção");
+                } else {
+                     schemaObject[question.id] = validator;
+                }
+            } else {
+                 schemaObject[question.id] = validator.optional().nullable();
+            }
         }
     });
     return z.object(schemaObject);
@@ -318,12 +353,6 @@ function CheckIcon(props: React.ComponentProps<'svg'>) {
     )
 }
 
-
-function QuestionRenderer({ questions, control }: { questions: FormQuestion[]; control: Control<any> }) {
-  if (!questions || questions.length === 0) return null;
-  return <div className="space-y-6">{questions.map(q => <RenderedQuestion key={q.id} question={q} control={control} />)}</div>;
-}
-
 type FillFormModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -333,11 +362,12 @@ type FillFormModalProps = {
 
 const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>): FormAnswer[] => {
     const results: FormAnswer[] = [];
+    const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    questions.forEach(q => {
-        let value = formValues[q.id];
-
-        if (q.type === 'range') {
+    const buildRecursive = (question: FormQuestion, currentValues: Record<string, any>): FormAnswer | null => {
+        let value = currentValues[question.id];
+        
+        if (question.type === 'range') {
             value = (value?.min || value?.max) ? `${value.min || ''} - ${value.max || ''}` : '';
         }
 
@@ -345,11 +375,34 @@ const buildAnswers = (questions: FormQuestion[], formValues: Record<string, any>
 
         if (hasValue) {
             const answer: FormAnswer = {
-                questionId: q.id,
-                questionLabel: q.label,
+                questionId: question.id,
+                questionLabel: question.label,
                 value: value,
-                subAnswers: [] // Sub-answers are not supported in this simplified model.
+                subAnswers: []
             };
+
+            if (question.options) {
+                const answerValueArray = Array.isArray(value) ? value : [value];
+                question.options.forEach(opt => {
+                    if (answerValueArray.includes(opt.value) && opt.ramification?.targetQuestionId) {
+                        const subQuestion = questionMap.get(opt.ramification.targetQuestionId);
+                        if (subQuestion) {
+                            const subAnswer = buildRecursive(subQuestion, currentValues);
+                            if (subAnswer) {
+                                answer.subAnswers!.push(subAnswer);
+                            }
+                        }
+                    }
+                });
+            }
+            return answer;
+        }
+        return null;
+    };
+    
+    questions.filter(q => !q.excluidaDoSumario).forEach(q => {
+        const answer = buildRecursive(q, formValues);
+        if (answer) {
             results.push(answer);
         }
     });
@@ -364,66 +417,35 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     
+    const allQuestions = useMemo(() => template.questions || [], [template]);
+    
+    const form = useForm({ mode: 'onChange' });
+    const formValues = useWatch({ control: form.control });
+    
+    const visibleQuestionIds = useMemo(() => getVisibleQuestionIds(allQuestions, formValues), [allQuestions, formValues]);
+    
     const visibleQuestions = useMemo(() => {
-        return getAllQuestions(template.questions);
-    }, [template]);
+        return allQuestions.filter(q => visibleQuestionIds.has(q.id)).sort((a,b) => a.order - b.order);
+    }, [allQuestions, visibleQuestionIds]);
     
-    const defaultValues = useMemo(() => {
-        const values: Record<string, any> = {};
-        visibleQuestions.forEach(q => {
-            if (q.type === 'multiple-choice' || q.type === 'file-attachment') {
-                 values[q.id] = [];
-            } else if (q.type === 'range') {
-                values[q.id] = { min: '', max: '' };
-            }
-             else {
-                 values[q.id] = '';
-            }
-        });
-        return values;
-    }, [visibleQuestions]);
+    const { resolver } = form.control.options;
 
-    const formSchema = useMemo(() => {
-        const baseSchema = generateSchema(visibleQuestions);
-        return baseSchema.superRefine((data, ctx) => {
-            const visibleIds = getVisibleQuestionIds(template.questions, data);
-            visibleQuestions.forEach(question => {
-                if (question.isRequired && visibleIds.has(question.id)) {
-                    const value = data[question.id];
-                    let isEmpty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
-                    if (question.type === 'range') {
-                        isEmpty = (value?.min === '' && value?.max === '');
-                    }
-                    if (isEmpty) {
-                        ctx.addIssue({
-                            code: z.ZodIssueCode.custom,
-                            path: [question.id],
-                            message: "Campo obrigatório",
-                        });
-                    }
-                }
-            });
-        });
-    }, [template, visibleQuestions]);
-    
-    const form = useForm({
-        resolver: zodResolver(formSchema),
-        defaultValues,
-        mode: 'onChange',
-    });
-    
+    useEffect(() => {
+        (form.control as any).resolver = zodResolver(generateSchema(allQuestions, visibleQuestionIds));
+    }, [visibleQuestionIds, allQuestions, form.control]);
+
     const handleResetAndFillAgain = () => {
-        form.reset(defaultValues);
+        form.reset();
         setIsSubmitted(false);
     };
 
     useEffect(() => {
         if (open) {
-            form.reset(defaultValues);
+            form.reset();
             setIsSubmitting(false);
             setIsSubmitted(false);
         }
-    }, [open, form, defaultValues]);
+    }, [open, form]);
     
     const onSubmit = async (values: Record<string, any>) => {
         if (!user) return;
@@ -449,7 +471,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         }
         
         const submission: Omit<FormSubmission, 'id'> = {
-            templateId: template.id,
+            templateId: template.id!,
             templateName: template.name,
             title,
             status: 'completed',
@@ -458,7 +480,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
             kioskId: kiosk?.id || 'N/A',
             kioskName: kiosk?.name || 'N/A',
             createdAt: new Date().toISOString(),
-            answers: buildAnswers(visibleQuestions, values),
+            answers: buildAnswers(allQuestions, values),
         };
 
         await addSubmission(submission, template);
@@ -466,7 +488,7 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
         setIsSubmitted(true);
         
         if (!template.showResetButton) {
-            setTimeout(() => onOpenChange(false), 3000); // Close modal after 3 seconds if no reset button
+            setTimeout(() => onOpenChange(false), 3000); 
         }
     };
 
@@ -488,7 +510,9 @@ export function FillFormModal({ open, onOpenChange, template, addSubmission }: F
                 <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)}>
                     <ScrollArea className="h-[60vh] p-4 -mx-4 pr-6">
-                    <QuestionRenderer questions={visibleQuestions} control={form.control} />
+                        <div className="space-y-6">
+                            {visibleQuestions.map(q => <RenderedQuestion key={q.id} question={q} control={form.control} />)}
+                        </div>
                     </ScrollArea>
                     <DialogFooter className="pt-6 border-t flex justify-between w-full">
                     <div className="flex-grow flex justify-end">
