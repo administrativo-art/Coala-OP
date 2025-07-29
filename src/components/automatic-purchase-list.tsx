@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -123,33 +124,33 @@ export function AutomaticPurchaseList() {
     }
 
     const handleConfirmSelected = async () => {
-        if (selectedItems.size === 0) {
-            toast({
-                variant: "destructive",
-                title: "Nenhum item selecionado",
-                description: "Por favor, marque os itens que deseja efetivar."
-            });
-            return;
-        }
-
+        const session = openAutomaticSession;
+        if (!session) return;
+        
         let confirmedCount = 0;
-        for (const itemId of selectedItems) {
-            const item = purchaseItems.find(i => i.id === itemId);
-            if (!item) continue;
-            
-            const product = products.find(p => p.id === item.productId);
-            if (!product?.baseProductId) continue;
-            
-            const pricePerUnit = findPricePerUnit(item);
-            if (pricePerUnit !== null) {
-                await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
-                confirmedCount++;
+        if (selectedItems.size > 0) {
+            for (const itemId of selectedItems) {
+                const item = purchaseItems.find(i => i.id === itemId);
+                if (!item) continue;
+                
+                const product = products.find(p => p.id === item.productId);
+                if (!product?.baseProductId) continue;
+                
+                const pricePerUnit = findPricePerUnit(item);
+                if (pricePerUnit !== null) {
+                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
+                    confirmedCount++;
+                }
             }
         }
         
+        await closeSession(session.id);
+
         toast({
-            title: "Compra efetivada!",
-            description: `${confirmedCount} item(s) tiveram seus preços atualizados.`
+            title: "Sessão de compra finalizada!",
+            description: selectedItems.size > 0 
+                ? `${confirmedCount} item(s) tiveram seus preços efetivados.`
+                : 'A pesquisa de preços foi salva no histórico.'
         });
         setSelectedItems(new Set());
     };
@@ -160,10 +161,6 @@ export function AutomaticPurchaseList() {
             setSessionToDelete(null);
         }
     };
-    
-    const handleCloseSession = (sessionId: string) => {
-        closeSession(sessionId);
-    }
     
     const openAutomaticSession = useMemo(() => {
         return sessions.find(s => s.type === 'automatic' && s.status === 'open');
@@ -226,9 +223,8 @@ export function AutomaticPurchaseList() {
                             ))}
                         </Accordion>
                     </CardContent>
-                    <CardFooter className="justify-between border-t pt-4">
-                        <Button variant="outline" onClick={() => handleCloseSession(openAutomaticSession.id)}>Concluir e Salvar Pesquisa</Button>
-                        <Button onClick={handleConfirmSelected} disabled={selectedItems.size === 0}>
+                    <CardFooter className="justify-end border-t pt-4">
+                        <Button onClick={handleConfirmSelected}>
                             <ShoppingCart className="mr-2 h-4 w-4" />
                             Salvar e Efetivar Compra ({selectedItems.size})
                         </Button>
@@ -236,7 +232,7 @@ export function AutomaticPurchaseList() {
                 </Card>
                 <DeleteConfirmationDialog 
                     open={!!sessionToDelete}
-                    onOpenChange={setSessionToDelete}
+                    onOpenChange={() => setSessionToDelete(null)}
                     onConfirm={handleDeleteSession}
                     itemName={`a compra "${sessionToDelete?.description}"`}
                     description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta compra serão perdidos."

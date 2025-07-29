@@ -131,7 +131,7 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                             <TableHead>Preço (R$)</TableHead>
                             <TableHead>R$ / {baseProduct.unit}</TableHead>
                             <TableHead className="text-center">Status</TableHead>
-                            <TableHead className="w-[150px] text-right">Selecionar para compra</TableHead>
+                            <TableHead className="w-[150px] text-right">Selecionar para comprar</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
