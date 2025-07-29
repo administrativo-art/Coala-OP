@@ -145,8 +145,8 @@ const SubQuestionDisplay = React.memo(({
                             allQuestions={props.allQuestions}
                             allSections={props.allSections}
                             onQuestionChange={props.onQuestionChange}
-                            onDeleteSubQuestion={props.onDeleteSubQuestion}
                             onCreateSubQuestion={props.onCreateSubQuestion}
+                            onDeleteSubQuestion={props.onDeleteSubQuestion}
                             onDuplicate={() => { /* Not implemented yet */ }}
                             users={props.users}
                             profiles={props.profiles}
@@ -290,8 +290,8 @@ const SortableQuestionItem = React.memo(({
                             allQuestions={allQuestions}
                             allSections={allSections}
                             onQuestionChange={onQuestionChange}
-                            onDeleteSubQuestion={onDeleteSubQuestion}
                             onCreateSubQuestion={onCreateSubQuestion}
+                            onDeleteSubQuestion={onDeleteSubQuestion}
                             onDuplicate={() => { /* Not implemented for sub-questions yet */ }}
                             users={users}
                             profiles={profiles}
@@ -537,48 +537,45 @@ export default function FormBuilderPage() {
     };
     
      const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type'] = 'text') => {
-        setInternalTemplate(currentTemplate => {
-            if (!currentTemplate) return null;
+        if (!internalTemplate) return;
 
-            const newSubQuestion: FormQuestion = {
-                id: `question-${nanoid()}`,
-                label: 'Nova Sub-pergunta',
-                type,
-                isRequired: false,
-                order: 0, 
-                sectionId: '',
-                excluidaDoSumario: true,
+        const newSubQuestion: FormQuestion = {
+            id: `question-${nanoid()}`,
+            label: 'Nova Sub-pergunta',
+            type,
+            isRequired: false,
+            order: 0,
+            sectionId: '',
+            excluidaDoSumario: true,
+        };
+
+        const currentQuestions = [...internalTemplate.questions];
+        const parentIndex = currentQuestions.findIndex(q => q.id === parentQuestionId);
+        if (parentIndex === -1) return;
+
+        const parentQuestion = { ...currentQuestions[parentIndex] };
+        newSubQuestion.sectionId = parentQuestion.sectionId!;
+        parentQuestion.options = (parentQuestion.options || []).map(opt => {
+            if (opt.id !== optionId) return opt;
+            return {
+                ...opt,
+                ramification: {
+                    id: `ram-${nanoid()}`,
+                    action: 'add_question',
+                    targetQuestionId: newSubQuestion.id,
+                },
             };
-
-            const questions = [...currentTemplate.questions];
-            const parentIndex = questions.findIndex(q => q.id === parentQuestionId);
-            if (parentIndex === -1) return currentTemplate;
-
-            const parentQuestion = { ...questions[parentIndex] };
-            newSubQuestion.sectionId = parentQuestion.sectionId;
-            
-            parentQuestion.options = (parentQuestion.options || []).map(opt => {
-                if (opt.id !== optionId) return opt;
-                return {
-                    ...opt,
-                    ramification: {
-                        id: `ram-${nanoid()}`,
-                        action: 'add_question',
-                        targetQuestionId: newSubQuestion.id
-                    }
-                };
-            });
-            
-            questions[parentIndex] = parentQuestion;
-            questions.splice(parentIndex + 1, 0, newSubQuestion);
-
-            const finalQuestions = questions.map((q, index) => ({ ...q, order: index }));
-            
-            setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
-
-            return { ...currentTemplate, questions: finalQuestions };
         });
-    }, [scrollToQuestion]);
+
+        currentQuestions[parentIndex] = parentQuestion;
+        currentQuestions.splice(parentIndex + 1, 0, newSubQuestion);
+
+        const finalQuestions = currentQuestions.map((q, index) => ({ ...q, order: index }));
+
+        setInternalTemplate({ ...internalTemplate, questions: finalQuestions });
+
+        setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
+    }, [internalTemplate, scrollToQuestion]);
 
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
