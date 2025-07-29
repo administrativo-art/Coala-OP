@@ -131,7 +131,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   const numberFormat = form.watch('numberConfig.format');
   const watchedOptions = form.watch('options');
   const showOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
-  const allQuestionsMap = useMemo(() => new Map(allQuestions.map(q => [q.id, q])), [allQuestions]);
 
   const onSubmit = () => {
     form.trigger().then(isValid => {
@@ -154,8 +153,6 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
 
 
   useEffect(() => {
-    const hasOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
-
     if (questionType === 'yes-no') {
         const yesNoOptions = [{ id: `opt-${nanoid()}`, value: 'Sim' }, { id: `opt-${nanoid()}`, value: 'Não' }];
         const currentOptions = form.getValues('options') || [];
@@ -166,7 +163,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
         });
 
         replaceOptions(optionsToSet);
-    } else if (!hasOptions) {
+    } else if (!['single-choice', 'multiple-choice'].includes(questionType)) {
         replaceOptions([]);
     }
   }, [questionType, replaceOptions, form]);
