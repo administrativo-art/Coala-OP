@@ -63,7 +63,7 @@ export function FormModule() {
              <ScrollArea className="h-96 mt-4">
                 <div className="space-y-2 pr-4">
                 {templates.map(template => {
-                    const itemCount = (template.sections?.reduce((acc, section) => acc + (section.questions?.length || 0), 0) || 0) + (template.questions?.length || 0);
+                    const itemCount = template.questions?.filter(q => !q.excluidaDoSumario).length || 0;
                     const isPublished = template.status === 'published';
                     return (
                         <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
