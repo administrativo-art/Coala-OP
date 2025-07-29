@@ -93,7 +93,7 @@ interface QuestionSettingsPanelProps {
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
-  onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+  onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
   onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
 }
 
@@ -355,27 +355,25 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                 </div>
                             )}
 
-                            {ramification?.action !== 'add_question' && (
+                             {ramification?.action === 'add_question' ? (
                                 <div className="flex items-center justify-between">
-                                    {jumpToAction && jumpToLabel && (
-                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                            <GitBranch className="h-4 w-4" />
-                                            <span>Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
-                                        </div>
-                                    )}
-                                    <Button type="button" variant="outline" size="sm" onClick={() => form.setValue(`options.${index}.ramification`, { id: nanoid() })}>
-                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
-                                    </Button>
-                                </div>
-                            )}
-                            
-                            {ramification?.action === 'add_question' && (
-                                <div className="flex items-center justify-between">
-                                     <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                    <div className="text-sm text-muted-foreground flex items-center gap-2">
                                         <GitBranch className="h-4 w-4" />
                                         <span>Exibe uma sub-pergunta.</span>
                                     </div>
                                     <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}>Remover sub-pergunta</Button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between">
+                                    {jumpToAction && jumpToLabel ? (
+                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                            <GitBranch className="h-4 w-4" />
+                                            <span>Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
+                                        </div>
+                                    ) : <div />}
+                                    <Button type="button" variant="outline" size="sm" onClick={() => onCreateSubQuestion(question.id, field.id)}>
+                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar sub-pergunta
+                                    </Button>
                                 </div>
                             )}
 
@@ -393,3 +391,4 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
+

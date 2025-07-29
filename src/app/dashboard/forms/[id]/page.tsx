@@ -61,7 +61,7 @@ const SubQuestionDisplay = React.memo(({
     allQuestions: FormQuestion[],
     allSections: FormSection[],
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     onDuplicate: () => void;
     users: any[];
@@ -81,7 +81,7 @@ const SubQuestionDisplay = React.memo(({
         const subQuestionMap = new Map(props.allQuestions.map(q => [q.id, q]));
         return question.options
             .map(opt => opt.ramification?.targetQuestionId ? subQuestionMap.get(opt.ramification.targetQuestionId) : null)
-            .filter((q): q is FormQuestion => !!q && q.excluidaDoSumario);
+            .filter((q): q is FormQuestion => !!q);
     }, [question.options, props.allQuestions]);
     
     return (
@@ -184,7 +184,7 @@ const SortableQuestionItem = React.memo(({
     onDelete: () => void,
     onDuplicate: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
@@ -318,7 +318,7 @@ const RecursiveQuestionRenderer = React.memo(({
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     onQuestionChange: (q: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
@@ -538,57 +538,60 @@ export default function FormBuilderPage() {
     
     const handleCreateSubQuestion = useCallback((
       parentQuestionId: string, 
-      optionId: string, 
-      type: FormQuestion['type']
+      optionId: string
     ) => {
       setInternalTemplate(currentTemplate => {
         if (!currentTemplate) return null;
 
-        const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
-        if(!parentQuestion) return currentTemplate;
+        const allQuestions = [...currentTemplate.questions];
+        const parentIndex = allQuestions.findIndex(q => q.id === parentQuestionId);
+        if (parentIndex === -1) return currentTemplate;
+        
+        const parentQuestion = allQuestions[parentIndex];
         
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: 'Nova Sub-pergunta',
-            type: type,
+            type: 'text',
             isRequired: false,
-            order: 999, // Will be re-ordered
+            order: 0, // Placeholder, will be set later
             sectionId: parentQuestion.sectionId,
             excluidaDoSumario: true,
         };
         
-        const newQuestions = [...currentTemplate.questions];
-        const parentIndex = newQuestions.findIndex(q => q.id === parentQuestionId);
-        
-        if (parentIndex !== -1) {
-            newQuestions[parentIndex] = {
-                ...newQuestions[parentIndex],
-                options: (newQuestions[parentIndex].options || []).map(opt => {
-                    if (opt.id !== optionId) return opt;
-                    return {
-                        ...opt,
-                        ramification: {
-                            id: `ram-${nanoid()}`,
-                            action: 'add_question',
-                            targetQuestionId: newSubQuestion.id
-                        }
-                    };
-                })
-            };
-        }
-        
-        let lastSubTreeIndex = parentIndex;
-        for (let i = parentIndex + 1; i < newQuestions.length; i++) {
-             if(newQuestions[i].excluidaDoSumario) {
-                lastSubTreeIndex = i;
+        // Update parent question's option with ramification
+        const updatedParentQuestion = {
+            ...parentQuestion,
+            options: (parentQuestion.options || []).map(opt => {
+                if (opt.id !== optionId) return opt;
+                return {
+                    ...opt,
+                    ramification: {
+                        id: `ram-${nanoid()}`,
+                        action: 'add_question',
+                        targetQuestionId: newSubQuestion.id
+                    }
+                };
+            })
+        };
+
+        allQuestions[parentIndex] = updatedParentQuestion;
+
+        // Find the correct insertion index
+        let lastSubQuestionIndex = parentIndex;
+        for (let i = parentIndex + 1; i < allQuestions.length; i++) {
+            if (allQuestions[i].excluidaDoSumario) {
+                lastSubQuestionIndex = i;
             } else {
                 break;
             }
         }
-
-        newQuestions.splice(lastSubTreeIndex + 1, 0, newSubQuestion);
         
-        const finalQuestions = newQuestions.map((q, index) => ({...q, order: index}));
+        // Insert new sub-question
+        allQuestions.splice(lastSubQuestionIndex + 1, 0, newSubQuestion);
+        
+        // Re-order all questions
+        const finalQuestions = allQuestions.map((q, index) => ({...q, order: index}));
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
 
@@ -1016,11 +1019,3 @@ export default function FormBuilderPage() {
     );
 }
 
-
-    
-
-    
-
-
-
-    
