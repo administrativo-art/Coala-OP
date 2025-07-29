@@ -378,7 +378,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button type="button" variant="outline" size="sm">
-                                            <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
+                                            <GitBranch className="mr-2 h-4 w-4" /> Adicionar ação
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
