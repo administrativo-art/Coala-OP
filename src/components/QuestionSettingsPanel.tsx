@@ -101,25 +101,18 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   
   const form = useForm<FormQuestionValues>({
     resolver: zodResolver(formQuestionSchema),
-    defaultValues: {
-      ...question,
-      options: question.options || [],
-      numberConfig: question.numberConfig || {},
-      rangeConfig: question.rangeConfig || { minLabel: 'Mínimo', maxLabel: 'Máximo'},
-      ratingConfig: question.ratingConfig || { min: 1, max: 5 },
-      attachmentConfig: question.attachmentConfig || { allowMultiple: false, allowedFileTypes: [], allowCamera: false }
-    }
+    defaultValues: {},
   });
 
   useEffect(() => {
-    form.reset({
+      form.reset({
         ...question,
         options: question.options || [],
         numberConfig: question.numberConfig || {},
         rangeConfig: question.rangeConfig || { minLabel: 'Mínimo', maxLabel: 'Máximo'},
         ratingConfig: question.ratingConfig || { min: 1, max: 5 },
         attachmentConfig: question.attachmentConfig || { allowMultiple: false, allowedFileTypes: [], allowCamera: false }
-    });
+      });
   }, [question, form]);
 
   const { fields: optionFields, append: appendOption, remove: removeOption, replace: replaceOptions, update: updateOption } = useFieldArray({
@@ -132,13 +125,14 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   const watchedOptions = form.watch('options');
   const showOptions = ['single-choice', 'multiple-choice', 'yes-no'].includes(questionType);
 
-  const onSubmit = () => {
+  const onSubmit = useCallback(() => {
     form.trigger().then(isValid => {
       if (isValid) {
-        onChange({ ...question, ...form.getValues() });
+        const currentValues = form.getValues();
+        onChange({ ...question, ...currentValues });
       }
     });
-  };
+  }, [form, onChange, question]);
   
   useEffect(() => {
     const subscription = form.watch((value, { name, type }) => {
@@ -148,8 +142,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
         }
     });
     return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.watch, onChange, question]);
+  }, [form, onSubmit]);
 
 
   useEffect(() => {
