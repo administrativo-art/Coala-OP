@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CheckCircle, Package, Inbox } from 'lucide-react';
 
 interface ProjectionResult {
-    lot: LotEntry;
+    lot: import('@/types').LotEntry;
     productName: string;
     daysRemaining: number;
     projectedConsumption: number;
@@ -83,16 +83,10 @@ export function ConsumptionProjection() {
             // 5. Convert lot quantity to base unit
             let lotQtyInBaseUnit = 0;
             try {
-                lotQtyInBaseUnit = convertValue(lot.quantity, "pacote", baseProduct.unit, baseProduct.category) * product.packageSize;
-            } catch (e) {
-                // Simplified: assuming 'pacote' is not a real unit, but a representation of the package.
-                // We convert package size to base unit, then multiply by quantity.
-                try {
-                     const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                     lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                } catch (err) {
-                     return null; // Cannot convert
-                }
+                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+            } catch (err) {
+                 return null; // Cannot convert
             }
             
             // 6. Compare and determine status
