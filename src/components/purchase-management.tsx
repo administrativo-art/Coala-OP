@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { AutomaticPurchaseList } from "./automatic-purchase-list";
 import { PurchaseSessionList } from "./purchase-session-list";
-import { PriceHistoryDashboard } from "./price-history-dashboard";
+import { PurchaseHistoryDashboard } from "./purchase-history-dashboard";
 import { History, ShoppingCart, Wand2, ArrowRight } from "lucide-react";
 
 type ActiveView = 'menu' | 'automatic' | 'sessions' | 'history';
@@ -35,7 +35,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <ShoppingCart className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Sessões de Compra</CardTitle>
-                    <CardDescription>Crie pesquisas manuais ou veja o histórico de compras e orçamentos.</CardDescription>
+                    <CardDescription>Crie pesquisas manuais ou veja as compras em andamento.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                      <Button className="w-full" onClick={() => setActiveView('sessions')}>
@@ -48,8 +48,8 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
                         <History className="h-8 w-8 text-primary" />
                     </div>
-                    <CardTitle>Histórico de Preços</CardTitle>
-                    <CardDescription>Consulte o histórico de todos os preços de compra que foram efetivados.</CardDescription>
+                    <CardTitle>Histórico de Compras</CardTitle>
+                    <CardDescription>Consulte ordens de compra e o histórico de preços efetivados.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                      <Button className="w-full" onClick={() => setActiveView('history')}>
@@ -72,7 +72,7 @@ export function PurchaseManagement() {
             case 'sessions':
                 return <PurchaseSessionList />;
             case 'history':
-                return <PriceHistoryDashboard />;
+                return <PurchaseHistoryDashboard />;
             case 'menu':
             default:
                 return <MenuScreen setActiveView={setActiveView} />;
@@ -83,7 +83,7 @@ export function PurchaseManagement() {
         switch (activeView) {
             case 'automatic': return "Compra Matriz";
             case 'sessions': return "Sessões de Compra";
-            case 'history': return "Histórico de Preços";
+            case 'history': return "Histórico de Compras";
             case 'menu':
             default: return "Gestão de compras";
         }
@@ -92,8 +92,8 @@ export function PurchaseManagement() {
     const getDescription = () => {
         switch (activeView) {
             case 'automatic': return "Crie uma sessão de compra com base no estoque mínimo da matriz.";
-            case 'sessions': return "Crie pesquisas manuais ou veja o histórico de compras e orçamentos.";
-            case 'history': return "Consulte o histórico de todos os preços de compra que foram efetivados.";
+            case 'sessions': return "Crie pesquisas manuais ou veja as compras em andamento.";
+            case 'history': return "Consulte ordens de compra finalizadas e o histórico de preços.";
             case 'menu':
             default: return "Crie pesquisas de preço, compare custos e efetive suas compras de insumos.";
         }
