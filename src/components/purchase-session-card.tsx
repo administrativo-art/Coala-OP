@@ -13,10 +13,13 @@ import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem } from "@/types";
 import { PriceComparisonTable } from "./price-comparison-table";
-import { Building, Calendar, ShoppingCart, User, Trash2 } from 'lucide-react';
+import { Building, Calendar, ShoppingCart, User, Trash2, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { convertValue } from '@/lib/conversion';
 
 interface PurchaseSessionCardProps {
     session: PurchaseSession;
@@ -27,10 +30,11 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
     const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } = usePurchase();
-    const { products } = useProducts();
+    const { products, getProductFullName } = useProducts();
     const { toast } = useToast();
     
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
     const entity = useMemo(() => entities.find(e => e.id === session.entityId), [session.entityId, entities]);
@@ -65,7 +69,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const findPricePerUnit = (item: PurchaseItem): number | null => {
         const product = products.find(p => p.id === item.productId);
         const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-        const { convertValue } = require('@/lib/conversion');
 
         if (product && baseProduct && item.price > 0) {
             try {
@@ -77,8 +80,44 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         }
         return null;
     }
+    
+    const handleExportPdf = () => {
+        const doc = new jsPDF();
+        const title = `Ordem de Compra: ${session.description}`;
+        const confirmedItems = sessionItems.filter(item => selectedItems.has(item.id));
 
-    const handleConfirmSelected = async () => {
+        doc.setFontSize(18);
+        doc.text(title, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Data: ${format(new Date(), 'dd/MM/yyyy', { locale: ptBR })}`, 14, 29);
+        if (user) doc.text(`Gerado por: ${user.username}`, 14, 35);
+
+        const tableHead = [['Insumo', 'Fornecedor', 'Preço Unitário (R$)', 'Custo Efetivo/unid.']];
+        const tableBody = confirmedItems.map(item => {
+            const product = products.find(p => p.id === item.productId);
+            const entity = entities.find(e => e.id === item.entityId);
+            const pricePerUnit = findPricePerUnit(item);
+            return [
+                product ? getProductFullName(product) : 'N/A',
+                entity?.name || 'N/A',
+                item.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                pricePerUnit ? pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'N/A'
+            ];
+        });
+
+        autoTable(doc, {
+            startY: 45,
+            head: tableHead,
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: '#3F51B5' },
+        });
+
+        doc.save(`ordem_de_compra_${session.id.slice(0, 8)}.pdf`);
+    };
+
+    const finalizePurchase = async (downloadPdf: boolean) => {
         let confirmedCount = 0;
         if (selectedItems.size > 0) {
             for (const itemId of selectedItems) {
@@ -104,7 +143,21 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 ? `${confirmedCount} item(s) tiveram seus preços efetivados.`
                 : 'A pesquisa de preços foi salva no histórico.'
         });
+
+        if (downloadPdf) {
+            handleExportPdf();
+        }
+
         setSelectedItems(new Set());
+        setIsConfirmModalOpen(false);
+    };
+
+    const handleSaveAndFinalize = () => {
+        if (selectedItems.size > 0) {
+            setIsConfirmModalOpen(true);
+        } else {
+            finalizePurchase(false);
+        }
     };
 
     return (
@@ -127,14 +180,21 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </CardDescription>
                                 </div>
                              </AccordionTrigger>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-destructive hover:text-destructive shrink-0"
-                                onClick={() => setIsDeleteConfirmOpen(true)}
-                            >
-                                <Trash2 className="h-5 w-5" />
-                            </Button>
+                            <div className="flex items-center">
+                                {isSessionClosed && session.confirmedItemIds && session.confirmedItemIds.length > 0 && (
+                                    <Button variant="outline" size="icon" onClick={handleExportPdf}>
+                                        <Download className="h-5 w-5"/>
+                                    </Button>
+                                )}
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="text-destructive hover:text-destructive shrink-0"
+                                    onClick={() => setIsDeleteConfirmOpen(true)}
+                                >
+                                    <Trash2 className="h-5 w-5" />
+                                </Button>
+                            </div>
                         </div>
                     </CardHeader>
                     <AccordionContent>
@@ -160,7 +220,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         </CardContent>
                         {!isSessionClosed && (
                             <CardFooter className="border-t pt-4 justify-end">
-                                <Button onClick={handleConfirmSelected}>
+                                <Button onClick={handleSaveAndFinalize}>
                                     <ShoppingCart className="mr-2 h-4 w-4" />
                                     Salvar e Efetivar Compra ({selectedItems.size})
                                 </Button>
@@ -176,6 +236,17 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 onConfirm={handleDeleteSession}
                 itemName={`a pesquisa "${session.description}"`}
                 description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta pesquisa serão perdidos."
+            />
+            <DeleteConfirmationDialog
+                open={isConfirmModalOpen}
+                onOpenChange={setIsConfirmModalOpen}
+                onConfirm={() => finalizePurchase(true)}
+                onCancel={() => finalizePurchase(false)}
+                title="Emitir Ordem de Compra?"
+                description="Você efetivou a compra de um ou mais itens. Deseja baixar o PDF da ordem de compra agora?"
+                confirmButtonText="Sim, baixar PDF"
+                cancelButtonText="Não, apenas finalizar"
+                confirmButtonVariant="default"
             />
         </>
     );
