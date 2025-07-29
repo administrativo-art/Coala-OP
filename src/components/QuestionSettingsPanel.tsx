@@ -169,20 +169,14 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     }
   }, [questionType, replaceOptions, form]);
   
-  const onAddRamification = (optionIndex: number) => {
-    const currentOption = { ...watchedOptions[optionIndex] };
-    const newRamification = { id: `ram-${nanoid()}` };
-    currentOption.ramification = newRamification;
-    updateOption(optionIndex, currentOption);
-  }
-
   const handleRemoveRamification = (optionIndex: number) => {
     const currentOption = { ...watchedOptions[optionIndex] };
     if(currentOption.ramification?.targetQuestionId){
         onDeleteSubQuestion(question.id, currentOption.ramification.targetQuestionId);
+    } else {
+        delete currentOption.ramification;
+        updateOption(optionIndex, currentOption);
     }
-    delete currentOption.ramification;
-    updateOption(optionIndex, currentOption);
   }
 
   return (
@@ -392,7 +386,11 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={() => onAddRamification(index)}>
+                                        <DropdownMenuItem onSelect={() => {
+                                            const updatedOptions = [...watchedOptions];
+                                            updatedOptions[index].ramification = { id: `ram-${nanoid()}` };
+                                            replaceOptions(updatedOptions);
+                                        }}>
                                             Pular para pergunta/seção
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onSelect={() => onCreateSubQuestion(question.id, field.id, 'text')}>
