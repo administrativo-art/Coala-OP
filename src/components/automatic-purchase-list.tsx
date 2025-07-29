@@ -15,11 +15,9 @@ import { ptBR } from 'date-fns/locale';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from '@/components/ui/button';
 import { Inbox, ShoppingCart, PlusCircle, Trash2 } from "lucide-react";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PriceComparisonTable } from "./price-comparison-table";
-import { type PurchaseItem, type PurchaseSession } from '@/types';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { type PurchaseSession } from '@/types';
+import { PurchaseSessionCard } from './purchase-session-card';
+
 
 interface AnalysisResult {
   baseProduct: import('@/types').BaseProduct;
@@ -32,14 +30,10 @@ export function AutomaticPurchaseList() {
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { products, loading: loadingProducts } = useProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
-    const { sessions, items: purchaseItems, loading: purchaseLoading, addSession, closeSession, deleteSession, confirmPurchase } = usePurchase();
+    const { sessions, addSession } = usePurchase();
     const { user } = useAuth();
-    const { toast } = useToast();
     
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-    const [sessionToDelete, setSessionToDelete] = useState<PurchaseSession | null>(null);
-
-    const loading = loadingBaseProducts || loadingProducts || lotsLoading || purchaseLoading;
+    const loading = loadingBaseProducts || loadingProducts || lotsLoading;
 
     const analysisResults = useMemo((): AnalysisResult[] => {
         if (loading) return [];
@@ -95,72 +89,6 @@ export function AutomaticPurchaseList() {
         const description = `Compra Matriz - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
         addSession({ description, baseProductIds, type: 'automatic' });
     };
-
-    const handleSelectionChange = (itemId: string, isSelected: boolean) => {
-        setSelectedItems(prev => {
-            const newSet = new Set(prev);
-            if (isSelected) {
-                newSet.add(itemId);
-            } else {
-                newSet.delete(itemId);
-            }
-            return newSet;
-        });
-    };
-    
-    const findPricePerUnit = (item: PurchaseItem): number | null => {
-        const product = products.find(p => p.id === item.productId);
-        const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-
-        if (product && baseProduct && item.price > 0) {
-            try {
-                const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                if (convertedQty > 0) {
-                    return item.price / convertedQty;
-                }
-            } catch (e) { console.error("Conversion error", e); }
-        }
-        return null;
-    }
-
-    const handleConfirmSelected = async () => {
-        const session = openAutomaticSession;
-        if (!session) return;
-        
-        let confirmedCount = 0;
-        if (selectedItems.size > 0) {
-            for (const itemId of selectedItems) {
-                const item = purchaseItems.find(i => i.id === itemId);
-                if (!item) continue;
-                
-                const product = products.find(p => p.id === item.productId);
-                if (!product?.baseProductId) continue;
-                
-                const pricePerUnit = findPricePerUnit(item);
-                if (pricePerUnit !== null) {
-                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
-                    confirmedCount++;
-                }
-            }
-        }
-        
-        await closeSession(session.id, Array.from(selectedItems));
-
-        toast({
-            title: "Sessão de compra finalizada!",
-            description: selectedItems.size > 0 
-                ? `${confirmedCount} item(s) tiveram seus preços efetivados.`
-                : 'A pesquisa de preços foi salva no histórico.'
-        });
-        setSelectedItems(new Set());
-    };
-    
-    const handleDeleteSession = () => {
-        if (sessionToDelete) {
-            deleteSession(sessionToDelete.id);
-            setSessionToDelete(null);
-        }
-    };
     
     const openAutomaticSession = useMemo(() => {
         return sessions.find(s => s.type === 'automatic' && s.status === 'open');
@@ -171,74 +99,12 @@ export function AutomaticPurchaseList() {
             <div className="space-y-4">
                 <Skeleton className="h-10 w-48" />
                 <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-24 w-full" />
             </div>
         );
     }
 
     if (openAutomaticSession) {
-        const sessionBaseProducts = baseProducts.filter(bp => openAutomaticSession.baseProductIds.includes(bp.id));
-        const sessionItems = purchaseItems.filter(i => i.sessionId === openAutomaticSession.id);
-        const isSessionClosed = openAutomaticSession.status === 'closed';
-
-        return (
-            <>
-                <Card>
-                    <CardHeader>
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <CardTitle>{openAutomaticSession.description}</CardTitle>
-                                <CardDescription>Criado por {user?.username} em {format(new Date(openAutomaticSession.createdAt), 'dd/MM/yyyy HH:mm', {locale: ptBR})}</CardDescription>
-                            </div>
-                            <div>
-                                <Button variant="destructive" size="sm" onClick={() => setSessionToDelete(openAutomaticSession)}>
-                                    <Trash2 className="mr-2 h-4 w-4" /> Cancelar Compra
-                                </Button>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                         <Accordion type="multiple" className="w-full space-y-3">
-                            {sessionBaseProducts.map(bp => (
-                                <AccordionItem value={bp.id} key={bp.id} className="border-none">
-                                    <Card className="bg-background/50">
-                                        <AccordionTrigger className="p-4 text-lg font-semibold hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none">
-                                            {bp.name}
-                                        </AccordionTrigger>
-                                        <AccordionContent className="p-4">
-                                            <PriceComparisonTable
-                                                baseProduct={bp}
-                                                items={sessionItems.filter(i => {
-                                                    const product = products.find(p => p.id === i.productId);
-                                                    return product?.baseProductId === bp.id;
-                                                })}
-                                                sessionId={openAutomaticSession.id}
-                                                isSessionClosed={isSessionClosed}
-                                                selectedItems={selectedItems}
-                                                onSelectionChange={handleSelectionChange}
-                                            />
-                                        </AccordionContent>
-                                    </Card>
-                                </AccordionItem>
-                            ))}
-                        </Accordion>
-                    </CardContent>
-                    <CardFooter className="justify-end border-t pt-4">
-                        <Button onClick={handleConfirmSelected}>
-                            <ShoppingCart className="mr-2 h-4 w-4" />
-                            Salvar e Efetivar Compra ({selectedItems.size})
-                        </Button>
-                    </CardFooter>
-                </Card>
-                <DeleteConfirmationDialog 
-                    open={!!sessionToDelete}
-                    onOpenChange={() => setSessionToDelete(null)}
-                    onConfirm={handleDeleteSession}
-                    itemName={`a compra "${sessionToDelete?.description}"`}
-                    description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta compra serão perdidos."
-                />
-            </>
-        )
+        return <PurchaseSessionCard session={openAutomaticSession} />;
     }
 
     return (
@@ -256,6 +122,7 @@ export function AutomaticPurchaseList() {
                  <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
                     <Inbox className="h-12 w-12 mb-4" />
                     <p className="font-semibold">Clique em "Criar nova compra" para iniciar.</p>
+                    <p className="text-sm">{analysisResults.length} iten(s) abaixo do estoque mínimo foram encontrados.</p>
                 </div>
             )}
         </div>
