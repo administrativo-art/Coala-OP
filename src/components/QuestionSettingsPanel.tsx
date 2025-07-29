@@ -115,7 +115,7 @@ const SubQuestionDisplay = React.memo(({
   allSections,
   users,
   profiles,
-  onQuestionChange,
+  onChange,
   onCreateSubQuestion,
   onDeleteSubQuestion,
 }: {
@@ -125,7 +125,7 @@ const SubQuestionDisplay = React.memo(({
   allSections: FormSection[];
   users: User[];
   profiles: Profile[];
-  onQuestionChange: (updatedQuestion: FormQuestion) => void;
+  onChange: (updatedQuestion: FormQuestion) => void;
   onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
   onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
 }) => {
@@ -146,7 +146,7 @@ const SubQuestionDisplay = React.memo(({
                                     <div className="flex-1">
                                         <Input
                                             value={question.label}
-                                            onChange={(e) => onQuestionChange({...question, label: e.target.value})}
+                                            onChange={(e) => onChange({...question, label: e.target.value})}
                                             className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
                                             onClick={e => e.stopPropagation()}
                                         />
@@ -159,13 +159,13 @@ const SubQuestionDisplay = React.memo(({
                             </Button>
                         </div>
                         <AccordionContent className="px-4 pb-4">
-                            <QuestionSettingsPanel
+                             <QuestionSettingsPanel
                                 question={question}
                                 allQuestions={allQuestions}
                                 allSections={allSections}
                                 users={users}
                                 profiles={profiles}
-                                onChange={onQuestionChange}
+                                onChange={onChange}
                                 onCreateSubQuestion={onCreateSubQuestion}
                                 onDeleteSubQuestion={onDeleteSubQuestion}
                             />
@@ -407,22 +407,16 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         )}/>
                                         
                                         {ramification.action === 'add_question' && !subQuestion && (
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button type="button" variant="outline" size="sm" className="w-full">
-                                                        <MessageSquarePlus className="mr-2" />
-                                                        Adicionar sub-pergunta
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent>
-                                                    {Object.entries(questionIcons).map(([type, Icon]) => (
-                                                        <DropdownMenuItem key={type} onSelect={() => onCreateSubQuestion(question.id, field.id, type as FormQuestion['type'])}>
-                                                            <Icon className="mr-2 h-4 w-4" />
-                                                            <span>{questionTypeLabels[type as FormQuestion['type']]}</span>
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                            <Button 
+                                                type="button" 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="w-full"
+                                                onClick={() => onCreateSubQuestion(question.id, field.id, 'text')}
+                                            >
+                                                <MessageSquarePlus className="mr-2" />
+                                                Adicionar sub-pergunta
+                                            </Button>
                                         )}
                                         
                                         {ramification.action === 'show_question' && (
@@ -473,7 +467,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     allSections={allSections}
                                     users={users}
                                     profiles={profiles}
-                                    onQuestionChange={onChange}
+                                    onChange={onChange}
                                     onCreateSubQuestion={onCreateSubQuestion}
                                     onDeleteSubQuestion={onDeleteSubQuestion}
                                 />
