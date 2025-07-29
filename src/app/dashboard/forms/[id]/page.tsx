@@ -386,59 +386,53 @@ export default function FormBuilderPage() {
         handleTemplateChange({ sections: newSections.map((s,i) => ({ ...s, order: i })), questions: newQuestions });
     };
     
-const handleCreateSubQuestion = useCallback((
-  parentQuestionId: string, 
-  optionId: string, 
-  type: FormQuestion['type']
-) => {
+const handleCreateSubQuestion = useCallback((parentQuestionId: string, optionId: string, type: FormQuestion['type']) => {
   setInternalTemplate(currentTemplate => {
     if (!currentTemplate) return null;
 
-    const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
-    if (!parentQuestion) {
-      console.warn(`Pergunta pai não encontrada: ${parentQuestionId}`);
-      return currentTemplate;
-    }
-
-    const targetOption = parentQuestion.options?.find(opt => opt.id === optionId);
-    if (!targetOption) {
-      console.warn(`Opção não encontrada: ${optionId} na pergunta ${parentQuestionId}`);
-      return currentTemplate;
-    }
+    const parentSectionId = currentTemplate.questions.find(q => q.id === parentQuestionId)?.sectionId;
 
     const newSubQuestion: FormQuestion = {
         id: `question-${nanoid()}`,
         label: 'Nova Sub-pergunta',
         type: type,
         isRequired: false,
-        order: 999,
-        sectionId: parentQuestion.sectionId,
+        order: 999, // High order to not interfere with main sorting
+        sectionId: parentSectionId,
         excluidaDoSumario: true,
     };
-
-    let newQuestions = JSON.parse(JSON.stringify(currentTemplate.questions));
-    newQuestions.push(newSubQuestion);
     
-    const parentIndex = newQuestions.findIndex((q: FormQuestion) => q.id === parentQuestionId);
-    if (parentIndex !== -1) {
-        const parent = newQuestions[parentIndex];
-        const optionIndex = parent.options?.findIndex((opt: any) => opt.id === optionId);
-        
-        if (parent.options && optionIndex !== -1 && optionIndex !== undefined) {
-            parent.options[optionIndex].ramification = {
-                id: `ram-${nanoid()}`,
-                action: 'add_question',
-                targetQuestionId: newSubQuestion.id
-            };
+    const newQuestions = currentTemplate.questions.map(q => {
+        if (q.id !== parentQuestionId) {
+            return q;
         }
-    }
+        return {
+            ...q,
+            options: (q.options || []).map(opt => {
+                if (opt.id !== optionId) {
+                    return opt;
+                }
+                return {
+                    ...opt,
+                    ramification: {
+                        id: `ram-${nanoid()}`,
+                        action: 'add_question',
+                        targetQuestionId: newSubQuestion.id
+                    }
+                };
+            })
+        };
+    });
+    
+    newQuestions.push(newSubQuestion);
     
     // Defer the scroll action to after the state update has been processed
     setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
 
     return { ...currentTemplate, questions: newQuestions };
   });
-}, []);
+}, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 
     const handleDeleteSubQuestion = useCallback((parentQuestionId: string, subQuestionId: string) => {
         setInternalTemplate(currentTemplate => {
