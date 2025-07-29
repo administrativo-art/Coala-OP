@@ -8,7 +8,8 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, parseISO, addDays, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -22,6 +23,8 @@ interface ProjectionResult {
     daysRemaining: number;
     projectedConsumption: number;
     status: 'ok' | 'at_risk' | 'no_data';
+    projectedConsumptionDate: Date | null;
+    expiryDate: Date;
 }
 
 export function ConsumptionProjection() {
@@ -37,18 +40,17 @@ export function ConsumptionProjection() {
     const projectionResults = useMemo((): ProjectionResult[] => {
         if (!selectedKioskId || loading) return [];
 
-        // 1. Calculate daily average consumption
-        const dailyAverages = new Map<string, number>(); // Map<baseProductId, dailyAvg>
+        const dailyAverages = new Map<string, number>();
         
-        // If Matriz is selected, use all reports. Otherwise, filter by kiosk.
         const reportsForAnalysis = selectedKioskId === 'matriz'
             ? consumptionHistory
             : consumptionHistory.filter(report => report.kioskId === selectedKioskId);
 
         baseProducts.forEach(bp => {
             const consumptionData: { [monthYear: string]: number } = {};
-
-            reportsForAnalysis.forEach(report => {
+            const reportsToUse = selectedKioskId === 'matriz' ? consumptionHistory : reportsForAnalysis;
+            
+            reportsToUse.forEach(report => {
                 const item = report.results.find(res => res.baseProductId === bp.id);
                 if (item) {
                     const key = `${report.year}-${report.month}`;
@@ -65,11 +67,12 @@ export function ConsumptionProjection() {
             }
         });
         
-        // 2. Analyze each lot in the selected kiosk
         const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
         
         return kioskLots.map(lot => {
             const product = products.find(p => p.id === lot.productId);
+            const expiryDate = parseISO(lot.expiryDate);
+
             if (!product || !product.baseProductId) return null;
 
             const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
@@ -83,16 +86,14 @@ export function ConsumptionProjection() {
                     daysRemaining: 0,
                     projectedConsumption: 0,
                     status: 'no_data',
+                    projectedConsumptionDate: null,
+                    expiryDate
                 };
             }
             
-            // 3. Calculate days remaining
-            const daysRemaining = Math.max(0, differenceInDays(parseISO(lot.expiryDate), new Date()));
-            
-            // 4. Calculate projected consumption in the base unit
+            const daysRemaining = Math.max(0, differenceInDays(expiryDate, new Date()));
             const projectedConsumption = dailyAvg * daysRemaining;
             
-            // 5. Convert lot quantity to base unit
             let lotQtyInBaseUnit = 0;
             try {
                 if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
@@ -110,7 +111,8 @@ export function ConsumptionProjection() {
                  return null;
             }
             
-            // 6. Compare and determine status
+            const daysToConsume = lotQtyInBaseUnit > 0 && dailyAvg > 0 ? lotQtyInBaseUnit / dailyAvg : Infinity;
+            const projectedConsumptionDate = isFinite(daysToConsume) ? addDays(new Date(), daysToConsume) : null;
             const status = projectedConsumption >= lotQtyInBaseUnit ? 'ok' : 'at_risk';
             
             return {
@@ -119,6 +121,8 @@ export function ConsumptionProjection() {
                 daysRemaining,
                 projectedConsumption,
                 status,
+                projectedConsumptionDate,
+                expiryDate
             };
         }).filter((item): item is ProjectionResult => item !== null)
           .sort((a,b) => {
@@ -178,8 +182,8 @@ export function ConsumptionProjection() {
                                 <TableRow>
                                     <TableHead>Insumo</TableHead>
                                     <TableHead>Lote</TableHead>
-                                    <TableHead className="text-center">Qtd. no Lote</TableHead>
-                                    <TableHead className="text-center">Consumo Projetado</TableHead>
+                                    <TableHead className="text-center">Vencimento do Lote</TableHead>
+                                    <TableHead className="text-center">Previsão de Término</TableHead>
                                     <TableHead className="text-center">Situação</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -188,8 +192,12 @@ export function ConsumptionProjection() {
                                     <TableRow key={result.lot.id}>
                                         <TableCell className="font-medium">{result.productName}</TableCell>
                                         <TableCell>{result.lot.lotNumber}</TableCell>
-                                        <TableCell className="text-center">{result.lot.quantity}</TableCell>
-                                        <TableCell className="text-center">{result.projectedConsumption.toFixed(2)}</TableCell>
+                                        <TableCell className="text-center font-semibold">
+                                            {format(result.expiryDate, 'dd/MM/yyyy', { locale: ptBR })}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
+                                        </TableCell>
                                         <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                                     </TableRow>
                                 ))}
