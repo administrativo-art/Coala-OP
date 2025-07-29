@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, TrendingUp, DollarSign, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, TrendingUp, DollarSign, RefreshCw, LineChart } from 'lucide-react';
 
 export default function AnalysisPage() {
     return (
@@ -43,6 +42,19 @@ export default function AnalysisPage() {
                         <Link href="/dashboard/stock/analysis/consumption" className="w-full">
                             <Button className="w-full">
                                 Ver consumo <ArrowRight className="ml-2" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+                 <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><LineChart /> Projeção de Consumo</CardTitle>
+                        <CardDescription>Preveja se o estoque será consumido antes do vencimento com base na média.</CardDescription>
+                    </CardHeader>
+                     <CardContent className="flex-grow flex items-end">
+                        <Link href="/dashboard/stock/analysis/projection" className="w-full">
+                            <Button className="w-full">
+                                Acessar projeção <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
