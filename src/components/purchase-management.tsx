@@ -21,7 +21,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <Wand2 className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Compra Matriz</CardTitle>
-                    <CardDescription>Crie uma sessão de compra com base no estoque mínimo da matriz.</CardDescription>
+                    <CardDescription>Realize pesquisa de preços e/ou registra os preços dos produtos comprados</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                     <Button className="w-full" onClick={() => setActiveView('automatic')}>
@@ -34,8 +34,8 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
                         <ShoppingCart className="h-8 w-8 text-primary" />
                     </div>
-                    <CardTitle>Sessões de Compra</CardTitle>
-                    <CardDescription>Crie pesquisas manuais ou veja as compras em andamento.</CardDescription>
+                    <CardTitle>Compra Geral</CardTitle>
+                    <CardDescription>Realize pesquisa de preços e/ou registra os preços dos produtos comprados</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                      <Button className="w-full" onClick={() => setActiveView('sessions')}>
@@ -82,7 +82,7 @@ export function PurchaseManagement() {
     const getTitle = () => {
         switch (activeView) {
             case 'automatic': return "Compra Matriz";
-            case 'sessions': return "Sessões de Compra";
+            case 'sessions': return "Compra Geral";
             case 'history': return "Histórico de Compras";
             case 'menu':
             default: return "Gestão de compras";
