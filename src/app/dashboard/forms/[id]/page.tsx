@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
-import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
+import { QuestionSettingsPanel, SubQuestionDisplay } from '@/components/QuestionSettingsPanel';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -84,7 +84,7 @@ const SortableQuestionItem = React.memo(({
     const style = {
         transform: CSS.Transform.toString(transform),
         transition: transition || 'transform 250ms ease',
-        marginLeft: `${level * 2}rem`
+        marginLeft: `${level * 40}px`
     };
     
     const inputRef = useRef<HTMLInputElement>(null);
@@ -94,11 +94,19 @@ const SortableQuestionItem = React.memo(({
             inputRef.current?.select();
         }
     }, [question.label]);
+    
+    const subQuestions = useMemo(() => {
+        if (!question.options) return [];
+        const subQuestionMap = new Map(allQuestions.map(q => [q.id, q]));
+        return question.options
+            .map(opt => opt.ramification?.targetQuestionId ? subQuestionMap.get(opt.ramification.targetQuestionId) : null)
+            .filter((q): q is FormQuestion => !!q);
+    }, [question.options, allQuestions]);
 
     return (
          <div className="relative">
-             {level > 0 && <div className="absolute left-4 -top-4 bottom-0 w-px bg-border -translate-x-1/2"></div>}
-             {level > 0 && <div className="absolute left-4 top-1/2 h-px w-4 bg-border -translate-x-1/2"></div>}
+             {level > 0 && <div className="absolute -left-5 top-0 bottom-0 w-px bg-border"></div>}
+             {level > 0 && <div className="absolute -left-5 top-7 h-px w-5 bg-border"></div>}
             <div
                 id={`question-card-${question.id}`}
                 ref={setNodeRef}
@@ -132,9 +140,6 @@ const SortableQuestionItem = React.memo(({
                                     </div>
                                 </div>
                             </AccordionTrigger>
-                            <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDelete();}}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
                         </div>
                         <AccordionContent className="px-4 pb-4">
                             <QuestionSettingsPanel
@@ -148,10 +153,36 @@ const SortableQuestionItem = React.memo(({
                                 users={users}
                                 profiles={profiles}
                             />
+                             <div className="border-t mt-4 pt-4 flex justify-end">
+                                <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir Pergunta
+                                </Button>
+                            </div>
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
             </div>
+             {subQuestions.length > 0 && (
+                <div className="pt-4 space-y-4">
+                    {subQuestions.map((subQ, subIndex) => (
+                         <SortableQuestionItem
+                            key={subQ.id}
+                            question={subQ}
+                            allQuestions={allQuestions}
+                            allSections={allSections}
+                            onDelete={() => onDeleteSubQuestion(question.id, subQ.id)}
+                            onQuestionChange={onQuestionChange}
+                            onCreateSubQuestion={onCreateSubQuestion}
+                            onDeleteSubQuestion={onDeleteSubQuestion}
+                            users={users}
+                            profiles={profiles}
+                            index={subIndex}
+                            level={level + 1}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 });
@@ -182,12 +213,7 @@ const RecursiveQuestionRenderer = React.memo(({
     
     return (
         <div className={cn("space-y-4", level > 0 && "pt-4")}>
-            {questionsToRender.map((q, index) => {
-                 const subQuestionIds = (q.options || [])
-                    .map(opt => opt.ramification?.targetQuestionId)
-                    .filter((id): id is string => !!id && !!questionMap.get(id));
-                    
-                return (
+            {questionsToRender.map((q, index) => (
                  <div key={q.id}>
                     {props.activeId && props.overId === q.id && <Placeholder index={index} />}
                     <SortableQuestionItem
@@ -205,16 +231,8 @@ const RecursiveQuestionRenderer = React.memo(({
                         isHighlighted={props.highlightedQuestionId === q.id}
                         level={level}
                     />
-                    {subQuestionIds.length > 0 && (
-                        <RecursiveQuestionRenderer 
-                            {...props}
-                            questionIds={subQuestionIds}
-                            level={level + 1}
-                        />
-                    )}
                 </div>
-                )
-            })}
+            ))}
         </div>
     )
 });
@@ -407,17 +425,17 @@ export default function FormBuilderPage() {
 
         const parentQuestion = currentTemplate.questions.find(q => q.id === parentQuestionId);
         if(!parentQuestion) return currentTemplate;
-
+        
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
-            label: 'Nova Pergunta',
+            label: 'Nova Sub-pergunta',
             type: type,
             isRequired: false,
             order: 999,
             sectionId: parentQuestion.sectionId,
             excluidaDoSumario: true,
         };
-
+        
         const newQuestions = currentTemplate.questions.map(q => {
             if (q.id !== parentQuestionId) return q;
             return {
@@ -762,4 +780,5 @@ export default function FormBuilderPage() {
         </DndContext>
     );
 }
+
 
