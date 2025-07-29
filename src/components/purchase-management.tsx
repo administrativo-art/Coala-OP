@@ -21,7 +21,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <Wand2 className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Compra Matriz</CardTitle>
-                    <CardDescription>Realize pesquisa de preços e/ou registra os preços dos produtos comprados</CardDescription>
+                    <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                     <Button className="w-full" onClick={() => setActiveView('automatic')}>
@@ -35,7 +35,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <ShoppingCart className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Compra Geral</CardTitle>
-                    <CardDescription>Realize pesquisa de preços e/ou registra os preços dos produtos comprados</CardDescription>
+                    <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                      <Button className="w-full" onClick={() => setActiveView('sessions')}>
