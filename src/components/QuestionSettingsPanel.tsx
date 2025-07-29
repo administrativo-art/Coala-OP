@@ -93,7 +93,7 @@ interface QuestionSettingsPanelProps {
   users: User[];
   profiles: Profile[];
   onChange: (updatedQuestion: FormQuestion) => void;
-  onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
+  onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
   onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
 }
 
@@ -156,9 +156,14 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
   useEffect(() => {
     if (questionType === 'yes-no') {
         const yesNoOptions = [{ id: 'yes', value: 'Sim' }, { id: 'no', value: 'Não' }];
-        if (JSON.stringify(form.getValues('options')) !== JSON.stringify(yesNoOptions)) {
-           replaceOptions(yesNoOptions);
-        }
+        const currentOptions = form.getValues('options') || [];
+        
+        const optionsToSet = yesNoOptions.map(defaultOpt => {
+            const existingOpt = currentOptions.find(o => o.value === defaultOpt.value);
+            return existingOpt || defaultOpt;
+        });
+
+        replaceOptions(optionsToSet);
     } else if (questionType !== 'single-choice' && questionType !== 'multiple-choice') {
         replaceOptions([]);
     }
@@ -281,7 +286,11 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
 
                        let jumpToLabel = '';
                        if (ramification?.action === 'show_question' && ramification.targetQuestionId) {
-                           jumpToLabel = allQuestions.find(q => q.id === ramification.targetQuestionId)?.label || '';
+                           const targetQ = allQuestions.find(q => q.id === ramification.targetQuestionId);
+                           if (targetQ) {
+                               const targetIndex = allQuestions.filter(q => !q.excluidaDoSumario).findIndex(q => q.id === targetQ.id) + 1;
+                               jumpToLabel = `${targetIndex}. ${targetQ.label}`;
+                           }
                        } else if (ramification?.action === 'show_section' && ramification.targetSectionId) {
                            jumpToLabel = allSections.find(s => s.id === ramification.targetSectionId)?.name || '';
                        }
@@ -314,10 +323,8 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Nenhuma ação"/></SelectTrigger></FormControl>
                                                 <SelectContent>
                                                     <SelectItem value="none">Nenhuma ação</SelectItem>
-                                                    <SelectItem value="add_question">Criar sub-pergunta</SelectItem>
                                                     <SelectItem value="show_question">Pular para outra pergunta</SelectItem>
                                                     <SelectItem value="show_section">Pular para seção</SelectItem>
-                                                    <SelectItem value="create_task">Criar uma tarefa</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </FormItem>
@@ -329,8 +336,8 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                                 <Select onValueChange={targetField.onChange} value={targetField.value}>
                                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
                                                     <SelectContent>
-                                                        {allQuestions.filter(q => q.id !== question.id && !q.excluidaDoSumario).map(q => (
-                                                            <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
+                                                        {allQuestions.filter(q => q.id !== question.id && !q.excluidaDoSumario).map((q, qIndex) => (
+                                                            <SelectItem key={q.id} value={q.id}>{`${qIndex + 1}. ${q.label}`}</SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select><FormMessage/>
@@ -361,17 +368,19 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                         <GitBranch className="h-4 w-4" />
                                         <span>Exibe uma sub-pergunta.</span>
                                     </div>
-                                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}>Remover sub-pergunta</Button>
+                                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
+                                        onDeleteSubQuestion(question.id, ramification.targetQuestionId!)
+                                    }}>Remover sub-pergunta</Button>
                                 </div>
                             ) : (
                                 <div className="flex items-center justify-between">
                                     {jumpToAction && jumpToLabel ? (
                                         <div className="text-sm text-muted-foreground flex items-center gap-2">
                                             <GitBranch className="h-4 w-4" />
-                                            <span>Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
+                                            <span className="truncate">Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
                                         </div>
                                     ) : <div />}
-                                    <Button type="button" variant="outline" size="sm" onClick={() => onCreateSubQuestion(question.id, field.id)}>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => onCreateSubQuestion(question.id, field.id, 'text')}>
                                         <GitBranch className="mr-2 h-4 w-4" /> Adicionar sub-pergunta
                                     </Button>
                                 </div>
@@ -380,7 +389,7 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                         </div>
                     )})}
                     {questionType !== 'yes-no' && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => appendOption({ id: nanoid(), value: '' })}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => appendOption({ id: `opt-${nanoid()}`, value: '' })}>
                             <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Opção
                         </Button>
                     )}
@@ -391,4 +400,3 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
     </Form>
   );
 }
-

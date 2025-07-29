@@ -61,7 +61,7 @@ const SubQuestionDisplay = React.memo(({
     allQuestions: FormQuestion[],
     allSections: FormSection[],
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     onDuplicate: () => void;
     users: any[];
@@ -184,7 +184,7 @@ const SortableQuestionItem = React.memo(({
     onDelete: () => void,
     onDuplicate: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
@@ -318,7 +318,7 @@ const RecursiveQuestionRenderer = React.memo(({
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     onQuestionChange: (q: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
     users: any[];
     profiles: any[];
@@ -538,12 +538,13 @@ export default function FormBuilderPage() {
     
     const handleCreateSubQuestion = useCallback((
       parentQuestionId: string, 
-      optionId: string
+      optionId: string,
+      type: FormQuestion['type'] = 'text'
     ) => {
       setInternalTemplate(currentTemplate => {
         if (!currentTemplate) return null;
 
-        const allQuestions = [...currentTemplate.questions];
+        let allQuestions = [...currentTemplate.questions];
         const parentIndex = allQuestions.findIndex(q => q.id === parentQuestionId);
         if (parentIndex === -1) return currentTemplate;
         
@@ -552,9 +553,9 @@ export default function FormBuilderPage() {
         const newSubQuestion: FormQuestion = {
             id: `question-${nanoid()}`,
             label: 'Nova Sub-pergunta',
-            type: 'text',
+            type,
             isRequired: false,
-            order: 0, // Placeholder, will be set later
+            order: 0, // Placeholder
             sectionId: parentQuestion.sectionId,
             excluidaDoSumario: true,
         };
@@ -579,8 +580,28 @@ export default function FormBuilderPage() {
 
         // Find the correct insertion index
         let lastSubQuestionIndex = parentIndex;
+        const parentSubTreeIds = new Set<string>();
+        const queue = [parentQuestion.id];
+        const visited = new Set<string>();
+
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            if(visited.has(currentId)) continue;
+            visited.add(currentId);
+
+            const currentQ = allQuestions.find(q => q.id === currentId);
+            if(currentQ?.options){
+                for(const opt of currentQ.options){
+                    if(opt.ramification?.targetQuestionId){
+                        parentSubTreeIds.add(opt.ramification.targetQuestionId);
+                        queue.push(opt.ramification.targetQuestionId);
+                    }
+                }
+            }
+        }
+        
         for (let i = parentIndex + 1; i < allQuestions.length; i++) {
-            if (allQuestions[i].excluidaDoSumario) {
+            if (parentSubTreeIds.has(allQuestions[i].id)) {
                 lastSubQuestionIndex = i;
             } else {
                 break;
@@ -590,7 +611,6 @@ export default function FormBuilderPage() {
         // Insert new sub-question
         allQuestions.splice(lastSubQuestionIndex + 1, 0, newSubQuestion);
         
-        // Re-order all questions
         const finalQuestions = allQuestions.map((q, index) => ({...q, order: index}));
         
         setTimeout(() => scrollToQuestion(newSubQuestion.id), 100);
