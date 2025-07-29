@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type FormTemplate, type FormQuestion, type FormSection } from '@/types';
-import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal, GitBranch } from 'lucide-react';
+import { Settings, PlusCircle, Trash2, Save, FileUp, GripVertical, ArrowLeft, Eye, Text, Hash, ToggleRight, CheckSquare, List, FileText as FileIcon, ChevronsLeft, ChevronsRight, Star, MoveHorizontal, GitBranch, Copy } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -56,6 +56,7 @@ const SortableQuestionItem = React.memo(({
     allQuestions,
     allSections,
     onDelete,
+    onDuplicate,
     onQuestionChange,
     onCreateSubQuestion,
     onDeleteSubQuestion,
@@ -70,6 +71,7 @@ const SortableQuestionItem = React.memo(({
     allQuestions: FormQuestion[],
     allSections: FormSection[],
     onDelete: () => void,
+    onDuplicate: () => void,
     onQuestionChange: (updatedQuestion: FormQuestion) => void;
     onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
@@ -100,7 +102,7 @@ const SortableQuestionItem = React.memo(({
         const subQuestionMap = new Map(allQuestions.map(q => [q.id, q]));
         return question.options
             .map(opt => opt.ramification?.targetQuestionId ? subQuestionMap.get(opt.ramification.targetQuestionId) : null)
-            .filter((q): q is FormQuestion => !!q);
+            .filter((q): q is FormQuestion => !!q && q.excluidaDoSumario);
     }, [question.options, allQuestions]);
 
     return (
@@ -153,7 +155,11 @@ const SortableQuestionItem = React.memo(({
                                 users={users}
                                 profiles={profiles}
                             />
-                             <div className="border-t mt-4 pt-4 flex justify-end">
+                             <div className="border-t mt-4 pt-4 flex justify-end gap-2">
+                                <Button variant="outline" onClick={onDuplicate}>
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Duplicar
+                                </Button>
                                 <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
                                     <Trash2 className="h-4 w-4 mr-2" />
                                     Excluir Pergunta
@@ -172,6 +178,7 @@ const SortableQuestionItem = React.memo(({
                             allQuestions={allQuestions}
                             allSections={allSections}
                             onDelete={() => onDeleteSubQuestion(question.id, subQ.id)}
+                            onDuplicate={() => { /* Not implemented for sub-questions yet */ }}
                             onQuestionChange={onQuestionChange}
                             onCreateSubQuestion={onCreateSubQuestion}
                             onDeleteSubQuestion={onDeleteSubQuestion}
@@ -197,6 +204,7 @@ const RecursiveQuestionRenderer = React.memo(({
     allQuestions: FormQuestion[];
     allSections: FormSection[];
     onDelete: (id: string) => void;
+    onDuplicate: (id: string) => void;
     onQuestionChange: (q: FormQuestion) => void;
     onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
     onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
@@ -222,6 +230,7 @@ const RecursiveQuestionRenderer = React.memo(({
                         allQuestions={props.allQuestions}
                         allSections={props.allSections}
                         onDelete={() => props.onDelete(q.id)}
+                        onDuplicate={() => props.onDuplicate(q.id)}
                         onQuestionChange={props.onQuestionChange}
                         onCreateSubQuestion={props.onCreateSubQuestion}
                         onDeleteSubQuestion={props.onDeleteSubQuestion}
@@ -518,6 +527,103 @@ export default function FormBuilderPage() {
         
         setTimeout(() => scrollToQuestion(newQuestion.id), 100);
     };
+    
+    const duplicateQuestionAndSubQuestions = useCallback((questionId: string, allQuestions: FormQuestion[]): { newQuestions: FormQuestion[], newTopLevelQuestionId: string } => {
+        const questionMap = new Map(allQuestions.map(q => [q.id, q]));
+        const duplicatedQuestionsMap = new Map<string, FormQuestion>();
+        const newQuestionsArray: FormQuestion[] = [];
+
+        const recursiveDuplicate = (qId: string): FormQuestion => {
+            if (duplicatedQuestionsMap.has(qId)) {
+                return duplicatedQuestionsMap.get(qId)!;
+            }
+
+            const originalQuestion = questionMap.get(qId);
+            if (!originalQuestion) {
+                throw new Error(`Question with id ${qId} not found`);
+            }
+
+            const newQuestion: FormQuestion = {
+                ...JSON.parse(JSON.stringify(originalQuestion)),
+                id: `question-${nanoid()}`,
+                options: [],
+            };
+            
+            if (originalQuestion.label.endsWith(" (Cópia)")) {
+                newQuestion.label = originalQuestion.label;
+            } else {
+                newQuestion.label = `${originalQuestion.label} (Cópia)`;
+            }
+
+            duplicatedQuestionsMap.set(qId, newQuestion);
+
+            if (originalQuestion.options) {
+                newQuestion.options = originalQuestion.options.map(opt => {
+                    const newOption = {
+                        ...opt,
+                        id: `opt-${nanoid()}`,
+                    };
+                    if (opt.ramification?.targetQuestionId) {
+                        const newSubQuestion = recursiveDuplicate(opt.ramification.targetQuestionId);
+                        newOption.ramification = {
+                            ...opt.ramification,
+                            id: `ram-${nanoid()}`,
+                            targetQuestionId: newSubQuestion.id,
+                        };
+                    }
+                    return newOption;
+                });
+            }
+            
+            newQuestionsArray.push(newQuestion);
+            return newQuestion;
+        };
+
+        const newTopLevelQuestion = recursiveDuplicate(questionId);
+        
+        return { newQuestions: newQuestionsArray, newTopLevelQuestionId: newTopLevelQuestion.id };
+    }, []);
+
+    const handleDuplicateQuestion = (questionId: string) => {
+        if (!internalTemplate) return;
+        
+        const { newQuestions: duplicatedQuestions, newTopLevelQuestionId } = duplicateQuestionAndSubQuestions(questionId, internalTemplate.questions);
+        
+        const originalQuestionIndex = internalTemplate.questions.findIndex(q => q.id === questionId);
+
+        const newQuestionsList = [...internalTemplate.questions];
+        
+        const originalQuestion = internalTemplate.questions[originalQuestionIndex];
+        const subTreeIds = new Set<string>();
+        const queue = [originalQuestion];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            if (current && current.options) {
+                current.options.forEach(opt => {
+                    if (opt.ramification?.targetQuestionId) {
+                        subTreeIds.add(opt.ramification.targetQuestionId);
+                        const subQ = internalTemplate.questions.find(q => q.id === opt.ramification.targetQuestionId);
+                        if (subQ) queue.push(subQ);
+                    }
+                });
+            }
+        }
+        
+        let lastSubTreeIndex = originalQuestionIndex;
+        for (let i = originalQuestionIndex + 1; i < newQuestionsList.length; i++) {
+            if (subTreeIds.has(newQuestionsList[i].id)) {
+                lastSubTreeIndex = i;
+            }
+        }
+
+        newQuestionsList.splice(lastSubTreeIndex + 1, 0, ...duplicatedQuestions);
+
+        const finalQuestions = newQuestionsList.map((q, index) => ({...q, order: index}));
+
+        handleTemplateChange({ questions: finalQuestions });
+
+        setTimeout(() => scrollToQuestion(newTopLevelQuestionId), 100);
+    };
 
     const handleDeleteQuestion = (questionId: string) => {
         if (!internalTemplate) return;
@@ -727,6 +833,7 @@ export default function FormBuilderPage() {
                                                 allQuestions={internalTemplate?.questions || []}
                                                 allSections={internalTemplate?.sections || []}
                                                 onDelete={handleDeleteQuestion}
+                                                onDuplicate={handleDuplicateQuestion}
                                                 onQuestionChange={handleQuestionChange}
                                                 onCreateSubQuestion={handleCreateSubQuestion}
                                                 onDeleteSubQuestion={handleDeleteSubQuestion}
@@ -752,7 +859,7 @@ export default function FormBuilderPage() {
                 </main>
 
                  <DragOverlay>
-                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={users} profiles={profiles} onDelete={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} />}
+                    {activeQuestion && <SortableQuestionItem question={activeQuestion} allQuestions={[]} allSections={[]} users={users} profiles={profiles} onDelete={() => {}} onDuplicate={() => {}} onQuestionChange={() => {}} onCreateSubQuestion={() => {}} onDeleteSubQuestion={() => {}} index={0} />}
                     {activeType && <DraggableQuestionType type={activeType} isOverlay />}
                 </DragOverlay>
 
@@ -782,3 +889,6 @@ export default function FormBuilderPage() {
 }
 
 
+    
+
+    
