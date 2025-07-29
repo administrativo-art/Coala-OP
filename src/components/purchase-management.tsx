@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { AutomaticPurchaseList } from "./automatic-purchase-list";
 import { PurchaseSessionList } from "./purchase-session-list";
 import { PurchaseHistoryDashboard } from "./purchase-history-dashboard";
-import { History, ShoppingCart, Wand2, ArrowRight } from "lucide-react";
+import { History, ShoppingCart, Wand2, ArrowRight, ArrowLeft } from "lucide-react";
 
 type ActiveView = 'menu' | 'automatic' | 'sessions' | 'history';
 
@@ -20,7 +20,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
                         <Wand2 className="h-8 w-8 text-primary" />
                     </div>
-                    <CardTitle>Compra Matriz</CardTitle>
+                    <CardTitle>Compra matriz</CardTitle>
                     <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
@@ -34,7 +34,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
                         <ShoppingCart className="h-8 w-8 text-primary" />
                     </div>
-                    <CardTitle>Compra Geral</CardTitle>
+                    <CardTitle>Compra geral</CardTitle>
                     <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
@@ -48,7 +48,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
                         <History className="h-8 w-8 text-primary" />
                     </div>
-                    <CardTitle>Histórico de Compras</CardTitle>
+                    <CardTitle>Histórico de compras</CardTitle>
                     <CardDescription>Consulte ordens de compra e o histórico de preços efetivados.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
@@ -81,9 +81,9 @@ export function PurchaseManagement() {
 
     const getTitle = () => {
         switch (activeView) {
-            case 'automatic': return "Compra Matriz";
-            case 'sessions': return "Compra Geral";
-            case 'history': return "Histórico de Compras";
+            case 'automatic': return "Compra matriz";
+            case 'sessions': return "Compra geral";
+            case 'history': return "Histórico de compras";
             case 'menu':
             default: return "Gestão de compras";
         }
@@ -103,13 +103,18 @@ export function PurchaseManagement() {
         <div className="w-full max-w-7xl mx-auto space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">{getTitle()}</CardTitle>
-                    <CardDescription>{getDescription()}</CardDescription>
-                     {activeView !== 'menu' && (
-                        <Button variant="outline" onClick={() => setActiveView('menu')} className="w-fit">
-                            Voltar ao menu de compras
-                        </Button>
-                    )}
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle className="font-headline">{getTitle()}</CardTitle>
+                            <CardDescription>{getDescription()}</CardDescription>
+                        </div>
+                        {activeView !== 'menu' && (
+                            <Button variant="outline" onClick={() => setActiveView('menu')}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Voltar para o menu de compras
+                            </Button>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent>
                     {renderView()}
