@@ -108,8 +108,28 @@ const questionTypeLabels: Record<FormQuestion['type'], string> = {
     'file-attachment': 'Anexo de Arquivo',
 };
 
-const SubQuestionDisplay = React.memo(({ parentQuestionId, subQuestionId, onDeleteSubQuestion, ...props }: any) => {
-    const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
+const SubQuestionDisplay = React.memo(({
+  parentQuestionId,
+  subQuestionId,
+  allQuestions,
+  allSections,
+  users,
+  profiles,
+  onQuestionChange,
+  onCreateSubQuestion,
+  onDeleteSubQuestion,
+}: {
+  parentQuestionId: string;
+  subQuestionId: string;
+  allQuestions: FormQuestion[];
+  allSections: FormSection[];
+  users: User[];
+  profiles: Profile[];
+  onQuestionChange: (updatedQuestion: FormQuestion) => void;
+  onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+  onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
+}) => {
+    const question = useMemo(() => allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, allQuestions]);
     
     if(!question) return null;
 
@@ -126,7 +146,7 @@ const SubQuestionDisplay = React.memo(({ parentQuestionId, subQuestionId, onDele
                                     <div className="flex-1">
                                         <Input
                                             value={question.label}
-                                            onChange={(e) => props.onQuestionChange({...question, label: e.target.value})}
+                                            onChange={(e) => onQuestionChange({...question, label: e.target.value})}
                                             className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
                                             onClick={e => e.stopPropagation()}
                                         />
@@ -140,8 +160,14 @@ const SubQuestionDisplay = React.memo(({ parentQuestionId, subQuestionId, onDele
                         </div>
                         <AccordionContent className="px-4 pb-4">
                             <QuestionSettingsPanel
-                                {...props}
                                 question={question}
+                                allQuestions={allQuestions}
+                                allSections={allSections}
+                                users={users}
+                                profiles={profiles}
+                                onChange={onQuestionChange}
+                                onCreateSubQuestion={onCreateSubQuestion}
+                                onDeleteSubQuestion={onDeleteSubQuestion}
                             />
                         </AccordionContent>
                     </AccordionItem>
@@ -445,11 +471,11 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
                                     subQuestionId={subQuestion.id}
                                     allQuestions={allQuestions}
                                     allSections={allSections}
-                                    onQuestionChange={onChange}
-                                    onDeleteSubQuestion={onDeleteSubQuestion}
-                                    onCreateSubQuestion={onCreateSubQuestion}
                                     users={users}
                                     profiles={profiles}
+                                    onQuestionChange={onChange}
+                                    onCreateSubQuestion={onCreateSubQuestion}
+                                    onDeleteSubQuestion={onDeleteSubQuestion}
                                 />
                             )}
                         </div>
