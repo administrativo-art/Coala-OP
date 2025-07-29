@@ -86,96 +86,6 @@ const formQuestionSchema = z.object({
 
 type FormQuestionValues = z.infer<typeof formQuestionSchema>;
 
-const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
-  text: Text,
-  number: Hash,
-  'yes-no': ToggleRight,
-  'single-choice': List,
-  'multiple-choice': CheckSquare,
-  'file-attachment': FileIcon,
-  range: MoveHorizontal,
-  rating: Star,
-};
-
-const questionTypeLabels: Record<FormQuestion['type'], string> = {
-    'text': 'Texto',
-    'number': 'Número',
-    'range': 'Intervalo',
-    'rating': 'Avaliação',
-    'yes-no': 'Sim/Não',
-    'single-choice': 'Escolha Única',
-    'multiple-choice': 'Múltipla Escolha',
-    'file-attachment': 'Anexo de Arquivo',
-};
-
-const SubQuestionDisplay = React.memo(({ 
-    parentQuestionId, 
-    subQuestionId, 
-    onDeleteSubQuestion, 
-    onChange,
-    onCreateSubQuestion,
-    ...props
-}: {
-    parentQuestionId: string;
-    subQuestionId: string;
-    allQuestions: FormQuestion[];
-    allSections: FormSection[];
-    users: User[];
-    profiles: Profile[];
-    onChange: (updatedQuestion: FormQuestion) => void;
-    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
-    onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
-}) => {
-    const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
-    
-    if(!question) return null;
-
-    return (
-        <div className="relative pl-8 pt-4">
-            <div className="absolute left-4 top-0 bottom-2 w-px bg-border/70 border-dashed -translate-x-1/2"></div>
-            <div className="absolute left-4 top-8 h-px w-4 bg-border/70 border-dashed -translate-x-1/2"></div>
-            <div className="bg-card border rounded-lg overflow-hidden">
-                <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value={question.id} className="border-b-0">
-                        <div className="flex items-center p-2 pr-3">
-                            <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
-                                <div className="flex-1 flex items-center gap-3">
-                                    <div className="flex-1">
-                                        <Input
-                                            value={question.label}
-                                            onChange={(e) => onChange({...question, label: e.target.value})}
-                                            className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
-                                            onClick={e => e.stopPropagation()}
-                                        />
-                                        <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
-                                    </div>
-                                </div>
-                            </AccordionTrigger>
-                            <Button variant="ghost" size="icon" className="text-destructive h-10 w-10" onClick={(e) => { e.stopPropagation(); onDeleteSubQuestion(parentQuestionId, question.id);}}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
-                        </div>
-                        <AccordionContent className="px-4 pb-4">
-                            <QuestionSettingsPanel
-                                allQuestions={props.allQuestions}
-                                allSections={props.allSections}
-                                users={props.users}
-                                profiles={props.profiles}
-                                onChange={onChange}
-                                onCreateSubQuestion={onCreateSubQuestion}
-                                onDeleteSubQuestion={onDeleteSubQuestion}
-                                question={question}
-                            />
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
-            </div>
-        </div>
-    );
-});
-SubQuestionDisplay.displayName = 'SubQuestionDisplay';
-
-
 interface QuestionSettingsPanelProps {
   question: FormQuestion;
   allQuestions: FormQuestion[];
@@ -362,117 +272,113 @@ export function QuestionSettingsPanel({ question, allQuestions, allSections, use
               <>
                 <div className="relative">
                     <Separator />
-                    <h3 className="absolute left-1/2 -translate-x-1/2 -top-3 bg-card px-2 text-sm font-semibold text-muted-foreground">Lógica e Ramificações</h3>
+                    <h3 className="absolute left-1/2 -translate-x-1/2 -top-3 bg-card px-2 text-sm font-semibold text-muted-foreground">Opções e Ramificações</h3>
                 </div>
                 <div className="space-y-4">
                     {optionFields.map((field, index) => {
                        const ramification = watchedOptions?.[index]?.ramification;
-                       const subQuestionId = ramification?.targetQuestionId;
-                       const subQuestion = subQuestionId ? allQuestionsMap.get(subQuestionId) : null;
+                       const jumpToAction = ramification?.action === 'show_question' || ramification?.action === 'show_section';
+
+                       let jumpToLabel = '';
+                       if (ramification?.action === 'show_question' && ramification.targetQuestionId) {
+                           jumpToLabel = allQuestions.find(q => q.id === ramification.targetQuestionId)?.label || '';
+                       } else if (ramification?.action === 'show_section' && ramification.targetSectionId) {
+                           jumpToLabel = allSections.find(s => s.id === ramification.targetSectionId)?.name || '';
+                       }
 
                         return (
-                        <div key={field.id}>
-                             <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
-                                <div className="flex items-center gap-2">
-                                    <FormField control={form.control} name={`options.${index}.value`} render={({ field: optionField }) => (
-                                        <FormItem className="flex-grow">
-                                            <FormControl><Input {...optionField} disabled={questionType === 'yes-no'} /></FormControl>
-                                            <FormMessage/>
-                                        </FormItem>
-                                    )}/>
-                                    {questionType !== 'yes-no' && (
-                                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeOption(index)}><Trash2 className="h-4 w-4" /></Button>
-                                    )}
-                                </div>
-                                
-                                {ramification ? (
-                                    <div className="p-3 border rounded-lg space-y-3 bg-card">
-                                        <div className="flex justify-between items-center">
-                                            <p className="font-medium text-sm flex items-center gap-2"><GitBranch className="h-4 w-4"/> Ramificação</p>
-                                            <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}><X className="h-4 w-4"/></Button>
-                                        </div>
-                                        <p className="font-medium text-sm">ENTÃO...</p>
-
-                                        <FormField control={form.control} name={`options.${index}.ramification.action`} render={({field: actionField}) => (
-                                            <FormItem>
-                                                <Select onValueChange={(v) => actionField.onChange(v === 'none' ? undefined : v)} value={actionField.value ?? 'none'}>
-                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Nenhuma ação"/></SelectTrigger></FormControl>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Nenhuma ação</SelectItem>
-                                                        <SelectItem value="add_question">Criar sub-pergunta</SelectItem>
-                                                        <SelectItem value="show_question">Pular para outra pergunta</SelectItem>
-                                                        <SelectItem value="show_section">Pular para seção</SelectItem>
-                                                        <SelectItem value="create_task">Criar uma tarefa</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormItem>
-                                        )}/>
-                                        
-                                        {ramification.action === 'add_question' && !subQuestionId && (
-                                            <Button 
-                                                type="button" 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="w-full"
-                                                onClick={() => onCreateSubQuestion(question.id, field.id, 'text')}
-                                            >
-                                                <MessageSquarePlus className="mr-2" />
-                                                Adicionar sub-pergunta
-                                            </Button>
-                                        )}
-                                        
-                                        {ramification.action === 'show_question' && (
-                                            <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
-                                                <FormItem>
-                                                    <Select
-                                                        onValueChange={targetField.onChange}
-                                                        value={targetField.value}
-                                                        >
-                                                        <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
-                                                        <SelectContent>
-                                                            {allQuestions.filter(q => q.id !== question.id && !q.excluidaDoSumario).map(q => (
-                                                                <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select><FormMessage/>
-                                                </FormItem>
-                                            )}/>
-                                        )}
-
-                                        {ramification.action === 'show_section' && (
-                                            <FormField control={form.control} name={`options.${index}.ramification.targetSectionId`} render={({field: targetField}) => (
-                                                <FormItem>
-                                                    <Select onValueChange={targetField.onChange} value={targetField.value}>
-                                                        <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a seção..."/></SelectTrigger></FormControl>
-                                                        <SelectContent>
-                                                            {allSections.map(s => (
-                                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select><FormMessage/>
-                                                </FormItem>
-                                            )}/>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <Button type="button" variant="outline" size="sm" onClick={() => form.setValue(`options.${index}.ramification`, { id: nanoid() })}>
-                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar ramificação
-                                    </Button>
+                        <div key={field.id} className="p-3 border rounded-lg bg-muted/50 space-y-3">
+                            <div className="flex items-start gap-2">
+                                <FormField control={form.control} name={`options.${index}.value`} render={({ field: optionField }) => (
+                                    <FormItem className="flex-grow">
+                                        <FormControl><Input {...optionField} disabled={questionType === 'yes-no'} /></FormControl>
+                                        <FormMessage/>
+                                    </FormItem>
+                                )}/>
+                                {questionType !== 'yes-no' && (
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeOption(index)}><Trash2 className="h-4 w-4" /></Button>
                                 )}
                             </div>
-                            {subQuestion && (
-                                 <SubQuestionDisplay
-                                    parentQuestionId={question.id}
-                                    subQuestionId={subQuestionId}
-                                    allQuestions={allQuestions}
-                                    allSections={allSections}
-                                    users={users}
-                                    profiles={profiles}
-                                    onChange={onChange}
-                                    onCreateSubQuestion={onCreateSubQuestion}
-                                    onDeleteSubQuestion={onDeleteSubQuestion}
-                                />
+                            
+                            {ramification && ramification.action !== 'add_question' && (
+                                <div className="p-3 border rounded-lg space-y-3 bg-card">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-medium text-sm flex items-center gap-2"><GitBranch className="h-4 w-4"/> Ramificação</p>
+                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}><X className="h-4 w-4"/></Button>
+                                    </div>
+                                    <p className="font-medium text-sm">SE a resposta for “{watchedOptions?.[index]?.value}” ENTÃO...</p>
+
+                                    <FormField control={form.control} name={`options.${index}.ramification.action`} render={({field: actionField}) => (
+                                        <FormItem>
+                                            <Select onValueChange={(v) => actionField.onChange(v === 'none' ? undefined : v)} value={actionField.value ?? 'none'}>
+                                                <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Nenhuma ação"/></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Nenhuma ação</SelectItem>
+                                                    <SelectItem value="add_question">Criar sub-pergunta</SelectItem>
+                                                    <SelectItem value="show_question">Pular para outra pergunta</SelectItem>
+                                                    <SelectItem value="show_section">Pular para seção</SelectItem>
+                                                    <SelectItem value="create_task">Criar uma tarefa</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </FormItem>
+                                    )}/>
+                                    
+                                    {ramification.action === 'show_question' && (
+                                        <FormField control={form.control} name={`options.${index}.ramification.targetQuestionId`} render={({field: targetField}) => (
+                                            <FormItem>
+                                                <Select onValueChange={targetField.onChange} value={targetField.value}>
+                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a pergunta..."/></SelectTrigger></FormControl>
+                                                    <SelectContent>
+                                                        {allQuestions.filter(q => q.id !== question.id && !q.excluidaDoSumario).map(q => (
+                                                            <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select><FormMessage/>
+                                            </FormItem>
+                                        )}/>
+                                    )}
+
+                                    {ramification.action === 'show_section' && (
+                                        <FormField control={form.control} name={`options.${index}.ramification.targetSectionId`} render={({field: targetField}) => (
+                                            <FormItem>
+                                                <Select onValueChange={targetField.onChange} value={targetField.value}>
+                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione a seção..."/></SelectTrigger></FormControl>
+                                                    <SelectContent>
+                                                        {allSections.map(s => (
+                                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select><FormMessage/>
+                                            </FormItem>
+                                        )}/>
+                                    )}
+                                </div>
                             )}
+
+                            {ramification?.action !== 'add_question' && (
+                                <div className="flex items-center justify-between">
+                                    {jumpToAction && jumpToLabel && (
+                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                            <GitBranch className="h-4 w-4" />
+                                            <span>Pular para: <span className="font-semibold">{jumpToLabel}</span></span>
+                                        </div>
+                                    )}
+                                    <Button type="button" variant="outline" size="sm" onClick={() => form.setValue(`options.${index}.ramification`, { id: nanoid() })}>
+                                        <GitBranch className="mr-2 h-4 w-4" /> Adicionar Lógica
+                                    </Button>
+                                </div>
+                            )}
+                            
+                            {ramification?.action === 'add_question' && (
+                                <div className="flex items-center justify-between">
+                                     <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                        <GitBranch className="h-4 w-4" />
+                                        <span>Exibe uma sub-pergunta.</span>
+                                    </div>
+                                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => form.setValue(`options.${index}.ramification`, undefined)}>Remover sub-pergunta</Button>
+                                </div>
+                            )}
+
                         </div>
                     )})}
                     {questionType !== 'yes-no' && (
