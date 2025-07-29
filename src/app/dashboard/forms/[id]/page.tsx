@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useToast } from '@/hooks/use-toast';
 import { useForm as useFormHook } from '@/hooks/use-form';
-import { QuestionSettingsPanel, SubQuestionDisplay } from '@/components/QuestionSettingsPanel';
+import { QuestionSettingsPanel } from '@/components/QuestionSettingsPanel';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -50,6 +50,117 @@ const questionIcons: Record<FormQuestion['type'], React.ElementType> = {
   range: MoveHorizontal,
   rating: Star,
 };
+
+const SubQuestionDisplay = React.memo(({
+    parentQuestionId,
+    subQuestionId,
+    ...props
+}: {
+    parentQuestionId: string,
+    subQuestionId: string,
+    allQuestions: FormQuestion[],
+    allSections: FormSection[],
+    onQuestionChange: (updatedQuestion: FormQuestion) => void;
+    onCreateSubQuestion: (parentQuestionId: string, optionId: string, type: FormQuestion['type']) => void;
+    onDeleteSubQuestion: (parentQuestionId: string, subQuestionId: string) => void;
+    onDuplicate: () => void;
+    users: any[];
+    profiles: any[];
+    index: number;
+    globalIndex: number;
+    level?: number;
+}) => {
+    const question = useMemo(() => props.allQuestions.find((q: FormQuestion) => q.id === subQuestionId), [subQuestionId, props.allQuestions]);
+
+    if (!question) {
+        return null;
+    }
+
+    const subQuestions = useMemo(() => {
+        if (!question.options) return [];
+        const subQuestionMap = new Map(props.allQuestions.map(q => [q.id, q]));
+        return question.options
+            .map(opt => opt.ramification?.targetQuestionId ? subQuestionMap.get(opt.ramification.targetQuestionId) : null)
+            .filter((q): q is FormQuestion => !!q && q.excluidaDoSumario);
+    }, [question.options, props.allQuestions]);
+    
+    return (
+        <div className="relative">
+            {props.level > 0 && <div className="absolute -left-5 top-0 bottom-0 w-px bg-border"></div>}
+            {props.level > 0 && <div className="absolute -left-5 top-7 h-px w-5 bg-border"></div>}
+            <div id={`question-card-${question.id}`} className={cn("bg-card border rounded-lg overflow-hidden transition-shadow relative", props.level > 0 && "ml-10")}>
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value={question.id} className="border-b-0">
+                        <div className="flex items-center p-2 pr-3">
+                             <Button variant="ghost" size="icon" className="h-10 w-10">
+                                <GitBranch className="h-5 w-5 text-muted-foreground" />
+                            </Button>
+                            <AccordionTrigger className="p-2 text-left flex-1 hover:no-underline">
+                                <div className="flex-1 flex items-center gap-3">
+                                    <span className="font-bold text-lg">{props.globalIndex + 1}.{props.index + 1}</span>
+                                    <div className="flex-1">
+                                        <Input
+                                            value={question.label}
+                                            onChange={(e) => props.onQuestionChange({ ...question, label: e.target.value })}
+                                            className="font-semibold border-none focus-visible:ring-1 bg-transparent p-1 h-auto"
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                        <p className="text-xs text-muted-foreground uppercase">{questionTypeLabels[question.type] || question.type}</p>
+                                    </div>
+                                </div>
+                            </AccordionTrigger>
+                        </div>
+                        <AccordionContent className="px-4 pb-4">
+                            <QuestionSettingsPanel
+                                question={question}
+                                allQuestions={props.allQuestions}
+                                allSections={props.allSections}
+                                onChange={props.onQuestionChange}
+                                onCreateSubQuestion={props.onCreateSubQuestion}
+                                onDeleteSubQuestion={props.onDeleteSubQuestion}
+                                users={props.users}
+                                profiles={props.profiles}
+                            />
+                            <div className="border-t mt-4 pt-4 flex justify-end gap-2">
+                                <Button variant="outline" onClick={props.onDuplicate}>
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Duplicar
+                                </Button>
+                                <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => props.onDeleteSubQuestion(parentQuestionId, subQuestionId)}>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir Sub-pergunta
+                                </Button>
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </div>
+             {subQuestions.length > 0 && (
+                <div className="pt-4 space-y-4">
+                    {subQuestions.map((subQ, subIndex) => (
+                         <SubQuestionDisplay
+                            key={subQ.id}
+                            parentQuestionId={question.id}
+                            subQuestionId={subQ.id}
+                            allQuestions={props.allQuestions}
+                            allSections={props.allSections}
+                            onQuestionChange={props.onQuestionChange}
+                            onDeleteSubQuestion={props.onDeleteSubQuestion}
+                            onCreateSubQuestion={props.onCreateSubQuestion}
+                            onDuplicate={() => { /* Not implemented yet */ }}
+                            users={props.users}
+                            profiles={props.profiles}
+                            index={subIndex}
+                            level={props.level + 1}
+                            globalIndex={props.globalIndex}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+});
+SubQuestionDisplay.displayName = 'SubQuestionDisplay';
 
 const SortableQuestionItem = React.memo(({
     question,
@@ -830,18 +941,18 @@ export default function FormBuilderPage() {
                              globalQuestionIndex += sectionQuestions.length;
                             return (
                                 <div key={section.id}>
-                                    {sortedSections.length > 1 && (
-                                        <div className="flex items-center mb-4">
-                                            <Input 
-                                                value={section.name} 
-                                                onChange={e => handleSectionChange(section.id, e.target.value)} 
-                                                className="text-xl font-bold border-none focus-visible:ring-1 flex-grow bg-transparent p-1 h-auto"
-                                            />
+                                    <div className="flex items-center mb-4">
+                                        <Input 
+                                            value={section.name} 
+                                            onChange={e => handleSectionChange(section.id, e.target.value)} 
+                                            className="text-xl font-bold border-none focus-visible:ring-1 flex-grow bg-transparent p-1 h-auto"
+                                        />
+                                        {sortedSections.length > 1 && (
                                             <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }} className="text-destructive h-9 w-9">
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
-                                        </div>
-                                     )}
+                                        )}
+                                    </div>
                                     <div className="space-y-4">
                                         <SortableContext items={sectionQuestions.map(q => q.id)}>
                                              <RecursiveQuestionRenderer 
@@ -907,5 +1018,9 @@ export default function FormBuilderPage() {
 
 
     
+
+    
+
+
 
     
