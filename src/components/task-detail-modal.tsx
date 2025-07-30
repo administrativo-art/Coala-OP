@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -11,10 +12,9 @@ import { Badge } from './ui/badge';
 import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
-import { useForm as useSubmissionHook } from '@/hooks/use-form';
+import { useForm as useSubmissionHook } from "@/hooks/use-form";
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ViewSubmissionModal } from './view-submission-modal';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -76,7 +76,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       return submissions.find(s => s.id === task.origin.submissionId);
   }, [task, submissions]);
 
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
 
   if (!task) return null;
 
@@ -178,7 +177,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                         <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Origem do formulário</h4>
                         <p className="text-sm mt-1 text-muted-foreground">{submission.templateName}</p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setIsSubmissionModalOpen(true)}>Visualizar resposta</Button>
                 </div>
               }
 
@@ -230,7 +228,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    {submission && isSubmissionModalOpen && <ViewSubmissionModal submission={submission} onOpenChange={(open) => !open && setIsSubmissionModalOpen(false)} />}
     </>
   );
 }
