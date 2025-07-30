@@ -434,15 +434,20 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         head: head,
         body: body,
         theme: 'grid',
-        headStyles: { fillColor: '#3F51B5' },
+        headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
         willDrawCell: (data: CellHookData) => {
-            if (data.section === 'body' && data.cell.text.length > 0) {
-                const namesInCell = data.cell.text[0].split('+').map((name: string) => name.trim().split('.')[0]);
-                for (const name of namesInCell) {
-                    const color = userColorMap.get(name);
-                    if (color) {
-                        data.cell.styles.fillColor = color;
-                        break; 
+            const isNameColumn = data.column.index >= 2;
+            if (data.section === 'body' && isNameColumn && data.cell.text) {
+                const cellText = data.cell.text[0];
+                if (cellText) {
+                    const names = cellText.split('+').map(name => name.trim());
+                    for (const name of names) {
+                        const userColor = userColorMap.get(name);
+                        if (userColor) {
+                            data.cell.styles.fillColor = userColor;
+                            data.cell.styles.textColor = '#000000'; // Ensure text is readable
+                            break; 
+                        }
                     }
                 }
             }
