@@ -436,6 +436,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         theme: 'grid',
         headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
         willDrawCell: (data: CellHookData) => {
+            // Highlight Sundays
+            const dayOfWeek = data.row.raw[1]; // Get the "Dia da Semana" value
+            if (typeof dayOfWeek === 'string' && dayOfWeek.toLowerCase().includes('domingo')) {
+                data.cell.styles.fillColor = '#f3f4f6'; // A light grey color
+            }
+
+            // Apply user colors (optional, can be added back if fixed)
             const isNameColumn = data.column.index >= 2;
             if (data.section === 'body' && isNameColumn && data.cell.text) {
                 const cellText = data.cell.text[0];
