@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -208,7 +207,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [schedule]);
   
   const kiosksToDisplay = useMemo(() => {
-    return kiosks.filter(k => k.id !== 'matriz');
+      return kiosks.sort((a, b) => {
+          if (a.id === 'matriz') return -1;
+          if (b.id === 'matriz') return 1;
+          return a.name.localeCompare(b.name);
+      });
   }, [kiosks]);
   
   const filteredKiosks = useMemo(() => {
@@ -436,13 +439,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         theme: 'grid',
         headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
         willDrawCell: (data: CellHookData) => {
-            // Highlight Sundays
-            const dayOfWeek = data.row.raw[1]; // Get the "Dia da Semana" value
+            const dayOfWeek = data.row.raw[1]; 
             if (typeof dayOfWeek === 'string' && dayOfWeek.toLowerCase().includes('domingo')) {
-                data.cell.styles.fillColor = '#f3f4f6'; // A light grey color
+                data.cell.styles.fillColor = '#f3f4f6';
             }
-
-            // Apply user colors (optional, can be added back if fixed)
+            
             const isNameColumn = data.column.index >= 2;
             if (data.section === 'body' && isNameColumn && data.cell.text) {
                 const cellText = data.cell.text[0];
@@ -452,7 +453,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         const userColor = userColorMap.get(name);
                         if (userColor) {
                             data.cell.styles.fillColor = userColor;
-                            data.cell.styles.textColor = '#000000'; // Ensure text is readable
+                            data.cell.styles.textColor = '#000000'; 
                             break; 
                         }
                     }

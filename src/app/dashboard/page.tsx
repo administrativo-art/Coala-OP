@@ -154,7 +154,11 @@ function OperationalDashboard() {
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
 
-  const kiosksToDisplay = useMemo(() => kiosks.filter(k => k.id !== 'matriz'), [kiosks]);
+  const kiosksToDisplay = useMemo(() => kiosks.sort((a, b) => {
+      if (a.id === 'matriz') return -1;
+      if (b.id === 'matriz') return 1;
+      return a.name.localeCompare(b.name);
+  }), [kiosks]);
   
   const handleEditDay = (dayData: DailySchedule, kioskId: string) => {
     setDayToEdit(dayData);
