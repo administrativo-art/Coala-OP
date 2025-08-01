@@ -1,4 +1,3 @@
-
 "use client"
 
 import { type Task } from '@/types';
@@ -6,7 +5,6 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Inbox, FileText, AlertCircle, History, CheckCircle2, ClipboardCheck, Truck, ShieldAlert, PackagePlus } from 'lucide-react';
 import { Badge } from './ui/badge';
-import { useForm } from '@/hooks/use-form';
 import { useRouter } from 'next/navigation';
 
 interface TaskListProps {
@@ -44,7 +42,6 @@ const getLegacyIcon = (type: string) => {
 
 
 export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
-  const { submissions } = useForm();
   const router = useRouter();
   
   if (tasks.length === 0) {
@@ -86,8 +83,6 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
             createdAt = new Date().toISOString(); // Placeholder as legacy tasks don't have a consistent createdAt
         }
 
-        const submission = isNewTask ? submissions.find(s => s.id === task.origin.submissionId) : null;
-
         return (
           <div
             key={task.id}
@@ -101,11 +96,6 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
                   {isNewTask ? (
                       <>
                         <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
-                        {submission && 
-                            <span className="flex items-center gap-1">
-                                <FileText className="h-3 w-3"/> Origem: {submission.templateName}
-                            </span>
-                        }
                       </>
                   ) : (
                     <span>{task.description}</span>

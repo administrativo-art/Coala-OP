@@ -12,7 +12,6 @@ import { Badge } from './ui/badge';
 import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
-import { useForm as useSubmissionHook } from "@/hooks/use-form";
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
@@ -43,7 +42,6 @@ const getStatusInfo = (status: Task['status']) => {
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { user, users, profiles } = useAuth();
   const { updateTask } = useTasks();
-  const { submissions, updateSubmission } = useSubmissionHook();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const { toast } = useToast();
 
@@ -71,12 +69,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     return false;
   }, [task, user, users, profiles]);
 
-  const submission = useMemo(() => {
-      if (!task) return null;
-      return submissions.find(s => s.id === task.origin.submissionId);
-  }, [task, submissions]);
-
-
   if (!task) return null;
 
   const { label: statusLabel, color: statusColor } = getStatusInfo(task.status);
@@ -96,7 +88,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const updatePayload: Partial<Task> = { status: newStatus, history: newHistory, updatedAt: now };
       if (newStatus === 'completed') {
         updatePayload.completedAt = now;
-        await updateSubmission(task.origin.submissionId, { status: 'completed' });
       }
 
       await updateTask(task.id, updatePayload);
@@ -107,7 +98,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('approved')];
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
-      await updateSubmission(task.origin.submissionId, { status: 'completed' });
       handleClose();
   };
   
@@ -171,15 +161,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                 </div>
               }
               
-              {submission &&
-                <div className="p-3 border rounded-lg flex items-center justify-between">
-                    <div>
-                        <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Origem do formulário</h4>
-                        <p className="text-sm mt-1 text-muted-foreground">{submission.templateName}</p>
-                    </div>
-                </div>
-              }
-
               <div>
                   <h3 className="font-semibold text-lg flex items-center gap-2 mb-2"><History /> Histórico</h3>
                   <div className="space-y-4 p-3 border rounded-lg max-h-60 overflow-y-auto">
