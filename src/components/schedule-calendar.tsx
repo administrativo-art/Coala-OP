@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF, { type CellHookData } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -348,7 +348,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     
     // 1. Calculate final counts from previous month
     let initialCounts = new Map<string, number>();
-    if (previousMonthSchedule.length > 0) {
+    if (previousMonthSchedule && previousMonthSchedule.length > 0) {
         const sortedPrevMonthDays = previousMonthSchedule.map(s => parseISO(s.id)).sort((a,b) => a.getTime() - b.getTime());
         const prevMonthScheduleMap = new Map<string, DailySchedule>();
         previousMonthSchedule.forEach(day => prevMonthScheduleMap.set(day.id, day));
@@ -657,6 +657,16 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
     return <span className="truncate">{nameElement}</span>;
   };
+  
+  const calendarGrid = useMemo(() => {
+    if (daysInMonth.length === 0) return [];
+    
+    const startCal = startOfWeek(daysInMonth[0], { weekStartsOn: 0 }); // Sunday
+    const endCal = endOfWeek(daysInMonth[daysInMonth.length-1], { weekStartsOn: 0 });
+
+    return eachDayOfInterval({ start: startCal, end: endCal });
+  }, [daysInMonth]);
+
 
   return (
     <>
@@ -731,12 +741,19 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     ))}
 
                     {/* Rows for each day */}
-                    {daysInMonth.map((day, dayIndex) => (
+                    {calendarGrid.map((day, dayIndex) => {
+                        const isCurrentMonth = getMonth(day) === getMonth(currentDate);
+
+                        if (!isCurrentMonth) {
+                            return <React.Fragment key={format(day, 'yyyy-MM-dd')}></React.Fragment>;
+                        }
+
+                        return (
                         <React.Fragment key={format(day, 'yyyy-MM-dd')}>
                             {/* Day Cell */}
                             <div className={cn(
                                 "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
-                                dayIndex < daysInMonth.length - 1 && "border-b",
+                                "border-b",
                                 (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50',
                                 isToday(day) && 'bg-accent/20'
                             )}>
@@ -773,7 +790,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                         className={cn(
                                             "p-1.5 h-full flex items-center justify-center group z-10",
                                             baseBg,
-                                            dayIndex < daysInMonth.length - 1 && "border-b",
+                                            "border-b",
                                             kioskIndex < filteredKiosks.length - 1 && "border-r",
                                             canManageSchedule && "cursor-pointer hover:bg-muted"
                                         )}
@@ -820,7 +837,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 );
                             })}
                         </React.Fragment>
-                    ))}
+                    )})}
                 </div>
             </div>
             )}
@@ -873,3 +890,4 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     </>
   );
 }
+
