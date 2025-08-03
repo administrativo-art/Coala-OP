@@ -261,7 +261,7 @@ export function LotCard({
             )}
             <div className="flex-grow">
                 <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-lg">{product.baseName}</h3>
+                    <h3 className="font-semibold text-lg">{getProductFullName(product)}</h3>
                      <Popover>
                         <PopoverTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
@@ -284,12 +284,11 @@ export function LotCard({
                         </PopoverContent>
                     </Popover>
                 </div>
-                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'}</p>
-                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
-                    {product.secondaryUnit && product.secondaryUnitValue && (
-                        <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
-                    )}
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                  <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                  {product.secondaryUnit && product.secondaryUnitValue && (
+                      <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
+                  )}
                 </div>
             </div>
         </div>
