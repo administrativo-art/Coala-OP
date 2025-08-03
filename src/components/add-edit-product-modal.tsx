@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
@@ -266,12 +267,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 <Separator/>
                                 <div className="p-4 border rounded-lg bg-muted/30">
-                                    <h4 className="text-md font-medium mb-2">Unidade de medida do insumo base (opcional)</h4>
+                                    <h4 className="text-md font-medium mb-2">Qtd por Embalagem (opcional)</h4>
                                     <p className="text-sm text-muted-foreground mb-4">
                                         Use esta seção se o estoque geral (produto base) for controlado por uma unidade diferente da do insumo. Ex: um insumo em "unidades" controlado por "peso" no estoque geral.
                                     </p>
                                     <div className="grid grid-cols-2 gap-4">
-                                            <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Fator da unidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                             <SelectContent>
