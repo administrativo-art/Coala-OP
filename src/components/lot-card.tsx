@@ -284,7 +284,13 @@ export function LotCard({
                         </PopoverContent>
                     </Popover>
                 </div>
-                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'} - {product.packageSize}{product.unit.toLowerCase().includes('pacote') ? '' : product.unit}</p>
+                <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'}</p>
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                    {product.secondaryUnit && product.secondaryUnitValue && (
+                        <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
+                    )}
+                </div>
             </div>
         </div>
 
@@ -307,8 +313,8 @@ export function LotCard({
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="text-center p-2 rounded-md bg-background w-24">
-                                <div className="text-2xl font-bold">{formatQuantity(lot.quantity, product.unit)}</div>
-                                <div className="text-xs text-muted-foreground">unidades</div>
+                                <div className="text-2xl font-bold">{formatQuantity(lot.quantity, 'un')}</div>
+                                <div className="text-xs text-muted-foreground">pacotes</div>
                             </div>
                             <div className="flex flex-col gap-0.5 border-l pl-1">
                                 {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}

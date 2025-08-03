@@ -154,11 +154,12 @@ export function ItemManagement() {
                                     <AccordionTrigger className="p-0 pl-3 hover:no-underline rounded-lg w-full">
                                         <div className="flex items-center gap-3 w-full">
                                             {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />}
-                                            <span className="font-semibold">{getProductFullName(product)}</span>
+                                            <span className="font-semibold">{product.baseName} {product.brand && ` - ${product.brand}`}</span>
                                         </div>
                                     </AccordionTrigger>
                                 </div>
                                 <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
+                                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
                                     <p><strong>Categoria:</strong> {product.category}</p>
                                     <p><strong>Cód. barras:</strong> {product.barcode || 'N/A'}</p>
                                     {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
