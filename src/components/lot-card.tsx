@@ -275,7 +275,7 @@ export function LotCard({
                                     {productGroup.lots.slice(0, 4).map(lot => (
                                         <div key={lot.id} className="p-2 border rounded-md text-sm">
                                             <p className="font-semibold">Lote: {lot.lotNumber}</p>
-                                            <p className="text-muted-foreground">Qtd: {formatQuantity(lot.quantity, product.unit)} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
                                             <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}</p>
                                         </div>
                                     ))}
@@ -285,6 +285,12 @@ export function LotCard({
                     </Popover>
                 </div>
                 <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'}</p>
+                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                    {product.secondaryUnit && product.secondaryUnitValue && (
+                        <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
+                    )}
+                </div>
             </div>
         </div>
 
@@ -303,17 +309,13 @@ export function LotCard({
                                 </Badge>
                             </div>
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
-                                {product.secondaryUnit && product.secondaryUnitValue && (
-                                    <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
-                                )}
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                                 <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="text-center p-2 rounded-md bg-background w-24">
-                                <div className="text-2xl font-bold">{formatQuantity(lot.quantity, 'un')}</div>
+                                <div className="text-2xl font-bold">{lot.quantity}</div>
                                 <div className="text-xs text-muted-foreground">pacotes</div>
                             </div>
                             <div className="flex flex-col gap-0.5 border-l pl-1">
