@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -19,12 +18,13 @@ export function TaskManager() {
 
     const taskLists = useMemo(() => {
         const pendingLegacyIds = new Set(legacyTasks.map(t => t.id));
-        const pending = formTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
+        const safeFormTasks = formTasks || [];
+        const pending = safeFormTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
         
         return {
             pending: [...pending, ...legacyTasks].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()),
-            awaiting_approval: formTasks.filter(t => t.status === 'awaiting_approval'),
-            completed: formTasks.filter(t => t.status === 'completed'),
+            awaiting_approval: safeFormTasks.filter(t => t.status === 'awaiting_approval'),
+            completed: safeFormTasks.filter(t => t.status === 'completed'),
             // Filter out legacy tasks from the main list to avoid duplicates if they were ever included
             all: allTasks.filter(t => !pendingLegacyIds.has(t.id)),
         }
