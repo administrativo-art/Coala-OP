@@ -52,7 +52,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
     // Tarefa para auditorias pendentes
     if (permissions.audit.approve) {
-        auditSessions.filter(s => s.status === 'pending_review').forEach(s => {
+        (auditSessions || []).filter(s => s.status === 'pending_review').forEach(s => {
             tasks.push({
                 id: `audit-${s.id}`,
                 type: 'Auditoria pendente',
