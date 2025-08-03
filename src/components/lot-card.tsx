@@ -285,12 +285,6 @@ export function LotCard({
                     </Popover>
                 </div>
                 <p className="text-sm text-muted-foreground">{product.brand || 'Sem marca'}</p>
-                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
-                    {product.secondaryUnit && product.secondaryUnitValue && (
-                        <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
-                    )}
-                </div>
             </div>
         </div>
 
@@ -308,8 +302,14 @@ export function LotCard({
                                     {status.text}
                                 </Badge>
                             </div>
-                            <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
-                            <p className="text-xs text-muted-foreground">Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                                {product.secondaryUnit && product.secondaryUnitValue && (
+                                    <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
+                                )}
+                                <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
+                                <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="text-center p-2 rounded-md bg-background w-24">
