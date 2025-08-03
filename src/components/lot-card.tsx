@@ -285,10 +285,10 @@ export function LotCard({
                     </Popover>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                  <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
-                  {product.secondaryUnit && product.secondaryUnitValue && (
-                      <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
-                  )}
+                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                    {product.secondaryUnit && product.secondaryUnitValue && (
+                        <p><strong>Fator p/ Estoque:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -298,6 +298,9 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
+                const totalUnits = (product.secondaryUnitValue || 0) * lot.quantity;
+                const totalUnitsLabel = product.secondaryUnit || 'unidades';
+
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
                         <div>
@@ -313,6 +316,12 @@ export function LotCard({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            {totalUnits > 0 && (
+                                <div className="text-center p-2 rounded-md bg-background w-28">
+                                    <div className="text-2xl font-bold">{totalUnits.toLocaleString()}</div>
+                                    <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
+                                </div>
+                            )}
                             <div className="text-center p-2 rounded-md bg-background w-24">
                                 <div className="text-2xl font-bold">{lot.quantity}</div>
                                 <div className="text-xs text-muted-foreground">pacotes</div>
