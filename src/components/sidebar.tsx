@@ -7,14 +7,14 @@ import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { LayoutDashboard, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase, ShieldCheck as AuditIcon, BookOpen, FileText } from 'lucide-react'
-import { Button } from "./ui/button"
+import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Badge } from "./ui/badge"
+import { Badge } from "@/components/ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
-import { Input } from './ui/input';
-import { ThemeToggle } from './theme-toggle';
-import packageInfo from '../../package.json';
+import { Input } from '@/components/ui/input';
+import { ThemeToggle } from '@/components/theme-toggle';
+import packageInfo from '../../../package.json';
 
 
 interface SidebarProps {
@@ -295,5 +295,4 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       </div>
     </div>
   )
-
-    
+}
