@@ -111,7 +111,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     }, [open, productToEdit, form]);
     
     useEffect(() => {
-        if (form.formState.isDirty || !productToEdit) {
+        // Only update the unit if the category has changed and it's a new product form.
+        if (form.formState.isDirty && !productToEdit) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
         }
     }, [categoryWatch, form, productToEdit]);
