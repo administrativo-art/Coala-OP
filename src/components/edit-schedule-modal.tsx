@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
@@ -17,6 +17,10 @@ import { type DailySchedule, type User } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { ChevronsUpDown } from 'lucide-react';
+import { ScrollArea } from './ui/scroll-area';
+
 
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
@@ -30,7 +34,7 @@ const scheduleSchema = z.object({
     key: z.string(),
     value: z.string(),
   })),
-  folga: z.string().optional(),
+  folga: z.array(z.string()),
 });
 
 type FormValues = z.infer<typeof scheduleSchema>;
@@ -44,7 +48,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
       shifts: [],
-      folga: '',
+      folga: [],
     },
   });
 
@@ -73,8 +77,11 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
           value: dayData[`${editingKiosk.name} ${turn}`] || '',
       }));
       
+      const folgaValue = dayData[`${editingKiosk.name} Folga`] || '';
+      const folgaArray = folgaValue ? folgaValue.split(' + ') : [];
+
       replace(initialShifts);
-      form.setValue('folga', dayData[`${editingKiosk.name} Folga`] || '');
+      form.setValue('folga', folgaArray);
     }
   }, [dayData, editingKiosk, replace, form]);
 
@@ -99,7 +106,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
         }
     }
     
-    updates[`${editingKiosk.name} Folga`] = transformValue(values.folga ?? ''); 
+    updates[`${editingKiosk.name} Folga`] = values.folga.join(' + '); 
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
@@ -187,26 +194,44 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
             
             <Separator className="my-1" />
             
-            <FormField
+             <Controller
                 control={form.control}
                 name="folga"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Folga</FormLabel>
-                     <Select onValueChange={field.onChange} value={field.value || '_NONE_'}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione um colaborador..." />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            <SelectItem value="_NONE_">Ninguém de folga</SelectItem>
-                            {availableEmployees.map(emp => (
-                                <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
+                        <FormLabel>Folga</FormLabel>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <FormControl>
+                                    <Button variant="outline" className="w-full justify-between font-normal">
+                                        {field.value?.length > 0 ? `${field.value.length} selecionado(s)` : "Ninguém de folga"}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </FormControl>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                <DropdownMenuLabel>Colaboradores</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <ScrollArea className="h-48">
+                                    {availableEmployees.map((emp) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={emp.id}
+                                            checked={field.value?.includes(emp.username)}
+                                            onCheckedChange={(checked) => {
+                                                const currentSelection = field.value || [];
+                                                return checked
+                                                    ? field.onChange([...currentSelection, emp.username])
+                                                    : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                                            }}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {emp.username}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </ScrollArea>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <FormMessage />
                     </FormItem>
                 )}
             />
