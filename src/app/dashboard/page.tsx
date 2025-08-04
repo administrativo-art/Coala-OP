@@ -43,11 +43,10 @@ interface OnlineUser {
     last_seen: Date;
 }
 
-const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
+const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    // 1º: tenta id (quando o BD já tiver sido migrado)
+    // Prioriza a chave nova com ID, mas mantém o fallback para a chave antiga com nome
     const byId   = daySchedule[`${kiosk.id} ${turn}`];
-    // 2º: tenta name (como está hoje)
     const byName = daySchedule[`${kiosk.name} ${turn}`];
     
     const result = byId ?? byName;
