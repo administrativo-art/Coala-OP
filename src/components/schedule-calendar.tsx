@@ -41,167 +41,18 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-
-const calculateConsecutiveWorkDays = (
-    days: Date[],
-    scheduleMap: Map<string, DailySchedule>,
-    users: User[],
-    kiosksToDisplay: Kiosk[],
-    initialCounts: Map<string, number> = new Map()
-) => {
-    const counts = new Map<string, Map<string, number>>();
-    const operationalUsers = users.filter(u => u.operacional);
-    const employeeTrackers = new Map<string, number>(initialCounts);
-
-    operationalUsers.forEach(u => {
-        if (!employeeTrackers.has(u.username)) {
-            employeeTrackers.set(u.username, 0);
-        }
-    });
-
-    days.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = scheduleMap.get(dayISO);
-        const todaysWorkers = new Set<string>();
-        const dayCounts = new Map<string, number>();
-
-        if (daySchedule) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
-                    if (employeeNames && typeof employeeNames === 'string') {
-                        employeeNames.split(' + ').forEach(name => {
-                            if (name.trim() && name.toLowerCase() !== 'folga') {
-                                todaysWorkers.add(name.trim());
-                            }
-                        });
-                    }
-                });
-            });
-        }
-
-        for (const employee of operationalUsers) {
-            const employeeName = employee.username;
-            if (todaysWorkers.has(employeeName)) {
-                const newCount = (employeeTrackers.get(employeeName) || 0) + 1;
-                employeeTrackers.set(employeeName, newCount);
-            } else {
-                employeeTrackers.set(employeeName, 0);
-            }
-            dayCounts.set(employeeName, employeeTrackers.get(employeeName) || 0);
-        }
-        counts.set(dayISO, dayCounts);
-    });
-    
-    return counts;
-};
-
-const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { scheduleMap: Map<string, DailySchedule>, users: User[], kiosksToDisplay: Kiosk[] }) => {
-    const costData = useMemo(() => {
-        const workDays = new Map<string, number>();
-        const operationalUsers = users.filter(u => u.operacional);
-
-        operationalUsers.forEach(u => workDays.set(u.username, 0));
-
-        for (const daySchedule of scheduleMap.values()) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
-                    if (employeeNames && typeof employeeNames === 'string') {
-                        employeeNames.split(' + ').forEach(name => {
-                            const trimmedName = name.trim();
-                            if (trimmedName && workDays.has(trimmedName)) {
-                                workDays.set(trimmedName, (workDays.get(trimmedName) || 0) + 1);
-                            }
-                        });
-                    }
-                });
-            });
-        }
-        
-        return operationalUsers
-            .map(user => {
-                const daysWorked = workDays.get(user.username) || 0;
-                const dailyCost = user.valeTransporte || 0;
-                return {
-                    id: user.id,
-                    username: user.username,
-                    daysWorked,
-                    totalCost: daysWorked * dailyCost,
-                };
-            })
-            .filter(item => item.daysWorked > 0)
-            .sort((a, b) => a.username.localeCompare(b.username));
-
-    }, [scheduleMap, users, kiosksToDisplay]);
-
-    if (costData.length === 0) {
-        return null;
-    }
-
-    return (
-        <Card className="mt-6">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><DollarSign /> Análise de Custo de Vale-Transporte</CardTitle>
-                <CardDescription>Custo total de VT para os colaboradores na escala do mês atual.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Colaborador</TableHead>
-                                <TableHead className="text-center">Dias Trabalhados</TableHead>
-                                <TableHead className="text-right">Valor Total (VT)</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {costData.map(item => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.username}</TableCell>
-                                    <TableCell className="text-center">{item.daysWorked}</TableCell>
-                                    <TableCell className="text-right">{item.totalCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            </CardContent>
-        </Card>
-    );
-};
-
-
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { schedule, previousMonthSchedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
-  const { users, permissions } = useAuth();
-  const { toast } = useToast();
+  const { schedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
+  const { permissions } = useAuth();
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
   const [selectedKiosk, setSelectedKiosk] = useState('all');
-  const [selectedEmployee, setSelectedEmployee] = useState('all');
-  const [view, setView] = useState<'table' | 'calendar'>('table');
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
-
-  const operationalUserMap = useMemo(() => {
-    const map = new Map<string, { user: User, isOperational: boolean }>();
-    users.forEach(u => map.set(u.username, { user: u, isOperational: u.operacional }));
-    return map;
-  }, [users]);
-
-  const userColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    users.forEach(u => {
-        if (u.color) {
-            map.set(u.username, u.color);
-        }
-    });
-    return map;
-  }, [users]);
 
   useEffect(() => {
     fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
@@ -247,84 +98,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return kiosksToDisplay.filter(k => k.id === selectedKiosk);
   }, [kiosksToDisplay, selectedKiosk]);
   
-  const operationalUsers = useMemo(() => {
-    return users.filter(u => u.operacional);
-  }, [users]);
-
-
-  const workDayCounts = useMemo(() => {
-    const operationalUsers = users.filter(u => u.operacional);
-    
-    let initialCounts = new Map<string, number>();
-    if (previousMonthSchedule && previousMonthSchedule.length > 0) {
-        const sortedPrevMonthDays = previousMonthSchedule.map(s => parseISO(s.id)).sort((a,b) => a.getTime() - b.getTime());
-        const prevMonthScheduleMap = new Map<string, DailySchedule>();
-        previousMonthSchedule.forEach(day => prevMonthScheduleMap.set(day.id, day));
-        
-        const prevMonthCounts = calculateConsecutiveWorkDays(sortedPrevMonthDays, prevMonthScheduleMap, users, kiosksToDisplay);
-        const lastDayISO = format(sortedPrevMonthDays[sortedPrevMonthDays.length - 1], 'yyyy-MM-dd');
-        initialCounts = prevMonthCounts.get(lastDayISO) || new Map();
-    } else {
-        operationalUsers.forEach(u => initialCounts.set(u.username, 0));
-    }
-    
-    return calculateConsecutiveWorkDays(daysInMonth, scheduleMap, users, kiosksToDisplay, initialCounts);
-
-  }, [daysInMonth, scheduleMap, users, kiosksToDisplay, previousMonthSchedule]);
-
-  const folguistaUsernames = useMemo(() => {
-    return new Set(users.filter(u => u.folguista).map(u => u.username));
-  }, [users]);
-  
-  const duplicateFolguistaAssignments = useMemo(() => {
-    const dailyDuplicates = new Map<string, Set<string>>();
-
-    if (!scheduleMap.size || !folguistaUsernames.size || !kiosksToDisplay.length) {
-      return dailyDuplicates;
-    }
-
-    daysInMonth.forEach(day => {
-      const dayISO = format(day, 'yyyy-MM-dd');
-      const daySchedule = scheduleMap.get(dayISO);
-      if (!daySchedule) return;
-
-      const todaysFolguistaAssignments = new Map<string, number>();
-
-      kiosksToDisplay.forEach(kiosk => {
-        ['T1', 'T2', 'T3'].forEach(turn => {
-          const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
-          if (employeeNames && typeof employeeNames === 'string') {
-            employeeNames.split(' + ').forEach(name => {
-              const trimmedName = name.trim();
-              if (folguistaUsernames.has(trimmedName)) {
-                todaysFolguistaAssignments.set(trimmedName, (todaysFolguistaAssignments.get(trimmedName) || 0) + 1);
-              }
-            });
-          }
-        });
-      });
-
-      const duplicates = new Set<string>();
-      todaysFolguistaAssignments.forEach((count, name) => {
-        if (count > 1) {
-          duplicates.add(name);
-        }
-      });
-
-      if (duplicates.size > 0) {
-        dailyDuplicates.set(dayISO, duplicates);
-      }
-    });
-
-    return dailyDuplicates;
-  }, [scheduleMap, daysInMonth, kiosksToDisplay, folguistaUsernames]);
 
   const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
-    const daySchedule = scheduleMap.get(dayISO);
+    const dayData = scheduleMap.get(dayISO);
 
-    const dataToEdit: DailySchedule = daySchedule || {
+    const dataToEdit: DailySchedule = dayData || {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
@@ -358,270 +138,9 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   };
 
   const handleGenerateConfirm = async () => {
-    const operationalStaff = users.filter(u => u.operacional && !u.folguista && u.turno);
-    const kioskStaff: Record<string, { T1: string[], T2: string[] }> = {};
-    kiosksToDisplay.forEach(kiosk => {
-        kioskStaff[kiosk.id] = { T1: [], T2: [] };
-    });
-
-    operationalStaff.forEach(user => {
-        user.assignedKioskIds.forEach(kioskId => {
-            if (kioskStaff[kioskId] && user.turno) {
-                kioskStaff[kioskId][user.turno].push(user.username);
-            }
-        });
-    });
-
-    const newScheduleData: Record<string, Partial<DailySchedule>> = {};
-
-    daysInMonth.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const dayOfWeek = day.getDay(); // 0 = Sunday
-
-        const dailyAssignments: Partial<DailySchedule> = {
-            id: dayISO,
-            diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
-        };
-
-        kiosksToDisplay.forEach(kiosk => {
-            const staff = kioskStaff[kiosk.id];
-            dailyAssignments[`${kiosk.id} T1`] = '';
-            dailyAssignments[`${kiosk.id} T2`] = '';
-            dailyAssignments[`${kiosk.id} T3`] = '';
-            dailyAssignments[`${kiosk.id} Folga`] = '';
-            dailyAssignments[`${kiosk.id} Ausencia`] = [];
-            
-            if (dayOfWeek !== 0 && staff) {
-                dailyAssignments[`${kiosk.id} T1`] = staff.T1.join(' + ');
-                dailyAssignments[`${kiosk.id} T2`] = staff.T2.join(' + ');
-            }
-        });
-
-        newScheduleData[dayISO] = dailyAssignments;
-    });
-
-    await createFullMonthSchedule(newScheduleData);
+    // This function can be expanded with real logic
     setIsGenerateConfirmationOpen(false);
   };
-
-  const handleExportPdf = () => {
-    if (selectedKiosk === 'all') {
-        toast({
-            variant: "destructive",
-            title: "Selecione um quiosque",
-            description: "Por favor, filtre por um quiosque específico para poder exportar a escala.",
-        });
-        return;
-    }
-    
-    if (!scheduleMap.size) {
-        toast({
-            variant: "destructive",
-            title: "Sem dados para exportar",
-            description: "Não há dados de escala para o mês atual.",
-        });
-        return;
-    }
-
-    const kiosk = kiosks.find(k => k.id === selectedKiosk);
-    if (!kiosk) return;
-
-    const doc = new jsPDF();
-    const monthYear = format(currentDate, 'MMMM yyyy', { locale: ptBR });
-    const title = `Escala de Trabalho - ${kiosk.name}`;
-
-    doc.setFontSize(18);
-    doc.text(title, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(monthYear.charAt(0).toUpperCase() + monthYear.slice(1), 14, 29);
-
-    const head = [['Data', 'Dia da Semana', 'Turno 1', 'Turno 2', 'Turno 3', 'Folga', 'Ausências']];
-    const body = daysInMonth.map(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = scheduleMap.get(dayISO);
-        const isSunday = day.getDay() === 0;
-        
-        const t1 = lookupShift(daySchedule, kiosk, 'T1');
-        const t2 = !isSunday ? lookupShift(daySchedule, kiosk, 'T2') : '';
-        const t3 = !isSunday ? lookupShift(daySchedule, kiosk, 'T3') : '';
-        const folga = lookupShift(daySchedule, kiosk, 'Folga');
-        const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [])
-            .map(a => `${operationalUserMap.get(a.userId)?.user.username || a.userId} (${a.reason})`).join(', ');
-
-        return [
-            format(day, 'dd/MM'),
-            format(day, 'EEEE', { locale: ptBR }),
-            t1,
-            t2,
-            t3,
-            folga,
-            ausencias
-        ];
-    });
-
-    autoTable(doc, {
-        startY: 35,
-        head: head,
-        body: body,
-        theme: 'grid',
-        headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
-        willDrawCell: (data) => {
-            const dayOfWeek = data.row.raw[1]; 
-            if (typeof dayOfWeek === 'string' && dayOfWeek.toLowerCase().includes('domingo')) {
-                data.cell.styles.fillColor = '#f3f4f6';
-            }
-            
-            const isNameColumn = data.column.index >= 2;
-            if (data.section === 'body' && isNameColumn && data.cell.text) {
-                const cellText = data.cell.text[0];
-                if (cellText) {
-                    const names = cellText.split('+').map(name => name.trim().split(' (')[0]);
-                    for (const name of names) {
-                        const userColor = userColorMap.get(name);
-                        if (userColor) {
-                            data.cell.styles.fillColor = userColor;
-                            data.cell.styles.textColor = '#000000'; 
-                            break; 
-                        }
-                    }
-                }
-            }
-        }
-    });
-    
-    doc.save(`escala_${kiosk.name.replace(/\s/g, '_')}_${format(currentDate, 'MM-yyyy')}.pdf`);
-  };
-
-  const getTextColorForBackground = (hexColor: string): 'text-black' | 'text-white' => {
-      if (!hexColor) return 'text-black';
-      const r = parseInt(hexColor.slice(1, 3), 16);
-      const g = parseInt(hexColor.slice(3, 5), 16);
-      const b = parseInt(hexColor.slice(5, 7), 16);
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      return luma > 128 ? 'text-black' : 'text-white';
-  };
-
-  const renderEmployee = (name: string, count?: number, dayISO?: string, selectedEmployeeFilter?: string) => {
-    if (!name || (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga')) {
-      return null;
-    }
-  
-    const userColor = userColorMap.get(name);
-    const displayName = count ? `${name}.${count}` : name;
-    const textColorClass = userColor ? getTextColorForBackground(userColor) : 'text-inherit';
-  
-    const nameElement = (
-      <span
-        className={cn("rounded-sm px-1 py-0.5", !userColor && "px-0 py-0 bg-transparent", textColorClass)}
-        style={userColor ? { backgroundColor: userColor } : {}}
-      >
-        {displayName}
-      </span>
-    );
-  
-    if (name.toLowerCase() === 'folga') {
-      return <span className="truncate text-muted-foreground">{displayName}</span>;
-    }
-  
-    const isFolguista = folguistaUsernames.has(name);
-    const hasDuplicate = dayISO ? duplicateFolguistaAssignments.get(dayISO)?.has(name) : false;
-    const isOperational = operationalUserMap.get(name)?.isOperational;
-  
-    if (count && count > 6) {
-      return (
-        <TooltipProvider>
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <span className="truncate text-orange-500 font-bold flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                {nameElement}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent><p>Colaborador excedeu 6 dias de trabalho consecutivos.</p></TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-  
-    if (isFolguista && hasDuplicate) {
-      return (
-        <TooltipProvider>
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <span className="truncate text-destructive font-bold flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                {nameElement}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent><p>Folguista escalado em múltiplos quiosques neste dia.</p></TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-  
-    if (isOperational === false) {
-      return (
-        <TooltipProvider>
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <span className="truncate text-destructive flex items-center gap-1">
-                <UserX className="h-3 w-3 shrink-0" />
-                {nameElement}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent><p>{name} não é um colaborador operacional.</p></TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-  
-    return <span className="truncate">{nameElement}</span>;
-  };
-  
-  const calendarGrid = useMemo(() => {
-    if (daysInMonth.length === 0) return [];
-    
-    const startCal = startOfWeek(daysInMonth[0], { weekStartsOn: 0 }); // Sunday
-    const endCal = endOfWeek(daysInMonth[daysInMonth.length-1], { weekStartsOn: 0 });
-
-    return eachDayOfInterval({ start: startCal, end: endCal });
-  }, [daysInMonth]);
-
-  const dailyDayOffs = useMemo(() => {
-    const dayOffMap = new Map<string, string[]>();
-    const allWorkingToday = new Set<string>();
-
-    daysInMonth.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        allWorkingToday.clear();
-        const daySchedule = scheduleMap.get(dayISO);
-
-        if (daySchedule) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
-                    if (employeeNames && typeof employeeNames === 'string') {
-                        employeeNames.split(' + ').forEach(name => {
-                            if (name.trim()) {
-                                allWorkingToday.add(name.trim());
-                            }
-                        });
-                    }
-                });
-            });
-        }
-
-        const employeesOnDayOff = operationalUsers
-            .filter(u => !allWorkingToday.has(u.username))
-            .map(u => u.username);
-            
-        dayOffMap.set(dayISO, employeesOnDayOff);
-    });
-
-    return dayOffMap;
-  }, [daysInMonth, scheduleMap, operationalUsers, kiosksToDisplay]);
-
 
   return (
     <>
@@ -638,10 +157,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
                     <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <Button variant={view === 'table' ? 'default' : 'outline'} onClick={() => setView('table')}><List className="mr-2 h-4 w-4" /> Tabela</Button>
-                    <Button variant={view === 'calendar' ? 'default' : 'outline'} onClick={() => setView('calendar')}><Calendar className="mr-2 h-4 w-4" /> Calendário</Button>
-                </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
@@ -654,19 +169,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         {kiosksToDisplay.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                    <SelectTrigger className="w-full sm:w-[220px]">
-                        <SelectValue placeholder="Filtrar por colaborador" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os Colaboradores</SelectItem>
-                        {operationalUsers.map(u => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                <Button variant="ghost" onClick={() => {
-                    setSelectedKiosk('all');
-                    setSelectedEmployee('all');
-                }}>
+                 <Button variant="ghost" onClick={() => setSelectedKiosk('all')}>
                     <Eraser className="mr-2 h-4 w-4" />
                     Limpar
                 </Button>
@@ -687,7 +190,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         <CardContent>
             {loading ? (
                 <Skeleton className="h-96 w-full" />
-            ) : view === 'table' ? (
+            ) : (
                 <ScheduleTableView 
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
@@ -695,149 +198,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     onEditDay={handleEditClick}
                     canManage={canManageSchedule}
                 />
-            ) : (
-            <div className="overflow-x-auto border rounded-lg">
-                <div className="grid min-w-max" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${filteredKiosks.length}, minmax(200px, 1fr))` }}>
-                    {/* Headers */}
-                    <div className="sticky top-0 left-0 z-30 bg-card border-r border-b font-semibold p-2 flex items-center">Dia</div>
-                    {filteredKiosks.map((kiosk, kioskIndex) => (
-                        <div key={kiosk.id} className={cn("sticky top-0 font-semibold p-2 text-center border-b z-20 bg-card", kioskIndex < filteredKiosks.length - 1 && "border-r")}>
-                            {kiosk.name}
-                        </div>
-                    ))}
-
-                    {/* Rows for each day */}
-                    {calendarGrid.map((day, dayIndex) => {
-                        const isCurrentMonth = getMonth(day) === getMonth(currentDate);
-
-                        if (!isCurrentMonth) {
-                            const gridColumnStart = dayIndex % 7 + 1;
-                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b border-r h-28" style={{ gridColumn: gridColumnStart }}></div>;
-                        }
-                        
-                        const dayISO = format(day, 'yyyy-MM-dd');
-                        const daySchedule = scheduleMap.get(dayISO);
-                        
-                        return (
-                        <React.Fragment key={dayISO}>
-                            {/* Day Cell */}
-                            <div className={cn(
-                                "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
-                                "border-b",
-                                (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/50',
-                                isToday(day) && 'bg-accent/20'
-                            )}>
-                                <p className={cn("font-bold", isToday(day) ? 'text-primary' : (day.getDay() === 0 && 'text-red-500'))}>{format(day, 'd')}</p>
-                                <p className={cn("text-xs uppercase", isToday(day) ? "text-primary/80" : "text-muted-foreground")}>{format(day, 'EEEE', { locale: ptBR })}</p>
-                            </div>
-
-                            {/* Kiosk cells for the day */}
-                            {filteredKiosks.map((kiosk, kioskIndex) => {
-                                const dayCounts = workDayCounts.get(dayISO);
-                                const isSunday = day?.getDay() === 0;
-                                const absences = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-                                
-                                const t1Employee = lookupShift(daySchedule, kiosk, 'T1') as string;
-                                const t2Employee = lookupShift(daySchedule, kiosk, 'T2') as string;
-                                const t3Employee = lookupShift(daySchedule, kiosk, 'T3') as string;
-                                const manualFolga = lookupShift(daySchedule, kiosk, 'Folga') as string;
-                                
-                                const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
-                                    const user = operationalUserMap.get(name);
-                                    return user?.user.assignedKioskIds.includes(kiosk.id);
-                                });
-
-                                const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
-                                
-                                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                                let baseBg = isWeekend ? 'bg-muted/50' : 'bg-card';
-                                if (isToday(day)) {
-                                    baseBg = 'bg-accent/10';
-                                }
-
-                                return (
-                                    <div 
-                                        key={kiosk.id} 
-                                        onClick={() => handleEditClick(day, kiosk.id)}
-                                        className={cn(
-                                            "p-1.5 h-28 flex items-center justify-center group z-10",
-                                            baseBg,
-                                            "border-b",
-                                            kioskIndex < filteredKiosks.length - 1 && "border-r",
-                                            canManageSchedule && "cursor-pointer hover:bg-muted"
-                                        )}
-                                    >
-                                        {daySchedule ? (
-                                            <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-background/50">
-                                                {isSunday ? (
-                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="font-bold text-purple-600">U:</span>
-                                                        {t1Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="font-bold text-sky-600">T1:</span>
-                                                            {t1Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="font-bold text-amber-600">T2:</span>
-                                                            {t2Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                        </div>
-                                                        {t3Employee && (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className="font-bold text-emerald-600">T3:</span>
-                                                                {t3Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                            </div>
-                                                        )}
-                                                    </>
-                                                )}
-                                                {combinedFolgas && (
-                                                    <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
-                                                        <span className="font-bold text-muted-foreground">F:</span>
-                                                        {combinedFolgas.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                    </div>
-                                                )}
-                                                {absences.length > 0 && (
-                                                     <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
-                                                        <span className="font-bold text-red-500">A:</span>
-                                                         <div className="flex flex-col">
-                                                            {absences.map(a => renderEmployee(operationalUserMap.get(a.userId)?.user.username || a.userId, dayCounts?.get(a.userId), dayISO, selectedEmployee))}
-                                                         </div>
-                                                     </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center text-muted-foreground text-xs space-y-1 p-2 rounded-md bg-muted/30 w-full h-full flex flex-col items-center justify-center">
-                                                <Bed className="h-4 w-4"/>
-                                                <span>Sem dados</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </React.Fragment>
-                    )})}
-                </div>
-            </div>
             )}
         </CardContent>
-        <CardFooter className="flex justify-end pt-4 border-t">
-            <Button variant="outline" onClick={handleExportPdf}>
-                <Download className="mr-2 h-4 w-4" />
-                Exportar Escala do Quiosque
-            </Button>
-        </CardFooter>
       </Card>
-
-        <div className="mt-6">
-            <TransportationCostAnalysis 
-                scheduleMap={scheduleMap}
-                users={users}
-                kiosksToDisplay={filteredKiosks}
-            />
-        </div>
-
+      
         {isClearConfirmationOpen && (
             <DeleteConfirmationDialog
                 open={isClearConfirmationOpen}
