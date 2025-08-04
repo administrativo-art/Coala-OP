@@ -128,12 +128,16 @@ function OperationalDashboard() {
   const [todayISO, setTodayISO] = useState<string>('');
 
   useEffect(() => {
+    // This now runs only on the client, avoiding hydration mismatch
     setTodayISO(format(new Date(), 'yyyy-MM-dd'));
   }, []);
 
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
-  const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
+  const todaySchedule = useMemo(() => {
+    if (!todayISO) return null; // Guard against running before todayISO is set
+    return schedule.find(s => s.id === todayISO);
+  }, [schedule, todayISO]);
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
@@ -189,7 +193,7 @@ function OperationalDashboard() {
     }
   };
 
-  const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading;
+  const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
   if (initialLoading) {
     return (

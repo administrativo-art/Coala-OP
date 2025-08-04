@@ -15,22 +15,22 @@ import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 
-function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
+function SidebarSkeleton() {
     return (
-        <div className={cn("hidden border-r bg-card md:flex flex-col dark transition-[width] duration-300", isCollapsed ? "w-[80px]" : "w-[280px]")}>
+        <div className={cn("hidden border-r bg-card md:flex flex-col dark transition-[width] duration-300 w-[280px]")}>
             <div className="flex h-[60px] shrink-0 items-center justify-center border-b px-4">
                 <Skeleton className="h-8 w-8" />
             </div>
             <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
                 <Skeleton className="h-9 w-full" />
                 <div className="space-y-2 pt-4">
-                    {!isCollapsed && <Skeleton className="h-4 w-20 mb-2 ml-3" />}
+                    <Skeleton className="h-4 w-20 mb-2 ml-3" />
                     <Skeleton className="h-9 w-full" />
                     <Skeleton className="h-9 w-full" />
                     <Skeleton className="h-9 w-full" />
                 </div>
                  <div className="space-y-2 pt-4">
-                    {!isCollapsed && <Skeleton className="h-4 w-24 mb-2 ml-3" />}
+                    <Skeleton className="h-4 w-24 mb-2 ml-3" />
                     <Skeleton className="h-9 w-full" />
                     <Skeleton className="h-9 w-full" />
                 </div>
@@ -38,7 +38,7 @@ function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
              <div className="mt-auto p-4 border-t flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                     <Skeleton className="h-10 w-10" />
-                    {!isCollapsed && <Skeleton className="h-8 w-8" />}
+                    <Skeleton className="h-8 w-8" />
                 </div>
             </div>
         </div>
@@ -76,7 +76,7 @@ export default function DashboardLayout({
   if (!isMounted || loading || tasksLoading || !isAuthenticated) {
     return (
       <div className="flex h-screen w-full">
-         <SidebarSkeleton isCollapsed={isCollapsed} />
+         <SidebarSkeleton />
         <div className="flex flex-col flex-1">
             <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:h-[60px] lg:px-6">
                 <Skeleton className="h-8 w-8 rounded-full md:hidden" />
