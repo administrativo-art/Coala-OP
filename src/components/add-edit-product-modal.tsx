@@ -40,7 +40,7 @@ const PhotoCaptureModal = dynamic(
 
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
-  brand: z.string().optional(),
+  brand: z.string().min(1, 'A marca é obrigatória.'),
   barcode: z.string().optional(),
   imageUrl: z.string().optional(),
   category: z.enum(unitCategories),
@@ -201,7 +201,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca (opcional)</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 
                                 <FormField control={form.control} name="barcode" render={({ field }) => (
