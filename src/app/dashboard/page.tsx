@@ -130,6 +130,7 @@ function OperationalDashboard() {
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
 
   const lotsInKiosk = useMemo(() => {
@@ -160,6 +161,19 @@ function OperationalDashboard() {
       if (b.id === 'matriz') return 1;
       return a.name.localeCompare(b.name);
   }), [kiosks]);
+
+  const todaysWorkers = useMemo(() => {
+      const working = new Set<string>();
+      if(todaySchedule) {
+          kiosksToDisplay.forEach(kiosk => {
+              ['T1', 'T2', 'T3'].forEach(turn => {
+                  const names = todaySchedule[`${kiosk.name} ${turn}`];
+                  if(names) names.split(' + ').forEach((n: string) => working.add(n.trim()));
+              })
+          });
+      }
+      return working;
+  }, [todaySchedule, kiosksToDisplay]);
   
   const handleEditDay = (dayData: DailySchedule, kioskId: string) => {
     setDayToEdit(dayData);
@@ -275,10 +289,14 @@ function OperationalDashboard() {
                             const t1 = todaySchedule[`${kiosk.name} T1`];
                             const t2 = todaySchedule[`${kiosk.name} T2`];
                             const t3 = todaySchedule[`${kiosk.name} T3`];
-                            const folga = todaySchedule[`${kiosk.name} Folga`];
+                            
+                            const manualFolga = todaySchedule[`${kiosk.name} Folga`] || '';
+                            const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username)).map(u => u.username);
+                            const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
+
                             const ausencias = (todaySchedule[`${kiosk.name} Ausencia`] || []) as AbsenceEntry[];
                             const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
-                            const hasSchedule = t1 || t2 || t3 || folga || ausencias.length > 0;
+                            const hasSchedule = t1 || t2 || t3 || combinedFolgas || ausencias.length > 0;
 
                             if (!hasSchedule) {
                                 return (
@@ -313,7 +331,7 @@ function OperationalDashboard() {
                                                         {t3 && <p><strong>T3:</strong> {t3}</p>}
                                                     </>
                                                 )}
-                                                {folga && <p className="text-muted-foreground"><strong>Folga:</strong> {folga}</p>}
+                                                {combinedFolgas && <p className="text-muted-foreground"><strong>Folga:</strong> {combinedFolgas}</p>}
                                                 {ausencias.length > 0 && (
                                                     <div className="pt-2 mt-2 border-t border-dashed">
                                                         {ausencias.map(a => {

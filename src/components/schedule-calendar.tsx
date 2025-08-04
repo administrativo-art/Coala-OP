@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -682,6 +681,40 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     return eachDayOfInterval({ start: startCal, end: endCal });
   }, [daysInMonth]);
 
+  const dailyDayOffs = useMemo(() => {
+    const dayOffMap = new Map<string, string[]>();
+    const allWorkingToday = new Set<string>();
+
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        allWorkingToday.clear();
+        const daySchedule = scheduleMap.get(dayISO);
+
+        if (daySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    if (employeeNames && typeof employeeNames === 'string') {
+                        employeeNames.split(' + ').forEach(name => {
+                            if (name.trim()) {
+                                allWorkingToday.add(name.trim());
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        const employeesOnDayOff = operationalUsers
+            .filter(u => !allWorkingToday.has(u.username))
+            .map(u => u.username);
+            
+        dayOffMap.set(dayISO, employeesOnDayOff);
+    });
+
+    return dayOffMap;
+  }, [daysInMonth, scheduleMap, operationalUsers, kiosksToDisplay]);
+
 
   return (
     <>
@@ -787,7 +820,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const t1Employee = dayData?.[`${kiosk.name} T1`];
                                 const t2Employee = dayData?.[`${kiosk.name} T2`];
                                 const t3Employee = dayData?.[`${kiosk.name} T3`];
-                                const folgaEmployee = dayData?.[`${kiosk.name} Folga`];
+                                const manualFolga = dayData?.[`${kiosk.name} Folga`] || '';
+                                const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
+                                    const user = operationalUserMap.get(name);
+                                    return user?.user.assignedKioskIds.includes(kiosk.id);
+                                });
+
+                                const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
                                 
                                 const t1Count = t1Employee ? dayCounts?.get(t1Employee) : undefined;
                                 const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
@@ -836,10 +875,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                         )}
                                                     </>
                                                 )}
-                                                {folgaEmployee && (
+                                                {combinedFolgas && (
                                                     <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
                                                         <span className="font-bold text-muted-foreground">F:</span>
-                                                        {renderEmployee(folgaEmployee, undefined, dayISO, selectedEmployee)}
+                                                        {renderEmployee(combinedFolgas, undefined, dayISO, selectedEmployee)}
                                                     </div>
                                                 )}
                                                 {absences.length > 0 && (
