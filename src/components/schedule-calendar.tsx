@@ -700,20 +700,17 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const isSunday = day?.getDay() === 0;
                                 const absences = (dayData?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || []);
 
-                                const t1Employee = dayData?.[`${kiosk.name} T1`];
-                                const t2Employee = dayData?.[`${kiosk.name} T2`];
-                                const t3Employee = dayData?.[`${kiosk.name} T3`];
-                                const manualFolga = dayData?.[`${kiosk.name} Folga`] || '';
+                                const t1Employee = dayData?.[`${kiosk.name} T1`] as string || '';
+                                const t2Employee = dayData?.[`${kiosk.name} T2`] as string || '';
+                                const t3Employee = dayData?.[`${kiosk.name} T3`] as string || '';
+                                const manualFolga = dayData?.[`${kiosk.name} Folga`] as string || '';
+                                
                                 const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
                                     const user = operationalUserMap.get(name);
                                     return user?.user.assignedKioskIds.includes(kiosk.id);
                                 });
 
                                 const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
-                                
-                                const t1Count = t1Employee ? dayCounts?.get(t1Employee) : undefined;
-                                const t2Count = t2Employee ? dayCounts?.get(t2Employee) : undefined;
-                                const t3Count = t3Employee ? dayCounts?.get(t3Employee) : undefined;
                                 
                                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                                 let baseBg = isWeekend ? 'bg-muted/50' : 'bg-card';
@@ -738,22 +735,22 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                 {isSunday ? (
                                                      <div className="flex items-center gap-1.5">
                                                         <span className="font-bold text-purple-600">U:</span>
-                                                        {renderEmployee(t1Employee, t1Count, dayISO, selectedEmployee)}
+                                                        {t1Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-sky-600">T1:</span>
-                                                            {renderEmployee(t1Employee, t1Count, dayISO, selectedEmployee)}
+                                                            {t1Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
                                                         </div>
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="font-bold text-amber-600">T2:</span>
-                                                            {renderEmployee(t2Employee, t2Count, dayISO, selectedEmployee)}
+                                                            {t2Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
                                                         </div>
                                                         {t3Employee && (
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className="font-bold text-emerald-600">T3:</span>
-                                                                {renderEmployee(t3Employee, t3Count, dayISO, selectedEmployee)}
+                                                                {t3Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
                                                             </div>
                                                         )}
                                                     </>
@@ -761,7 +758,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                 {combinedFolgas && (
                                                     <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
                                                         <span className="font-bold text-muted-foreground">F:</span>
-                                                        {renderEmployee(combinedFolgas, undefined, dayISO, selectedEmployee)}
+                                                        {combinedFolgas.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
                                                     </div>
                                                 )}
                                                 {absences.length > 0 && (
@@ -829,4 +826,3 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     </>
   );
 }
-
