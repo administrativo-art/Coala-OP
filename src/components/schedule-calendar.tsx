@@ -801,7 +801,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         const isCurrentMonth = getMonth(day) === getMonth(currentDate);
 
                         if (!isCurrentMonth) {
-                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b h-28"></div>;
+                            const gridColumnStart = dayIndex % 7 + 1;
+                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b border-r h-28" style={{ gridColumn: gridColumnStart }}></div>;
                         }
 
                         return (
