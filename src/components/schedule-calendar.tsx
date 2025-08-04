@@ -686,9 +686,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                             const gridColumnStart = dayIndex % 7 + 1;
                             return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b border-r h-28" style={{ gridColumn: gridColumnStart }}></div>;
                         }
+                        
+                        const dayISO = format(day, 'yyyy-MM-dd');
+                        const daySchedule = scheduleMap.get(dayISO);
 
                         return (
-                        <React.Fragment key={format(day, 'yyyy-MM-dd')}>
+                        <React.Fragment key={dayISO}>
                             {/* Day Cell */}
                             <div className={cn(
                                 "sticky left-0 z-20 border-r p-2 font-medium text-sm bg-card",
@@ -702,16 +705,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
                             {/* Kiosk cells for the day */}
                             {filteredKiosks.map((kiosk, kioskIndex) => {
-                                const dayISO = format(day, 'yyyy-MM-dd');
-                                const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
                                 const isSunday = day?.getDay() === 0;
-                                const absences = (dayData?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || []);
+                                const absences = (daySchedule?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || []);
 
-                                const t1Employee = dayData?.[`${kiosk.name} T1`] as string || '';
-                                const t2Employee = dayData?.[`${kiosk.name} T2`] as string || '';
-                                const t3Employee = dayData?.[`${kiosk.name} T3`] as string || '';
-                                const manualFolga = dayData?.[`${kiosk.name} Folga`] as string || '';
+                                const t1Employee = daySchedule?.[`${kiosk.name} T1`] as string || '';
+                                const t2Employee = daySchedule?.[`${kiosk.name} T2`] as string || '';
+                                const t3Employee = daySchedule?.[`${kiosk.name} T3`] as string || '';
+                                const manualFolga = daySchedule?.[`${kiosk.name} Folga`] as string || '';
                                 
                                 const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
                                     const user = operationalUserMap.get(name);
@@ -738,7 +739,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                             canManageSchedule && "cursor-pointer hover:bg-muted"
                                         )}
                                     >
-                                        {dayData ? (
+                                        {daySchedule ? (
                                             <div className="w-full h-full rounded-md p-2 border text-xs flex flex-col justify-center bg-background/50">
                                                 {isSunday ? (
                                                      <div className="flex items-center gap-1.5">
