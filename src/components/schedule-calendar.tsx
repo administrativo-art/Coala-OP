@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF, { type CellHookData } from 'jspdf';
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -157,89 +157,6 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
     );
 };
 
-interface KioskConfig {
-    id: string;
-    name: string;
-    visible: boolean;
-}
-
-const KIOSK_CONFIG_STORAGE_KEY = 'coala-kiosk-config';
-
-function KioskConfigModal({
-  open,
-  onOpenChange,
-  kioskConfig,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  kioskConfig: KioskConfig[];
-  onSave: (newConfig: KioskConfig[]) => void;
-}) {
-  const [internalConfig, setInternalConfig] = useState(kioskConfig);
-
-  useEffect(() => {
-    setInternalConfig(kioskConfig);
-  }, [kioskConfig]);
-
-  const handleVisibilityChange = (kioskId: string, visible: boolean) => {
-    setInternalConfig(prev =>
-      prev.map(k => (k.id === kioskId ? { ...k, visible } : k))
-    );
-  };
-
-  const moveKiosk = (index: number, direction: 'up' | 'down') => {
-    const newConfig = [...internalConfig];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newConfig.length) return;
-    [newConfig[index], newConfig[targetIndex]] = [newConfig[targetIndex], newConfig[index]];
-    setInternalConfig(newConfig);
-  };
-
-  const handleSave = () => {
-    onSave(internalConfig);
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Configurar Visualização da Escala</DialogTitle>
-          <DialogDescription>
-            Arraste para reordenar ou desative para ocultar quiosques da visualização principal.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4 space-y-2">
-            {internalConfig.map((kiosk, index) => (
-                <div key={kiosk.id} className="flex items-center gap-2 p-2 border rounded-lg">
-                    <Switch
-                        id={`vis-${kiosk.id}`}
-                        checked={kiosk.visible}
-                        onCheckedChange={checked => handleVisibilityChange(kiosk.id, checked)}
-                    />
-                    <label htmlFor={`vis-${kiosk.id}`} className="flex-grow font-medium">{kiosk.name}</label>
-                    <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" disabled={index === 0} onClick={() => moveKiosk(index, 'up')}>
-                            <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" disabled={index === internalConfig.length - 1} onClick={() => moveKiosk(index, 'down')}>
-                            <ArrowDown className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </div>
-            ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Salvar Configuração</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, previousMonthSchedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
@@ -250,49 +167,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
   const [selectedKiosk, setSelectedKiosk] = useState('all');
   const [selectedEmployee, setSelectedEmployee] = useState('all');
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [kioskConfig, setKioskConfig] = useState<KioskConfig[]>([]);
-
-  useEffect(() => {
-    const savedConfigRaw = localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
-    const savedConfig = savedConfigRaw ? JSON.parse(savedConfigRaw) : null;
-
-    const defaultConfigSorted = [...kiosks].sort((a, b) => {
-        if (a.id === 'matriz') return -1;
-        if (b.id === 'matriz') return 1;
-        return a.name.localeCompare(b.name);
-    });
-
-    if (savedConfig) {
-        const savedKioskMap = new Map(savedConfig.map((c: KioskConfig) => [c.id, c]));
-        const currentKioskMap = new Map(kiosks.map(k => [k.id, k]));
-
-        // Re-apply the saved order and add any new kiosks at the end
-        const finalConfig: KioskConfig[] = savedConfig
-            .map((c: KioskConfig) => {
-                const currentKiosk = currentKioskMap.get(c.id);
-                return currentKiosk ? { ...c, name: currentKiosk.name } : null; // Update name, keep order
-            })
-            .filter((c: KioskConfig | null): c is KioskConfig => c !== null);
-
-        const newKiosks = kiosks.filter(k => !savedKioskMap.has(k.id));
-        newKiosks.forEach(k => {
-            finalConfig.push({ id: k.id, name: k.name, visible: true });
-        });
-        
-        setKioskConfig(finalConfig);
-    } else {
-        // No saved config, use default sort
-        setKioskConfig(defaultConfigSorted.map(k => ({ id: k.id, name: k.name, visible: true })));
-    }
-  }, [kiosks]);
-
-
-  const handleSaveKioskConfig = (newConfig: KioskConfig[]) => {
-    setKioskConfig(newConfig);
-    localStorage.setItem(KIOSK_CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
-    toast({ title: 'Visualização salva!', description: 'A ordem e visibilidade dos quiosques foi atualizada.' });
-  };
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -335,22 +209,19 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [schedule]);
   
   const kiosksToDisplay = useMemo(() => {
-    return kioskConfig
-        .map(config => kiosks.find(k => k.id === config.id))
-        .filter((k): k is Kiosk => !!k);
-  }, [kioskConfig, kiosks]);
+    return [...kiosks].sort((a, b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
+  }, [kiosks]);
   
   const filteredKiosks = useMemo(() => {
-    const visibleKiosks = kiosksToDisplay.filter(k => {
-        const config = kioskConfig.find(kc => kc.id === k.id);
-        return config ? config.visible : true;
-    });
-
     if (selectedKiosk === 'all') {
-        return visibleKiosks;
+        return kiosksToDisplay;
     }
-    return visibleKiosks.filter(k => k.id === selectedKiosk);
-  }, [kiosksToDisplay, selectedKiosk, kioskConfig]);
+    return kiosksToDisplay.filter(k => k.id === selectedKiosk);
+  }, [kiosksToDisplay, selectedKiosk]);
   
   const operationalUsers = useMemo(() => {
     return users.filter(u => u.operacional);
@@ -573,7 +444,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         body: body,
         theme: 'grid',
         headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
-        willDrawCell: (data: CellHookData) => {
+        willDrawCell: (data) => {
             const dayOfWeek = data.row.raw[1]; 
             if (typeof dayOfWeek === 'string' && dayOfWeek.toLowerCase().includes('domingo')) {
                 data.cell.styles.fillColor = '#f3f4f6';
@@ -764,9 +635,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         {operationalUsers.map(u => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                 <Button variant="outline" onClick={() => setIsConfigModalOpen(true)}>
-                    <Settings className="mr-2 h-4 w-4" /> Configurar
-                </Button>
                 <Button variant="ghost" onClick={() => {
                     setSelectedKiosk('all');
                     setSelectedEmployee('all');
@@ -958,13 +826,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 confirmButtonVariant="default"
             />
         )}
-
-        <KioskConfigModal 
-            open={isConfigModalOpen}
-            onOpenChange={setIsConfigModalOpen}
-            kioskConfig={kioskConfig}
-            onSave={handleSaveKioskConfig}
-        />
     </>
   );
 }
+

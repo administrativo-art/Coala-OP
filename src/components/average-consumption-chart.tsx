@@ -188,11 +188,13 @@ export function AverageConsumptionChart() {
     });
   }
 
-  const sortedKiosks = kiosks.sort((a,b) => {
-    if (a.id === 'matriz') return -1;
-    if (b.id === 'matriz') return 1;
-    return a.name.localeCompare(b.name);
-  });
+  const sortedKiosks = useMemo(() => {
+    return [...kiosks].sort((a, b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
+  }, [kiosks]);
   
   const loadingData = consumptionLoading || kiosksLoading;
   const CHART_COLORS = [
@@ -342,3 +344,4 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
+

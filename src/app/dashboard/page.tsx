@@ -128,14 +128,13 @@ function OperationalDashboard() {
   const [todayISO, setTodayISO] = useState<string>('');
 
   useEffect(() => {
-    // This now runs only on the client, avoiding hydration mismatch
     setTodayISO(format(new Date(), 'yyyy-MM-dd'));
   }, []);
 
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
   const todaySchedule = useMemo(() => {
-    if (!todayISO) return null; // Guard against running before todayISO is set
+    if (!todayISO) return null;
     return schedule.find(s => s.id === todayISO);
   }, [schedule, todayISO]);
 
@@ -162,11 +161,13 @@ function OperationalDashboard() {
     return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
   }, [lotsInKiosk, lotsLoading]);
 
-  const kiosksToDisplay = useMemo(() => kiosks.sort((a, b) => {
-      if (a.id === 'matriz') return -1;
-      if (b.id === 'matriz') return 1;
-      return a.name.localeCompare(b.name);
-  }), [kiosks]);
+  const kiosksToDisplay = useMemo(() => {
+    return [...kiosks].sort((a, b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
+  }, [kiosks]);
 
   const todaysWorkers = useMemo(() => {
       const working = new Set<string>();
@@ -537,3 +538,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

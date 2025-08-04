@@ -158,11 +158,13 @@ export function StockValuation() {
         doc.save(`avaliacao_estoque_${kioskName.replace(/\s/g, '_')}.pdf`);
     };
     
-    const sortedKiosks = useMemo(() => kiosks.sort((a,b) => {
-        if (a.id === 'matriz') return -1;
-        if (b.id === 'matriz') return 1;
-        return a.name.localeCompare(b.name);
-    }), [kiosks]);
+    const sortedKiosks = useMemo(() => {
+        return [...kiosks].sort((a, b) => {
+            if (a.id === 'matriz') return -1;
+            if (b.id === 'matriz') return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }, [kiosks]);
     
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
 
@@ -324,3 +326,4 @@ export function StockValuation() {
         </div>
     );
 }
+
