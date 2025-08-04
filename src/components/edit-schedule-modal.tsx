@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
-import { type DailySchedule, type User, absenceReasons, type AbsenceReason } from '@/types';
+import { type DailySchedule, type User, absenceReasons, type AbsenceReason, type Kiosk } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
@@ -47,6 +47,14 @@ const scheduleSchema = z.object({
 });
 
 type FormValues = z.infer<typeof scheduleSchema>;
+
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
+};
+
 
 export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
@@ -84,22 +92,24 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   useEffect(() => {
     if (dayData && editingKiosk) {
-      const hasT3Data = !!dayData[`${editingKiosk.id} T3`];
+      const hasT3Data = !!lookupShift(dayData, editingKiosk, 'T3');
       setShowThirdShift(hasT3Data);
       
       const parseValue = (val: string | undefined): string[] => val ? val.split(' + ') : [];
 
       const initialShifts = ['T1', 'T2', 'T3'].map(turn => ({
           key: `${editingKiosk.id} ${turn}`,
-          value: parseValue(dayData[`${editingKiosk.id} ${turn}`]),
+          value: parseValue(lookupShift(dayData, editingKiosk, turn as any) as string),
       }));
       
-      const folgaValue = dayData[`${editingKiosk.id} Folga`] || '';
+      const folgaValue = lookupShift(dayData, editingKiosk, 'Folga') as string || '';
       const folgaArray = folgaValue ? folgaValue.split(' + ') : [];
+      
+      const ausenciasValue = lookupShift(dayData, editingKiosk, 'Ausencia') as AbsenceEntry[] || [];
 
       replace(initialShifts);
       form.setValue('folga', folgaArray);
-      form.setValue('ausencias', dayData[`${editingKiosk.id} Ausencia`] || []);
+      form.setValue('ausencias', ausenciasValue);
 
     }
   }, [dayData, editingKiosk, replace, form]);

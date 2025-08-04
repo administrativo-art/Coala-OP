@@ -18,7 +18,7 @@ import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { type DailySchedule, type ProductSimulation, type AbsenceEntry } from "@/types"
+import { type DailySchedule, type ProductSimulation, type AbsenceEntry, type Kiosk } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { EditScheduleModal } from "@/components/edit-schedule-modal"
@@ -42,6 +42,13 @@ interface OnlineUser {
     status: 'online' | 'offline';
     last_seen: Date;
 }
+
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
+};
 
 function OnlineUsersPanel() {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -174,7 +181,7 @@ function OperationalDashboard() {
       if(todaySchedule) {
           kiosksToDisplay.forEach(kiosk => {
               ['T1', 'T2', 'T3'].forEach(turn => {
-                  const names = todaySchedule[`${kiosk.id} ${turn}`];
+                  const names = lookupShift(todaySchedule, kiosk, turn as any);
                   if(names) names.split(' + ').forEach((n: string) => working.add(n.trim()));
               })
           });
@@ -293,15 +300,15 @@ function OperationalDashboard() {
                 ) : todaySchedule ? (
                     <Accordion type="multiple" className="w-full space-y-2">
                         {kiosksToDisplay.map(kiosk => {
-                            const t1 = todaySchedule[`${kiosk.id} T1`];
-                            const t2 = todaySchedule[`${kiosk.id} T2`];
-                            const t3 = todaySchedule[`${kiosk.id} T3`];
+                            const t1 = lookupShift(todaySchedule, kiosk, 'T1');
+                            const t2 = lookupShift(todaySchedule, kiosk, 'T2');
+                            const t3 = lookupShift(todaySchedule, kiosk, 'T3');
                             
-                            const manualFolga = todaySchedule[`${kiosk.id} Folga`] || '';
+                            const manualFolga = lookupShift(todaySchedule, kiosk, 'Folga');
                             const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username)).map(u => u.username);
-                            const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
+                            const combinedFolgas = [...new Set([...(manualFolga as string).split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
 
-                            const ausencias = (todaySchedule[`${kiosk.id} Ausencia`] || []) as AbsenceEntry[];
+                            const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
                             const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
                             const hasSchedule = t1 || t2 || t3 || combinedFolgas || ausencias.length > 0;
 

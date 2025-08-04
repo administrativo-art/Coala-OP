@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -54,7 +53,7 @@ const calculateConsecutiveWorkDays = (
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
+                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             if (name.trim() && name.toLowerCase() !== 'folga') {
@@ -92,7 +91,7 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
         for (const daySchedule of scheduleMap.values()) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
+                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             const trimmedName = name.trim();
@@ -155,6 +154,13 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
             </CardContent>
         </Card>
     );
+};
+
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
 };
 
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
@@ -279,7 +285,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
       kiosksToDisplay.forEach(kiosk => {
         ['T1', 'T2', 'T3'].forEach(turn => {
-          const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
+          const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
           if (employeeNames && typeof employeeNames === 'string') {
             employeeNames.split(' + ').forEach(name => {
               const trimmedName = name.trim();
@@ -429,11 +435,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         const daySchedule = scheduleMap.get(dayISO);
         const isSunday = day.getDay() === 0;
         
-        const t1 = daySchedule?.[`${kiosk.id} T1`] || '';
-        const t2 = !isSunday ? (daySchedule?.[`${kiosk.id} T2`] || '') : '';
-        const t3 = !isSunday ? (daySchedule?.[`${kiosk.id} T3`] || '') : '';
-        const folga = daySchedule?.[`${kiosk.id} Folga`] || '';
-        const ausencias = (daySchedule?.[`${kiosk.id} Ausencia`] as AbsenceEntry[] || [])
+        const t1 = lookupShift(daySchedule, kiosk, 'T1');
+        const t2 = !isSunday ? lookupShift(daySchedule, kiosk, 'T2') : '';
+        const t3 = !isSunday ? lookupShift(daySchedule, kiosk, 'T3') : '';
+        const folga = lookupShift(daySchedule, kiosk, 'Folga');
+        const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [])
             .map(a => `${operationalUserMap.get(a.userId)?.user.username || a.userId} (${a.reason})`).join(', ');
 
         return [
@@ -587,7 +593,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
+                    const employeeNames = lookupShift(daySchedule, kiosk, turn as any);
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             if (name.trim()) {
@@ -708,12 +714,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                             {filteredKiosks.map((kiosk, kioskIndex) => {
                                 const dayCounts = workDayCounts.get(dayISO);
                                 const isSunday = day?.getDay() === 0;
-                                const absences = (daySchedule?.[`${kiosk.id} Ausencia`] as AbsenceEntry[] || []);
-
-                                const t1Employee = daySchedule?.[`${kiosk.id} T1`] as string || '';
-                                const t2Employee = daySchedule?.[`${kiosk.id} T2`] as string || '';
-                                const t3Employee = daySchedule?.[`${kiosk.id} T3`] as string || '';
-                                const manualFolga = daySchedule?.[`${kiosk.id} Folga`] as string || '';
+                                const absences = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+                                
+                                const t1Employee = lookupShift(daySchedule, kiosk, 'T1');
+                                const t2Employee = lookupShift(daySchedule, kiosk, 'T2');
+                                const t3Employee = lookupShift(daySchedule, kiosk, 'T3');
+                                const manualFolga = lookupShift(daySchedule, kiosk, 'Folga');
                                 
                                 const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
                                     const user = operationalUserMap.get(name);
@@ -836,5 +842,3 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     </>
   );
 }
-
-    
