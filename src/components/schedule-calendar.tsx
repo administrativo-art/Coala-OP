@@ -256,7 +256,13 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   useEffect(() => {
     const savedConfigRaw = localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
     const savedConfig = savedConfigRaw ? JSON.parse(savedConfigRaw) : null;
-    const sortedKiosks = [...kiosks].sort((a,b) => a.name.localeCompare(b.name));
+    
+    // Start with kiosks sorted alphabetically, with 'matriz' first
+    const sortedKiosks = [...kiosks].sort((a, b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    });
 
     const newConfig: KioskConfig[] = sortedKiosks.map(k => {
         const existing = savedConfig?.find((sc: KioskConfig) => sc.id === k.id);
