@@ -41,6 +41,9 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
   const findUnitKey = (unit: string) => {
     if (!unit) return undefined;
     const lowerCaseUnit = unit.toLowerCase();
+    // Exact match first
+    if(categoryUnits[unit]) return unit;
+    // Fallback to case-insensitive
     return Object.keys(categoryUnits).find(key => key.toLowerCase() === lowerCaseUnit);
   }
 
