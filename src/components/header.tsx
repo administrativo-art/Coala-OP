@@ -3,7 +3,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo, AreaChart } from "lucide-react"
+import { Menu, LayoutDashboard, Repeat, CheckSquare, UserCog, ClipboardList, ClipboardCheck, Users, ListPlus, Settings, ShoppingCart, LifeBuoy, DollarSign, ListTodo, AreaChart, Camera } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { UserProfile } from "./user-profile"
 import { ThemeToggle } from "./theme-toggle"
 import { type LegacyTask, NotificationCenter } from "./notification-center"
+import { GlobalBarcodeScanner } from "./global-barcode-scanner"
 
 
 export function Header({ tasks }: { tasks: LegacyTask[] }) {
@@ -80,7 +81,8 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
         </Sheet>
         <div className="w-full flex-1">
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <GlobalBarcodeScanner />
           <NotificationCenter tasks={tasks} />
           <ThemeToggle />
           <UserProfile />

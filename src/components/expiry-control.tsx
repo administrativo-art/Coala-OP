@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -50,7 +50,7 @@ export type GroupedByBaseProduct = {
 };
 
 
-export function ExpiryControl() {
+function ExpiryControlContent() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
@@ -60,6 +60,7 @@ export function ExpiryControl() {
 
   const searchParams = useSearchParams();
   const scannedLotId = searchParams.get('lotId');
+  const searchQuery = searchParams.get('search');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -76,6 +77,12 @@ export function ExpiryControl() {
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchQuery) {
+        setSearchTerm(searchQuery);
+    }
+  }, [searchQuery]);
 
 
   const visibleLots = useMemo(() => {
@@ -555,3 +562,12 @@ export function ExpiryControl() {
     </>
   );
 }
+
+export function ExpiryControl() {
+    return (
+        <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
+            <ExpiryControlContent />
+        </Suspense>
+    );
+}
+
