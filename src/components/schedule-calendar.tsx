@@ -264,26 +264,29 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     });
 
     if (savedConfig) {
-        // Use saved config, but update names and add new kiosks
-        const savedOrderMap = new Map(savedConfig.map((c: KioskConfig, i: number) => [c.id, { ...c, savedIndex: i }]));
-        const newKiosks = kiosks.filter(k => !savedOrderMap.has(k.id));
+        const savedKioskMap = new Map(savedConfig.map((c: KioskConfig) => [c.id, c]));
+        const currentKioskMap = new Map(kiosks.map(k => [k.id, k]));
 
-        const updatedConfig = kiosks
-            .map(k => {
-                const saved = savedOrderMap.get(k.id);
-                return saved ? { ...saved, name: k.name } : null; // Update name, keep order
+        // Re-apply the saved order and add any new kiosks at the end
+        const finalConfig: KioskConfig[] = savedConfig
+            .map((c: KioskConfig) => {
+                const currentKiosk = currentKioskMap.get(c.id);
+                return currentKiosk ? { ...c, name: currentKiosk.name } : null; // Update name, keep order
             })
-            .filter((c): c is KioskConfig & { savedIndex: number } => !!c)
-            .sort((a, b) => a.savedIndex - b.savedIndex)
-            .map(({ savedIndex, ...rest }) => rest);
+            .filter((c: KioskConfig | null): c is KioskConfig => c !== null);
 
-        const newKioskConfigs = newKiosks.map(k => ({ id: k.id, name: k.name, visible: true }));
-        setKioskConfig([...updatedConfig, ...newKioskConfigs]);
+        const newKiosks = kiosks.filter(k => !savedKioskMap.has(k.id));
+        newKiosks.forEach(k => {
+            finalConfig.push({ id: k.id, name: k.name, visible: true });
+        });
+        
+        setKioskConfig(finalConfig);
     } else {
         // No saved config, use default sort
         setKioskConfig(defaultConfigSorted.map(k => ({ id: k.id, name: k.name, visible: true })));
     }
   }, [kiosks]);
+
 
   const handleSaveKioskConfig = (newConfig: KioskConfig[]) => {
     setKioskConfig(newConfig);
