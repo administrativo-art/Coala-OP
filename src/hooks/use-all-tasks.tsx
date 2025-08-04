@@ -9,9 +9,10 @@ import { useStockCount } from './use-stock-count';
 import { useReturnRequests } from './use-return-requests';
 import { useReposition } from './use-reposition';
 import { useStockAudit } from './use-stock-audit'; // Importar o hook de auditoria
+import { useTasks } from './use-tasks';
 import { format, parseISO } from 'date-fns';
 import { returnRequestStatuses, type ReturnRequest, type Task } from '@/types';
-import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck } from 'lucide-react';
+import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck, FileText } from 'lucide-react';
 
 export interface LegacyTask {
   id: string;
@@ -25,11 +26,15 @@ export interface LegacyTask {
 
 interface AllTasksContextType {
   legacyTasks: LegacyTask[];
+  allTasks: Task[];
+  formTasks: Task[];
   loading: boolean;
 }
 
 const AllTasksContext = createContext<AllTasksContextType>({
   legacyTasks: [],
+  allTasks: [],
+  formTasks: [],
   loading: true,
 });
 
@@ -41,9 +46,10 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
-  const { auditSessions, loading: auditLoading } = useStockAudit(); // Obter sessões de auditoria
+  const { auditSessions, loading: auditLoading } = useStockAudit();
+  const { tasks: formTasks, loading: tasksLoading } = useTasks();
 
-  const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading;
+  const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading;
 
   const legacyTasks = useMemo((): LegacyTask[] => {
     if (!user || !permissions || loading) return [];
@@ -156,8 +162,16 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   }, [user, permissions, itemAdditionRequests, stockCounts, returnRequests, repositionActivities, auditSessions, loading]);
   
+  const allTasks = useMemo(() => {
+    // This will combine legacy and new tasks in the future.
+    // For now, it just holds formTasks.
+    return formTasks;
+  }, [formTasks]);
+
   const value = {
     legacyTasks,
+    allTasks,
+    formTasks,
     loading
   };
 
