@@ -84,22 +84,22 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   useEffect(() => {
     if (dayData && editingKiosk) {
-      const hasT3Data = !!dayData[`${editingKiosk.name} T3`];
+      const hasT3Data = !!dayData[`${editingKiosk.id} T3`];
       setShowThirdShift(hasT3Data);
       
       const parseValue = (val: string | undefined): string[] => val ? val.split(' + ') : [];
 
       const initialShifts = ['T1', 'T2', 'T3'].map(turn => ({
-          key: `${editingKiosk.name} ${turn}`,
-          value: parseValue(dayData[`${editingKiosk.name} ${turn}`]),
+          key: `${editingKiosk.id} ${turn}`,
+          value: parseValue(dayData[`${editingKiosk.id} ${turn}`]),
       }));
       
-      const folgaValue = dayData[`${editingKiosk.name} Folga`] || '';
+      const folgaValue = dayData[`${editingKiosk.id} Folga`] || '';
       const folgaArray = folgaValue ? folgaValue.split(' + ') : [];
 
       replace(initialShifts);
       form.setValue('folga', folgaArray);
-      form.setValue('ausencias', dayData[`${editingKiosk.name} Ausencia`] || []);
+      form.setValue('ausencias', dayData[`${editingKiosk.id} Ausencia`] || []);
 
     }
   }, [dayData, editingKiosk, replace, form]);
@@ -111,20 +111,20 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
     if (isSunday) {
-        updates[`${editingKiosk.name} T1`] = values.shifts[0].value.join(' + ');
-        updates[`${editingKiosk.name} T2`] = '';
-        updates[`${editingKiosk.name} T3`] = '';
+        updates[`${editingKiosk.id} T1`] = values.shifts[0].value.join(' + ');
+        updates[`${editingKiosk.id} T2`] = '';
+        updates[`${editingKiosk.id} T3`] = '';
     } else {
         values.shifts.forEach(shift => {
             updates[shift.key] = shift.value.join(' + ');
         });
         if (!showThirdShift) {
-            updates[`${editingKiosk.name} T3`] = '';
+            updates[`${editingKiosk.id} T3`] = '';
         }
     }
     
-    updates[`${editingKiosk.name} Folga`] = values.folga.join(' + '); 
-    updates[`${editingKiosk.name} Ausencia`] = values.ausencias;
+    updates[`${editingKiosk.id} Folga`] = values.folga.join(' + '); 
+    updates[`${editingKiosk.id} Ausencia`] = values.ausencias;
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
@@ -304,3 +304,5 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     </Dialog>
   );
 }
+
+    

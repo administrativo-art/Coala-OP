@@ -174,7 +174,7 @@ function OperationalDashboard() {
       if(todaySchedule) {
           kiosksToDisplay.forEach(kiosk => {
               ['T1', 'T2', 'T3'].forEach(turn => {
-                  const names = todaySchedule[`${kiosk.name} ${turn}`];
+                  const names = todaySchedule[`${kiosk.id} ${turn}`];
                   if(names) names.split(' + ').forEach((n: string) => working.add(n.trim()));
               })
           });
@@ -293,15 +293,15 @@ function OperationalDashboard() {
                 ) : todaySchedule ? (
                     <Accordion type="multiple" className="w-full space-y-2">
                         {kiosksToDisplay.map(kiosk => {
-                            const t1 = todaySchedule[`${kiosk.name} T1`];
-                            const t2 = todaySchedule[`${kiosk.name} T2`];
-                            const t3 = todaySchedule[`${kiosk.name} T3`];
+                            const t1 = todaySchedule[`${kiosk.id} T1`];
+                            const t2 = todaySchedule[`${kiosk.id} T2`];
+                            const t3 = todaySchedule[`${kiosk.id} T3`];
                             
-                            const manualFolga = todaySchedule[`${kiosk.name} Folga`] || '';
+                            const manualFolga = todaySchedule[`${kiosk.id} Folga`] || '';
                             const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username)).map(u => u.username);
                             const combinedFolgas = [...new Set([...manualFolga.split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
 
-                            const ausencias = (todaySchedule[`${kiosk.name} Ausencia`] || []) as AbsenceEntry[];
+                            const ausencias = (todaySchedule[`${kiosk.id} Ausencia`] || []) as AbsenceEntry[];
                             const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
                             const hasSchedule = t1 || t2 || t3 || combinedFolgas || ausencias.length > 0;
 
@@ -539,3 +539,5 @@ export default function DashboardPage() {
     );
 }
 
+
+    

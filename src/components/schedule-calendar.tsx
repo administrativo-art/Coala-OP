@@ -54,7 +54,7 @@ const calculateConsecutiveWorkDays = (
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             if (name.trim() && name.toLowerCase() !== 'folga') {
@@ -92,7 +92,7 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
         for (const daySchedule of scheduleMap.values()) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             const trimmedName = name.trim();
@@ -279,7 +279,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
       kiosksToDisplay.forEach(kiosk => {
         ['T1', 'T2', 'T3'].forEach(turn => {
-          const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+          const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
           if (employeeNames && typeof employeeNames === 'string') {
             employeeNames.split(' + ').forEach(name => {
               const trimmedName = name.trim();
@@ -316,7 +316,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
             ['T1', 'T2', 'T3', 'Folga', 'Ausencia'].forEach(turn => {
-                acc[`${kiosk.name} ${turn}`] = turn === 'Ausencia' ? [] : '';
+                acc[`${kiosk.id} ${turn}`] = turn === 'Ausencia' ? [] : '';
             });
             return acc;
         }, {} as { [key: string]: any })
@@ -326,7 +326,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
-    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`, `${kiosk.name} Folga`, `${kiosk.name} Ausencia`]);
+    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.id} T1`, `${kiosk.id} T2`, `${kiosk.id} T3`, `${kiosk.id} Folga`, `${kiosk.id} Ausencia`]);
 
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
@@ -372,15 +372,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
 
         kiosksToDisplay.forEach(kiosk => {
             const staff = kioskStaff[kiosk.id];
-            dailyAssignments[`${kiosk.name} T1`] = '';
-            dailyAssignments[`${kiosk.name} T2`] = '';
-            dailyAssignments[`${kiosk.name} T3`] = '';
-            dailyAssignments[`${kiosk.name} Folga`] = '';
-            dailyAssignments[`${kiosk.name} Ausencia`] = [];
+            dailyAssignments[`${kiosk.id} T1`] = '';
+            dailyAssignments[`${kiosk.id} T2`] = '';
+            dailyAssignments[`${kiosk.id} T3`] = '';
+            dailyAssignments[`${kiosk.id} Folga`] = '';
+            dailyAssignments[`${kiosk.id} Ausencia`] = [];
             
             if (dayOfWeek !== 0 && staff) {
-                dailyAssignments[`${kiosk.name} T1`] = staff.T1.join(' + ');
-                dailyAssignments[`${kiosk.name} T2`] = staff.T2.join(' + ');
+                dailyAssignments[`${kiosk.id} T1`] = staff.T1.join(' + ');
+                dailyAssignments[`${kiosk.id} T2`] = staff.T2.join(' + ');
             }
         });
 
@@ -429,11 +429,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         const daySchedule = scheduleMap.get(dayISO);
         const isSunday = day.getDay() === 0;
         
-        const t1 = daySchedule?.[`${kiosk.name} T1`] || '';
-        const t2 = !isSunday ? (daySchedule?.[`${kiosk.name} T2`] || '') : '';
-        const t3 = !isSunday ? (daySchedule?.[`${kiosk.name} T3`] || '') : '';
-        const folga = daySchedule?.[`${kiosk.name} Folga`] || '';
-        const ausencias = (daySchedule?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || [])
+        const t1 = daySchedule?.[`${kiosk.id} T1`] || '';
+        const t2 = !isSunday ? (daySchedule?.[`${kiosk.id} T2`] || '') : '';
+        const t3 = !isSunday ? (daySchedule?.[`${kiosk.id} T3`] || '') : '';
+        const folga = daySchedule?.[`${kiosk.id} Folga`] || '';
+        const ausencias = (daySchedule?.[`${kiosk.id} Ausencia`] as AbsenceEntry[] || [])
             .map(a => `${operationalUserMap.get(a.userId)?.user.username || a.userId} (${a.reason})`).join(', ');
 
         return [
@@ -587,7 +587,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const employeeNames = daySchedule[`${kiosk.name} ${turn}`];
+                    const employeeNames = daySchedule[`${kiosk.id} ${turn}`];
                     if (employeeNames && typeof employeeNames === 'string') {
                         employeeNames.split(' + ').forEach(name => {
                             if (name.trim()) {
@@ -708,12 +708,12 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                             {filteredKiosks.map((kiosk, kioskIndex) => {
                                 const dayCounts = workDayCounts.get(dayISO);
                                 const isSunday = day?.getDay() === 0;
-                                const absences = (daySchedule?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || []);
+                                const absences = (daySchedule?.[`${kiosk.id} Ausencia`] as AbsenceEntry[] || []);
 
-                                const t1Employee = daySchedule?.[`${kiosk.name} T1`] as string || '';
-                                const t2Employee = daySchedule?.[`${kiosk.name} T2`] as string || '';
-                                const t3Employee = daySchedule?.[`${kiosk.name} T3`] as string || '';
-                                const manualFolga = daySchedule?.[`${kiosk.name} Folga`] as string || '';
+                                const t1Employee = daySchedule?.[`${kiosk.id} T1`] as string || '';
+                                const t2Employee = daySchedule?.[`${kiosk.id} T2`] as string || '';
+                                const t3Employee = daySchedule?.[`${kiosk.id} T3`] as string || '';
+                                const manualFolga = daySchedule?.[`${kiosk.id} Folga`] as string || '';
                                 
                                 const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
                                     const user = operationalUserMap.get(name);
@@ -836,3 +836,5 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     </>
   );
 }
+
+    
