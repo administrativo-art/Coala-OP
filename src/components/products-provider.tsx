@@ -21,6 +21,16 @@ export interface ProductsContextType {
 
 export const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
 
+const cleanUndefinedFields = (data: Record<string, any>) => {
+    const cleanedData = { ...data };
+    Object.keys(cleanedData).forEach(key => {
+        if (cleanedData[key] === undefined) {
+            delete cleanedData[key];
+        }
+    });
+    return cleanedData;
+};
+
 export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +91,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
     try {
-        await addDoc(collection(db, "products"), product);
+        const cleanedProduct = cleanUndefinedFields(product);
+        await addDoc(collection(db, "products"), cleanedProduct);
     } catch(error) {
         console.error("Error adding product:", error);
     }
@@ -91,7 +102,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     const productRef = doc(db, "products", updatedProduct.id);
     const { id, ...dataToUpdate } = updatedProduct;
     try {
-        await updateDoc(productRef, dataToUpdate);
+        const cleanedData = cleanUndefinedFields(dataToUpdate);
+        await updateDoc(productRef, cleanedData);
     } catch(error) {
         console.error("Error updating product:", error);
     }
@@ -103,7 +115,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
       if(product.id) {
         const productRef = doc(db, "products", product.id);
         const { id, ...dataToUpdate } = product;
-        batch.update(productRef, dataToUpdate);
+        const cleanedData = cleanUndefinedFields(dataToUpdate);
+        batch.update(productRef, cleanedData);
       }
     });
     try {
