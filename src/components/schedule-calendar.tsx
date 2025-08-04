@@ -324,7 +324,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     const dayISO = format(day, 'yyyy-MM-dd');
     const daySchedule = scheduleMap.get(dayISO);
 
-    const dataToEdit: DailySchedule = dayData || {
+    const dataToEdit: DailySchedule = daySchedule || {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
