@@ -1,4 +1,3 @@
-
 "use client"
 
 import React from 'react';
@@ -9,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { isToday } from 'date-fns';
 import { Button } from './ui/button';
 import { Edit, UserMinus } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface ScheduleTableViewProps {
   kiosks: Kiosk[];
@@ -93,7 +93,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                         </TableCell>
                     )
                 })}
-                </tr>
+                </TableRow>
             )
             })}
         </TableBody>
@@ -101,4 +101,3 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
     </div>
   );
 }
-
