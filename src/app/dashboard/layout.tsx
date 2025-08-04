@@ -39,7 +39,7 @@ function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
              <div className="mt-auto p-4 border-t flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                     <Skeleton className="h-10 w-10" />
-                    <Skeleton className="h-8 w-8" />
+                    {!isCollapsed && <Skeleton className="h-8 w-8" />}
                 </div>
             </div>
         </div>
