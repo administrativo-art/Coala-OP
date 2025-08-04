@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
@@ -15,6 +14,7 @@ import { getUnitsForCategory } from '@/lib/conversion';
 import { type Product, type UnitCategory, unitCategories } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { resizeImage } from '@/lib/image-utils';
+import { fetchProductInfo } from '@/ai/flows/fetch-product-info-flow';
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Trash2, Upload, Info, Settings } from 'lucide-react';
+import { Camera, Trash2, Upload, Info, Settings, Search, Loader2 } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from './ui/separator';
@@ -68,6 +68,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const [isFetchingProduct, setIsFetchingProduct] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProductFormValues>({
@@ -151,6 +152,33 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
+    const handleFetchProductInfo = async () => {
+        const barcode = form.getValues('barcode');
+        if (!barcode) {
+            toast({ variant: 'destructive', title: 'Código de barras ausente', description: 'Por favor, insira um código de barras para buscar.' });
+            return;
+        }
+
+        setIsFetchingProduct(true);
+        try {
+            const result = await fetchProductInfo(barcode);
+            if (result.found) {
+                form.setValue('baseName', result.name || '', { shouldValidate: true });
+                form.setValue('brand', result.brand || '', { shouldValidate: true });
+                if (result.packageSize) form.setValue('packageSize', result.packageSize, { shouldValidate: true });
+                if (result.unit) form.setValue('unit', result.unit, { shouldValidate: true });
+                if (result.imageUrl) form.setValue('imageUrl', result.imageUrl, { shouldValidate: true });
+                toast({ title: 'Produto encontrado!', description: 'Os dados do formulário foram preenchidos.' });
+            } else {
+                toast({ variant: 'destructive', title: 'Produto não encontrado', description: 'Nenhuma informação encontrada para este código de barras.' });
+            }
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro na busca', description: 'Não foi possível se comunicar com o banco de dados de produtos.' });
+        } finally {
+            setIsFetchingProduct(false);
+        }
+    };
+
     const onSubmit = (values: ProductFormValues) => {
         const productData = { ...values };
         if (productToEdit) {
@@ -205,7 +233,16 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 </div>
                                 
                                 <FormField control={form.control} name="barcode" render={({ field }) => (
-                                    <FormItem><FormLabel>Código de barras</FormLabel><div className="flex gap-2"><FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl><Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button></div><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Código de barras</FormLabel>
+                                        <div className="flex gap-2">
+                                            <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
+                                            <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
+                                            <Button type="button" variant="secondary" onClick={handleFetchProductInfo} disabled={isFetchingProduct}>
+                                                {isFetchingProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                            </Button>
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
                                 )}/>
 
                                 <div className="grid grid-cols-3 gap-4">
