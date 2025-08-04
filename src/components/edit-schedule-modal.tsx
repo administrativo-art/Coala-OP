@@ -32,7 +32,7 @@ type EditScheduleModalProps = {
 const scheduleSchema = z.object({
   shifts: z.array(z.object({
     key: z.string(),
-    value: z.string(),
+    value: z.array(z.string()),
   })),
   folga: z.array(z.string()),
 });
@@ -71,10 +71,12 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     if (dayData && editingKiosk) {
       const hasT3Data = !!dayData[`${editingKiosk.name} T3`];
       setShowThirdShift(hasT3Data);
+      
+      const parseValue = (val: string | undefined): string[] => val ? val.split(' + ') : [];
 
       const initialShifts = ['T1', 'T2', 'T3'].map(turn => ({
           key: `${editingKiosk.name} ${turn}`,
-          value: dayData[`${editingKiosk.name} ${turn}`] || '',
+          value: parseValue(dayData[`${editingKiosk.name} ${turn}`]),
       }));
       
       const folgaValue = dayData[`${editingKiosk.name} Folga`] || '';
@@ -88,18 +90,16 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
   const onSubmit = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
     
-    const transformValue = (val: string) => (val === '_NONE_' ? '' : val);
-
-    const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
     const updates: Partial<DailySchedule> = {};
+    const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
     if (isSunday) {
-        updates[`${editingKiosk.name} T1`] = transformValue(values.shifts[0].value);
-        updates[`${editingKiosk.name} T2`] = ''; // Clear T2
-        updates[`${editingKiosk.name} T3`] = ''; // Clear T3
+        updates[`${editingKiosk.name} T1`] = values.shifts[0].value.join(' + ');
+        updates[`${editingKiosk.name} T2`] = '';
+        updates[`${editingKiosk.name} T3`] = '';
     } else {
         values.shifts.forEach(shift => {
-            updates[shift.key] = transformValue(shift.value);
+            updates[shift.key] = shift.value.join(' + ');
         });
         if (!showThirdShift) {
             updates[`${editingKiosk.name} T3`] = '';
@@ -116,20 +116,38 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
-  const renderSelect = (field: any) => (
-    <Select onValueChange={(v) => field.onChange(v === '_NONE_' ? '' : v)} value={field.value || '_NONE_'}>
-        <FormControl>
-            <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-            </SelectTrigger>
-        </FormControl>
-        <SelectContent>
-            <SelectItem value="_NONE_">Nenhum</SelectItem>
-            {availableEmployees.map(emp => (
-                <SelectItem key={emp.id} value={emp.username}>{emp.username}</SelectItem>
-            ))}
-        </SelectContent>
-    </Select>
+  const renderMultiSelect = (field: any, placeholder: string) => (
+    <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+            <FormControl>
+                <Button variant="outline" className="w-full justify-between font-normal">
+                    {field.value?.length > 0 ? field.value.join(', ') : placeholder}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </FormControl>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+            <DropdownMenuLabel>Colaboradores</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <ScrollArea className="h-48">
+                {availableEmployees.map((emp) => (
+                    <DropdownMenuCheckboxItem
+                        key={emp.id}
+                        checked={field.value?.includes(emp.username)}
+                        onCheckedChange={(checked) => {
+                            const currentSelection = field.value || [];
+                            return checked
+                                ? field.onChange([...currentSelection, emp.username])
+                                : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                        }}
+                        onSelect={(e) => e.preventDefault()}
+                    >
+                        {emp.username}
+                    </DropdownMenuCheckboxItem>
+                ))}
+            </ScrollArea>
+        </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   return (
@@ -147,11 +165,11 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
               {isSunday ? (
                 <FormField
                     control={form.control}
-                    name={`shifts.0.value`} // Assumes T1 is at index 0
+                    name={`shifts.0.value`}
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Turno único</FormLabel>
-                        {renderSelect(field)}
+                        {renderMultiSelect(field, "Selecione...")}
                         <FormMessage />
                         </FormItem>
                     )}
@@ -174,7 +192,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                                 : field.key.endsWith('T2') ? 'Turno 2' 
                                 : 'Turno 3'
                             }</FormLabel>
-                            {renderSelect(controllerField)}
+                            {renderMultiSelect(controllerField, "Selecione...")}
                             <FormMessage />
                             </FormItem>
                         )}
@@ -200,37 +218,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                 render={({ field }) => (
                     <FormItem>
                         <FormLabel>Folga</FormLabel>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <FormControl>
-                                    <Button variant="outline" className="w-full justify-between font-normal">
-                                        {field.value?.length > 0 ? `${field.value.length} selecionado(s)` : "Ninguém de folga"}
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </FormControl>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                                <DropdownMenuLabel>Colaboradores</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <ScrollArea className="h-48">
-                                    {availableEmployees.map((emp) => (
-                                        <DropdownMenuCheckboxItem
-                                            key={emp.id}
-                                            checked={field.value?.includes(emp.username)}
-                                            onCheckedChange={(checked) => {
-                                                const currentSelection = field.value || [];
-                                                return checked
-                                                    ? field.onChange([...currentSelection, emp.username])
-                                                    : field.onChange(currentSelection.filter((name) => name !== emp.username));
-                                            }}
-                                            onSelect={(e) => e.preventDefault()}
-                                        >
-                                            {emp.username}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
-                                </ScrollArea>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        {renderMultiSelect(field, "Ninguém de folga")}
                         <FormMessage />
                     </FormItem>
                 )}
