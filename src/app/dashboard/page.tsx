@@ -43,12 +43,21 @@ interface OnlineUser {
     last_seen: Date;
 }
 
-const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    // 1º: tenta id (quando o BD já tiver sido migrado)
+    const byId   = daySchedule[`${kiosk.id} ${turn}`];
+    // 2º: tenta name (como está hoje)
     const byName = daySchedule[`${kiosk.name} ${turn}`];
-    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
+    
+    const result = byId ?? byName;
+    if (result !== undefined) {
+        return result;
+    }
+
+    return turn === 'Ausencia' ? [] : '';
 };
+
 
 function OnlineUsersPanel() {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -181,7 +190,7 @@ function OperationalDashboard() {
       if(todaySchedule) {
           kiosksToDisplay.forEach(kiosk => {
               ['T1', 'T2', 'T3'].forEach(turn => {
-                  const names = lookupShift(todaySchedule, kiosk, turn as any);
+                  const names = lookupShift(todaySchedule, kiosk, turn as any) as string;
                   if(names) names.split(' + ').forEach((n: string) => working.add(n.trim()));
               })
           });
@@ -300,11 +309,11 @@ function OperationalDashboard() {
                 ) : todaySchedule ? (
                     <Accordion type="multiple" className="w-full space-y-2">
                         {kiosksToDisplay.map(kiosk => {
-                            const t1 = lookupShift(todaySchedule, kiosk, 'T1');
-                            const t2 = lookupShift(todaySchedule, kiosk, 'T2');
-                            const t3 = lookupShift(todaySchedule, kiosk, 'T3');
+                            const t1 = lookupShift(todaySchedule, kiosk, 'T1') as string;
+                            const t2 = lookupShift(todaySchedule, kiosk, 'T2') as string;
+                            const t3 = lookupShift(todaySchedule, kiosk, 'T3') as string;
                             
-                            const manualFolga = lookupShift(todaySchedule, kiosk, 'Folga');
+                            const manualFolga = lookupShift(todaySchedule, kiosk, 'Folga') as string;
                             const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username)).map(u => u.username);
                             const combinedFolgas = [...new Set([...(manualFolga as string).split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
 

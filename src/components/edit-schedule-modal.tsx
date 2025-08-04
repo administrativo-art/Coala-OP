@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
-import { type DailySchedule, type User, absenceReasons, type AbsenceReason, type Kiosk } from '@/types';
+import { type DailySchedule, type User, absenceReasons, type AbsenceReason, type Kiosk, type AbsenceEntry } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
@@ -48,11 +48,19 @@ const scheduleSchema = z.object({
 
 type FormValues = z.infer<typeof scheduleSchema>;
 
-const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    // 1º: tenta id (quando o BD já tiver sido migrado)
+    const byId   = daySchedule[`${kiosk.id} ${turn}`];
+    // 2º: tenta name (como está hoje)
     const byName = daySchedule[`${kiosk.name} ${turn}`];
-    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
+    
+    const result = byId ?? byName;
+    if (result !== undefined) {
+        return result;
+    }
+
+    return turn === 'Ausencia' ? [] : '';
 };
 
 

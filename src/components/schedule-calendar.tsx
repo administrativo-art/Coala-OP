@@ -28,6 +28,22 @@ interface ScheduleCalendarProps {
     onEditDay: (day: DailySchedule, kioskId: string) => void;
 }
 
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    // 1º: tenta id (quando o BD já tiver sido migrado)
+    const byId   = daySchedule[`${kiosk.id} ${turn}`];
+    // 2º: tenta name (como está hoje)
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    
+    const result = byId ?? byName;
+    if (result !== undefined) {
+        return result;
+    }
+
+    return turn === 'Ausencia' ? [] : '';
+};
+
+
 const calculateConsecutiveWorkDays = (
     days: Date[],
     scheduleMap: Map<string, DailySchedule>,
@@ -155,20 +171,6 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
             </CardContent>
         </Card>
     );
-};
-
-const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
-    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    
-    // Tenta primeiro com ID (novo padrão)
-    const byId = daySchedule[`${kiosk.id} ${turn}`];
-    if (byId !== undefined) return byId;
-
-    // Fallback para nome (padrão legado)
-    const byName = daySchedule[`${kiosk.name} ${turn}`];
-    if (byName !== undefined) return byName;
-    
-    return turn === 'Ausencia' ? [] : '';
 };
 
 
@@ -702,8 +704,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         
                         const dayISO = format(day, 'yyyy-MM-dd');
                         const daySchedule = scheduleMap.get(dayISO);
-                        console.log('daySchedule para', day.toISOString().slice(0,10), Object.keys(daySchedule || {}));
-
+                        
                         return (
                         <React.Fragment key={dayISO}>
                             {/* Day Cell */}
