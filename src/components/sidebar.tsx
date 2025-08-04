@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
@@ -14,8 +13,6 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
-import packageInfo from '../../package.json';
-
 
 interface SidebarProps {
     isCollapsed: boolean;
@@ -286,7 +283,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       <div className="mt-auto p-4 border-t flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <ThemeToggle />
-            {!isCollapsed && <span className="text-xs text-muted-foreground">v{packageInfo.version}</span>}
+            {!isCollapsed && <span className="text-xs text-muted-foreground">v1.0.0</span>}
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsCollapsed(!isCollapsed)}>
                 {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
                 <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
