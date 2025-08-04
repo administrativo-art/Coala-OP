@@ -273,7 +273,7 @@ function OperationalDashboard() {
         <Card className={cn("lg:col-span-1", expiringSoonLots.length === 0 && "lg:col-span-2")}>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Users className="h-6 w-6" /> Escala de hoje - {format(new Date(), "dd 'de' MMMM", { locale: ptBR })}
+                    <Users className="h-6 w-6" /> Escala de hoje - {todayISO ? format(parseISO(todayISO), "dd 'de' MMMM", { locale: ptBR }) : ''}
                 </CardTitle>
                 <CardDescription>
                     Resumo da escala de trabalho para o dia atual.

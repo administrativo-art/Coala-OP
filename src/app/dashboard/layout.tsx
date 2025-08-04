@@ -2,8 +2,8 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Undo2 } from 'lucide-react';
 import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
-import { useKiosks } from '@/hooks/use-kiosks';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 
 function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
@@ -46,6 +45,7 @@ function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
     );
 }
 
+
 export default function DashboardLayout({
   children,
 }: {
@@ -55,7 +55,6 @@ export default function DashboardLayout({
   const { legacyTasks, loading: tasksLoading } = useAllTasks();
   const [isCollapsed, setIsCollapsed] = useLocalStorage('sidebarIsCollapsed', false);
   const router = useRouter();
-  const pathname = usePathname();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
