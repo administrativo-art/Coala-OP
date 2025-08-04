@@ -329,7 +329,9 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [schedule]);
   
   const kiosksToDisplay = useMemo(() => {
-    return kioskConfig.map(config => kiosks.find(k => k.id === config.id)).filter((k): k is Kiosk => !!k);
+    return kioskConfig
+        .map(config => kiosks.find(k => k.id === config.id))
+        .filter((k): k is Kiosk => !!k);
   }, [kioskConfig, kiosks]);
   
   const filteredKiosks = useMemo(() => {
