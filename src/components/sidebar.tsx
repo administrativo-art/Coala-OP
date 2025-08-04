@@ -14,7 +14,7 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
 import { Input } from './ui/input';
 import { ThemeToggle } from './theme-toggle';
-import packageInfo from '../../../package.json';
+import packageInfo from '../../package.json';
 
 
 interface SidebarProps {
