@@ -32,11 +32,9 @@ interface ScheduleCalendarProps {
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
     
-    // Tenta pelo ID primeiro (novo padrão)
     const byId = daySchedule[`${kiosk.id} ${turn}`];
     if (byId !== undefined) return byId;
 
-    // Fallback para o nome (padrão antigo)
     const byName = daySchedule[`${kiosk.name} ${turn}`];
     if (byName !== undefined) return byName;
     
@@ -324,7 +322,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const handleEditClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
     const dayISO = format(day, 'yyyy-MM-dd');
-    const dayData = scheduleMap.get(dayISO);
+    const daySchedule = scheduleMap.get(dayISO);
 
     const dataToEdit: DailySchedule = dayData || {
         id: dayISO,
@@ -694,7 +692,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
                     dates={daysInMonth}
-                    onEditDay={onEditDay}
+                    onEditDay={handleEditClick}
                     canManage={canManageSchedule}
                 />
             ) : (
@@ -804,7 +802,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                      <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
                                                         <span className="font-bold text-red-500">A:</span>
                                                          <div className="flex flex-col">
-                                                            {absences.map(a => renderEmployee(operationalUserMap.get(a.userId)?.user.username || a.userId, undefined, dayISO, selectedEmployee))}
+                                                            {absences.map(a => renderEmployee(operationalUserMap.get(a.userId)?.user.username || a.userId, dayCounts?.get(a.userId), dayISO, selectedEmployee))}
                                                          </div>
                                                      </div>
                                                 )}
