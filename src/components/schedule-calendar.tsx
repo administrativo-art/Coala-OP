@@ -209,11 +209,19 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   }, [schedule]);
   
   const kiosksToDisplay = useMemo(() => {
+    // START of change
+    // Filter to only show Tirirical kiosk
+    const tiriricalKiosk = kiosks.find(k => k.id === 'tirirical');
+    if (tiriricalKiosk) {
+        return [tiriricalKiosk];
+    }
+    // Fallback to original logic if tirirical is not found for some reason
     return [...kiosks].sort((a, b) => {
         if (a.id === 'matriz') return -1;
         if (b.id === 'matriz') return 1;
         return a.name.localeCompare(b.name);
     });
+    // END of change
   }, [kiosks]);
   
   const filteredKiosks = useMemo(() => {
