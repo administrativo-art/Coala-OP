@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download, Settings, Eye, EyeOff, ArrowUp, ArrowDown, UserMinus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download, Settings, Eye, EyeOff, ArrowUp, ArrowDown, UserMinus, Calendar, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from './ui/switch';
+import { ScheduleTableView } from './schedule-table';
 
 
 interface ScheduleCalendarProps {
@@ -31,12 +32,14 @@ interface ScheduleCalendarProps {
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
     
-    const result = daySchedule[`${kiosk.id} ${turn}`];
-    
-    if (result !== undefined) {
-        return result;
-    }
+    // Tenta pelo ID primeiro (novo padrão)
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    if (byId !== undefined) return byId;
 
+    // Fallback para o nome (padrão antigo)
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    if (byName !== undefined) return byName;
+    
     return turn === 'Ausencia' ? [] : '';
 };
 
@@ -181,6 +184,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
   const [selectedKiosk, setSelectedKiosk] = useState('all');
   const [selectedEmployee, setSelectedEmployee] = useState('all');
+  const [view, setView] = useState<'table' | 'calendar'>('table');
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -630,10 +634,16 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                 <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
             </div>
             
-            <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
-                <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
-                <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={handlePrevMonth}><ChevronLeft /></Button>
+                    <span className="text-lg font-semibold w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
+                    <Button variant="outline" size="icon" onClick={handleNextMonth}><ChevronRight /></Button>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <Button variant={view === 'table' ? 'default' : 'outline'} onClick={() => setView('table')}><List className="mr-2 h-4 w-4" /> Tabela</Button>
+                    <Button variant={view === 'calendar' ? 'default' : 'outline'} onClick={() => setView('calendar')}><Calendar className="mr-2 h-4 w-4" /> Calendário</Button>
+                </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
@@ -679,6 +689,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         <CardContent>
             {loading ? (
                 <Skeleton className="h-96 w-full" />
+            ) : view === 'table' ? (
+                <ScheduleTableView 
+                    kiosks={filteredKiosks}
+                    scheduleMap={scheduleMap}
+                    dates={daysInMonth}
+                    onEditDay={handleEditClick}
+                    canManage={canManageSchedule}
+                />
             ) : (
             <div className="overflow-x-auto border rounded-lg">
                 <div className="grid min-w-max" style={{ gridTemplateColumns: `minmax(120px, 0.5fr) repeat(${filteredKiosks.length}, minmax(200px, 1fr))` }}>
