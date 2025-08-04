@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -156,12 +157,20 @@ const TransportationCostAnalysis = ({ scheduleMap, users, kiosksToDisplay }: { s
     );
 };
 
-const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia') => {
+const lookupShift = (daySchedule: DailySchedule, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    
+    // Tenta primeiro com ID (novo padrão)
     const byId = daySchedule[`${kiosk.id} ${turn}`];
+    if (byId !== undefined) return byId;
+
+    // Fallback para nome (padrão legado)
     const byName = daySchedule[`${kiosk.name} ${turn}`];
-    return byId ?? byName ?? (turn === 'Ausencia' ? [] : '');
+    if (byName !== undefined) return byName;
+    
+    return turn === 'Ausencia' ? [] : '';
 };
+
 
 export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -217,7 +226,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const kiosksToDisplay = useMemo(() => {
     const kioskOrder = ["matriz", "joao-paulo", "tirirical"];
     
-    // Sort all kiosks according to the predefined order
     const sortedKiosks = [...kiosks].sort((a, b) => {
         const indexA = kioskOrder.indexOf(a.id);
         const indexB = kioskOrder.indexOf(b.id);
@@ -246,7 +254,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const workDayCounts = useMemo(() => {
     const operationalUsers = users.filter(u => u.operacional);
     
-    // 1. Calculate final counts from previous month
     let initialCounts = new Map<string, number>();
     if (previousMonthSchedule && previousMonthSchedule.length > 0) {
         const sortedPrevMonthDays = previousMonthSchedule.map(s => parseISO(s.id)).sort((a,b) => a.getTime() - b.getTime());
@@ -260,7 +267,6 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         operationalUsers.forEach(u => initialCounts.set(u.username, 0));
     }
     
-    // 2. Calculate current month counts using initial counts
     return calculateConsecutiveWorkDays(daysInMonth, scheduleMap, users, kiosksToDisplay, initialCounts);
 
   }, [daysInMonth, scheduleMap, users, kiosksToDisplay, previousMonthSchedule]);
@@ -696,6 +702,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         
                         const dayISO = format(day, 'yyyy-MM-dd');
                         const daySchedule = scheduleMap.get(dayISO);
+                        console.log('daySchedule para', day.toISOString().slice(0,10), Object.keys(daySchedule || {}));
 
                         return (
                         <React.Fragment key={dayISO}>
@@ -716,10 +723,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const isSunday = day?.getDay() === 0;
                                 const absences = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
                                 
-                                const t1Employee = lookupShift(daySchedule, kiosk, 'T1');
-                                const t2Employee = lookupShift(daySchedule, kiosk, 'T2');
-                                const t3Employee = lookupShift(daySchedule, kiosk, 'T3');
-                                const manualFolga = lookupShift(daySchedule, kiosk, 'Folga');
+                                const t1Employee = lookupShift(daySchedule, kiosk, 'T1') as string;
+                                const t2Employee = lookupShift(daySchedule, kiosk, 'T2') as string;
+                                const t3Employee = lookupShift(daySchedule, kiosk, 'T3') as string;
+                                const manualFolga = lookupShift(daySchedule, kiosk, 'Folga') as string;
                                 
                                 const autoFolgas = (dailyDayOffs.get(dayISO) || []).filter(name => {
                                     const user = operationalUserMap.get(name);
