@@ -210,18 +210,19 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
   const kiosksToDisplay = useMemo(() => {
     const kioskOrder = ["matriz", "joao-paulo", "tirirical"];
-    const orderedKiosks = [...kiosks].sort((a, b) => {
+    
+    // Sort all kiosks according to the predefined order
+    const sortedKiosks = [...kiosks].sort((a, b) => {
         const indexA = kioskOrder.indexOf(a.id);
         const indexB = kioskOrder.indexOf(b.id);
-        if (indexA !== -1 && indexB !== -1) {
-            return indexA - indexB;
-        }
+        
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
         if (indexA !== -1) return -1;
         if (indexB !== -1) return 1;
         return a.name.localeCompare(b.name);
     });
 
-    return orderedKiosks.filter(k => k.id === 'tirirical');
+    return sortedKiosks;
 }, [kiosks]);
   
   const filteredKiosks = useMemo(() => {
