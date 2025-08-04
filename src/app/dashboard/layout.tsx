@@ -53,18 +53,10 @@ export default function DashboardLayout({
 }) {
   const { user, isAuthenticated, loading, originalUser, stopImpersonating } = useAuth();
   const { legacyTasks, loading: tasksLoading } = useAllTasks();
-  const { kiosks } = useKiosks();
+  const [isCollapsed, setIsCollapsed] = useLocalStorage('sidebarIsCollapsed', false);
   const router = useRouter();
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
-  const [activeKioskId, setActiveKioskId] = useLocalStorage<string | null>('activeKioskId', null);
-
-  useEffect(() => {
-    if (user && !activeKioskId) {
-      setActiveKioskId(user.assignedKioskIds?.[0] || null);
-    }
-  }, [user, activeKioskId, setActiveKioskId]);
 
   useEffect(() => {
     const startTime = performance.now();
@@ -77,21 +69,6 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, loading, router]);
   
-  const activeKioskColor = useMemo(() => {
-    if (!activeKioskId) return null;
-    return kiosks.find(k => k.id === activeKioskId)?.color || null;
-  }, [activeKioskId, kiosks]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (activeKioskColor) {
-        // A more subtle approach: setting a CSS variable for accent color
-        root.style.setProperty('--kiosk-accent-color', activeKioskColor);
-    } else {
-        root.style.removeProperty('--kiosk-accent-color');
-    }
-  }, [activeKioskColor]);
-
   if (loading || tasksLoading || !isAuthenticated) {
     return (
       <div className="flex h-screen w-full">

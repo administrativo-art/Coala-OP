@@ -72,7 +72,6 @@ export type ConversionUnits = {
 export type Kiosk = {
     id: string;
     name: string;
-    color?: string;
 }
 
 export type LotEntry = {

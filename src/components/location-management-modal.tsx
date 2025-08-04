@@ -27,8 +27,6 @@ type KioskManagementModalProps = {
   permissions: { add: boolean, delete: boolean };
 };
 
-const kioskColors = ['#FCA5A5', '#FDBA74', '#FCD34D', '#A7F3D0', '#93C5FD', '#C4B5FD', '#F9A8D4'];
-
 export function LocationManagementModal({ open, onOpenChange, kiosks, updateKiosk, deleteKiosk, permissions }: KioskManagementModalProps) {
   const { addKiosk } = useKiosks();
   const [newKioskName, setNewKioskName] = useState('');
@@ -36,13 +34,9 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, updateKios
 
   const handleAddKiosk = () => {
     if (newKioskName.trim()) {
-      addKiosk({ name: newKioskName.trim(), color: kioskColors[0] });
+      addKiosk({ name: newKioskName.trim() });
       setNewKioskName('');
     }
-  };
-  
-  const handleColorChange = (kiosk: Kiosk, color: string) => {
-    updateKiosk({ ...kiosk, color });
   };
 
   const handleDeleteClick = (kiosk: Kiosk) => {
@@ -92,29 +86,6 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, updateKios
                   <div key={kiosk.id} className="grid grid-cols-[1fr_auto] items-center rounded-md border p-3 gap-2">
                     <span className="font-medium">{kiosk.name}</span>
                     <div className="flex items-center gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="icon" className="h-8 w-8">
-                            <Palette className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <div className="p-2 grid grid-cols-4 gap-2">
-                            {kioskColors.map(color => (
-                              <button
-                                key={color}
-                                className={cn(
-                                  "h-8 w-8 rounded-full border-2 transition-all",
-                                  kiosk.color === color ? 'border-primary ring-2 ring-ring' : 'border-transparent'
-                                )}
-                                style={{ backgroundColor: color }}
-                                onClick={() => handleColorChange(kiosk, color)}
-                              />
-                            ))}
-                          </div>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-
                       <Button
                         variant="ghost"
                         size="icon"

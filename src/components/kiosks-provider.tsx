@@ -29,9 +29,9 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
         console.log("No kiosks found. Seeding default kiosks...");
         const batch = writeBatch(db);
         
-        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz', color: '#60A5FA' });
-        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical', color: '#FCD34D' });
-        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo', color: '#A7F3D0' });
+        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz' });
+        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical' });
+        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo' });
         
         try {
           await batch.commit();
