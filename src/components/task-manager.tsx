@@ -19,6 +19,7 @@ export function TaskManager() {
     const taskLists = useMemo(() => {
         const pendingLegacyIds = new Set(legacyTasks.map(t => t.id));
         const safeFormTasks = formTasks || [];
+        const safeAllTasks = allTasks || [];
         const pending = safeFormTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
         
         return {
@@ -26,7 +27,7 @@ export function TaskManager() {
             awaiting_approval: safeFormTasks.filter(t => t.status === 'awaiting_approval'),
             completed: safeFormTasks.filter(t => t.status === 'completed'),
             // Filter out legacy tasks from the main list to avoid duplicates if they were ever included
-            all: allTasks.filter(t => !pendingLegacyIds.has(t.id)),
+            all: safeAllTasks.filter(t => !pendingLegacyIds.has(t.id)),
         }
     }, [allTasks, formTasks, legacyTasks]);
     
