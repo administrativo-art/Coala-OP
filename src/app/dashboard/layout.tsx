@@ -58,7 +58,13 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
-  const [activeKioskId] = useLocalStorage('activeKioskId', user?.assignedKioskIds?.[0] || null);
+  const [activeKioskId, setActiveKioskId] = useLocalStorage<string | null>('activeKioskId', null);
+
+  useEffect(() => {
+    if (user && !activeKioskId) {
+      setActiveKioskId(user.assignedKioskIds?.[0] || null);
+    }
+  }, [user, activeKioskId, setActiveKioskId]);
 
   useEffect(() => {
     const startTime = performance.now();
