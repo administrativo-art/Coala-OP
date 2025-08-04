@@ -775,7 +775,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                      <div className="flex items-center gap-1.5">
                                                         <span className="font-bold text-purple-600">U:</span>
                                                         {t1Employee.split(' + ').map(name => renderEmployee(name.trim(), dayCounts?.get(name.trim()), dayISO, selectedEmployee)).filter(Boolean).reduce((prev, curr) => <>{prev}{' '}{curr}</> as any, null)}
-                                                    </div>
+                                                     </div>
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-1.5">
