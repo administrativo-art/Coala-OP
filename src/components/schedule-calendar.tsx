@@ -694,7 +694,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
                     dates={daysInMonth}
-                    onEditDay={handleEditClick}
+                    onEditDay={onEditDay}
                     canManage={canManageSchedule}
                 />
             ) : (
