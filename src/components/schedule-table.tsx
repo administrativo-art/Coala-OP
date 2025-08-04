@@ -3,12 +3,13 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { type Kiosk, type DailySchedule, type AbsenceEntry } from '../types';
+import { type Kiosk, type DailySchedule, type AbsenceEntry, type User } from '../types';
 import { cn } from '@/lib/utils';
 import { isToday } from 'date-fns';
 import { Button } from './ui/button';
 import { Edit, UserMinus } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from './ui/badge';
 
 interface ScheduleTableViewProps {
   kiosks: Kiosk[];
@@ -16,6 +17,8 @@ interface ScheduleTableViewProps {
   dates: Date[];
   onEditDay: (day: DailySchedule, kioskId: string) => void;
   canManage: boolean;
+  users: User[];
+  workDayCounts: Map<string, number>;
 }
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -27,7 +30,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage }: ScheduleTableViewProps) {
+export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts }: ScheduleTableViewProps) {
 
   const handleEditClick = (day: Date, kioskId: string) => {
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -46,6 +49,30 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
     onEditDay(dataToEdit, kioskId);
   };
   
+  const renderEmployeeName = (name: string, date: Date) => {
+      const dayISO = format(date, 'yyyy-MM-dd');
+      const user = users.find(u => u.username === name.trim());
+      const count = workDayCounts.get(`${dayISO}-${user?.username}`);
+      const color = user?.color;
+
+      return (
+        <span
+            className={cn("px-1.5 py-0.5 rounded-md", color && 'text-black')}
+            style={color ? { backgroundColor: color } : {}}
+        >
+            {name}
+            {count && count > 1 && (
+                <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+            )}
+        </span>
+      );
+  };
+
+  const renderShift = (shiftValue: string | any[], date: Date) => {
+      if (typeof shiftValue !== 'string' || !shiftValue) return null;
+      return shiftValue.split(' + ').map(name => renderEmployeeName(name.trim(), date)).reduce((prev, curr) => <>{prev} + {curr}</>);
+  };
+
   return (
     <div className="overflow-x-auto rounded-lg border">
         <Table className="min-w-full text-left">
@@ -77,13 +104,18 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
 
                     return (
                         <TableCell key={kiosk.id} className="px-2 py-3 align-top text-xs relative group">
-                            <div className="min-h-[60px]">
-                                {t1 && <p><strong>T1:</strong> {t1}</p>}
-                                {t2 && <p><strong>T2:</strong> {t2}</p>}
-                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {folga}</p>}
-                                {ausencias.length > 0 && ausencias.map(a => (
-                                    <p key={a.userId} className="text-red-500 flex items-center gap-1"><UserMinus className="h-3 w-3"/> Ausente</p>
-                                ))}
+                            <div className="min-h-[60px] space-y-1">
+                                {t1 && <p><strong>T1:</strong> {renderShift(t1, date)}</p>}
+                                {t2 && <p><strong>T2:</strong> {renderShift(t2, date)}</p>}
+                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date)}</p>}
+                                {ausencias.length > 0 && ausencias.map(a => {
+                                    const user = users.find(u => u.id === a.userId);
+                                    return (
+                                        <p key={a.userId} className="text-red-500 flex items-center gap-1">
+                                            <UserMinus className="h-3 w-3"/> Ausente: {user?.username}
+                                        </p>
+                                    )
+                                })}
                             </div>
                             {canManage && (
                                 <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleEditClick(date, kiosk.id)}>

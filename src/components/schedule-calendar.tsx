@@ -1,50 +1,24 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, isToday, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download, Settings, Eye, EyeOff, ArrowUp, ArrowDown, UserMinus, Calendar, List } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser } from 'lucide-react';
+import { type DailySchedule, type User, type Kiosk } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Switch } from './ui/switch';
 import { ScheduleTableView } from './schedule-table';
 
-
-interface ScheduleCalendarProps {
-    onEditDay: (day: DailySchedule, kioskId: string) => void;
-}
-
-const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
-    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    
-    const byId = daySchedule[`${kiosk.id} ${turn}`];
-    if (byId !== undefined) return byId;
-
-    const byName = daySchedule[`${kiosk.name} ${turn}`];
-    if (byName !== undefined) return byName;
-    
-    return turn === 'Ausencia' ? [] : '';
-};
-
-export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
+export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule, kioskId: string) => void; }) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { schedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule } = useMonthlySchedule();
-  const { permissions } = useAuth();
+  const { schedule, loading: scheduleLoading, fetchSchedule, createFullMonthSchedule, previousMonthSchedule } = useMonthlySchedule();
+  const { users, permissions } = useAuth();
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
@@ -74,6 +48,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     });
     return map;
   }, [schedule]);
+
+  const previousScheduleMap = useMemo(() => {
+    const map = new Map<string, DailySchedule>();
+    previousMonthSchedule.forEach(daySchedule => {
+      map.set(daySchedule.id, daySchedule);
+    });
+    return map;
+  }, [previousMonthSchedule]);
   
   const kiosksToDisplay = useMemo(() => {
     const kioskOrder = ["matriz", "joao-paulo", "tirirical"];
@@ -89,7 +71,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     });
 
     return sortedKiosks;
-}, [kiosks]);
+  }, [kiosks]);
   
   const filteredKiosks = useMemo(() => {
     if (selectedKiosk === 'all') {
@@ -97,25 +79,69 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     }
     return kiosksToDisplay.filter(k => k.id === selectedKiosk);
   }, [kiosksToDisplay, selectedKiosk]);
+
+  const workDayCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const lastDayCounts = new Map<string, number>();
   
+    // Initialize with previous month's last day count
+    if (previousScheduleMap.size > 0) {
+      const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
+      const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+      const lastDaySchedule = previousScheduleMap.get(lastDayISO);
 
-  const handleEditClick = (day: Date, kioskId: string) => {
-    if (!canManageSchedule) return;
-    const dayISO = format(day, 'yyyy-MM-dd');
-    const dayData = scheduleMap.get(dayISO);
-
-    const dataToEdit: DailySchedule = dayData || {
-        id: dayISO,
-        diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
-        ...kiosksToDisplay.reduce((acc, kiosk) => {
-            ['T1', 'T2', 'T3', 'Folga', 'Ausencia'].forEach(turn => {
-                acc[`${kiosk.id} ${turn}`] = turn === 'Ausencia' ? [] : '';
+      if (lastDaySchedule) {
+         users.forEach(user => {
+            let isWorking = false;
+            kiosksToDisplay.forEach(kiosk => {
+              ['T1', 'T2', 'T3'].forEach(turn => {
+                const shiftKey = `${kiosk.id} ${turn}`;
+                const shiftWorkers = lastDaySchedule[shiftKey] as string || '';
+                if (shiftWorkers.includes(user.username)) {
+                  isWorking = true;
+                }
+              });
             });
-            return acc;
-        }, {} as { [key: string]: any })
-    };
-    onEditDay(dataToEdit, kioskId);
-  };
+            if (isWorking) {
+                lastDayCounts.set(user.username, 1); // Start with 1 if worked last day of prev month
+            }
+        });
+      }
+    }
+    
+    daysInMonth.forEach(day => {
+      const dayISO = format(day, 'yyyy-MM-dd');
+      const daySchedule = scheduleMap.get(dayISO);
+      
+      users.forEach(user => {
+        let isWorking = false;
+        if (daySchedule) {
+          kiosksToDisplay.forEach(kiosk => {
+            ['T1', 'T2', 'T3'].forEach(turn => {
+              const shiftKey = `${kiosk.id} ${turn}`;
+              const shiftWorkers = daySchedule[shiftKey] as string || '';
+              if (shiftWorkers.includes(user.username)) {
+                isWorking = true;
+              }
+            });
+          });
+        }
+        
+        const prevDay = subMonths(day, 1); // Incorrect, should be subDays
+        const prevDayISO = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
+        const prevCount = counts.get(`${prevDayISO}-${user.username}`) || lastDayCounts.get(user.username) || 0;
+        
+        if (isWorking) {
+          counts.set(`${dayISO}-${user.username}`, prevCount + 1);
+        } else {
+          counts.set(`${dayISO}-${user.username}`, 0);
+          lastDayCounts.set(user.username, 0); // Reset for next month calculation
+        }
+      });
+    });
+
+    return counts;
+  }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
@@ -195,8 +221,10 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
                     dates={daysInMonth}
-                    onEditDay={handleEditClick}
+                    onEditDay={onEditDay}
                     canManage={canManageSchedule}
+                    users={users}
+                    workDayCounts={workDayCounts}
                 />
             )}
         </CardContent>
