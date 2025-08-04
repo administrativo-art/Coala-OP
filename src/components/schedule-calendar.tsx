@@ -582,6 +582,15 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     doc.save(`escala_${kiosk.name.replace(/\s/g, '_')}_${format(currentDate, 'MM-yyyy')}.pdf`);
   };
 
+  const getTextColorForBackground = (hexColor: string): 'text-black' | 'text-white' => {
+      if (!hexColor) return 'text-black';
+      const r = parseInt(hexColor.slice(1, 3), 16);
+      const g = parseInt(hexColor.slice(3, 5), 16);
+      const b = parseInt(hexColor.slice(5, 7), 16);
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return luma > 128 ? 'text-black' : 'text-white';
+  };
+
   const renderEmployee = (name: string, count?: number, dayISO?: string, selectedEmployeeFilter?: string) => {
     if (!name || (selectedEmployeeFilter !== 'all' && name !== selectedEmployeeFilter && name.toLowerCase() !== 'folga')) {
       return null;
@@ -589,10 +598,11 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
     const userColor = userColorMap.get(name);
     const displayName = count ? `${name}.${count}` : name;
+    const textColorClass = userColor ? getTextColorForBackground(userColor) : 'text-inherit';
   
     const nameElement = (
       <span
-        className={cn("rounded-sm px-1 py-0.5", !userColor && "px-0 py-0 bg-transparent")}
+        className={cn("rounded-sm px-1 py-0.5", !userColor && "px-0 py-0 bg-transparent", textColorClass)}
         style={userColor ? { backgroundColor: userColor } : {}}
       >
         {displayName}
@@ -745,7 +755,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         const isCurrentMonth = getMonth(day) === getMonth(currentDate);
 
                         if (!isCurrentMonth) {
-                            return <React.Fragment key={format(day, 'yyyy-MM-dd')}></React.Fragment>;
+                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b"></div>;
                         }
 
                         return (
@@ -890,4 +900,3 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     </>
   );
 }
-
