@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -71,6 +72,7 @@ export type ConversionUnits = {
 export type Kiosk = {
     id: string;
     name: string;
+    color?: string;
 }
 
 export type LotEntry = {

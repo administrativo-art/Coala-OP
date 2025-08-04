@@ -1,34 +1,43 @@
 
+
 "use client"
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, Palette } from 'lucide-react';
 import { type Kiosk } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { cn } from '@/lib/utils';
+import { useKiosks } from '@/hooks/use-kiosks';
 
 type KioskManagementModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   kiosks: Kiosk[];
-  addKiosk: (name: string) => void;
+  updateKiosk: (kiosk: Kiosk) => void;
   deleteKiosk: (id: string) => void;
   permissions: { add: boolean, delete: boolean };
 };
 
-export function LocationManagementModal({ open, onOpenChange, kiosks, addKiosk, deleteKiosk, permissions }: KioskManagementModalProps) {
+const kioskColors = ['#FCA5A5', '#FDBA74', '#FCD34D', '#A7F3D0', '#93C5FD', '#C4B5FD', '#F9A8D4'];
+
+export function LocationManagementModal({ open, onOpenChange, kiosks, updateKiosk, deleteKiosk, permissions }: KioskManagementModalProps) {
+  const { addKiosk } = useKiosks();
   const [newKioskName, setNewKioskName] = useState('');
   const [kioskToDelete, setKioskToDelete] = useState<Kiosk | null>(null);
 
   const handleAddKiosk = () => {
     if (newKioskName.trim()) {
-      addKiosk(newKioskName.trim());
+      addKiosk({ name: newKioskName.trim(), color: kioskColors[0] });
       setNewKioskName('');
     }
+  };
+  
+  const handleColorChange = (kiosk: Kiosk, color: string) => {
+    updateKiosk({ ...kiosk, color });
   };
 
   const handleDeleteClick = (kiosk: Kiosk) => {
@@ -41,11 +50,19 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, addKiosk, 
       setKioskToDelete(null);
     }
   };
+  
+  const sortedKiosks = useMemo(() => {
+    return [...kiosks].sort((a,b) => {
+        if(a.id === 'matriz') return -1;
+        if(b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    })
+  }, [kiosks]);
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Gerenciar quiosques</DialogTitle>
             <DialogDescription>Adicione, edite ou exclua os quiosques.</DialogDescription>
@@ -63,21 +80,46 @@ export function LocationManagementModal({ open, onOpenChange, kiosks, addKiosk, 
                 <PlusCircle className="h-4 w-4" />
               </Button>
             </div>
-            <Separator />
-            <ScrollArea className="h-60">
+            
+            <ScrollArea className="h-72">
               <div className="space-y-2 pr-4">
-                {kiosks.length > 0 ? kiosks.map(kiosk => (
-                  <div key={kiosk.id} className="flex items-center justify-between rounded-md border p-3">
+                {sortedKiosks.length > 0 ? sortedKiosks.map(kiosk => (
+                  <div key={kiosk.id} className="grid grid-cols-[1fr_auto] items-center rounded-md border p-3 gap-2">
                     <span className="font-medium">{kiosk.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteClick(kiosk)}
-                      disabled={!permissions.delete || kiosk.id === 'matriz'}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="icon" className="h-8 w-8">
+                            <Palette className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <div className="p-2 grid grid-cols-4 gap-2">
+                            {kioskColors.map(color => (
+                              <button
+                                key={color}
+                                className={cn(
+                                  "h-8 w-8 rounded-full border-2 transition-all",
+                                  kiosk.color === color ? 'border-primary ring-2 ring-ring' : 'border-transparent'
+                                )}
+                                style={{ backgroundColor: color }}
+                                onClick={() => handleColorChange(kiosk, color)}
+                              />
+                            ))}
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive h-8 w-8"
+                        onClick={() => handleDeleteClick(kiosk)}
+                        disabled={!permissions.delete || kiosk.id === 'matriz'}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 )) : (
                   <p className="text-center text-muted-foreground py-8">Nenhum quiosque cadastrado.</p>

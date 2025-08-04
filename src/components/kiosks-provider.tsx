@@ -1,15 +1,17 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Kiosk } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDocs, query } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDocs, query, updateDoc } from "firebase/firestore";
 
 export interface KiosksContextType {
   kiosks: Kiosk[];
   loading: boolean;
-  addKiosk: (kioskName: string) => Promise<void>;
+  addKiosk: (kioskData: Partial<Kiosk>) => Promise<void>;
+  updateKiosk: (kiosk: Kiosk) => Promise<void>;
   deleteKiosk: (kioskId: string) => Promise<void>;
 }
 
@@ -25,16 +27,11 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
       // If the collection is empty, seed it with default data.
       if (querySnapshot.empty && !localStorage.getItem('kiosks_seeded')) {
         console.log("No kiosks found. Seeding default kiosks...");
-        const defaultKiosks = [
-            { name: 'Centro de distribuição - Matriz' },
-            { name: 'Quiosque Tirirical' },
-            { name: 'Quiosque João Paulo' },
-        ];
         const batch = writeBatch(db);
-        // We need a stable ID for the 'matriz' kiosk for user assignment
-        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz' });
-        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical' });
-        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo' });
+        
+        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz', color: '#60A5FA' });
+        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical', color: '#FCD34D' });
+        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo', color: '#A7F3D0' });
         
         try {
           await batch.commit();
@@ -56,15 +53,24 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
   
-  const addKiosk = useCallback(async (kioskName: string) => {
-    if (kioskName && !kiosks.find(l => l.name.toLowerCase() === kioskName.toLowerCase())) {
+  const addKiosk = useCallback(async (kioskData: Partial<Kiosk>) => {
+    if (kioskData.name && !kiosks.find(l => l.name.toLowerCase() === kioskData.name!.toLowerCase())) {
         try {
-            await addDoc(collection(db, "kiosks"), { name: kioskName });
+            await addDoc(collection(db, "kiosks"), kioskData);
         } catch(error) {
             console.error("Error adding kiosk:", error);
         }
     }
   }, [kiosks]);
+
+  const updateKiosk = useCallback(async (kioskData: Kiosk) => {
+    const { id, ...data } = kioskData;
+    try {
+        await updateDoc(doc(db, "kiosks", id), data);
+    } catch(error) {
+        console.error("Error updating kiosk:", error);
+    }
+  }, []);
   
   const deleteKiosk = useCallback(async (kioskId: string) => {
     try {
@@ -79,8 +85,9 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
     kiosks,
     loading,
     addKiosk,
+    updateKiosk,
     deleteKiosk,
-  }), [kiosks, loading, addKiosk, deleteKiosk]);
+  }), [kiosks, loading, addKiosk, updateKiosk, deleteKiosk]);
 
   return <KiosksContext.Provider value={value}>{children}</KiosksContext.Provider>;
 }

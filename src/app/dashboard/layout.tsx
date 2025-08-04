@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Undo2 } from 'lucide-react';
 import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { useLocalStorage } from '@/hooks/use-local-storage';
 
 function SidebarSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
     return (
@@ -51,9 +53,12 @@ export default function DashboardLayout({
 }) {
   const { user, isAuthenticated, loading, originalUser, stopImpersonating } = useAuth();
   const { legacyTasks, loading: tasksLoading } = useAllTasks();
+  const { kiosks } = useKiosks();
   const router = useRouter();
+  const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
+  const [activeKioskId] = useLocalStorage('activeKioskId', user?.assignedKioskIds?.[0] || null);
 
   useEffect(() => {
     const startTime = performance.now();
@@ -65,6 +70,21 @@ export default function DashboardLayout({
       }
     }
   }, [isAuthenticated, loading, router]);
+  
+  const activeKioskColor = useMemo(() => {
+    if (!activeKioskId) return null;
+    return kiosks.find(k => k.id === activeKioskId)?.color || null;
+  }, [activeKioskId, kiosks]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (activeKioskColor) {
+        // A more subtle approach: setting a CSS variable for accent color
+        root.style.setProperty('--kiosk-accent-color', activeKioskColor);
+    } else {
+        root.style.removeProperty('--kiosk-accent-color');
+    }
+  }, [activeKioskColor]);
 
   if (loading || tasksLoading || !isAuthenticated) {
     return (

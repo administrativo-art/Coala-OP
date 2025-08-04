@@ -48,7 +48,7 @@ const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC
 
 export function UserManagement() {
   const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
-  const { kiosks, addKiosk, deleteKiosk, loading: kiosksLoading } = useKiosks();
+  const { kiosks, updateKiosk, deleteKiosk, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -487,7 +487,7 @@ export function UserManagement() {
         open={isKiosksModalOpen}
         onOpenChange={setIsKiosksModalOpen}
         kiosks={kiosks}
-        addKiosk={addKiosk}
+        updateKiosk={updateKiosk}
         deleteKiosk={deleteKiosk}
         permissions={permissions.kiosks}
       />
