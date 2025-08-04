@@ -256,31 +256,33 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   useEffect(() => {
     const savedConfigRaw = localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
     const savedConfig = savedConfigRaw ? JSON.parse(savedConfigRaw) : null;
-    
-    // Sort kiosks by default order: Matriz first, then alphabetically
-    const sortedKiosks = [...kiosks].sort((a, b) => {
+
+    const defaultConfigSorted = [...kiosks].sort((a, b) => {
         if (a.id === 'matriz') return -1;
         if (b.id === 'matriz') return 1;
         return a.name.localeCompare(b.name);
     });
 
-    let newConfig: KioskConfig[] = sortedKiosks.map(k => {
-        const existing = savedConfig?.find((sc: KioskConfig) => sc.id === k.id);
-        return existing ? { ...existing, name: k.name } : { id: k.id, name: k.name, visible: true };
-    });
-    
-    // If a saved order exists, apply it
-    if(savedConfig) {
-        newConfig.sort((a,b) => {
-            const indexA = savedConfig.findIndex((sc: KioskConfig) => sc.id === a.id);
-            const indexB = savedConfig.findIndex((sc: KioskConfig) => sc.id === b.id);
-            if (indexA === -1) return 1; // New kiosks go to the end
-            if (indexB === -1) return -1;
-            return indexA - indexB;
-        });
-    }
+    if (savedConfig) {
+        // Use saved config, but update names and add new kiosks
+        const savedOrderMap = new Map(savedConfig.map((c: KioskConfig, i: number) => [c.id, { ...c, savedIndex: i }]));
+        const newKiosks = kiosks.filter(k => !savedOrderMap.has(k.id));
 
-    setKioskConfig(newConfig);
+        const updatedConfig = kiosks
+            .map(k => {
+                const saved = savedOrderMap.get(k.id);
+                return saved ? { ...saved, name: k.name } : null; // Update name, keep order
+            })
+            .filter((c): c is KioskConfig & { savedIndex: number } => !!c)
+            .sort((a, b) => a.savedIndex - b.savedIndex)
+            .map(({ savedIndex, ...rest }) => rest);
+
+        const newKioskConfigs = newKiosks.map(k => ({ id: k.id, name: k.name, visible: true }));
+        setKioskConfig([...updatedConfig, ...newKioskConfigs]);
+    } else {
+        // No saved config, use default sort
+        setKioskConfig(defaultConfigSorted.map(k => ({ id: k.id, name: k.name, visible: true })));
+    }
   }, [kiosks]);
 
   const handleSaveKioskConfig = (newConfig: KioskConfig[]) => {

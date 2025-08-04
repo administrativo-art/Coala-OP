@@ -172,11 +172,11 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
     const handleExportPdf = () => {
         if (!comparisonResults) return;
 
-        const doc = new jsPDF();
         const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'N/A';
         const periodALabel = `${getMonthLabel(periodA.month)}/${periodA.year}`;
         const periodBLabel = `${getMonthLabel(periodB.month)}/${periodB.year}`;
 
+        const doc = new jsPDF();
         doc.setFontSize(18);
         doc.text(`Comparativo de consumo - ${kioskName}`, 14, 22);
         doc.setFontSize(11);
@@ -240,13 +240,11 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         );
     };
 
-    const sortedKiosks = useMemo(() => {
-        return [...kiosks].sort((a,b) => {
-            if (a.id === 'matriz') return -1;
-            if (b.id === 'matriz') return 1;
-            return a.name.localeCompare(b.name);
-        });
-    }, [kiosks]);
+    const sortedKiosks = useMemo(() => kiosks.sort((a,b) => {
+        if (a.id === 'matriz') return -1;
+        if (b.id === 'matriz') return 1;
+        return a.name.localeCompare(b.name);
+    }), [kiosks]);
     
     const isCompareDisabled = !kioskId || !periodA.month || !periodA.year || !periodB.month || !periodB.year;
     
