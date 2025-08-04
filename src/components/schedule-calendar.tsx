@@ -257,27 +257,28 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     const savedConfigRaw = localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
     const savedConfig = savedConfigRaw ? JSON.parse(savedConfigRaw) : null;
     
-    // Start with kiosks sorted alphabetically, with 'matriz' first
     const sortedKiosks = [...kiosks].sort((a, b) => {
         if (a.id === 'matriz') return -1;
         if (b.id === 'matriz') return 1;
         return a.name.localeCompare(b.name);
     });
 
-    const newConfig: KioskConfig[] = sortedKiosks.map(k => {
+    let newConfig: KioskConfig[] = sortedKiosks.map(k => {
         const existing = savedConfig?.find((sc: KioskConfig) => sc.id === k.id);
         return existing ? { ...existing, name: k.name } : { id: k.id, name: k.name, visible: true };
     });
+    
+    // Create a map for quick lookup of saved indices
+    const savedOrderMap = new Map(savedConfig?.map((k: KioskConfig, index: number) => [k.id, index]) || []);
 
-    if(savedConfig) {
-        newConfig.sort((a, b) => {
-            const indexA = savedConfig.findIndex((sc: KioskConfig) => sc.id === a.id);
-            const indexB = savedConfig.findIndex((sc: KioskConfig) => sc.id === b.id);
-            if (indexA === -1) return 1;
-            if (indexB === -1) return -1;
-            return indexA - indexB;
-        });
-    }
+    // Sort the new config based on the saved order
+    newConfig.sort((a, b) => {
+        const indexA = savedOrderMap.get(a.id);
+        const indexB = savedOrderMap.get(b.id);
+        if (indexA === undefined) return 1; // Put new kiosks at the end
+        if (indexB === undefined) return -1;
+        return indexA - indexB;
+    });
 
     setKioskConfig(newConfig);
   }, [kiosks]);
