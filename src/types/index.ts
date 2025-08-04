@@ -5,6 +5,9 @@ export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as con
 
 export type UnitCategory = (typeof unitCategories)[number];
 
+export const absenceReasons = ["Atestado Médico", "Falta Injustificada", "Atraso", "Outros"] as const;
+export type AbsenceReason = (typeof absenceReasons)[number];
+
 export type LastEffectivePrice = {
   pricePerUnit: number;
   productId: string;
@@ -137,6 +140,12 @@ export type Shift = {
     startTime: string; // HH:mm
     endTime: string; // HH:mm
     notes?: string;
+};
+
+export type AbsenceEntry = {
+  userId: string;
+  reason: AbsenceReason;
+  notes?: string;
 };
 
 export type DailySchedule = {

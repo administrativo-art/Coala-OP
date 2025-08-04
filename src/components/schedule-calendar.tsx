@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -12,9 +13,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download, Settings, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Bed, UserX, Trash2, Wand2, DollarSign, AlertTriangle, Eraser, Download, Settings, Eye, EyeOff, ArrowUp, ArrowDown, UserMinus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type DailySchedule, type User, type Kiosk } from '@/types';
+import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -286,8 +287,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   const canManageSchedule = permissions.team.manage;
 
   const operationalUserMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-    users.forEach(u => map.set(u.username, u.operacional));
+    const map = new Map<string, { user: User, isOperational: boolean }>();
+    users.forEach(u => map.set(u.username, { user: u, isOperational: u.operacional }));
     return map;
   }, [users]);
 
@@ -421,8 +422,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         id: dayISO,
         diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         ...kiosksToDisplay.reduce((acc, kiosk) => {
-            ['T1', 'T2', 'T3', 'Folga'].forEach(turn => {
-                acc[`${kiosk.name} ${turn}`] = '';
+            ['T1', 'T2', 'T3', 'Folga', 'Ausencia'].forEach(turn => {
+                acc[`${kiosk.name} ${turn}`] = turn === 'Ausencia' ? [] : '';
             });
             return acc;
         }, {} as { [key: string]: any })
@@ -432,7 +433,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
-    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`, `${kiosk.name} Folga`]);
+    const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.name} T1`, `${kiosk.name} T2`, `${kiosk.name} T3`, `${kiosk.name} Folga`, `${kiosk.name} Ausencia`]);
 
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
@@ -441,7 +442,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
         };
         kioskKeys.forEach(key => {
-            emptyDay[key] = '';
+            emptyDay[key] = key.endsWith('Ausencia') ? [] : '';
         });
         emptyScheduleData[dayISO] = emptyDay;
     });
@@ -482,6 +483,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             dailyAssignments[`${kiosk.name} T2`] = '';
             dailyAssignments[`${kiosk.name} T3`] = '';
             dailyAssignments[`${kiosk.name} Folga`] = '';
+            dailyAssignments[`${kiosk.name} Ausencia`] = [];
             
             if (dayOfWeek !== 0 && staff) {
                 dailyAssignments[`${kiosk.name} T1`] = staff.T1.join(' + ');
@@ -528,7 +530,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
     doc.setTextColor(100);
     doc.text(monthYear.charAt(0).toUpperCase() + monthYear.slice(1), 14, 29);
 
-    const head = [['Data', 'Dia da Semana', 'Turno 1', 'Turno 2', 'Turno 3', 'Folga']];
+    const head = [['Data', 'Dia da Semana', 'Turno 1', 'Turno 2', 'Turno 3', 'Folga', 'Ausências']];
     const body = daysInMonth.map(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
         const daySchedule = scheduleMap.get(dayISO);
@@ -538,6 +540,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
         const t2 = !isSunday ? (daySchedule?.[`${kiosk.name} T2`] || '') : '';
         const t3 = !isSunday ? (daySchedule?.[`${kiosk.name} T3`] || '') : '';
         const folga = daySchedule?.[`${kiosk.name} Folga`] || '';
+        const ausencias = (daySchedule?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || [])
+            .map(a => `${operationalUserMap.get(a.userId)?.user.username || a.userId} (${a.reason})`).join(', ');
 
         return [
             format(day, 'dd/MM'),
@@ -545,7 +549,8 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             t1,
             t2,
             t3,
-            folga
+            folga,
+            ausencias
         ];
     });
 
@@ -565,7 +570,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
             if (data.section === 'body' && isNameColumn && data.cell.text) {
                 const cellText = data.cell.text[0];
                 if (cellText) {
-                    const names = cellText.split('+').map(name => name.trim());
+                    const names = cellText.split('+').map(name => name.trim().split(' (')[0]);
                     for (const name of names) {
                         const userColor = userColorMap.get(name);
                         if (userColor) {
@@ -615,7 +620,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
   
     const isFolguista = folguistaUsernames.has(name);
     const hasDuplicate = dayISO ? duplicateFolguistaAssignments.get(dayISO)?.has(name) : false;
-    const isOperational = operationalUserMap.get(name);
+    const isOperational = operationalUserMap.get(name)?.isOperational;
   
     if (count && count > 6) {
       return (
@@ -755,7 +760,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                         const isCurrentMonth = getMonth(day) === getMonth(currentDate);
 
                         if (!isCurrentMonth) {
-                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b"></div>;
+                            return <div key={format(day, 'yyyy-MM-dd')} className="bg-muted/30 border-b h-28"></div>;
                         }
 
                         return (
@@ -777,6 +782,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                 const dayData = scheduleMap.get(dayISO);
                                 const dayCounts = workDayCounts.get(dayISO);
                                 const isSunday = day?.getDay() === 0;
+                                const absences = (dayData?.[`${kiosk.name} Ausencia`] as AbsenceEntry[] || []);
 
                                 const t1Employee = dayData?.[`${kiosk.name} T1`];
                                 const t2Employee = dayData?.[`${kiosk.name} T2`];
@@ -798,7 +804,7 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                         key={kiosk.id} 
                                         onClick={() => handleEditClick(day, kiosk.id)}
                                         className={cn(
-                                            "p-1.5 h-full flex items-center justify-center group z-10",
+                                            "p-1.5 h-28 flex items-center justify-center group z-10",
                                             baseBg,
                                             "border-b",
                                             kioskIndex < filteredKiosks.length - 1 && "border-r",
@@ -835,6 +841,14 @@ export function ScheduleCalendar({ onEditDay }: ScheduleCalendarProps) {
                                                         <span className="font-bold text-muted-foreground">F:</span>
                                                         {renderEmployee(folgaEmployee, undefined, dayISO, selectedEmployee)}
                                                     </div>
+                                                )}
+                                                {absences.length > 0 && (
+                                                     <div className="flex items-center gap-1.5 mt-1 border-t pt-1 border-dashed">
+                                                        <span className="font-bold text-red-500">A:</span>
+                                                         <div className="flex flex-col">
+                                                            {absences.map(a => renderEmployee(operationalUserMap.get(a.userId)?.user.username || a.userId, undefined, dayISO, selectedEmployee))}
+                                                         </div>
+                                                     </div>
                                                 )}
                                             </div>
                                         ) : (

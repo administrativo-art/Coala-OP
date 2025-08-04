@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
@@ -13,13 +14,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
-import { type DailySchedule, type User } from '@/types';
+import { type DailySchedule, type User, absenceReasons, type AbsenceReason } from '@/types';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronsUpDown, PlusCircle, Trash2 } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
+import { Textarea } from './ui/textarea';
 
 
 type EditScheduleModalProps = {
@@ -29,12 +31,19 @@ type EditScheduleModalProps = {
   users: User[];
 };
 
+const absenceSchema = z.object({
+  userId: z.string().min(1, "Selecione um colaborador."),
+  reason: z.enum(absenceReasons, { required_error: 'Selecione um motivo.'}),
+  notes: z.string().optional(),
+});
+
 const scheduleSchema = z.object({
   shifts: z.array(z.object({
     key: z.string(),
     value: z.array(z.string()),
   })),
   folga: z.array(z.string()),
+  ausencias: z.array(absenceSchema).optional(),
 });
 
 type FormValues = z.infer<typeof scheduleSchema>;
@@ -49,12 +58,18 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     defaultValues: {
       shifts: [],
       folga: [],
+      ausencias: [],
     },
   });
 
   const { fields, replace } = useFieldArray({
     control: form.control,
     name: "shifts",
+  });
+  
+  const { fields: absenceFields, append: appendAbsence, remove: removeAbsence } = useFieldArray({
+    control: form.control,
+    name: "ausencias",
   });
   
   const editingKiosk = useMemo(() => {
@@ -84,6 +99,8 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
       replace(initialShifts);
       form.setValue('folga', folgaArray);
+      form.setValue('ausencias', dayData[`${editingKiosk.name} Ausencia`] || []);
+
     }
   }, [dayData, editingKiosk, replace, form]);
 
@@ -107,6 +124,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     }
     
     updates[`${editingKiosk.name} Folga`] = values.folga.join(' + '); 
+    updates[`${editingKiosk.name} Ausencia`] = values.ausencias;
 
     await updateDailySchedule(dayData.id, updates);
     onOpenChange(false);
@@ -152,7 +170,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   return (
     <Dialog open={!!dayData} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Editar escala - {editingKiosk.name}</DialogTitle>
           <DialogDescription>
@@ -160,7 +178,10 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <ScrollArea className="h-[60vh] pr-4 -mr-4">
+            <div className="space-y-4">
+            <h4 className="font-medium text-muted-foreground">Turnos</h4>
             <div className="space-y-3 py-2">
               {isSunday ? (
                 <FormField
@@ -224,6 +245,55 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                 )}
             />
 
+            <Separator className="my-1" />
+            
+            <div>
+              <Label>Ausências</Label>
+              <div className="space-y-2 mt-2">
+                {absenceFields.map((field, index) => (
+                  <div key={field.id} className="p-3 border rounded-lg space-y-2">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeAbsence(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <FormField control={form.control} name={`ausencias.${index}.userId`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Colaborador</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>{availableEmployees.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                    )}/>
+                     <FormField control={form.control} name={`ausencias.${index}.reason`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Motivo</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>{absenceReasons.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                    )}/>
+                     <FormField control={form.control} name={`ausencias.${index}.notes`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Observações (opcional)</FormLabel>
+                          <FormControl><Textarea {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                    )}/>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendAbsence({ userId: '', reason: 'Falta Injustificada', notes: '' })}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar ausência
+                </Button>
+              </div>
+            </div>
+
+            </div>
+            </ScrollArea>
             <DialogFooter className="pt-3 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={loading}>Salvar alterações</Button>

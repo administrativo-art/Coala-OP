@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -13,12 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus } from 'lucide-react'
 import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { type DailySchedule, type ProductSimulation } from "@/types"
+import { type DailySchedule, type ProductSimulation, type AbsenceEntry } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { EditScheduleModal } from "@/components/edit-schedule-modal"
@@ -275,8 +276,9 @@ function OperationalDashboard() {
                             const t2 = todaySchedule[`${kiosk.name} T2`];
                             const t3 = todaySchedule[`${kiosk.name} T3`];
                             const folga = todaySchedule[`${kiosk.name} Folga`];
+                            const ausencias = (todaySchedule[`${kiosk.name} Ausencia`] || []) as AbsenceEntry[];
                             const isSunday = todaySchedule.diaDaSemana.toLowerCase().includes('domingo');
-                            const hasSchedule = t1 || t2 || t3 || folga;
+                            const hasSchedule = t1 || t2 || t3 || folga || ausencias.length > 0;
 
                             if (!hasSchedule) {
                                 return (
@@ -312,6 +314,19 @@ function OperationalDashboard() {
                                                     </>
                                                 )}
                                                 {folga && <p className="text-muted-foreground"><strong>Folga:</strong> {folga}</p>}
+                                                {ausencias.length > 0 && (
+                                                    <div className="pt-2 mt-2 border-t border-dashed">
+                                                        {ausencias.map(a => {
+                                                            const employee = users.find(u => u.id === a.userId);
+                                                            return (
+                                                                <p key={a.userId} className="text-red-500 flex items-center gap-2">
+                                                                    <UserMinus className="h-4 w-4"/>
+                                                                    <strong>Ausente:</strong> {employee?.username} ({a.reason})
+                                                                </p>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         </AccordionContent>
                                     </Card>
