@@ -125,10 +125,13 @@ function OperationalDashboard() {
   
   const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
   const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
+  const [todayISO, setTodayISO] = useState<string>('');
+
+  useEffect(() => {
+    setTodayISO(format(new Date(), 'yyyy-MM-dd'));
+  }, []);
 
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
-  
-  const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   
   const todaySchedule = useMemo(() => schedule.find(s => s.id === todayISO), [schedule, todayISO]);
 

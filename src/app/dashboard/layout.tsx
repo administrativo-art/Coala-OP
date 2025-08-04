@@ -57,6 +57,11 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const startTime = performance.now();
@@ -69,7 +74,7 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, loading, router]);
   
-  if (loading || tasksLoading || !isAuthenticated) {
+  if (!isMounted || loading || tasksLoading || !isAuthenticated) {
     return (
       <div className="flex h-screen w-full">
          <SidebarSkeleton isCollapsed={isCollapsed} />
