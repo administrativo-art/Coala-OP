@@ -17,7 +17,7 @@ interface ScheduleTableViewProps {
   kiosks: Kiosk[];
   scheduleMap: Map<string, DailySchedule>;
   dates: Date[];
-  onEditDay: (day: DailySchedule, kioskId: string) => void;
+  onEditDay: (day: Date, kioskId: string) => void;
   canManage: boolean;
   users: User[];
   workDayCounts: Map<string, number>;
@@ -35,31 +35,14 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
 
 export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings }: ScheduleTableViewProps) {
 
-  const handleEditClick = (day: Date, kioskId: string) => {
-    const dayISO = format(day, 'yyyy-MM-dd');
-    const dayData = scheduleMap.get(dayISO);
-
-    const dataToEdit: DailySchedule = dayData || {
-        id: dayISO,
-        diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
-        ...kiosks.reduce((acc, kiosk) => {
-            ['T1', 'T2', 'T3', 'Folga', 'Ausencia'].forEach(turn => {
-                acc[`${kiosk.id} ${turn}`] = turn === 'Ausencia' ? [] : '';
-            });
-            return acc;
-        }, {} as { [key: string]: any })
-    };
-    onEditDay(dataToEdit, kioskId);
-  };
-  
   const renderEmployeeName = (name: string, date: Date, kioskId: string) => {
       const dayISO = format(date, 'yyyy-MM-dd');
       const user = users.find(u => u.username === name.trim());
       if (!user) return name;
       
-      const count = workDayCounts.get(`${dayISO}-${user.username}`);
+      const count = workDayCounts.get(`${dayISO}-${user.id}`);
       const color = user?.color;
-      const overworkWarning = warnings.get(`${dayISO}-${user.username}`);
+      const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
       const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
 
       const warning = conflictWarning || overworkWarning;
@@ -67,8 +50,8 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       return (
         <span className="inline-flex items-center gap-1">
             <span
-                className={cn("px-1.5 py-0.5 rounded-md", color && 'text-black')}
-                style={color ? { backgroundColor: color } : {}}
+                className="px-1.5 py-0.5 rounded-md"
+                style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
                 {count && count > 1 && (
@@ -93,7 +76,12 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
 
   const renderShift = (shiftValue: string | any[], date: Date, kioskId: string) => {
       if (typeof shiftValue !== 'string' || !shiftValue) return null;
-      return shiftValue.split(' + ').map(name => renderEmployeeName(name.trim(), date, kioskId)).reduce((prev, curr) => <>{prev} + {curr}</>);
+      return shiftValue.split(' + ').map((name, index, arr) => (
+        <React.Fragment key={name}>
+          {renderEmployeeName(name.trim(), date, kioskId)}
+          {index < arr.length - 1 && ' + '}
+        </React.Fragment>
+      ));
   };
 
   return (
@@ -141,7 +129,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                                 })}
                             </div>
                             {canManage && (
-                                <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleEditClick(date, kiosk.id)}>
+                                <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onEditDay(date, kiosk.id)}>
                                     <Edit className="h-3 w-3" />
                                 </Button>
                             )}

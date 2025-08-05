@@ -9,11 +9,21 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser } from 'lucide-react';
-import { type DailySchedule, type User, type Kiosk } from '@/types';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle } from 'lucide-react';
+import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScheduleTableView } from './schedule-table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+
+const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    if (byId !== undefined) return byId;
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    if (byName !== undefined) return byName;
+    return turn === 'Ausencia' ? [] : '';
+};
 
 export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule, kioskId: string) => void; }) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -84,72 +94,65 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const counts = new Map<string, number>();
     const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
 
-    if (users.length === 0 || kiosksToDisplay.length === 0) {
+    if (users.length === 0 || kiosksToDisplay.length === 0 || !scheduleMap.size) {
       return { workDayCounts: counts, warnings: warningsMap };
     }
-
-    const lastDayOfPrevMonth = endOfMonth(subDays(startOfMonth(currentDate), 1));
+    
+    const initialCounts = new Map<string, number>();
+    const lastDayOfPrevMonth = endOfMonth(subMonths(new Date(getYear(currentDate), getMonth(currentDate)), 1));
     const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
     const lastDaySchedule = previousScheduleMap.get(lastDayISO);
 
     users.forEach(user => {
-      let consecutiveDays = 0;
+      let workedLastDay = false;
       if (lastDaySchedule) {
-        let workedLastDay = false;
         kiosksToDisplay.forEach(kiosk => {
           ['T1', 'T2', 'T3'].forEach(turn => {
-            const shiftKey = `${kiosk.id} ${turn}`;
-            const shiftWorkers = lastDaySchedule[shiftKey] as string || '';
+            const shiftWorkers = lookupShift(lastDaySchedule, kiosk, turn as any) as string || '';
             if (shiftWorkers.includes(user.username)) {
               workedLastDay = true;
             }
           });
         });
-        if (workedLastDay) {
-            // This part requires a loop backwards, for simplicity we'll just check the very last day
-            // A more robust implementation would fetch more history
-            consecutiveDays = 1; 
-        }
       }
-      counts.set(`${user.username}-initial`, consecutiveDays);
+      initialCounts.set(user.id, workedLastDay ? 1 : 0);
     });
     
     daysInMonth.forEach(day => {
       const dayISO = format(day, 'yyyy-MM-dd');
       const daySchedule = scheduleMap.get(dayISO);
       const todaysAssignments = new Map<string, string>();
+      const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
 
       users.forEach(user => {
           let workedToday = false;
-          kiosksToDisplay.forEach(kiosk => {
-            if(daySchedule) {
-              ['T1', 'T2', 'T3'].forEach(turn => {
-                const shiftKey = `${kiosk.id} ${turn}`;
-                const shiftWorkers = (daySchedule[shiftKey] as string || '').split(' + ').map(s => s.trim());
-                if (shiftWorkers.includes(user.username)) {
-                  workedToday = true;
-                  const key = `${dayISO}-${user.username}`;
-                  if (todaysAssignments.has(key)) {
-                      warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
-                  } else {
-                      todaysAssignments.set(key, kiosk.name);
+          if (daySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                  const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                  if (shiftWorkers.includes(user.username)) {
+                    workedToday = true;
+                    const key = `${dayISO}-${user.username}`;
+                    if (todaysAssignments.has(key)) {
+                        warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
+                    } else {
+                        todaysAssignments.set(key, kiosk.name);
+                    }
                   }
-                }
-              });
-            }
-          });
+                });
+            });
+          }
 
-          const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
-          const yesterdayCount = counts.get(`${prevDayISO}-${user.username}`) || counts.get(`${user.username}-initial`) || 0;
+          const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
           
           if(workedToday) {
             const newCount = yesterdayCount + 1;
-            counts.set(`${dayISO}-${user.username}`, newCount);
+            counts.set(`${dayISO}-${user.id}`, newCount);
             if (newCount > 6) {
-                warningsMap.set(`${dayISO}-${user.username}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+                warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
-            counts.set(`${dayISO}-${user.username}`, 0);
+            counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
     });
@@ -180,6 +183,64 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const handleGenerateConfirm = async () => {
     // This function can be expanded with real logic
     setIsGenerateConfirmationOpen(false);
+  };
+  
+  const handleEditClick = (day: Date, kioskId: string) => {
+    if (!canManageSchedule) return;
+    const dayISO = format(day, 'yyyy-MM-dd');
+    const dayData = scheduleMap.get(dayISO);
+
+    const dataToEdit: DailySchedule = dayData || {
+        id: dayISO,
+        diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
+        ...kiosks.reduce((acc, kiosk) => {
+            ['T1', 'T2', 'T3', 'Folga', 'Ausencia'].forEach(turn => {
+                acc[`${kiosk.id} ${turn}`] = turn === 'Ausencia' ? [] : '';
+            });
+            return acc;
+        }, {} as { [key: string]: any })
+    };
+    onEditDay(dataToEdit, kioskId);
+  };
+
+
+  const renderEmployeeName = (name: string, date: Date, kioskId: string) => {
+      const dayISO = format(date, 'yyyy-MM-dd');
+      const user = users.find(u => u.username === name.trim());
+      if (!user) return name;
+      
+      const count = workDayCounts.get(`${dayISO}-${user.id}`);
+      const color = user?.color;
+      const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
+      const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
+
+      const warning = conflictWarning || overworkWarning;
+
+      return (
+        <span className="inline-flex items-center gap-1">
+            <span
+                className="px-1.5 py-0.5 rounded-md"
+                style={color ? { backgroundColor: color, color: 'black' } : {}}
+            >
+                {name}
+                {count && count > 1 && (
+                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+                )}
+            </span>
+             {warning && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger>
+                            <AlertTriangle className="h-4 w-4 text-destructive"/>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{warning.message}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            )}
+        </span>
+      );
   };
 
   return (
@@ -235,7 +296,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
                     dates={daysInMonth}
-                    onEditDay={onEditDay}
+                    onEditDay={handleEditClick}
                     canManage={canManageSchedule}
                     users={users}
                     workDayCounts={workDayCounts}
