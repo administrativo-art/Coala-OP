@@ -100,12 +100,13 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     return kiosksToDisplay.filter(k => selectedKiosks.includes(k.id));
   }, [kiosksToDisplay, selectedKiosks]);
 
-  const { workDayCounts, warnings } = useMemo(() => {
+  const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
     const counts = new Map<string, number>();
     const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
+    const dailyWorkers = new Map<string, Set<string>>();
 
     if (users.length === 0 || kiosksToDisplay.length === 0) {
-      return { workDayCounts: counts, warnings: warningsMap };
+      return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
     }
     
     const initialCounts = new Map<string, number>();
@@ -133,10 +134,22 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       const daySchedule = scheduleMap.get(dayISO);
       const todaysAssignments = new Map<string, string>();
       const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+      
+      const workersToday = new Set<string>();
+      if (daySchedule) {
+          kiosksToDisplay.forEach(kiosk => {
+            ['T1', 'T2', 'T3'].forEach(turn => {
+                const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                shiftWorkers.forEach(name => workersToday.add(name));
+            });
+        });
+      }
+      dailyWorkers.set(dayISO, workersToday);
 
       users.forEach(user => {
           let workedToday = false;
           let isOnFolga = false;
+          let isAusente = false;
 
           if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
@@ -155,13 +168,17 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                  const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
                  if (folgaNames.includes(user.username)) {
                     isOnFolga = true;
-                }
+                 }
+                 const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+                 if (ausencias.some(a => a.userId === user.id)) {
+                    isAusente = true;
+                 }
             });
           }
 
           const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
           
-          if (workedToday && !isOnFolga) {
+          if (workedToday && !isOnFolga && !isAusente) {
             const newCount = yesterdayCount + 1;
             counts.set(`${dayISO}-${user.id}`, newCount);
             if (newCount > 6) {
@@ -173,7 +190,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       });
     });
 
-    return { workDayCounts: counts, warnings: warningsMap };
+    return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
   }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
   const handleClearMonthConfirm = async () => {
@@ -408,6 +425,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     users={users}
                     workDayCounts={workDayCounts}
                     warnings={warnings}
+                    todaysWorkersMap={todaysWorkersMap}
                 />
             )}
         </CardContent>

@@ -24,6 +24,7 @@ interface ScheduleTableViewProps {
   users: User[];
   workDayCounts: Map<string, number>;
   warnings: Map<string, { type: 'overwork' | 'conflict'; message: string }>;
+  todaysWorkersMap: Map<string, Set<string>>;
 }
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -35,7 +36,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings }: ScheduleTableViewProps) {
+export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings, todaysWorkersMap }: ScheduleTableViewProps) {
 
   const renderEmployeeName = (name: string, date: Date, kioskId: string, isFolga = false) => {
       const dayISO = format(date, 'yyyy-MM-dd');
@@ -61,7 +62,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                 style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
-                {count && count > 0 && (
+                {count && count >= 1 && (
                     <span className="text-xs font-bold opacity-80"> - {count}</span>
                 )}
             </span>
@@ -118,11 +119,18 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                     const t1 = lookupShift(daySchedule, kiosk, 'T1');
                     const t2 = lookupShift(daySchedule, kiosk, 'T2');
                     const t3 = lookupShift(daySchedule, kiosk, 'T3');
-                    const folga = lookupShift(daySchedule, kiosk, 'Folga');
                     const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+                    
+                    const manualFolga = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+                    const todaysWorkers = todaysWorkersMap.get(dateStr) || new Set();
+                    const autoFolgas = users
+                        .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
+                        .map(u => u.username);
+                    
+                    const combinedFolgas = [...new Set([...manualFolga, ...autoFolgas])].join(' + ');
 
                     const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
-                    const hasFolgaOrAusencia = (folga && folga.length > 0) || ausencias.length > 0;
+                    const hasFolgaOrAusencia = (combinedFolgas && combinedFolgas.length > 0) || ausencias.length > 0;
 
                     return (
                         <TableCell
@@ -142,7 +150,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                                     <Separator className="my-2 border-dashed" />
                                 )}
 
-                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
+                                {combinedFolgas && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(combinedFolgas, date, kiosk.id, true)}</p>}
                                 
                                 {ausencias.length > 0 && ausencias.map(a => {
                                     const user = users.find(u => u.id === a.userId);

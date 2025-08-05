@@ -101,7 +101,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
       const hasT3Data = !!lookupShift(dayData, editingKiosk, 'T3');
       setShowThirdShift(hasT3Data);
       
-      const parseValue = (val: string | undefined): string[] => val ? val.split(' + ') : [];
+      const parseValue = (val: string | undefined): string[] => val ? val.split(' + ').filter(Boolean) : [];
 
       const initialShifts = ['T1', 'T2', 'T3'].map(turn => ({
           key: `${editingKiosk.id} ${turn}`,
@@ -109,7 +109,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
       }));
       
       const folgaValue = lookupShift(dayData, editingKiosk, 'Folga') as string || '';
-      const folgaArray = folgaValue ? folgaValue.split(' + ') : [];
+      const folgaArray = folgaValue ? folgaValue.split(' + ').filter(Boolean) : [];
       
       const ausenciasValue = lookupShift(dayData, editingKiosk, 'Ausencia') as AbsenceEntry[] || [];
 
@@ -320,5 +320,3 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     </Dialog>
   );
 }
-
-    
