@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScheduleTableView } from './schedule-table';
@@ -193,6 +193,35 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
   }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
+   const valeTransporteData = useMemo(() => {
+    const dailyWorkers = Array.from(todaysWorkersMap.values());
+    const workedDaysByUser = new Map<string, number>();
+
+    dailyWorkers.forEach(daySet => {
+        daySet.forEach(username => {
+            workedDaysByUser.set(username, (workedDaysByUser.get(username) || 0) + 1);
+        });
+    });
+
+    let totalCost = 0;
+    const userCosts = users
+        .map(user => {
+            const workedDays = workedDaysByUser.get(user.username) || 0;
+            const dailyValue = user.valeTransporte || 0;
+            const userTotal = workedDays * dailyValue;
+            totalCost += userTotal;
+            return {
+                username: user.username,
+                workedDays,
+                dailyValue,
+                total: userTotal
+            };
+        })
+        .filter(item => item.workedDays > 0);
+
+    return { totalCost, userCosts };
+  }, [todaysWorkersMap, users]);
+
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
     const kioskKeys = kiosksToDisplay.flatMap(kiosk => [`${kiosk.id} T1`, `${kiosk.id} T2`, `${kiosk.id} T3`, `${kiosk.id} Folga`, `${kiosk.id} Ausencia`]);
@@ -352,6 +381,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
   return (
     <>
+      <div className="space-y-6">
         <Card className="w-full">
         <CardHeader className="space-y-4">
             <div>
@@ -430,6 +460,38 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             )}
         </CardContent>
       </Card>
+      
+        {valeTransporteData.totalCost > 0 && (
+           <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><DollarSign /> Custo com Vale-Transporte</CardTitle>
+                    <CardDescription>Custo total estimado para o mês de {format(currentDate, 'MMMM', { locale: ptBR })}.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex justify-between items-center bg-muted p-4 rounded-lg">
+                        <span className="font-semibold">Total mensal</span>
+                        <span className="text-2xl font-bold text-primary">{valeTransporteData.totalCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                     <Accordion type="single" collapsible className="w-full mt-2">
+                        <AccordionItem value="details" className="border-none">
+                            <AccordionTrigger className="text-sm p-2 hover:no-underline">Ver detalhes por colaborador</AccordionTrigger>
+                            <AccordionContent>
+                                <div className="space-y-2 p-2 border rounded-lg">
+                                    {valeTransporteData.userCosts.map(item => (
+                                        <div key={item.username} className="flex justify-between items-center text-sm">
+                                            <span>{item.username} ({item.workedDays} dias)</span>
+                                            <span className="font-medium">{item.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
+                </CardContent>
+           </Card>
+        )}
+      </div>
+
       
         {isClearConfirmationOpen && (
             <DeleteConfirmationDialog
