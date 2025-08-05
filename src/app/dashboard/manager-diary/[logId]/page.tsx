@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { type DailyLog, type DiaryActivity } from '@/types';
+import { useDebounce } from 'use-debounce';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -73,6 +74,9 @@ export default function EditDiaryPage() {
         name: "activities",
     });
 
+    // Debounce form values to trigger autosave
+    const [debouncedFormValues] = useDebounce(form.watch(), 2000);
+
     useEffect(() => {
         const entry = getLogById(logId as string);
         if (entry) {
@@ -95,7 +99,7 @@ export default function EditDiaryPage() {
         }
     };
     
-    const onSave = async (status: DailyLog['status']) => {
+    const onFinalize = async () => {
         if (!logEntry) return;
 
         const values = form.getValues();
@@ -108,15 +112,31 @@ export default function EditDiaryPage() {
         const payload: Partial<DailyLog> = {
             activities: updatedActivities,
             generalObservations: values.generalObservations,
-            status,
+            status: 'finalizado',
         };
         
         await updateLog(logEntry.id, payload);
-        toast({ title: `Diário ${status === 'finalizado' ? 'finalizado' : 'salvo como rascunho'} com sucesso!` });
-        if (status === 'finalizado') {
-            router.push('/dashboard/manager-diary');
-        }
+        toast({ title: 'Diário finalizado com sucesso!' });
+        router.push('/dashboard/manager-diary');
     };
+
+    // Auto-save effect
+    useEffect(() => {
+        if (logEntry && logEntry.status !== 'finalizado' && form.formState.isDirty) {
+            const values = form.getValues();
+            const updatedActivities = values.activities.map(act => ({
+                ...act,
+                durationMinutes: calculateDuration(act.startTime, act.endTime)
+            }));
+            const payload: Partial<DailyLog> = {
+                activities: updatedActivities,
+                generalObservations: values.generalObservations,
+                status: 'em andamento', // Always save as 'in progress'
+            };
+            updateLog(logEntry.id, payload);
+        }
+    }, [debouncedFormValues, logEntry, form, updateLog]);
+
 
     if (loading) {
         return <Skeleton className="h-screen w-full" />
@@ -136,7 +156,13 @@ export default function EditDiaryPage() {
             </Button>
             <Card>
                 <CardHeader>
-                    <CardTitle>Diário de {format(new Date(logEntry.logDate), 'dd/MM/yyyy', { timeZone: 'UTC' })}</CardTitle>
+                    <CardTitle>Diário de {format(parseISO(logEntry.logDate), 'dd/MM/yyyy', { timeZone: 'UTC' })}</CardTitle>
+                     <CardDescription>
+                        {isFinalized 
+                            ? "Este registro foi finalizado e não pode ser alterado." 
+                            : "As alterações são salvas automaticamente. Clique em 'Finalizar' ao concluir."
+                        }
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>
@@ -176,8 +202,7 @@ export default function EditDiaryPage() {
                              
                              {!isFinalized && (
                                 <div className="flex justify-end gap-2 sticky bottom-0 py-4 bg-background">
-                                    <Button type="button" variant="outline" onClick={() => onSave('em andamento')}><Save className="mr-2"/> Salvar Rascunho</Button>
-                                    <Button type="button" onClick={() => onSave('finalizado')}><Send className="mr-2"/> Finalizar Registro</Button>
+                                    <Button type="button" onClick={onFinalize}><Send className="mr-2"/> Finalizar Registro</Button>
                                 </div>
                              )}
                         </form>
@@ -241,4 +266,3 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
         </AccordionItem>
     );
 }
-
