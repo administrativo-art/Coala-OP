@@ -116,8 +116,7 @@ export default function EditDiaryPage() {
             const canEdit = (entry.status === 'draft' || entry.status === 'em andamento') && permissions.authorBoardDiary.create;
             setIsEditing(canEdit);
             
-            const sortedActivities = [...(entry.activities || [])].sort((a,b) => a.startTime.localeCompare(b.startTime));
-            replace(sortedActivities);
+            replace(entry.activities || []);
         }
     }, [logId, getLogById, replace, permissions.authorBoardDiary.create]);
     
@@ -168,15 +167,13 @@ export default function EditDiaryPage() {
     // Auto-save effect
     useEffect(() => {
         if (logEntry && (logEntry.status === 'draft' || logEntry.status === 'em andamento') && form.formState.isDirty && isEditing) {
-            const values = form.getValues();
             const payload: Partial<DailyLog> = {
                 ...getPayload(),
                 status: 'em andamento',
             };
             updateLog(logEntry.id, payload);
-            form.reset(values); // Reset dirty state
         }
-    }, [debouncedFormValues, logEntry, form, updateLog, isEditing]);
+    }, [debouncedFormValues, logEntry, isEditing]);
 
 
     if (loading) {
@@ -425,3 +422,5 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
         </AccordionItem>
     );
 }
+
+    
