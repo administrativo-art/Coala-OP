@@ -283,6 +283,7 @@ export type PermissionSet = {
     help: { view: boolean; };
     tasks: { view: boolean, manage: boolean; };
     audit: { start: boolean; approve: boolean; };
+    authorBoardDiary: { create: boolean; viewAll: boolean; validate: boolean; };
 };
 
 export type Profile = {
@@ -584,6 +585,7 @@ export const defaultGuestPermissions: PermissionSet = {
     help: { view: true },
     tasks: { view: true, manage: false },
     audit: { start: false, approve: false },
+    authorBoardDiary: { create: false, viewAll: false, validate: false },
 };
 
 export const defaultUserPermissions: PermissionSet = {
@@ -598,6 +600,7 @@ export const defaultUserPermissions: PermissionSet = {
     purchasing: { suggest: true, approve: false, viewHistory: true, deleteHistory: false },
     stockCount: { perform: true, approve: false },
     pricing: { simulate: true, manageParameters: false },
+    authorBoardDiary: { create: true, viewAll: false, validate: false },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -618,6 +621,7 @@ export const defaultAdminPermissions: PermissionSet = {
     help: { view: true },
     tasks: { view: true, manage: true },
     audit: { start: true, approve: true },
+    authorBoardDiary: { create: true, viewAll: true, validate: true },
 };
 
 

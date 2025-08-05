@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -20,6 +21,7 @@ import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSqua
 import SignatureCanvas from 'react-signature-canvas';
 import { Skeleton } from './ui/skeleton';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { useProfiles } from '@/hooks/use-profiles';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -53,6 +55,7 @@ type DiaryFormValues = z.infer<typeof diaryFormSchema>;
 export function ManagerDiary() {
     const { user } = useAuth();
     const { kiosks } = useKiosks();
+    const { profiles } = useProfiles();
     const { todayLog, createOrUpdateLog, loading } = useAuthorBoardDiary();
     
     const supervisorSignatureRef = React.useRef<SignatureCanvas>(null);
@@ -90,6 +93,8 @@ export function ManagerDiary() {
     if (loading) {
         return <Skeleton className="h-screen w-full" />
     }
+    
+    const userProfileName = profiles.find(p => p.id === user?.profileId)?.name || 'Perfil desconhecido';
 
     const onSave = async (values: DiaryFormValues, newStatus: 'draft' | 'submitted') => {
         const supervisorSignature = supervisorSignatureRef.current;
@@ -121,8 +126,8 @@ export function ManagerDiary() {
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3 p-3 border rounded-lg"><Calendar className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Data</p><p className="font-semibold">{format(new Date(), 'dd/MM/yyyy')}</p></div></div>
-                    <div className="flex items-center gap-3 p-3 border rounded-lg"><User className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Autor</p><p className="font-semibold">{user?.username}</p></div></div>
-                    <div className="flex items-center gap-3 p-3 border rounded-lg"><Warehouse className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Unidades</p><p className="font-semibold truncate">{user?.assignedKioskIds.map(id => kiosks.find(k => k.id === id)?.name).join(', ')}</p></div></div>
+                    <div className="flex items-center gap-3 p-3 border rounded-lg"><User className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">{userProfileName}</p><p className="font-semibold">{user?.username}</p></div></div>
+                    <div className="flex items-center gap-3 p-3 border rounded-lg"><Warehouse className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Unidades vinculadas</p><p className="font-semibold truncate">{user?.assignedKioskIds.map(id => kiosks.find(k => k.id === id)?.name).join(', ')}</p></div></div>
                 </CardContent>
             </Card>
 

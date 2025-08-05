@@ -22,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -37,13 +37,15 @@ const permissionsSchema = z.object({
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     team: z.object({ manage: z.boolean(), view: z.boolean() }),
-    purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
+    purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
     itemRequests: z.object({ manage: z.boolean() }),
     pricing: z.object({ simulate: z.boolean(), manageParameters: z.boolean() }),
     reports: z.object({ view: z.boolean() }),
     help: z.object({ view: z.boolean() }),
     tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
+    audit: z.object({ start: z.boolean(), approve: z.boolean() }),
+    authorBoardDiary: z.object({ create: z.boolean(), viewAll: z.boolean(), validate: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -107,6 +109,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       itemRequests: { ...defaultGuestPermissions.itemRequests, ...profile.permissions?.itemRequests },
       pricing: { ...defaultGuestPermissions.pricing, ...profile.permissions?.pricing },
       reports: { ...defaultGuestPermissions.reports, ...profile.permissions?.reports },
+      audit: { ...defaultGuestPermissions.audit, ...profile.permissions?.audit },
+      authorBoardDiary: { ...defaultGuestPermissions.authorBoardDiary, ...profile.permissions?.authorBoardDiary },
     };
 
     form.reset({
@@ -182,7 +186,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests', 'reports']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['authorBoardDiary', 'pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests', 'reports']} className="w-full">
+                            <AccordionItem value="authorBoardDiary">
+                                <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Diário Gerencial</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.authorBoardDiary.create", "Criar/Editar diário", "Permite criar e editar os próprios registros no diário gerencial.")}
+                                    {renderPermissionSwitch("permissions.authorBoardDiary.viewAll", "Visualizar todos", "Permite visualizar os diários de todos os outros usuários.")}
+                                    {renderPermissionSwitch("permissions.authorBoardDiary.validate", "Validar diários", "Permite aprovar ou rejeitar os registros enviados por outros.")}
+                                </AccordionContent>
+                            </AccordionItem>
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e preço</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">

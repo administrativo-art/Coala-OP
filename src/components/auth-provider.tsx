@@ -141,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
             audit: { ...defaultGuestPermissions.audit, ...profilePermissions?.audit },
+            authorBoardDiary: { ...defaultGuestPermissions.authorBoardDiary, ...profilePermissions?.authorBoardDiary },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
