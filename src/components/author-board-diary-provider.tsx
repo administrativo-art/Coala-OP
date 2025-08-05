@@ -18,6 +18,25 @@ export interface AuthorBoardDiaryContextType {
 
 export const AuthorBoardDiaryContext = createContext<AuthorBoardDiaryContextType | undefined>(undefined);
 
+const cleanUndefined = (obj: any): any => {
+    if (obj === null || obj === undefined) {
+        return null;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(v => cleanUndefined(v));
+    }
+    if (typeof obj === 'object') {
+        return Object.entries(obj).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = cleanUndefined(value);
+            }
+            return acc;
+        }, {} as {[key: string]: any});
+    }
+    return obj;
+}
+
+
 export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [logs, setLogs] = useState<DailyLog[]>([]);
@@ -87,9 +106,10 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
 
     const now = new Date().toISOString();
     const payload = { ...logData, updatedAt: now };
+    const cleanedPayload = cleanUndefined(payload);
 
     try {
-      await setDoc(doc(db, 'authorboarddiary', logId), payload, { merge: true });
+      await setDoc(doc(db, 'authorboarddiary', logId), cleanedPayload, { merge: true });
     } catch (error) {
       console.error("Error updating log:", error);
       throw error;
