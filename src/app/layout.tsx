@@ -28,6 +28,7 @@ import { ProductSimulationCategoryProvider } from '@/components/product-simulati
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
 import { StockAuditProvider } from '@/components/stock-audit-provider';
 import { TaskProvider } from '@/components/task-provider';
+import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -80,7 +81,9 @@ export default function RootLayout({
                                                   <AllTasksProvider>
                                                     <ConsumptionAnalysisProvider>
                                                       <MovementHistoryProvider>
-                                                        {children}
+                                                        <AuthorBoardDiaryProvider>
+                                                          {children}
+                                                        </AuthorBoardDiaryProvider>
                                                       </MovementHistoryProvider>
                                                     </ConsumptionAnalysisProvider>
                                                   </AllTasksProvider>

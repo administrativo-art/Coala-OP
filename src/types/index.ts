@@ -215,6 +215,55 @@ export type ProductSimulation = {
   updatedAt: string; // ISO String
 };
 
+// Manager's Diary Types
+export type DiaryOccurrence = {
+  id: string;
+  description: string;
+  identifiedCause?: string;
+  actionTaken?: string;
+  result?: string;
+  requiresEscalation?: boolean;
+  escalatedTo?: string;
+};
+
+export type DiaryActivity = {
+  id: string;
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  durationMinutes: number;
+  title: string;
+  description?: string;
+  occurrences: DiaryOccurrence[];
+};
+
+export type DiarySignature = {
+    dataUrl: string;
+    signedAt: string; // ISO String
+    manager?: {
+      userId: string;
+      username: string;
+    }
+}
+
+export type DailyLog = {
+  id: string; // YYYY-MM-DD_authorId
+  logDate: string; // YYYY-MM-DD
+  status: 'draft' | 'submitted' | 'validated';
+  author: {
+    userId: string;
+    username: string;
+  };
+  kioskIds: string[];
+  activities: DiaryActivity[];
+  generalObservations?: string;
+  signatures?: {
+    supervisorSignature?: DiarySignature;
+    managerSignature?: DiarySignature;
+  };
+  createdAt: string; // ISO String
+  updatedAt: string; // ISO String
+};
+
 
 export type PermissionSet = {
     products: { add: boolean; edit: boolean; delete: boolean; };
