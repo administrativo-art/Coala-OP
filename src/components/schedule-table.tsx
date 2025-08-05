@@ -42,8 +42,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       const user = users.find(u => u.username === name.trim());
       if (!user) return name;
       
-      const yesterdayISO = format(subDays(date, 1), 'yyyy-MM-dd');
-      const count = workDayCounts.get(`${yesterdayISO}-${user.id}`) || 0;
+      const count = workDayCounts.get(`${dayISO}-${user.id}`) || 0;
       
       const color = user?.color;
       const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
@@ -62,8 +61,8 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                 style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
-                {count > 0 && (
-                    <span className="text-xs font-bold ml-1 opacity-80">({count + 1})</span>
+                {count >= 1 && (
+                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
                 )}
             </span>
              {warning && (
