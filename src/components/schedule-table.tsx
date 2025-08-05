@@ -42,7 +42,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       const user = users.find(u => u.username === name.trim());
       if (!user) return name;
       
-      const count = workDayCounts.get(`${dayISO}-${user.id}`) || 0;
+      const count = workDayCounts.get(`${dayISO}-${user.id}`);
       
       const color = user?.color;
       const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
@@ -61,7 +61,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                 style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
-                {count >= 1 && (
+                {count && count > 0 && (
                     <span className="text-xs font-bold opacity-80"> - {count}</span>
                 )}
             </span>
@@ -125,7 +125,14 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                     const hasFolgaOrAusencia = (folga && folga.length > 0) || ausencias.length > 0;
 
                     return (
-                        <TableCell key={kiosk.id} className="px-2 py-3 align-top text-xs relative group">
+                        <TableCell
+                          key={kiosk.id}
+                          className={cn(
+                            "px-2 py-3 align-top text-xs relative group",
+                             canManage && "cursor-pointer hover:bg-accent/10"
+                          )}
+                          onClick={canManage ? () => onEditDay(date, kiosk.id) : undefined}
+                        >
                             <div className="min-h-[60px] space-y-1">
                                 {t1 && <p><strong>T1:</strong> {renderShift(t1, date, kiosk.id)}</p>}
                                 {t2 && <p><strong>T2:</strong> {renderShift(t2, date, kiosk.id)}</p>}
@@ -146,10 +153,10 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                                     )
                                 })}
                             </div>
-                            {canManage && (
-                                <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => onEditDay(date, kiosk.id)}>
-                                    <Edit className="h-3 w-3" />
-                                </Button>
+                             {canManage && (
+                                <div className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <Edit className="h-3 w-3 text-muted-foreground" />
+                                </div>
                             )}
                         </TableCell>
                     )
