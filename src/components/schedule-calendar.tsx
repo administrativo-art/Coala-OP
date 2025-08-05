@@ -10,12 +10,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScheduleTableView } from './schedule-table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
@@ -271,6 +273,50 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     };
     onEditDay(dataToEdit, kioskId);
   };
+  
+  const handleExportPdf = () => {
+    const doc = new jsPDF('landscape');
+    const monthYear = format(currentDate, 'MMMM yyyy', { locale: ptBR });
+    doc.setFontSize(18);
+    doc.text(`Escala de Trabalho - ${monthYear}`, 14, 22);
+
+    const head = [['Dia', ...filteredKiosks.map(k => k.name)]];
+    const body = daysInMonth.map(day => {
+        const dayStr = format(day, 'dd/MM (EEE)', { locale: ptBR });
+        const daySchedule = scheduleMap.get(format(day, 'yyyy-MM-dd'));
+        const row = [dayStr];
+
+        filteredKiosks.forEach(kiosk => {
+            const t1 = lookupShift(daySchedule, kiosk, 'T1');
+            const t2 = lookupShift(daySchedule, kiosk, 'T2');
+            const t3 = lookupShift(daySchedule, kiosk, 'T3');
+            const folga = lookupShift(daySchedule, kiosk, 'Folga');
+            const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+            
+            let cellText = '';
+            if (t1) cellText += `T1: ${t1}\n`;
+            if (t2) cellText += `T2: ${t2}\n`;
+            if (t3) cellText += `T3: ${t3}\n`;
+            if (folga) cellText += `F: ${folga}\n`;
+            if (ausencias.length > 0) {
+                cellText += `A: ${ausencias.map(a => users.find(u => u.id === a.userId)?.username).join(', ')}`;
+            }
+            row.push(cellText.trim());
+        });
+        return row;
+    });
+
+    autoTable(doc, {
+        head,
+        body,
+        startY: 30,
+        theme: 'grid',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [63, 81, 181] }
+    });
+
+    doc.save(`escala_${format(currentDate, 'MM_yyyy')}.pdf`);
+  };
 
 
   return (
@@ -306,8 +352,9 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 </Button>
             </div>
 
-             {canManageSchedule && (
-                <div className="flex flex-wrap gap-2">
+             <div className="flex flex-wrap gap-2">
+                {canManageSchedule && (
+                  <>
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
                     </Button>
@@ -315,8 +362,12 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Mês
                     </Button>
-                </div>
-            )}
+                  </>
+                )}
+                 <Button variant="outline" onClick={handleExportPdf}>
+                    <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                </Button>
+            </div>
         </CardHeader>
         <CardContent>
             {loading ? (
