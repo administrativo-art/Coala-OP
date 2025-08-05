@@ -62,7 +62,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
             >
                 {name}
                 {count >= 1 && (
-                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+                    <span className="text-xs font-bold opacity-80"> - {count}</span>
                 )}
             </span>
              {warning && (
@@ -135,7 +135,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                                     <Separator className="my-2 border-dashed" />
                                 )}
 
-                                {folga && <p><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
+                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
                                 
                                 {ausencias.length > 0 && ausencias.map(a => {
                                     const user = users.find(u => u.id === a.userId);
