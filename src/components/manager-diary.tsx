@@ -1,13 +1,13 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, History, BookOpen, ArrowRight } from 'lucide-react';
+import { PlusCircle, History, BookOpen, ArrowRight, BarChart2, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
@@ -15,6 +15,7 @@ import { Skeleton } from './ui/skeleton';
 import { type DailyLog } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
+import { DiaryDashboard } from './diary-dashboard';
 
 const getStatusBadge = (status: DailyLog['status']) => {
     switch (status) {
@@ -66,7 +67,7 @@ function HistoryModal({ open, onOpenChange, logs, onOpenRecord }: { open: boolea
 }
 
 export function ManagerDiary() {
-    const { user, loading: userLoading } = useAuth();
+    const { user, loading: userLoading, permissions } = useAuth();
     const { logs, createOrGetDailyLog, loading: logsLoading } = useAuthorBoardDiary();
     const router = useRouter();
     const [isCreating, setIsCreating] = useState(false);
@@ -89,6 +90,8 @@ export function ManagerDiary() {
     if (userLoading || logsLoading) {
         return <Skeleton className="h-96 w-full" />;
     }
+    
+    const finalizedLogs = useMemo(() => logs.filter(log => log.status === 'finalizado'), [logs]);
 
     return (
         <div className="space-y-6">
@@ -129,6 +132,12 @@ export function ManagerDiary() {
                     </CardContent>
                 </Card>
             </div>
+
+            {permissions.authorBoardDiary.viewAll && (
+                 <div className="mt-8">
+                    <DiaryDashboard logs={finalizedLogs} />
+                </div>
+            )}
 
              <HistoryModal 
                 open={isHistoryOpen}
