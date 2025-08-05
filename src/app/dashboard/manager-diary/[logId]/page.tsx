@@ -18,7 +18,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft } from 'lucide-react';
-import SignatureCanvas from 'react-signature-canvas';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -48,7 +47,6 @@ const activitySchema = z.object({
 const diaryFormSchema = z.object({
   activities: z.array(activitySchema),
   generalObservations: z.string().optional(),
-  supervisorSignatureUrl: z.string().optional(),
 });
 
 type DiaryFormValues = z.infer<typeof diaryFormSchema>;
@@ -64,7 +62,6 @@ export default function EditDiaryPage() {
     const { toast } = useToast();
 
     const [logEntry, setLogEntry] = useState<DailyLog | null>(null);
-    const supervisorSignatureRef = React.useRef<SignatureCanvas>(null);
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
@@ -83,7 +80,6 @@ export default function EditDiaryPage() {
             form.reset({
                 activities: entry.activities || [],
                 generalObservations: entry.generalObservations || '',
-                supervisorSignatureUrl: entry.signatures?.supervisorSignature?.dataUrl,
             });
         }
     }, [logId, getLogById, form]);
@@ -104,14 +100,6 @@ export default function EditDiaryPage() {
 
         const values = form.getValues();
         
-        let supervisorSignatureData = logEntry.signatures?.supervisorSignature;
-        if (supervisorSignatureRef.current && !supervisorSignatureRef.current.isEmpty()){
-            supervisorSignatureData = {
-                dataUrl: supervisorSignatureRef.current.toDataURL(),
-                signedAt: new Date().toISOString()
-            }
-        }
-        
         const updatedActivities = values.activities.map(act => ({
             ...act,
             durationMinutes: calculateDuration(act.startTime, act.endTime)
@@ -121,7 +109,6 @@ export default function EditDiaryPage() {
             activities: updatedActivities,
             generalObservations: values.generalObservations,
             status,
-            signatures: { ...logEntry.signatures, supervisorSignature: supervisorSignatureData }
         };
         
         await updateLog(logEntry.id, payload);
@@ -186,23 +173,6 @@ export default function EditDiaryPage() {
                                     />
                                 </CardContent>
                              </Card>
-
-                             <Card>
-                                 <CardHeader><CardTitle>Assinatura do Autor</CardTitle></CardHeader>
-                                 <CardContent>
-                                    <div className="border rounded-md">
-                                        {logEntry.signatures?.supervisorSignature?.dataUrl && (
-                                            <img src={logEntry.signatures.supervisorSignature.dataUrl} alt="Assinatura" className="w-full h-40 object-contain"/>
-                                        )}
-                                        {!isFinalized && (
-                                            <SignatureCanvas ref={supervisorSignatureRef} canvasProps={{ className: 'w-full h-40' }} />
-                                        )}
-                                    </div>
-                                    {!isFinalized && (
-                                        <Button type="button" variant="ghost" size="sm" onClick={() => supervisorSignatureRef.current?.clear()}>Limpar</Button>
-                                    )}
-                                 </CardContent>
-                             </Card>
                              
                              {!isFinalized && (
                                 <div className="flex justify-end gap-2 sticky bottom-0 py-4 bg-background">
@@ -235,7 +205,7 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
     
     return (
         <AccordionItem value={`activity-${activityIndex}`} className="border rounded-lg">
-            <Card>
+             <Card>
                 <div className="flex items-center p-2 pr-4">
                     <AccordionTrigger className="p-2 text-left hover:no-underline w-full flex-grow">
                         <div className="space-y-1">

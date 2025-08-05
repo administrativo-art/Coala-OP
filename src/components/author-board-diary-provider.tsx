@@ -110,4 +110,3 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     </AuthorBoardDiaryContext.Provider>
   );
 }
-
