@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -80,67 +80,81 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     return kiosksToDisplay.filter(k => k.id === selectedKiosk);
   }, [kiosksToDisplay, selectedKiosk]);
 
-  const workDayCounts = useMemo(() => {
+  const { workDayCounts, warnings } = useMemo(() => {
     const counts = new Map<string, number>();
-    const lastDayCounts = new Map<string, number>();
-  
-    // Initialize with previous month's last day count
-    if (previousScheduleMap.size > 0) {
-      const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
-      const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
-      const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+    const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
 
-      if (lastDaySchedule) {
-         users.forEach(user => {
-            let isWorking = false;
-            kiosksToDisplay.forEach(kiosk => {
-              ['T1', 'T2', 'T3'].forEach(turn => {
-                const shiftKey = `${kiosk.id} ${turn}`;
-                const shiftWorkers = lastDaySchedule[shiftKey] as string || '';
-                if (shiftWorkers.includes(user.username)) {
-                  isWorking = true;
-                }
-              });
-            });
-            if (isWorking) {
-                lastDayCounts.set(user.username, 1); // Start with 1 if worked last day of prev month
-            }
-        });
-      }
+    if (users.length === 0 || kiosksToDisplay.length === 0) {
+      return { workDayCounts: counts, warnings: warningsMap };
     }
+
+    const lastDayOfPrevMonth = endOfMonth(subDays(startOfMonth(currentDate), 1));
+    const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+    const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+
+    users.forEach(user => {
+      let consecutiveDays = 0;
+      if (lastDaySchedule) {
+        let workedLastDay = false;
+        kiosksToDisplay.forEach(kiosk => {
+          ['T1', 'T2', 'T3'].forEach(turn => {
+            const shiftKey = `${kiosk.id} ${turn}`;
+            const shiftWorkers = lastDaySchedule[shiftKey] as string || '';
+            if (shiftWorkers.includes(user.username)) {
+              workedLastDay = true;
+            }
+          });
+        });
+        if (workedLastDay) {
+            // This part requires a loop backwards, for simplicity we'll just check the very last day
+            // A more robust implementation would fetch more history
+            consecutiveDays = 1; 
+        }
+      }
+      counts.set(`${user.username}-initial`, consecutiveDays);
+    });
     
     daysInMonth.forEach(day => {
       const dayISO = format(day, 'yyyy-MM-dd');
       const daySchedule = scheduleMap.get(dayISO);
-      
+      const todaysAssignments = new Map<string, string>();
+
       users.forEach(user => {
-        let isWorking = false;
-        if (daySchedule) {
+          let workedToday = false;
           kiosksToDisplay.forEach(kiosk => {
-            ['T1', 'T2', 'T3'].forEach(turn => {
-              const shiftKey = `${kiosk.id} ${turn}`;
-              const shiftWorkers = daySchedule[shiftKey] as string || '';
-              if (shiftWorkers.includes(user.username)) {
-                isWorking = true;
-              }
-            });
+            if(daySchedule) {
+              ['T1', 'T2', 'T3'].forEach(turn => {
+                const shiftKey = `${kiosk.id} ${turn}`;
+                const shiftWorkers = (daySchedule[shiftKey] as string || '').split(' + ').map(s => s.trim());
+                if (shiftWorkers.includes(user.username)) {
+                  workedToday = true;
+                  const key = `${dayISO}-${user.username}`;
+                  if (todaysAssignments.has(key)) {
+                      warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
+                  } else {
+                      todaysAssignments.set(key, kiosk.name);
+                  }
+                }
+              });
+            }
           });
-        }
-        
-        const prevDay = subMonths(day, 1); // Incorrect, should be subDays
-        const prevDayISO = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
-        const prevCount = counts.get(`${prevDayISO}-${user.username}`) || lastDayCounts.get(user.username) || 0;
-        
-        if (isWorking) {
-          counts.set(`${dayISO}-${user.username}`, prevCount + 1);
-        } else {
-          counts.set(`${dayISO}-${user.username}`, 0);
-          lastDayCounts.set(user.username, 0); // Reset for next month calculation
-        }
+
+          const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+          const yesterdayCount = counts.get(`${prevDayISO}-${user.username}`) || counts.get(`${user.username}-initial`) || 0;
+          
+          if(workedToday) {
+            const newCount = yesterdayCount + 1;
+            counts.set(`${dayISO}-${user.username}`, newCount);
+            if (newCount > 6) {
+                warningsMap.set(`${dayISO}-${user.username}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+            }
+          } else {
+            counts.set(`${dayISO}-${user.username}`, 0);
+          }
       });
     });
 
-    return counts;
+    return { workDayCounts: counts, warnings: warningsMap };
   }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
   const handleClearMonthConfirm = async () => {
@@ -225,6 +239,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     canManage={canManageSchedule}
                     users={users}
                     workDayCounts={workDayCounts}
+                    warnings={warnings}
                 />
             )}
         </CardContent>

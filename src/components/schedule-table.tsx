@@ -7,9 +7,11 @@ import { type Kiosk, type DailySchedule, type AbsenceEntry, type User } from '..
 import { cn } from '@/lib/utils';
 import { isToday } from 'date-fns';
 import { Button } from './ui/button';
-import { Edit, UserMinus } from 'lucide-react';
+import { Edit, UserMinus, AlertTriangle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+
 
 interface ScheduleTableViewProps {
   kiosks: Kiosk[];
@@ -19,6 +21,7 @@ interface ScheduleTableViewProps {
   canManage: boolean;
   users: User[];
   workDayCounts: Map<string, number>;
+  warnings: Map<string, { type: 'overwork' | 'conflict'; message: string }>;
 }
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -30,7 +33,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts }: ScheduleTableViewProps) {
+export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings }: ScheduleTableViewProps) {
 
   const handleEditClick = (day: Date, kioskId: string) => {
     const dayISO = format(day, 'yyyy-MM-dd');
@@ -49,28 +52,48 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
     onEditDay(dataToEdit, kioskId);
   };
   
-  const renderEmployeeName = (name: string, date: Date) => {
+  const renderEmployeeName = (name: string, date: Date, kioskId: string) => {
       const dayISO = format(date, 'yyyy-MM-dd');
       const user = users.find(u => u.username === name.trim());
-      const count = workDayCounts.get(`${dayISO}-${user?.username}`);
+      if (!user) return name;
+      
+      const count = workDayCounts.get(`${dayISO}-${user.username}`);
       const color = user?.color;
+      const overworkWarning = warnings.get(`${dayISO}-${user.username}`);
+      const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
+
+      const warning = conflictWarning || overworkWarning;
 
       return (
-        <span
-            className={cn("px-1.5 py-0.5 rounded-md", color && 'text-black')}
-            style={color ? { backgroundColor: color } : {}}
-        >
-            {name}
-            {count && count > 1 && (
-                <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+        <span className="inline-flex items-center gap-1">
+            <span
+                className={cn("px-1.5 py-0.5 rounded-md", color && 'text-black')}
+                style={color ? { backgroundColor: color } : {}}
+            >
+                {name}
+                {count && count > 1 && (
+                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+                )}
+            </span>
+             {warning && (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger>
+                            <AlertTriangle className="h-4 w-4 text-destructive"/>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{warning.message}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             )}
         </span>
       );
   };
 
-  const renderShift = (shiftValue: string | any[], date: Date) => {
+  const renderShift = (shiftValue: string | any[], date: Date, kioskId: string) => {
       if (typeof shiftValue !== 'string' || !shiftValue) return null;
-      return shiftValue.split(' + ').map(name => renderEmployeeName(name.trim(), date)).reduce((prev, curr) => <>{prev} + {curr}</>);
+      return shiftValue.split(' + ').map(name => renderEmployeeName(name.trim(), date, kioskId)).reduce((prev, curr) => <>{prev} + {curr}</>);
   };
 
   return (
@@ -105,9 +128,9 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                     return (
                         <TableCell key={kiosk.id} className="px-2 py-3 align-top text-xs relative group">
                             <div className="min-h-[60px] space-y-1">
-                                {t1 && <p><strong>T1:</strong> {renderShift(t1, date)}</p>}
-                                {t2 && <p><strong>T2:</strong> {renderShift(t2, date)}</p>}
-                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date)}</p>}
+                                {t1 && <p><strong>T1:</strong> {renderShift(t1, date, kiosk.id)}</p>}
+                                {t2 && <p><strong>T2:</strong> {renderShift(t2, date, kiosk.id)}</p>}
+                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id)}</p>}
                                 {ausencias.length > 0 && ausencias.map(a => {
                                     const user = users.find(u => u.id === a.userId);
                                     return (
