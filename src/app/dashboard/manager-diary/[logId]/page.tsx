@@ -17,13 +17,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { type DailyLog, type DiaryActivity } from '@/types';
 import { useDebounce } from 'use-debounce';
 import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -237,7 +238,19 @@ function OccurrenceItem({ activityIndex, occurrenceIndex, control, removeOccurre
                     name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.requiresEscalation`}
                     render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                            <FormLabel>Requer escalonamento?</FormLabel>
+                            <div className="flex items-center gap-2">
+                                <FormLabel>Requer escalonamento?</FormLabel>
+                                <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger type="button" onClick={e => e.preventDefault()}>
+                                        <Info className="h-4 w-4 text-muted-foreground"/>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p className="max-w-xs">Marque esta opção se a ocorrência precisa da atenção de um gestor ou de outro setor para ser resolvida.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                                </TooltipProvider>
+                            </div>
                             <FormControl>
                                 <Switch checked={field.value} onCheckedChange={field.onChange} disabled={isFinalized} />
                             </FormControl>
