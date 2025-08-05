@@ -54,7 +54,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading || diaryLoading;
 
     useEffect(() => {
-        if (!loading && permissions.authorBoardDiary.validate) {
+        if (!loading && permissions?.authorBoardDiary?.validate && profiles) {
             const submittedDiaries = logs.filter(log => log.status === 'submitted');
             submittedDiaries.forEach(log => {
                 const taskId = `diary-${log.id}`;
@@ -88,7 +88,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                 }
             });
         }
-  }, [logs, formTasks, loading, permissions.authorBoardDiary.validate, addTask, profiles]);
+  }, [logs, formTasks, loading, permissions, addTask, profiles]);
 
 
   const legacyTasks = useMemo((): LegacyTask[] => {
