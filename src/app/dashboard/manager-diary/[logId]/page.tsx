@@ -50,7 +50,6 @@ const activitySchema = z.object({
 
 const diaryFormSchema = z.object({
   activities: z.array(activitySchema),
-  generalObservations: z.string().optional(),
 });
 
 type DiaryFormValues = z.infer<typeof diaryFormSchema>;
@@ -69,7 +68,7 @@ export default function EditDiaryPage() {
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
-        defaultValues: { activities: [], generalObservations: '' }
+        defaultValues: { activities: [] }
     });
     
     const { fields: activityFields, append: appendActivity, remove: removeActivity } = useFieldArray({
@@ -98,7 +97,6 @@ export default function EditDiaryPage() {
             setLogEntry(entry);
             form.reset({
                 activities: entry.activities || [],
-                generalObservations: entry.generalObservations || '',
             });
         }
     }, [logId, getLogById, form]);
@@ -128,7 +126,6 @@ export default function EditDiaryPage() {
 
         const payload: Partial<DailyLog> = {
             activities: updatedActivities,
-            generalObservations: values.generalObservations,
             status: 'finalizado',
             totalActivities: updatedActivities.length,
             totalDurationMinutes: totalDuration,
@@ -149,7 +146,6 @@ export default function EditDiaryPage() {
             }));
             const payload: Partial<DailyLog> = {
                 activities: updatedActivities,
-                generalObservations: values.generalObservations,
                 status: 'em andamento', // Always save as 'in progress'
             };
             updateLog(logEntry.id, payload);
@@ -203,19 +199,6 @@ export default function EditDiaryPage() {
                                             <ActivityItem key={field.id} activityId={field.id} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
                                         ))}
                                     </Accordion>
-                                </CardContent>
-                             </Card>
-                             
-                             <Card>
-                                <CardHeader><CardTitle>Observações gerais e sugestões de melhoria</CardTitle></CardHeader>
-                                <CardContent>
-                                    <FormField
-                                        control={form.control}
-                                        name="generalObservations"
-                                        render={({ field }) => (
-                                            <Textarea {...field} rows={5} placeholder="Descreva aqui pontos de atenção e ideias de melhoria..." disabled={isFinalized} />
-                                        )}
-                                    />
                                 </CardContent>
                              </Card>
                              
@@ -370,3 +353,4 @@ function ActivityItem({ activityId, control, removeActivity, kiosks, isFinalized
         </AccordionItem>
     );
 }
+

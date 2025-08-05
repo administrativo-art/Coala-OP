@@ -255,7 +255,6 @@ export type DailyLog = {
     profileName?: string;
   };
   activities: DiaryActivity[];
-  generalObservations?: string;
   signatures?: {
     managerSignature?: DiarySignature;
   };
@@ -635,6 +634,7 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
+
 
 
 
