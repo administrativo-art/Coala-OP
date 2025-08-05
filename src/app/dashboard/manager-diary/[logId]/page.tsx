@@ -76,16 +76,18 @@ export default function EditDiaryPage() {
         name: "activities",
     });
 
+    const watchedActivities = useWatch({ control: form.control, name: 'activities' });
+
     const sortedActivities = useMemo(() => {
         return [...activityFields].sort((a,b) => {
-            const activityA = form.getValues().activities.find(act => act.id === a.id);
-            const activityB = form.getValues().activities.find(act => act.id === b.id);
+            const activityA = watchedActivities.find(act => act.id === a.id);
+            const activityB = watchedActivities.find(act => act.id === b.id);
             if(activityA && activityB) {
                 return activityA.startTime.localeCompare(activityB.startTime);
             }
             return 0;
         });
-    }, [activityFields, form]);
+    }, [activityFields, watchedActivities]);
     
 
     // Debounce form values to trigger autosave
@@ -149,6 +151,7 @@ export default function EditDiaryPage() {
                 status: 'em andamento', // Always save as 'in progress'
             };
             updateLog(logEntry.id, payload);
+            form.reset(values); // Reset dirty state
         }
     }, [debouncedFormValues, logEntry, form, updateLog]);
 
@@ -195,9 +198,13 @@ export default function EditDiaryPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Accordion type="multiple" className="w-full space-y-3">
-                                        {sortedActivities.map((field, index) => (
-                                            <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
-                                        ))}
+                                        {sortedActivities.map((field, index) => {
+                                            // Find the original index before sorting
+                                            const originalIndex = activityFields.findIndex(f => f.id === field.id);
+                                            return (
+                                                <ActivityItem key={field.id} activityIndex={originalIndex} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
+                                            )
+                                        })}
                                     </Accordion>
                                 </CardContent>
                              </Card>
@@ -285,7 +292,7 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
             const minutes = (diff % 60).toString().padStart(2, '0');
             return `${hours}:${minutes}`;
         } catch { return '00:00'; }
-    }, [activity]);
+    }, [activity?.startTime, activity?.endTime]);
     
     if (!activity) {
         return null; 
@@ -350,4 +357,3 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
         </AccordionItem>
     );
 }
-
