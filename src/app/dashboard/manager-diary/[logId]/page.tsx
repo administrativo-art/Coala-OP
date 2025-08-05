@@ -236,15 +236,19 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
     return (
         <AccordionItem value={`activity-${activityIndex}`} className="border rounded-lg">
             <Card>
-                <AccordionTrigger className="p-4 text-left hover:no-underline w-full">
-                    <div className="flex justify-between items-center w-full">
+                <div className="flex items-center p-2 pr-4">
+                    <AccordionTrigger className="p-2 text-left hover:no-underline w-full flex-grow">
                         <div className="space-y-1">
                             <p className="font-semibold">{activity.title || 'Nova Atividade'}</p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4"/> {duration}</p>
                         </div>
-                        {!isFinalized && <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={(e) => { e.stopPropagation(); removeActivity(activityIndex); }}><Trash2 className="h-4 w-4"/></Button>}
-                    </div>
-                </AccordionTrigger>
+                    </AccordionTrigger>
+                    {!isFinalized && 
+                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 shrink-0" onClick={() => removeActivity(activityIndex)}>
+                            <Trash2 className="h-4 w-4"/>
+                        </Button>
+                    }
+                </div>
                 <AccordionContent className="p-4 pt-0">
                     <div className="space-y-4">
                         <FormField control={control} name={`activities.${activityIndex}.title`} render={({ field }) => ( <FormItem><FormLabel>Título</FormLabel><Input {...field} disabled={isFinalized} /></FormItem> )} />
