@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, History, BookOpen, ArrowRight, BarChart2, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { PlusCircle, History, BookOpen, ArrowRight, BarChart2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
