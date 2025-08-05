@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
 
 const CHART_COLORS = [
     'hsl(var(--chart-1))',
@@ -24,8 +26,6 @@ const CHART_COLORS = [
     'hsl(var(--chart-5))',
 ];
 
-const formatNumber = (value: number) => new Intl.NumberFormat('pt-BR').format(value);
-
 export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
     const { users, loading: usersLoading } = useAuth();
     const [userId, setUserId] = useState<string>('all');
@@ -33,6 +33,7 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
         from: new Date(new Date().setDate(1)),
         to: new Date(),
     });
+    const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
 
     const filteredLogs = useMemo(() => {
         return logs.filter(log => {
@@ -41,7 +42,11 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
 
             if (userId !== 'all' && log.author.userId !== userId) return false;
             
-            if (dateRange?.from && logDate < dateRange.from) return false;
+            if (dateRange?.from) {
+                 const fromDate = new Date(dateRange.from);
+                 fromDate.setHours(0, 0, 0, 0);
+                 if (logDate < fromDate) return false;
+            }
             if (dateRange?.to) {
                 const toDate = new Date(dateRange.to);
                 toDate.setHours(23, 59, 59, 999);
@@ -51,6 +56,21 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
             return true;
         });
     }, [logs, userId, dateRange]);
+    
+    const formatDuration = (minutes: number) => {
+        if (timeUnit === 'hours') {
+            return (minutes / 60);
+        }
+        return minutes;
+    };
+    
+    const formatNumber = (value: number) => {
+        if (timeUnit === 'hours') {
+            return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        }
+        return new Intl.NumberFormat('pt-BR').format(Math.round(value));
+    };
+
 
     const { kpis, chartData } = useMemo(() => {
         if (filteredLogs.length === 0) {
@@ -76,14 +96,18 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
         const chartDataResult = Object.keys(activitiesByDay).map(day => ({
             day,
             atividades: activitiesByDay[day],
-            minutos: durationByDay[day],
+            minutos: formatDuration(durationByDay[day]),
         })).sort((a,b) => a.day.localeCompare(b.day, undefined, { numeric: true }));
 
         return {
-            kpis: { totalDuration, totalActivities, avgTimePerActivity },
+            kpis: { 
+                totalDuration: formatDuration(totalDuration), 
+                totalActivities, 
+                avgTimePerActivity: formatDuration(avgTimePerActivity) 
+            },
             chartData: chartDataResult
         };
-    }, [filteredLogs]);
+    }, [filteredLogs, timeUnit]);
 
 
     if (usersLoading) {
@@ -95,32 +119,43 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
             <CardHeader>
                 <CardTitle>Painel de Análise</CardTitle>
                 <CardDescription>Métricas de produtividade baseadas nos diários finalizados.</CardDescription>
-                <div className="flex flex-wrap gap-2 pt-2">
-                    <Select value={userId} onValueChange={setUserId}>
-                        <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Colaborador" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos</SelectItem>
-                            {users.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button id="date" variant="outline" className={cn("w-full sm:w-[260px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Período</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
-                        </PopoverContent>
-                    </Popover>
+                <div className="flex flex-wrap gap-4 pt-2 items-center justify-between">
+                    <div className="flex flex-wrap gap-2">
+                        <Select value={userId} onValueChange={setUserId}>
+                            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Colaborador" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos</SelectItem>
+                                {users.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button id="date" variant="outline" className={cn("w-full sm:w-[260px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Período</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                     <div className="flex items-center space-x-2">
+                        <Label htmlFor="time-unit-switch" className="text-sm">Min</Label>
+                        <Switch
+                            id="time-unit-switch"
+                            checked={timeUnit === 'hours'}
+                            onCheckedChange={(checked) => setTimeUnit(checked ? 'hours' : 'minutes')}
+                        />
+                        <Label htmlFor="time-unit-switch" className="text-sm">Horas</Label>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>
                 <div className="grid gap-4 md:grid-cols-3 mb-6">
-                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo total</CardTitle><Clock className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.totalDuration)} min</div></CardContent></Card>
+                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo total</CardTitle><Clock className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.totalDuration)} {timeUnit === 'hours' ? 'h' : 'min'}</div></CardContent></Card>
                     <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total de Atividades</CardTitle><ListOrdered className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.totalActivities)}</div></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo médio / Atividade</CardTitle><Timer className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.avgTimePerActivity.toFixed(1)} min</div></CardContent></Card>
+                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo médio / Atividade</CardTitle><Timer className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.avgTimePerActivity.toFixed(1)} {timeUnit === 'hours' ? 'h' : 'min'}</div></CardContent></Card>
                 </div>
 
                 {chartData.length > 0 ? (
@@ -132,24 +167,24 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
                                     <BarChart data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="day" fontSize={12} />
-                                        <YAxis />
-                                        <Tooltip />
+                                        <YAxis allowDecimals={false} />
+                                        <Tooltip formatter={(value: number) => formatNumber(value)}/>
                                         <Bar dataKey="atividades" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="atividades" position="top" />
+                                            <LabelList dataKey="atividades" position="top" formatter={(value: number) => formatNumber(value)}/>
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
                          <Card>
-                            <CardHeader><CardTitle className="text-base">Tempo Gasto por Dia (min)</CardTitle></CardHeader>
+                            <CardHeader><CardTitle className="text-base">Tempo Gasto por Dia ({timeUnit === 'hours' ? 'h' : 'min'})</CardTitle></CardHeader>
                             <CardContent>
                                <ResponsiveContainer width="100%" height={250}>
                                     <BarChart data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="day" fontSize={12} />
                                         <YAxis />
-                                        <Tooltip formatter={(value: number) => `${formatNumber(value)} min`} />
+                                        <Tooltip formatter={(value: number) => `${formatNumber(value)} ${timeUnit === 'hours' ? 'h' : 'min'}`} />
                                         <Bar dataKey="minutos" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]}>
                                             <LabelList dataKey="minutos" position="top" formatter={(value: number) => formatNumber(value)} />
                                         </Bar>
@@ -168,4 +203,3 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
         </Card>
     );
 }
-
