@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -11,9 +12,12 @@ import { TaskList } from './task-list';
 import { TaskDetailModal } from './task-detail-modal';
 import { type Task } from '@/types';
 import { useAllTasks } from '@/hooks/use-all-tasks';
+import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 
 export function TaskManager() {
     const { allTasks, formTasks, legacyTasks, loading } = useAllTasks();
+    const { todayLog, createOrUpdateLog, loading: diaryLoading } = useAuthorBoardDiary();
+
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
     const taskLists = useMemo(() => {
@@ -81,3 +85,4 @@ export function TaskManager() {
         </>
     );
 }
+

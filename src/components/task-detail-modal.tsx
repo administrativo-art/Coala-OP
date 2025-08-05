@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -14,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -44,6 +46,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { updateTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const { toast } = useToast();
+  const { createOrUpdateLog } = useAuthorBoardDiary();
 
   const handleClose = () => {
     setRejectionNotes('');
@@ -97,6 +100,11 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const handleApprove = async () => {
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('approved')];
+      
+      if(task.origin.type === 'author_board_diary'){
+          await createOrUpdateLog({ status: 'validated' });
+      }
+      
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
       handleClose();
   };
@@ -108,6 +116,11 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       }
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
+      
+       if(task.origin.type === 'author_board_diary'){
+          await createOrUpdateLog({ status: 'draft' });
+      }
+      
       await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });
       handleClose();
   };

@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useEffect } from 'react';
 import { useAuth } from './use-auth';
 import { useItemAddition } from './use-item-addition';
 import { useStockCount } from './use-stock-count';
@@ -12,7 +12,8 @@ import { useStockAudit } from './use-stock-audit'; // Importar o hook de auditor
 import { useTasks } from './use-tasks';
 import { format, parseISO } from 'date-fns';
 import { returnRequestStatuses, type ReturnRequest, type Task } from '@/types';
-import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck, FileText } from 'lucide-react';
+import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck, FileText, BookOpen } from 'lucide-react';
+import { useAuthorBoardDiary } from './use-author-board-diary';
 
 export interface LegacyTask {
   id: string;
@@ -47,9 +48,44 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { auditSessions, loading: auditLoading } = useStockAudit();
-  const { tasks: formTasks, loading: tasksLoading } = useTasks();
+  const { tasks: formTasks, loading: tasksLoading, addTask } = useTasks();
+  const { todayLog } = useAuthorBoardDiary();
 
   const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading;
+
+    useEffect(() => {
+        if (!loading && permissions.audit.approve && todayLog?.status === 'submitted') {
+            const taskId = `diary-${todayLog.id}`;
+            const existingTask = formTasks.find(t => t.id === taskId);
+            
+            if(!existingTask) {
+                const adminProfile = 'Administrador';
+                addTask({
+                    id: taskId,
+                    title: `Validar Diário de ${todayLog.author.username}`,
+                    description: `Revisar e aprovar o diário do dia ${format(parseISO(todayLog.logDate), 'dd/MM/yyyy')}.`,
+                    status: 'awaiting_approval',
+                    assigneeType: 'profile',
+                    assigneeId: adminProfile,
+                    requiresApproval: true,
+                    approverType: 'profile',
+                    approverId: adminProfile,
+                    origin: {
+                        type: 'author_board_diary',
+                        id: todayLog.id,
+                    },
+                    history: [{
+                        timestamp: new Date().toISOString(),
+                        action: 'created',
+                        author: { id: 'system', name: 'Sistema' },
+                    }],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                });
+            }
+        }
+  }, [todayLog, formTasks, loading, permissions.audit.approve, addTask]);
+
 
   const legacyTasks = useMemo((): LegacyTask[] => {
     if (!user || !permissions || loading) return [];

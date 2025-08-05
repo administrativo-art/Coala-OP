@@ -78,15 +78,15 @@ export default function RootLayout({
                                             <RepositionProvider>
                                               <StockAuditProvider>
                                                 <TaskProvider>
-                                                  <AllTasksProvider>
-                                                    <ConsumptionAnalysisProvider>
-                                                      <MovementHistoryProvider>
-                                                        <AuthorBoardDiaryProvider>
+                                                  <AuthorBoardDiaryProvider>
+                                                    <AllTasksProvider>
+                                                      <ConsumptionAnalysisProvider>
+                                                        <MovementHistoryProvider>
                                                           {children}
-                                                        </AuthorBoardDiaryProvider>
-                                                      </MovementHistoryProvider>
-                                                    </ConsumptionAnalysisProvider>
-                                                  </AllTasksProvider>
+                                                        </MovementHistoryProvider>
+                                                      </ConsumptionAnalysisProvider>
+                                                    </AllTasksProvider>
+                                                  </AuthorBoardDiaryProvider>
                                                 </TaskProvider>
                                               </StockAuditProvider>
                                             </RepositionProvider>
