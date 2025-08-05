@@ -26,6 +26,16 @@ const CHART_COLORS = [
     'hsl(var(--chart-5))',
 ];
 
+const formatMinutesToHoursAndMinutes = (minutes: number): string => {
+    if (minutes < 0) return "0m";
+    if (minutes < 60) return `${Math.round(minutes)}m`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = Math.round(minutes % 60);
+    if (remainingMinutes === 0) return `${hours}h`;
+    return `${hours}h ${remainingMinutes}m`;
+};
+
+
 export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
     const { users, loading: usersLoading } = useAuth();
     const [userId, setUserId] = useState<string>('all');
@@ -33,7 +43,6 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
         from: new Date(new Date().setDate(1)),
         to: new Date(),
     });
-    const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
 
     const filteredLogs = useMemo(() => {
         return logs.filter(log => {
@@ -56,21 +65,6 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
             return true;
         });
     }, [logs, userId, dateRange]);
-    
-    const formatDuration = (minutes: number) => {
-        if (timeUnit === 'hours') {
-            return (minutes / 60);
-        }
-        return minutes;
-    };
-    
-    const formatNumber = (value: number) => {
-        if (timeUnit === 'hours') {
-            return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-        }
-        return new Intl.NumberFormat('pt-BR').format(Math.round(value));
-    };
-
 
     const { kpis, chartData } = useMemo(() => {
         if (filteredLogs.length === 0) {
@@ -96,18 +90,18 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
         const chartDataResult = Object.keys(activitiesByDay).map(day => ({
             day,
             atividades: activitiesByDay[day],
-            minutos: formatDuration(durationByDay[day]),
+            minutos: durationByDay[day],
         })).sort((a,b) => a.day.localeCompare(b.day, undefined, { numeric: true }));
 
         return {
             kpis: { 
-                totalDuration: formatDuration(totalDuration), 
+                totalDuration,
                 totalActivities, 
-                avgTimePerActivity: formatDuration(avgTimePerActivity) 
+                avgTimePerActivity
             },
             chartData: chartDataResult
         };
-    }, [filteredLogs, timeUnit]);
+    }, [filteredLogs]);
 
 
     if (usersLoading) {
@@ -140,22 +134,13 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
                             </PopoverContent>
                         </Popover>
                     </div>
-                     <div className="flex items-center space-x-2">
-                        <Label htmlFor="time-unit-switch" className="text-sm">Min</Label>
-                        <Switch
-                            id="time-unit-switch"
-                            checked={timeUnit === 'hours'}
-                            onCheckedChange={(checked) => setTimeUnit(checked ? 'hours' : 'minutes')}
-                        />
-                        <Label htmlFor="time-unit-switch" className="text-sm">Horas</Label>
-                    </div>
                 </div>
             </CardHeader>
             <CardContent>
                 <div className="grid gap-4 md:grid-cols-3 mb-6">
-                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo total</CardTitle><Clock className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.totalDuration)} {timeUnit === 'hours' ? 'h' : 'min'}</div></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total de Atividades</CardTitle><ListOrdered className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.totalActivities)}</div></CardContent></Card>
-                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo médio / Atividade</CardTitle><Timer className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.avgTimePerActivity.toFixed(1)} {timeUnit === 'hours' ? 'h' : 'min'}</div></CardContent></Card>
+                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo total</CardTitle><Clock className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatMinutesToHoursAndMinutes(kpis.totalDuration)}</div></CardContent></Card>
+                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total de Atividades</CardTitle><ListOrdered className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.totalActivities}</div></CardContent></Card>
+                    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Tempo médio / Atividade</CardTitle><Timer className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{formatMinutesToHoursAndMinutes(kpis.avgTimePerActivity)}</div></CardContent></Card>
                 </div>
 
                 {chartData.length > 0 ? (
@@ -168,25 +153,25 @@ export function DiaryDashboard({ logs }: { logs: DailyLog[] }) {
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="day" fontSize={12} />
                                         <YAxis allowDecimals={false} />
-                                        <Tooltip formatter={(value: number) => formatNumber(value)}/>
+                                        <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR').format(value)}/>
                                         <Bar dataKey="atividades" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="atividades" position="top" formatter={(value: number) => formatNumber(value)}/>
+                                            <LabelList dataKey="atividades" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR').format(value)}/>
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
                          <Card>
-                            <CardHeader><CardTitle className="text-base">Tempo Gasto por Dia ({timeUnit === 'hours' ? 'h' : 'min'})</CardTitle></CardHeader>
+                            <CardHeader><CardTitle className="text-base">Tempo Gasto por Dia</CardTitle></CardHeader>
                             <CardContent>
                                <ResponsiveContainer width="100%" height={250}>
                                     <BarChart data={chartData}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="day" fontSize={12} />
-                                        <YAxis />
-                                        <Tooltip formatter={(value: number) => `${formatNumber(value)} ${timeUnit === 'hours' ? 'h' : 'min'}`} />
+                                        <YAxis tickFormatter={formatMinutesToHoursAndMinutes} />
+                                        <Tooltip formatter={(value: number) => formatMinutesToHoursAndMinutes(value)} />
                                         <Bar dataKey="minutos" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]}>
-                                            <LabelList dataKey="minutos" position="top" formatter={(value: number) => formatNumber(value)} />
+                                            <LabelList dataKey="minutos" position="top" formatter={(value: number) => formatMinutesToHoursAndMinutes(value)} />
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
