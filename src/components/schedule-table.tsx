@@ -1,3 +1,4 @@
+
 "use client"
 
 import React from 'react';
@@ -11,6 +12,7 @@ import { Edit, UserMinus, AlertTriangle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { Separator } from './ui/separator';
 
 
 interface ScheduleTableViewProps {
@@ -35,7 +37,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
 
 export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings }: ScheduleTableViewProps) {
 
-  const renderEmployeeName = (name: string, date: Date, kioskId: string) => {
+  const renderEmployeeName = (name: string, date: Date, kioskId: string, isFolga = false) => {
       const dayISO = format(date, 'yyyy-MM-dd');
       const user = users.find(u => u.username === name.trim());
       if (!user) return name;
@@ -46,6 +48,10 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
 
       const warning = conflictWarning || overworkWarning;
+      
+      if (isFolga) {
+          return <span>{name}</span>;
+      }
 
       return (
         <span className="inline-flex items-center gap-1">
@@ -74,11 +80,11 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       );
   };
 
-  const renderShift = (shiftValue: string | any[], date: Date, kioskId: string) => {
+  const renderShift = (shiftValue: string | any[], date: Date, kioskId: string, isFolga = false) => {
       if (typeof shiftValue !== 'string' || !shiftValue) return null;
       return shiftValue.split(' + ').map((name, index, arr) => (
         <React.Fragment key={name}>
-          {renderEmployeeName(name.trim(), date, kioskId)}
+          {renderEmployeeName(name.trim(), date, kioskId, isFolga)}
           {index < arr.length - 1 && ' + '}
         </React.Fragment>
       ));
@@ -105,20 +111,31 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                 <TableRow key={dateStr} className={cn(isWeekend && 'bg-muted/30')}>
                 <TableCell className={cn("px-2 py-3 align-top font-semibold", isToday(date) && "bg-accent/20 text-accent-foreground")}>
                     <p>{format(date, 'dd')}</p>
-                    <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', {locale: ptBR})}</p>
+                    <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
                 </TableCell>
                 {kiosks.map(kiosk => {
                     const t1 = lookupShift(daySchedule, kiosk, 'T1');
                     const t2 = lookupShift(daySchedule, kiosk, 'T2');
+                    const t3 = lookupShift(daySchedule, kiosk, 'T3');
                     const folga = lookupShift(daySchedule, kiosk, 'Folga');
                     const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+
+                    const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
+                    const hasFolgaOrAusencia = (folga && folga.length > 0) || ausencias.length > 0;
 
                     return (
                         <TableCell key={kiosk.id} className="px-2 py-3 align-top text-xs relative group">
                             <div className="min-h-[60px] space-y-1">
                                 {t1 && <p><strong>T1:</strong> {renderShift(t1, date, kiosk.id)}</p>}
                                 {t2 && <p><strong>T2:</strong> {renderShift(t2, date, kiosk.id)}</p>}
-                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id)}</p>}
+                                {t3 && <p><strong>T3:</strong> {renderShift(t3, date, kiosk.id)}</p>}
+                                
+                                {hasWorkShifts && hasFolgaOrAusencia && (
+                                    <Separator className="my-2 border-dashed" />
+                                )}
+
+                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
+                                
                                 {ausencias.length > 0 && ausencias.map(a => {
                                     const user = users.find(u => u.id === a.userId);
                                     return (
