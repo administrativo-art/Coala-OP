@@ -196,7 +196,7 @@ export default function EditDiaryPage() {
                                 <CardContent>
                                     <Accordion type="multiple" className="w-full space-y-3">
                                         {sortedActivities.map((field, index) => (
-                                            <ActivityItem key={field.id} activityId={field.id} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
+                                            <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
                                         ))}
                                     </Accordion>
                                 </CardContent>
@@ -266,11 +266,8 @@ function OccurrenceItem({ activityIndex, occurrenceIndex, control, removeOccurre
 }
 
 
-function ActivityItem({ activityId, control, removeActivity, kiosks, isFinalized }: { activityId: string; control: any; removeActivity: (index: number) => void; kiosks: any[]; isFinalized: boolean }) {
-    const activities = useWatch({ control, name: 'activities' });
-    const activityIndex = useMemo(() => activities.findIndex((act: {id: string}) => act.id === activityId), [activities, activityId]);
-    
-    const activity = useMemo(() => activities[activityIndex], [activities, activityIndex]);
+function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinalized }: { activityIndex: number; control: any; removeActivity: (index: number) => void; kiosks: any[]; isFinalized: boolean }) {
+    const activity = useWatch({ control, name: `activities.${activityIndex}` });
     
     const { fields, append, remove } = useFieldArray({
         control,
@@ -290,7 +287,7 @@ function ActivityItem({ activityId, control, removeActivity, kiosks, isFinalized
         } catch { return '00:00'; }
     }, [activity]);
     
-    if (activityIndex === -1) {
+    if (!activity) {
         return null; 
     }
 
