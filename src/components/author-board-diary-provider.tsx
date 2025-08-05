@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type DailyLog } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, setDoc, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { format } from 'date-fns';
 
@@ -15,6 +15,7 @@ export interface AuthorBoardDiaryContextType {
   createOrGetDailyLog: () => Promise<DailyLog | null>;
   updateLog: (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
   createOrUpdateLog: (logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
+  deleteLog: (logId: string) => Promise<void>;
   todayLog: DailyLog | null;
 }
 
@@ -145,6 +146,15 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     }
   }, [user]);
   
+  const deleteLog = useCallback(async (logId: string) => {
+    try {
+        await deleteDoc(doc(db, 'authorboarddiary', logId));
+    } catch (error) {
+        console.error("Error deleting log:", error);
+        throw error;
+    }
+  }, []);
+
   const todayLog = useMemo(() => {
     if (!user) return null;
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -158,8 +168,9 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     createOrGetDailyLog,
     updateLog,
     createOrUpdateLog,
+    deleteLog,
     todayLog,
-  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog, createOrUpdateLog, todayLog]);
+  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog, createOrUpdateLog, deleteLog, todayLog]);
 
   return (
     <AuthorBoardDiaryContext.Provider value={value}>

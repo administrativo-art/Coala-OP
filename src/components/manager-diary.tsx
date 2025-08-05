@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, History, BookOpen, ArrowRight, BarChart2 } from 'lucide-react';
+import { PlusCircle, History, BookOpen, ArrowRight, BarChart2, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
@@ -16,21 +16,36 @@ import { type DailyLog } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { DiaryDashboard } from './diary-dashboard';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+
 
 const getStatusBadge = (status: DailyLog['status']) => {
     switch (status) {
-        case 'aberto':
-            return <Badge variant="outline">Aberto</Badge>;
-        case 'em andamento':
-            return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Em Andamento</Badge>;
-        case 'finalizado':
-            return <Badge className="bg-green-100 text-green-800">Finalizado</Badge>;
-        default:
-            return <Badge variant="secondary">{status}</Badge>;
+        case 'draft': return <Badge variant="outline">Rascunho</Badge>;
+        case 'submitted': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Pendente</Badge>;
+        case 'validated': return <Badge className="bg-green-100 text-green-800">Validado</Badge>;
+        case 'aberto': return <Badge variant="outline">Aberto</Badge>;
+        case 'em andamento': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Em Andamento</Badge>;
+        case 'finalizado': return <Badge className="bg-green-100 text-green-800">Finalizado</Badge>;
+        default: return <Badge variant="secondary">{status}</Badge>;
     }
 }
 
-function HistoryModal({ open, onOpenChange, logs, onOpenRecord }: { open: boolean, onOpenChange: (open: boolean) => void, logs: DailyLog[], onOpenRecord: (logId: string) => void }) {
+function HistoryModal({ 
+    open, 
+    onOpenChange, 
+    logs, 
+    onOpenRecord,
+    onDeleteRecord,
+    canDelete
+}: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    logs: DailyLog[], 
+    onOpenRecord: (logId: string) => void,
+    onDeleteRecord: (log: DailyLog) => void,
+    canDelete: boolean,
+}) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
@@ -42,12 +57,19 @@ function HistoryModal({ open, onOpenChange, logs, onOpenRecord }: { open: boolea
                      {logs.length > 0 ? (
                         <div className="space-y-2">
                             {logs.map(log => (
-                                <div key={log.id} className="p-3 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-muted/50" onClick={() => onOpenRecord(log.id)}>
-                                    <div>
+                                <div key={log.id} className="p-3 border rounded-lg flex justify-between items-center group">
+                                    <div className="flex-grow cursor-pointer hover:bg-muted/50" onClick={() => onOpenRecord(log.id)}>
                                         <p className="font-semibold">Diário de {format(parseISO(log.logDate), "dd 'de' MMMM, yyyy", { locale: ptBR })}</p>
                                         <p className="text-sm text-muted-foreground">Autor: {log.author.username}</p>
                                     </div>
-                                    {getStatusBadge(log.status)}
+                                    <div className="flex items-center gap-2">
+                                        {getStatusBadge(log.status)}
+                                        {canDelete && (
+                                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDeleteRecord(log)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -68,10 +90,11 @@ function HistoryModal({ open, onOpenChange, logs, onOpenRecord }: { open: boolea
 
 export function ManagerDiary() {
     const { user, loading: userLoading, permissions } = useAuth();
-    const { logs, createOrGetDailyLog, loading: logsLoading } = useAuthorBoardDiary();
+    const { logs, createOrGetDailyLog, loading: logsLoading, deleteLog } = useAuthorBoardDiary();
     const router = useRouter();
     const [isCreating, setIsCreating] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [logToDelete, setLogToDelete] = useState<DailyLog | null>(null);
 
     const handleNewRecord = async () => {
         setIsCreating(true);
@@ -86,12 +109,20 @@ export function ManagerDiary() {
         setIsHistoryOpen(false);
         router.push(`/dashboard/manager-diary/${logId}`);
     }
+    
+    const handleDeleteRecord = async () => {
+        if (logToDelete) {
+            await deleteLog(logToDelete.id);
+            setLogToDelete(null);
+        }
+    }
 
     if (userLoading || logsLoading) {
         return <Skeleton className="h-96 w-full" />;
     }
     
-    const finalizedLogs = useMemo(() => logs.filter(log => log.status === 'finalizado'), [logs]);
+    const finalizedLogs = useMemo(() => logs.filter(log => log.status === 'validated'), [logs]);
+    const canDelete = user?.username === 'Tiago Brasil';
 
     return (
         <div className="space-y-6">
@@ -144,7 +175,17 @@ export function ManagerDiary() {
                 onOpenChange={setIsHistoryOpen}
                 logs={logs}
                 onOpenRecord={handleOpenRecord}
+                onDeleteRecord={setLogToDelete}
+                canDelete={canDelete}
             />
+            {logToDelete && (
+                 <DeleteConfirmationDialog 
+                    open={!!logToDelete}
+                    onOpenChange={() => setLogToDelete(null)}
+                    onConfirm={handleDeleteRecord}
+                    itemName={`o diário de ${logToDelete.author.username} do dia ${format(parseISO(logToDelete.logDate), 'dd/MM/yyyy')}`}
+                />
+            )}
         </div>
     );
 }
