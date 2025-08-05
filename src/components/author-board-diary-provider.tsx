@@ -14,6 +14,8 @@ export interface AuthorBoardDiaryContextType {
   getLogById: (logId: string) => DailyLog | undefined;
   createOrGetDailyLog: () => Promise<DailyLog | null>;
   updateLog: (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
+  createOrUpdateLog: (logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
+  todayLog: DailyLog | null;
 }
 
 export const AuthorBoardDiaryContext = createContext<AuthorBoardDiaryContextType | undefined>(undefined);
@@ -49,14 +51,14 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
         return;
     }
 
-    const q = query(collection(db, "authorboarddiary"), where("author.userId", "==", user.id));
+    const q = query(collection(db, "authorboarddiary"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyLog));
-      setLogs(userLogs.sort((a,b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime()));
+      const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyLog));
+      setLogs(allLogs.sort((a,b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime()));
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching user's logs:", error);
+      console.error("Error fetching logs:", error);
       setLoading(false);
     });
 
@@ -82,7 +84,7 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     const now = new Date().toISOString();
     const newLogData: Omit<DailyLog, 'id'> = {
         logDate: todayStr,
-        status: 'aberto',
+        status: 'draft',
         author: {
             userId: user.id,
             username: user.username,
@@ -100,6 +102,33 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
         return null;
     }
   }, [user]);
+  
+   const createOrUpdateLog = useCallback(async (logData: Partial<Omit<DailyLog, 'id'>>) => {
+        if (!user) return null;
+        
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const q = query(collection(db, "authorboarddiary"), where("logDate", "==", todayStr), where("author.userId", "==", user.id));
+        const querySnapshot = await getDocs(q);
+
+        const now = new Date().toISOString();
+        const payload = { ...logData, updatedAt: now };
+
+        if (!querySnapshot.empty) {
+            const docRef = querySnapshot.docs[0].ref;
+            await updateDoc(docRef, payload);
+        } else {
+            const newLog = {
+                logDate: todayStr,
+                status: 'draft',
+                author: { userId: user.id, username: user.username },
+                activities: [],
+                createdAt: now,
+                ...payload
+            };
+            await addDoc(collection(db, 'authorboarddiary'), newLog);
+        }
+    }, [user]);
+
 
   const updateLog = useCallback(async (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => {
     if (!user) throw new Error("Usuário não autenticado.");
@@ -115,6 +144,12 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
       throw error;
     }
   }, [user]);
+  
+  const todayLog = useMemo(() => {
+    if (!user) return null;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    return logs.find(log => log.author.userId === user.id && log.logDate === todayStr) || null;
+  }, [logs, user]);
 
   const value = useMemo(() => ({
     logs,
@@ -122,7 +157,9 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     getLogById,
     createOrGetDailyLog,
     updateLog,
-  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog]);
+    createOrUpdateLog,
+    todayLog,
+  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog, createOrUpdateLog, todayLog]);
 
   return (
     <AuthorBoardDiaryContext.Provider value={value}>

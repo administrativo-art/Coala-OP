@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft, Info, Activity as ActivityIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft, Info, Activity as ActivityIcon, Check, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,7 @@ import { useDebounce } from 'use-debounce';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -48,6 +49,10 @@ const activitySchema = z.object({
   occurrences: z.array(occurrenceSchema),
 });
 
+const rejectionSchema = z.object({
+    rejectionNotes: z.string().min(10, "A justificativa para rejeição deve ter pelo menos 10 caracteres."),
+});
+
 const diaryFormSchema = z.object({
   activities: z.array(activitySchema),
 });
@@ -56,14 +61,13 @@ type DiaryFormValues = z.infer<typeof diaryFormSchema>;
 
 const getStatusBadge = (status: DailyLog['status']) => {
     switch (status) {
-        case 'aberto':
-            return <Badge variant="outline">Aberto</Badge>;
-        case 'em andamento':
-            return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Em Andamento</Badge>;
-        case 'finalizado':
-            return <Badge className="bg-green-100 text-green-800">Finalizado</Badge>;
-        default:
-            return <Badge variant="secondary">{status}</Badge>;
+        case 'draft': return <Badge variant="outline">Rascunho</Badge>;
+        case 'submitted': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Pendente de Validação</Badge>;
+        case 'validated': return <Badge className="bg-green-100 text-green-800">Validado</Badge>;
+        case 'aberto': return <Badge variant="outline">Aberto</Badge>;
+        case 'em andamento': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Em Andamento</Badge>;
+        case 'finalizado': return <Badge className="bg-green-100 text-green-800">Finalizado</Badge>;
+        default: return <Badge variant="secondary">{status}</Badge>;
     }
 }
 
@@ -72,13 +76,15 @@ export default function EditDiaryPage() {
     const router = useRouter();
     const { logId } = params;
     
-    const { user } = useAuth();
+    const { user, permissions } = useAuth();
     const { kiosks } = useKiosks();
     const { getLogById, updateLog, loading } = useAuthorBoardDiary();
     const { toast } = useToast();
 
     const [logEntry, setLogEntry] = useState<DailyLog | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [isRejectionModalOpen, setRejectionModalOpen] = useState(false);
+    const [rejectionNotes, setRejectionNotes] = useState('');
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
@@ -107,56 +113,70 @@ export default function EditDiaryPage() {
         const entry = getLogById(logId as string);
         if (entry) {
             setLogEntry(entry);
-            // Start in edit mode if the log is not finalized
-            setIsEditing(entry.status !== 'finalizado');
+            const canEdit = (entry.status === 'draft' || entry.status === 'em andamento') && permissions.authorBoardDiary.create;
+            setIsEditing(canEdit);
             
             const sortedActivities = [...(entry.activities || [])].sort((a,b) => a.startTime.localeCompare(b.startTime));
-            
             replace(sortedActivities);
         }
-    }, [logId, getLogById, replace]);
-
-    const onFinalize = async () => {
-        if (!logEntry) return;
-
+    }, [logId, getLogById, replace, permissions.authorBoardDiary.create]);
+    
+    const getPayload = (): Partial<DailyLog> => {
         const values = form.getValues();
-        
         const sortedAndUpdatedActivities = [...values.activities]
             .sort((a,b) => a.startTime.localeCompare(b.startTime))
             .map(act => ({
                 ...act,
                 durationMinutes: calculateDuration(act.startTime, act.endTime)
             }));
-
         const totalDuration = sortedAndUpdatedActivities.reduce((sum, act) => sum + (act.durationMinutes || 0), 0);
-        
-        const payload: Partial<DailyLog> = {
+
+        return {
             activities: sortedAndUpdatedActivities,
-            status: 'finalizado',
             totalActivities: sortedAndUpdatedActivities.length,
             totalDurationMinutes: totalDuration,
         };
-        
-        await updateLog(logEntry.id, payload);
-        toast({ title: 'Diário finalizado com sucesso!' });
+    };
+
+    const handleSubmitForValidation = async () => {
+        if (!logEntry) return;
+        const payload = getPayload();
+        await updateLog(logEntry.id, { ...payload, status: 'submitted' });
+        toast({ title: 'Diário enviado para validação!' });
+        router.push('/dashboard/manager-diary');
+    };
+    
+    const handleApprove = async () => {
+        if (!logEntry) return;
+        const payload = getPayload();
+        await updateLog(logEntry.id, { ...payload, status: 'validated' });
+        toast({ title: 'Diário validado com sucesso!' });
         router.push('/dashboard/manager-diary');
     };
 
+    const handleReject = async () => {
+        if (!logEntry || !rejectionNotes) return;
+        await updateLog(logEntry.id, { 
+            status: 'draft',
+            notes: `Rejeitado por: ${user?.username}. Motivo: ${rejectionNotes}`
+        });
+        toast({ title: 'Diário rejeitado e devolvido para o autor.' });
+        setRejectionModalOpen(false);
+        router.push('/dashboard/manager-diary');
+    };
+    
     // Auto-save effect
     useEffect(() => {
-        if (logEntry && logEntry.status !== 'finalizado' && form.formState.isDirty && isEditing) {
+        if (logEntry && (logEntry.status === 'draft' || logEntry.status === 'em andamento') && form.formState.isDirty && isEditing) {
             const values = form.getValues();
             const payload: Partial<DailyLog> = {
-                activities: values.activities.map(act => ({
-                    ...act,
-                    durationMinutes: calculateDuration(act.startTime, act.endTime)
-                })),
+                ...getPayload(),
                 status: 'em andamento',
             };
             updateLog(logEntry.id, payload);
             form.reset(values); // Reset dirty state
         }
-    }, [debouncedFormValues, logEntry, form, updateLog, isEditing, calculateDuration]);
+    }, [debouncedFormValues, logEntry, form, updateLog, isEditing]);
 
 
     if (loading) {
@@ -167,7 +187,9 @@ export default function EditDiaryPage() {
         return <div className="text-center p-8">Registro não encontrado.</div>;
     }
     
-    const isFinalized = logEntry.status === 'finalizado';
+    const isLocked = logEntry.status === 'submitted' || logEntry.status === 'validated';
+    const canValidate = permissions.authorBoardDiary.validate && logEntry.status === 'submitted';
+    const canSubmit = (logEntry.status === 'draft' || logEntry.status === 'em andamento') && permissions.authorBoardDiary.create;
 
     return (
         <div className="space-y-6">
@@ -182,10 +204,7 @@ export default function EditDiaryPage() {
                         <div>
                             <CardTitle>Diário de {format(parseISO(logEntry.logDate), 'dd/MM/yyyy')}</CardTitle>
                              <CardDescription>
-                                {isFinalized 
-                                    ? "Este registro foi finalizado e não pode ser alterado." 
-                                    : "As alterações são salvas automaticamente. Clique em 'Finalizar' ao concluir."
-                                }
+                                {isLocked ? "Este registro está bloqueado." : "As alterações são salvas automaticamente."}
                             </CardDescription>
                         </div>
                         <div className="text-right">
@@ -197,6 +216,15 @@ export default function EditDiaryPage() {
                     </div>
                 </CardHeader>
             </Card>
+            
+             {logEntry.notes && (
+                <Card className="bg-yellow-50 border-yellow-200">
+                    <CardHeader>
+                        <CardTitle className="text-yellow-800 text-lg">Notas da Rejeição</CardTitle>
+                        <CardDescription className="text-yellow-700">{logEntry.notes}</CardDescription>
+                    </CardHeader>
+                </Card>
+            )}
 
             <Form {...form}>
                 <form className="space-y-6">
@@ -217,7 +245,7 @@ export default function EditDiaryPage() {
                         <CardContent>
                             <Accordion type="multiple" className="w-full space-y-3">
                                 {activityFields.map((field, index) => (
-                                    <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized || !isEditing} />
+                                    <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={!isEditing} />
                                 ))}
                                 {activityFields.length === 0 && (
                                     <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
@@ -229,16 +257,28 @@ export default function EditDiaryPage() {
                      </Card>
                      
                      <div className="flex justify-end gap-2 sticky bottom-0 py-4 bg-background z-10">
-                         {isFinalized && <Button type="button" onClick={() => setIsEditing(true)}><Edit className="mr-2"/> Editar Registro</Button>}
-                         {isEditing && (
+                        {canSubmit && (
+                             <Button type="button" onClick={handleSubmitForValidation}><Send className="mr-2"/> Enviar para Validação</Button>
+                        )}
+                        {canValidate && (
                             <>
-                             {logEntry.status !== 'finalizado' && <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancelar Edição</Button>}
-                             <Button type="button" onClick={onFinalize}><Send className="mr-2"/> Finalizar Registro</Button>
+                                <Button type="button" variant="destructive" onClick={() => setRejectionModalOpen(true)}><X className="mr-2"/> Rejeitar</Button>
+                                <Button type="button" onClick={handleApprove}><Check className="mr-2"/> Validar Diário</Button>
                             </>
-                         )}
+                        )}
                     </div>
                 </form>
             </Form>
+            
+            <DeleteConfirmationDialog
+                open={isRejectionModalOpen}
+                onOpenChange={setRejectionModalOpen}
+                onConfirm={handleReject}
+                title="Rejeitar diário?"
+                description={<Textarea placeholder="Descreva o motivo da rejeição aqui..." value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} />}
+                confirmButtonText="Confirmar rejeição"
+                confirmButtonVariant="destructive"
+            />
         </div>
     );
 }

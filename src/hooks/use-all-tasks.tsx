@@ -42,49 +42,53 @@ const AllTasksContext = createContext<AllTasksContextType>({
 export const useAllTasks = () => useContext(AllTasksContext);
 
 export const AllTasksProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, permissions, loading: authLoading } = useAuth();
+  const { user, permissions, profiles, loading: authLoading } = useAuth();
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
   const { counts: stockCounts, loading: stockCountsLoading } = useStockCount();
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { auditSessions, loading: auditLoading } = useStockAudit();
   const { tasks: formTasks, loading: tasksLoading, addTask } = useTasks();
-  const { todayLog } = useAuthorBoardDiary();
+  const { logs, loading: diaryLoading } = useAuthorBoardDiary();
 
-  const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading;
+  const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading || diaryLoading;
 
     useEffect(() => {
-        if (!loading && permissions.audit.approve && todayLog?.status === 'submitted') {
-            const taskId = `diary-${todayLog.id}`;
-            const existingTask = formTasks.find(t => t.id === taskId);
-            
-            if(!existingTask) {
-                const adminProfile = 'Administrador';
-                addTask({
-                    id: taskId,
-                    title: `Validar Diário de ${todayLog.author.username}`,
-                    description: `Revisar e aprovar o diário do dia ${format(parseISO(todayLog.logDate), 'dd/MM/yyyy')}.`,
-                    status: 'awaiting_approval',
-                    assigneeType: 'profile',
-                    assigneeId: adminProfile,
-                    requiresApproval: true,
-                    approverType: 'profile',
-                    approverId: adminProfile,
-                    origin: {
-                        type: 'author_board_diary',
-                        id: todayLog.id,
-                    },
-                    history: [{
-                        timestamp: new Date().toISOString(),
-                        action: 'created',
-                        author: { id: 'system', name: 'Sistema' },
-                    }],
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                });
-            }
+        if (!loading && permissions.authorBoardDiary.validate) {
+            const submittedDiaries = logs.filter(log => log.status === 'submitted');
+            submittedDiaries.forEach(log => {
+                const taskId = `diary-${log.id}`;
+                const existingTask = formTasks.find(t => t.origin.id === log.id && t.origin.type === 'author_board_diary');
+                const adminProfile = profiles.find(p => p.isDefaultAdmin);
+
+                if (!existingTask && adminProfile) {
+                    addTask({
+                        title: `Validar Diário de ${log.author.username}`,
+                        description: `Revisar e aprovar o diário do dia ${format(parseISO(log.logDate), 'dd/MM/yyyy')}.`,
+                        status: 'awaiting_approval',
+                        assigneeType: 'profile',
+                        assigneeId: adminProfile.id,
+                        requiresApproval: true,
+                        approverType: 'profile',
+                        approverId: adminProfile.id,
+                        origin: {
+                            type: 'author_board_diary',
+                            id: log.id,
+                        },
+                        history: [{
+                            timestamp: new Date().toISOString(),
+                            action: 'created',
+                            author: { id: 'system', name: 'Sistema' },
+                        }],
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    });
+                } else if (existingTask && log.status !== 'submitted') {
+                    // Logic to maybe remove the task if the diary is no longer submitted
+                }
+            });
         }
-  }, [todayLog, formTasks, loading, permissions.audit.approve, addTask]);
+  }, [logs, formTasks, loading, permissions.authorBoardDiary.validate, addTask, profiles]);
 
 
   const legacyTasks = useMemo((): LegacyTask[] => {

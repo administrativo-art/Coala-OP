@@ -248,13 +248,14 @@ export type DiarySignature = {
 export type DailyLog = {
   id: string; 
   logDate: string; // YYYY-MM-DD
-  status: 'aberto' | 'em andamento' | 'finalizado' | 'validated' | 'submitted' | 'draft';
+  status: 'draft' | 'em andamento' | 'submitted' | 'validated' | 'aberto' | 'finalizado';
   author: {
     userId: string;
     username: string;
     profileName?: string;
   };
   activities: DiaryActivity[];
+  notes?: string;
   signatures?: {
     managerSignature?: DiarySignature;
   };
@@ -635,7 +636,36 @@ export type StockAuditContextType = {
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
 
+export type TaskOrigin = {
+    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary';
+    id: string; // ID of the originating document (e.g., submissionId, returnRequestId)
+    questionId?: string; // Optional: for tasks generated from specific form questions
+};
 
+export type TaskHistoryItem = {
+    timestamp: string; // ISO string
+    author: {
+        id: string;
+        name: string;
+    };
+    action: 'created' | 'assigned' | 'status_changed' | 'commented' | 'completed' | 'reopened' | 'approved' | 'rejected';
+    details?: string;
+};
 
-
-
+export type Task = {
+    id: string;
+    title: string;
+    description?: string;
+    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
+    assigneeType: 'user' | 'profile';
+    assigneeId: string; // userId or profileId
+    requiresApproval: boolean;
+    approverType?: 'user' | 'profile';
+    approverId?: string;
+    origin: TaskOrigin;
+    history: TaskHistoryItem[];
+    createdAt: string; // ISO string
+    updatedAt: string; // ISO string
+    dueDate?: string; // ISO string
+    completedAt?: string; // ISO string
+};
