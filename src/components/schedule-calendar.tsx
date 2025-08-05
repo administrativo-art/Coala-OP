@@ -10,14 +10,16 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScheduleTableView } from './schedule-table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from './ui/scroll-area';
+
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
@@ -36,7 +38,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
-  const [selectedKiosk, setSelectedKiosk] = useState('all');
+  const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
+  const [initialSelectionDone, setInitialSelectionDone] = useState(false);
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -85,13 +88,17 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
     return sortedKiosks;
   }, [kiosks]);
+
+  useEffect(() => {
+    if (!initialSelectionDone && kiosksToDisplay.length > 0) {
+      setSelectedKiosks(kiosksToDisplay.map(k => k.id));
+      setInitialSelectionDone(true);
+    }
+  }, [kiosksToDisplay, initialSelectionDone]);
   
   const filteredKiosks = useMemo(() => {
-    if (selectedKiosk === 'all') {
-        return kiosksToDisplay;
-    }
-    return kiosksToDisplay.filter(k => k.id === selectedKiosk);
-  }, [kiosksToDisplay, selectedKiosk]);
+    return kiosksToDisplay.filter(k => selectedKiosks.includes(k.id));
+  }, [kiosksToDisplay, selectedKiosks]);
 
   const { workDayCounts, warnings } = useMemo(() => {
     const counts = new Map<string, number>();
@@ -111,7 +118,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       if (lastDaySchedule) {
         kiosksToDisplay.forEach(kiosk => {
           ['T1', 'T2', 'T3'].forEach(turn => {
-            const shiftWorkers = lookupShift(lastDaySchedule, kiosk, turn as any) as string || '';
+            const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
             if (shiftWorkers.includes(user.username)) {
               workedLastDay = true;
             }
@@ -130,6 +137,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       users.forEach(user => {
           let workedToday = false;
           let isOnFolga = false;
+
           if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
@@ -153,7 +161,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
           const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
           
-          if(workedToday) {
+          if (workedToday && !isOnFolga) {
             const newCount = yesterdayCount + 1;
             counts.set(`${dayISO}-${user.id}`, newCount);
             if (newCount > 6) {
@@ -166,7 +174,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
 
     return { workDayCounts: counts, warnings: warningsMap };
-  }, [scheduleMap, previousMonthSchedule, daysInMonth, users, kiosksToDisplay, currentDate]);
+  }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
@@ -192,7 +200,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const newScheduleData: Record<string, DailySchedule> = {};
     const userWorkdayCounts = new Map<string, number>();
 
-    // Initialize counts from the end of the previous month
     const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
     const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
     const lastDaySchedule = previousScheduleMap.get(lastDayISO);
@@ -202,7 +209,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         if(lastDaySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                    const shiftWorkers = lookupShift(lastDaySchedule, kiosk, turn as any) as string || '';
+                    const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
                     if (shiftWorkers.includes(user.username)) {
                         workedLastDay = true;
                     }
@@ -234,13 +241,11 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         const consecutiveDays = userWorkdayCounts.get(user.id) || 0;
         
         if (consecutiveDays >= 6) {
-            // Force day off
-            const kioskId = user.assignedKioskIds[0] || kiosksToDisplay[0].id; // Assign to first assigned kiosk
+            const kioskId = user.assignedKioskIds[0] || kiosksToDisplay[0].id;
             const folgaKey = `${kioskId} Folga`;
             newDaySchedule[folgaKey] = newDaySchedule[folgaKey] ? `${newDaySchedule[folgaKey]} + ${user.username}` : user.username;
-            userWorkdayCounts.set(user.id, 0); // Reset count
+            userWorkdayCounts.set(user.id, 0);
         } else if (user.turno) {
-            // Assign to default shift
             const kioskId = user.assignedKioskIds[0];
             if (kioskId) {
                 const shiftKey = `${kioskId} ${user.turno}`;
@@ -318,6 +323,15 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     doc.save(`escala_${format(currentDate, 'MM_yyyy')}.pdf`);
   };
 
+  const handleKioskFilterChange = (kioskId: string, checked: boolean) => {
+    setSelectedKiosks(current => {
+        if (checked) {
+            return [...current, kioskId];
+        } else {
+            return current.filter(id => id !== kioskId);
+        }
+    });
+  };
 
   return (
     <>
@@ -336,23 +350,35 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
-                <Select value={selectedKiosk} onValueChange={setSelectedKiosk}>
-                    <SelectTrigger className="w-full sm:w-[220px]">
-                        <SelectValue placeholder="Filtrar por quiosque" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os Quiosques</SelectItem>
-                        {kiosksToDisplay.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                 <Button variant="ghost" onClick={() => setSelectedKiosk('all')}>
-                    <Eraser className="mr-2 h-4 w-4" />
-                    Limpar
-                </Button>
-            </div>
+            <div className="flex flex-wrap gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Filter className="mr-2 h-4 w-4" />
+                            Filtrar Quiosques ({selectedKiosks.length})
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56">
+                        <DropdownMenuLabel>Exibir quiosques</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setSelectedKiosks(kiosksToDisplay.map(k => k.id))}>Selecionar Todos</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setSelectedKiosks([])}>Limpar Seleção</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <ScrollArea className="h-48">
+                        {kiosksToDisplay.map(kiosk => (
+                            <DropdownMenuCheckboxItem
+                                key={kiosk.id}
+                                checked={selectedKiosks.includes(kiosk.id)}
+                                onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                {kiosk.name}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                        </ScrollArea>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
-             <div className="flex flex-wrap gap-2">
                 {canManageSchedule && (
                   <>
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
