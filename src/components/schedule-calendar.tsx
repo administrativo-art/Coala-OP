@@ -127,6 +127,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
       users.forEach(user => {
           let workedToday = false;
+          let isOnFolga = false;
           if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
@@ -141,6 +142,10 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     }
                   }
                 });
+                 const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
+                 if (folgaNames.includes(user.username)) {
+                    isOnFolga = true;
+                }
             });
           }
 
@@ -153,15 +158,13 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
-            // Se não trabalhou, a contagem para o dia é a mesma de ontem (para ser exibida na folga),
-            // e zerará no próximo dia de trabalho.
             counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
     });
 
     return { workDayCounts: counts, warnings: warningsMap };
-  }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
+  }, [scheduleMap, previousMonthSchedule, daysInMonth, users, kiosksToDisplay, currentDate]);
   
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
@@ -184,7 +187,70 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   };
 
   const handleGenerateConfirm = async () => {
-    // This function can be expanded with real logic
+    const newScheduleData: Record<string, DailySchedule> = {};
+    const userWorkdayCounts = new Map<string, number>();
+
+    // Initialize counts from the end of the previous month
+    const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
+    const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+    const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+    
+    users.forEach(user => {
+        let workedLastDay = false;
+        if(lastDaySchedule) {
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const shiftWorkers = lookupShift(lastDaySchedule, kiosk, turn as any) as string || '';
+                    if (shiftWorkers.includes(user.username)) {
+                        workedLastDay = true;
+                    }
+                });
+            });
+        }
+        userWorkdayCounts.set(user.id, workedLastDay ? 1 : 0);
+    });
+
+
+    daysInMonth.forEach(day => {
+      const dayISO = format(day, 'yyyy-MM-dd');
+      const newDaySchedule: DailySchedule = {
+        id: dayISO,
+        diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
+      };
+
+      kiosksToDisplay.forEach(kiosk => {
+        newDaySchedule[`${kiosk.id} T1`] = '';
+        newDaySchedule[`${kiosk.id} T2`] = '';
+        newDaySchedule[`${kiosk.id} T3`] = '';
+        newDaySchedule[`${kiosk.id} Folga`] = '';
+        newDaySchedule[`${kiosk.id} Ausencia`] = [];
+      });
+      
+      const operationalUsers = users.filter(u => u.operacional && !u.folguista);
+      
+      operationalUsers.forEach(user => {
+        const consecutiveDays = userWorkdayCounts.get(user.id) || 0;
+        
+        if (consecutiveDays >= 6) {
+            // Force day off
+            const kioskId = user.assignedKioskIds[0] || kiosksToDisplay[0].id; // Assign to first assigned kiosk
+            const folgaKey = `${kioskId} Folga`;
+            newDaySchedule[folgaKey] = newDaySchedule[folgaKey] ? `${newDaySchedule[folgaKey]} + ${user.username}` : user.username;
+            userWorkdayCounts.set(user.id, 0); // Reset count
+        } else if (user.turno) {
+            // Assign to default shift
+            const kioskId = user.assignedKioskIds[0];
+            if (kioskId) {
+                const shiftKey = `${kioskId} ${user.turno}`;
+                newDaySchedule[shiftKey] = newDaySchedule[shiftKey] ? `${newDaySchedule[shiftKey]} + ${user.username}` : user.username;
+                userWorkdayCounts.set(user.id, consecutiveDays + 1);
+            }
+        }
+      });
+      newScheduleData[dayISO] = newDaySchedule;
+    });
+
+    await createFullMonthSchedule(newScheduleData);
     setIsGenerateConfirmationOpen(false);
   };
   
