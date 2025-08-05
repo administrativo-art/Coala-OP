@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { type DailyLog, type DiaryActivity } from '@/types';
 import { useDebounce } from 'use-debounce';
+import { Switch } from '@/components/ui/switch';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -213,9 +214,52 @@ export default function EditDiaryPage() {
     );
 }
 
+function OccurrenceItem({ activityIndex, occurrenceIndex, control, removeOccurrence, isFinalized }: { activityIndex: number, occurrenceIndex: number, control: any, removeOccurrence: (index: number) => void, isFinalized: boolean }) {
+    const occurrence = useWatch({ control, name: `activities.${activityIndex}.occurrences.${occurrenceIndex}` });
+    const escalationWatch = useWatch({ control, name: `activities.${activityIndex}.occurrences.${occurrenceIndex}.requiresEscalation` });
+
+    return (
+        <div className="p-3 border rounded-lg bg-background/50 relative">
+             <div className="absolute top-1 right-1">
+                {!isFinalized && (
+                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => removeOccurrence(occurrenceIndex)}>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                )}
+            </div>
+            <div className="space-y-3">
+                <FormField control={control} name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.description`} render={({ field }) => ( <FormItem><FormLabel>Descrição da ocorrência</FormLabel><Textarea {...field} disabled={isFinalized} placeholder="Ex: Cliente reclamou de produto vencido." /></FormItem> )}/>
+                <FormField control={control} name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.identifiedCause`} render={({ field }) => ( <FormItem><FormLabel>Causa identificada</FormLabel><Input {...field} disabled={isFinalized} placeholder="Ex: Falha na verificação de validade." /></FormItem> )}/>
+                <FormField control={control} name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.actionTaken`} render={({ field }) => ( <FormItem><FormLabel>Ação tomada</FormLabel><Input {...field} disabled={isFinalized} placeholder="Ex: Produto substituído e lote retirado."/></FormItem> )}/>
+                <FormField control={control} name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.result`} render={({ field }) => ( <FormItem><FormLabel>Resultado</FormLabel><Input {...field} disabled={isFinalized} placeholder="Ex: Cliente satisfeito."/></FormItem> )}/>
+                <FormField
+                    control={control}
+                    name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.requiresEscalation`}
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                            <FormLabel>Requer escalonamento?</FormLabel>
+                            <FormControl>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} disabled={isFinalized} />
+                            </FormControl>
+                        </FormItem>
+                    )}
+                />
+                 {escalationWatch && (
+                    <FormField control={control} name={`activities.${activityIndex}.occurrences.${occurrenceIndex}.escalatedTo`} render={({ field }) => ( <FormItem><FormLabel>Escalonado para</FormLabel><Input {...field} disabled={isFinalized} placeholder="Nome do gerente ou setor" /></FormItem> )}/>
+                 )}
+            </div>
+        </div>
+    )
+}
+
 
 function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinalized }: { activityIndex: number, control: any, removeActivity: (index: number) => void, kiosks: any[], isFinalized: boolean }) {
     const activity = useWatch({ control, name: `activities.${activityIndex}` });
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: `activities.${activityIndex}.occurrences`,
+    });
+
     const duration = useMemo(() => {
         try {
             const start = parse(activity.startTime, 'HH:mm', new Date());
@@ -260,6 +304,27 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
                             <FormField control={control} name={`activities.${activityIndex}.endTime`} render={({ field }) => ( <FormItem><FormLabel>Fim</FormLabel><Input type="time" {...field} disabled={isFinalized} /></FormItem> )} />
                         </div>
                         <FormField control={control} name={`activities.${activityIndex}.description`} render={({ field }) => ( <FormItem><FormLabel>Descrição</FormLabel><Textarea {...field} placeholder="Detalhes da atividade..." disabled={isFinalized} /></FormItem> )} />
+
+                         <div className="space-y-3 pt-4 border-t">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-medium">Ocorrências ({fields.length})</h4>
+                                {!isFinalized && (
+                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ id: `occ-${Date.now()}`, description: '', requiresEscalation: false })}>
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Ocorrência
+                                    </Button>
+                                )}
+                            </div>
+                            {fields.map((field, index) => (
+                                <OccurrenceItem 
+                                    key={field.id}
+                                    activityIndex={activityIndex}
+                                    occurrenceIndex={index}
+                                    control={control}
+                                    removeOccurrence={remove}
+                                    isFinalized={isFinalized}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </AccordionContent>
             </Card>
