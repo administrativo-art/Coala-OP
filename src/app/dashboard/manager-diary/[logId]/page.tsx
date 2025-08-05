@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format, parse, isValid, parseISO } from 'date-fns';
@@ -76,21 +76,6 @@ export default function EditDiaryPage() {
         name: "activities",
     });
 
-    const watchedActivities = useWatch({ control: form.control, name: 'activities' });
-
-    const sortedActivities = useMemo(() => {
-        return [...activityFields].sort((a,b) => {
-            const activityA = watchedActivities.find(act => act.id === a.id);
-            const activityB = watchedActivities.find(act => act.id === b.id);
-            if(activityA && activityB) {
-                return activityA.startTime.localeCompare(activityB.startTime);
-            }
-            return 0;
-        });
-    }, [activityFields, watchedActivities]);
-    
-
-    // Debounce form values to trigger autosave
     const [debouncedFormValues] = useDebounce(form.watch(), 2000);
 
     useEffect(() => {
@@ -119,17 +104,19 @@ export default function EditDiaryPage() {
 
         const values = form.getValues();
         
-        const updatedActivities = values.activities.map(act => ({
-            ...act,
-            durationMinutes: calculateDuration(act.startTime, act.endTime)
-        }));
+        const sortedAndUpdatedActivities = [...values.activities]
+            .sort((a,b) => a.startTime.localeCompare(b.startTime))
+            .map(act => ({
+                ...act,
+                durationMinutes: calculateDuration(act.startTime, act.endTime)
+            }));
 
-        const totalDuration = updatedActivities.reduce((sum, act) => sum + act.durationMinutes, 0);
+        const totalDuration = sortedAndUpdatedActivities.reduce((sum, act) => sum + act.durationMinutes, 0);
 
         const payload: Partial<DailyLog> = {
-            activities: updatedActivities,
+            activities: sortedAndUpdatedActivities,
             status: 'finalizado',
-            totalActivities: updatedActivities.length,
+            totalActivities: sortedAndUpdatedActivities.length,
             totalDurationMinutes: totalDuration,
         };
         
@@ -198,13 +185,9 @@ export default function EditDiaryPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Accordion type="multiple" className="w-full space-y-3">
-                                        {sortedActivities.map((field, index) => {
-                                            // Find the original index before sorting
-                                            const originalIndex = activityFields.findIndex(f => f.id === field.id);
-                                            return (
-                                                <ActivityItem key={field.id} activityIndex={originalIndex} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
-                                            )
-                                        })}
+                                        {activityFields.map((field, index) => (
+                                            <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
+                                        ))}
                                     </Accordion>
                                 </CardContent>
                              </Card>
@@ -223,7 +206,6 @@ export default function EditDiaryPage() {
 }
 
 function OccurrenceItem({ activityIndex, occurrenceIndex, control, removeOccurrence, isFinalized }: { activityIndex: number, occurrenceIndex: number, control: any, removeOccurrence: (index: number) => void, isFinalized: boolean }) {
-    const occurrence = useWatch({ control, name: `activities.${activityIndex}.occurrences.${occurrenceIndex}` });
     const escalationWatch = useWatch({ control, name: `activities.${activityIndex}.occurrences.${occurrenceIndex}.requiresEscalation` });
 
     return (
@@ -300,7 +282,7 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
 
     return (
         <AccordionItem value={activity.id} className="border rounded-lg">
-             <Card>
+            <Card>
                 <div className="flex items-center p-2 pr-4">
                     <AccordionTrigger className="p-2 text-left hover:no-underline w-full flex-grow">
                         <div className="space-y-1">
