@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -228,6 +227,7 @@ export type DiaryOccurrence = {
 
 export type DiaryActivity = {
   id: string;
+  kioskId: string;
   startTime: string; // HH:mm
   endTime: string; // HH:mm
   durationMinutes: number;
@@ -246,14 +246,14 @@ export type DiarySignature = {
 }
 
 export type DailyLog = {
-  id: string; // YYYY-MM-DD_authorId
+  id: string; 
   logDate: string; // YYYY-MM-DD
-  status: 'draft' | 'submitted' | 'validated';
+  status: 'aberto' | 'em andamento' | 'finalizado';
   author: {
     userId: string;
     username: string;
+    profileName?: string;
   };
-  kioskIds: string[];
   activities: DiaryActivity[];
   generalObservations?: string;
   signatures?: {
@@ -634,3 +634,4 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
+
