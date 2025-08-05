@@ -317,7 +317,7 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
                             <div className="flex justify-between items-center">
                                 <h4 className="font-medium">Ocorrências ({fields.length})</h4>
                                 {!isFinalized && (
-                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ id: `occ-${Date.now()}`, description: '', requiresEscalation: false })}>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ id: `occ-${Date.now()}`, description: '', identifiedCause: '', actionTaken: '', result: '', escalatedTo: '', requiresEscalation: false })}>
                                         <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Ocorrência
                                     </Button>
                                 )}
