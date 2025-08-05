@@ -94,7 +94,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const counts = new Map<string, number>();
     const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
 
-    if (users.length === 0 || kiosksToDisplay.length === 0 || !scheduleMap.size) {
+    if (users.length === 0 || kiosksToDisplay.length === 0) {
       return { workDayCounts: counts, warnings: warningsMap };
     }
     
@@ -203,45 +203,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     onEditDay(dataToEdit, kioskId);
   };
 
-
-  const renderEmployeeName = (name: string, date: Date, kioskId: string) => {
-      const dayISO = format(date, 'yyyy-MM-dd');
-      const user = users.find(u => u.username === name.trim());
-      if (!user) return name;
-      
-      const count = workDayCounts.get(`${dayISO}-${user.id}`);
-      const color = user?.color;
-      const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
-      const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
-
-      const warning = conflictWarning || overworkWarning;
-
-      return (
-        <span className="inline-flex items-center gap-1">
-            <span
-                className="px-1.5 py-0.5 rounded-md"
-                style={color ? { backgroundColor: color, color: 'black' } : {}}
-            >
-                {name}
-                {count && count > 1 && (
-                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
-                )}
-            </span>
-             {warning && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger>
-                            <AlertTriangle className="h-4 w-4 text-destructive"/>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{warning.message}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
-        </span>
-      );
-  };
 
   return (
     <>
