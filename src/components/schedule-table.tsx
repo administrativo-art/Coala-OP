@@ -2,7 +2,7 @@
 "use client"
 
 import React from 'react';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type Kiosk, type DailySchedule, type AbsenceEntry, type User } from '../types';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,9 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       const user = users.find(u => u.username === name.trim());
       if (!user) return name;
       
-      const count = workDayCounts.get(`${dayISO}-${user.id}`);
+      const yesterdayISO = format(subDays(date, 1), 'yyyy-MM-dd');
+      const count = workDayCounts.get(`${yesterdayISO}-${user.id}`) || 0;
+      
       const color = user?.color;
       const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
       const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
@@ -50,7 +52,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
       const warning = conflictWarning || overworkWarning;
       
       if (isFolga) {
-          return <span>{name}</span>;
+          return <span className="text-muted-foreground">{name}</span>;
       }
 
       return (
@@ -60,8 +62,8 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                 style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
-                {count && count > 1 && (
-                    <span className="text-xs font-bold ml-1 opacity-80">({count})</span>
+                {count > 0 && (
+                    <span className="text-xs font-bold ml-1 opacity-80">({count + 1})</span>
                 )}
             </span>
              {warning && (
@@ -134,7 +136,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                                     <Separator className="my-2 border-dashed" />
                                 )}
 
-                                {folga && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
+                                {folga && <p><strong>F:</strong> {renderShift(folga, date, kiosk.id, true)}</p>}
                                 
                                 {ausencias.length > 0 && ausencias.map(a => {
                                     const user = users.find(u => u.id === a.userId);

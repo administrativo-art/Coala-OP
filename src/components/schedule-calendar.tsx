@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -152,6 +153,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
+            // Se não trabalhou, a contagem para o dia é a mesma de ontem (para ser exibida na folga),
+            // e zerará no próximo dia de trabalho.
             counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
