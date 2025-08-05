@@ -248,7 +248,7 @@ export type DiarySignature = {
 export type DailyLog = {
   id: string; 
   logDate: string; // YYYY-MM-DD
-  status: 'aberto' | 'em andamento' | 'finalizado';
+  status: 'aberto' | 'em andamento' | 'finalizado' | 'validated' | 'submitted' | 'draft';
   author: {
     userId: string;
     username: string;
@@ -259,6 +259,8 @@ export type DailyLog = {
   signatures?: {
     managerSignature?: DiarySignature;
   };
+  totalActivities?: number;
+  totalDurationMinutes?: number;
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
 };
@@ -633,5 +635,6 @@ export type StockAuditContextType = {
   updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
   deleteAuditSession: (sessionId: string) => Promise<void>;
 }
+
 
 

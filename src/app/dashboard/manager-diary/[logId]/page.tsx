@@ -42,6 +42,7 @@ const activitySchema = z.object({
   kioskId: z.string().min(1, "Selecione uma unidade."),
   startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato inválido."),
   endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato inválido."),
+  durationMinutes: z.number().default(0),
   title: z.string().min(1, 'O título é obrigatório.'),
   description: z.string().optional(),
   occurrences: z.array(occurrenceSchema),
@@ -75,6 +76,18 @@ export default function EditDiaryPage() {
         control: form.control,
         name: "activities",
     });
+
+    const sortedActivities = useMemo(() => {
+        return [...activityFields].sort((a,b) => {
+            const activityA = form.getValues().activities.find(act => act.id === a.id);
+            const activityB = form.getValues().activities.find(act => act.id === b.id);
+            if(activityA && activityB) {
+                return activityA.startTime.localeCompare(activityB.startTime);
+            }
+            return 0;
+        });
+    }, [activityFields, form]);
+    
 
     // Debounce form values to trigger autosave
     const [debouncedFormValues] = useDebounce(form.watch(), 2000);
@@ -111,10 +124,14 @@ export default function EditDiaryPage() {
             durationMinutes: calculateDuration(act.startTime, act.endTime)
         }));
 
+        const totalDuration = updatedActivities.reduce((sum, act) => sum + act.durationMinutes, 0);
+
         const payload: Partial<DailyLog> = {
             activities: updatedActivities,
             generalObservations: values.generalObservations,
             status: 'finalizado',
+            totalActivities: updatedActivities.length,
+            totalDurationMinutes: totalDuration,
         };
         
         await updateLog(logEntry.id, payload);
@@ -174,7 +191,7 @@ export default function EditDiaryPage() {
                                     <CardTitle className="flex justify-between items-center">
                                         <span>Atividades ({activityFields.length})</span>
                                         {!isFinalized && (
-                                            <Button type="button" size="sm" onClick={() => appendActivity({ id: `act-${Date.now()}`, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [] })}>
+                                            <Button type="button" size="sm" onClick={() => appendActivity({ id: `act-${Date.now()}`, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [], durationMinutes: 60 })}>
                                                 <PlusCircle className="mr-2 h-4 w-4"/> Nova Atividade
                                             </Button>
                                         )}
@@ -182,8 +199,8 @@ export default function EditDiaryPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Accordion type="multiple" className="w-full space-y-3">
-                                        {activityFields.map((field, index) => (
-                                            <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
+                                        {sortedActivities.map((field, index) => (
+                                            <ActivityItem key={field.id} activityId={field.id} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={isFinalized} />
                                         ))}
                                     </Accordion>
                                 </CardContent>
@@ -266,8 +283,12 @@ function OccurrenceItem({ activityIndex, occurrenceIndex, control, removeOccurre
 }
 
 
-function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinalized }: { activityIndex: number, control: any, removeActivity: (index: number) => void, kiosks: any[], isFinalized: boolean }) {
-    const activity = useWatch({ control, name: `activities.${activityIndex}` });
+function ActivityItem({ activityId, control, removeActivity, kiosks, isFinalized }: { activityId: string; control: any; removeActivity: (index: number) => void; kiosks: any[]; isFinalized: boolean }) {
+    const activities = useWatch({ control, name: 'activities' });
+    const activityIndex = useMemo(() => activities.findIndex((act: {id: string}) => act.id === activityId), [activities, activityId]);
+    
+    const activity = useMemo(() => activities[activityIndex], [activities, activityIndex]);
+    
     const { fields, append, remove } = useFieldArray({
         control,
         name: `activities.${activityIndex}.occurrences`,
@@ -275,6 +296,7 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
 
     const duration = useMemo(() => {
         try {
+            if (!activity || !activity.startTime || !activity.endTime) return '00:00';
             const start = parse(activity.startTime, 'HH:mm', new Date());
             const end = parse(activity.endTime, 'HH:mm', new Date());
             if (!isValid(start) || !isValid(end) || end < start) return '00:00';
@@ -283,10 +305,14 @@ function ActivityItem({ activityIndex, control, removeActivity, kiosks, isFinali
             const minutes = (diff % 60).toString().padStart(2, '0');
             return `${hours}:${minutes}`;
         } catch { return '00:00'; }
-    }, [activity.startTime, activity.endTime]);
+    }, [activity]);
     
+    if (activityIndex === -1) {
+        return null; 
+    }
+
     return (
-        <AccordionItem value={`activity-${activityIndex}`} className="border rounded-lg">
+        <AccordionItem value={activity.id} className="border rounded-lg">
              <Card>
                 <div className="flex items-center p-2 pr-4">
                     <AccordionTrigger className="p-2 text-left hover:no-underline w-full flex-grow">
