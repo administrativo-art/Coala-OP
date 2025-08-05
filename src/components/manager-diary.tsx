@@ -121,7 +121,7 @@ export function ManagerDiary() {
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3 p-3 border rounded-lg"><Calendar className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Data</p><p className="font-semibold">{format(new Date(), 'dd/MM/yyyy')}</p></div></div>
-                    <div className="flex items-center gap-3 p-3 border rounded-lg"><User className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Supervisor</p><p className="font-semibold">{user?.username}</p></div></div>
+                    <div className="flex items-center gap-3 p-3 border rounded-lg"><User className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Autor</p><p className="font-semibold">{user?.username}</p></div></div>
                     <div className="flex items-center gap-3 p-3 border rounded-lg"><Warehouse className="h-5 w-5 text-primary" /><div><p className="text-sm text-muted-foreground">Unidades</p><p className="font-semibold truncate">{user?.assignedKioskIds.map(id => kiosks.find(k => k.id === id)?.name).join(', ')}</p></div></div>
                 </CardContent>
             </Card>
@@ -161,7 +161,7 @@ export function ManagerDiary() {
 
                  <div className="grid md:grid-cols-2 gap-6">
                      <Card>
-                         <CardHeader><CardTitle>Assinatura do Supervisor</CardTitle></CardHeader>
+                         <CardHeader><CardTitle>Assinatura do Autor</CardTitle></CardHeader>
                          <CardContent>
                             <div className="border rounded-md">
                                 <SignatureCanvas ref={supervisorSignatureRef} canvasProps={{ className: 'w-full h-40' }} />
@@ -265,3 +265,5 @@ function OccurrenceItem({ activityIndex, occurrenceIndex, control, remove }: { a
         </div>
     )
 }
+
+    
