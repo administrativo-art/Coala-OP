@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft, Info, Activity as ActivityIcon, Check, X } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSquare, AlertCircle, Save, Send, ArrowLeft, Info, Activity as ActivityIcon, Check, X, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -87,6 +87,9 @@ export default function EditDiaryPage() {
     const [rejectionNotes, setRejectionNotes] = useState('');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
     const [lastAddedActivityId, setLastAddedActivityId] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
@@ -113,9 +116,12 @@ export default function EditDiaryPage() {
         const entry = getLogById(logId as string);
         if (entry) {
             setLogEntry(entry);
-            replace(entry.activities || []);
+            const initialActivities = entry.activities ? [...entry.activities].sort((a,b) => a.startTime.localeCompare(b.startTime)) : [];
+            replace(initialActivities);
+            form.reset({ activities: initialActivities });
         }
-    }, [logId, getLogById, replace, permissions.authorBoardDiary.create, loading]);
+    }, [logId, getLogById, replace, form]);
+
 
     useEffect(() => {
         if (lastAddedActivityId) {
@@ -124,8 +130,7 @@ export default function EditDiaryPage() {
         }
     }, [lastAddedActivityId, activityFields]);
     
-    const getPayload = (): Partial<DailyLog> => {
-        const values = form.getValues();
+    const getPayload = (values: DiaryFormValues): Partial<DailyLog> => {
         const sortedAndUpdatedActivities = [...values.activities]
             .sort((a,b) => a.startTime.localeCompare(b.startTime))
             .map(act => ({
@@ -141,6 +146,31 @@ export default function EditDiaryPage() {
         };
     };
 
+    // Auto-save logic
+    const watchedFormValues = form.watch();
+    const [debouncedValues] = useDebounce(watchedFormValues, 2000);
+
+    useEffect(() => {
+        if (form.formState.isDirty && logEntry && logEntry.status === 'draft') {
+            setIsDirty(true);
+        }
+    }, [watchedFormValues, form.formState.isDirty, logEntry]);
+    
+    const handleAutoSave = useCallback(async (values: DiaryFormValues) => {
+        if (isDirty && logEntry && logEntry.status === 'draft') {
+            setIsSaving(true);
+            const payload = getPayload(values);
+            await updateLog(logEntry.id, payload);
+            setIsSaving(false);
+            form.reset(values); // Reset dirty state
+            setIsDirty(false);
+        }
+    }, [isDirty, logEntry, updateLog, form]);
+
+    useEffect(() => {
+        handleAutoSave(debouncedValues);
+    }, [debouncedValues, handleAutoSave]);
+
     const handleAddNewActivity = useCallback(() => {
         const newActivityId = `act-${Date.now()}`;
         appendActivity({ id: newActivityId, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [], durationMinutes: 60 });
@@ -149,17 +179,20 @@ export default function EditDiaryPage() {
 
     const handleSubmitForValidation = async () => {
         if (!logEntry || !user) return;
-        const payload = getPayload();
+        
+        await handleAutoSave(form.getValues());
+        setIsSaving(true);
+        const payload = getPayload(form.getValues());
         
         const adminProfile = profiles.find(p => p.isDefaultAdmin);
         if (!adminProfile) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Perfil de administrador não encontrado para atribuir a tarefa.' });
+            setIsSaving(false);
             return;
         }
 
         await updateLog(logEntry.id, { ...payload, status: 'submitted' });
         
-        // Create a task for validation
         const taskId = `diary-${logEntry.id}`;
         const existingTask = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
         
@@ -180,13 +213,14 @@ export default function EditDiaryPage() {
             });
         }
         
+        setIsSaving(false);
         toast({ title: 'Diário enviado para validação!' });
         router.push('/dashboard/manager-diary');
     };
     
     const handleApprove = async () => {
         if (!logEntry) return;
-        const payload = getPayload();
+        const payload = getPayload(form.getValues());
         await updateLog(logEntry.id, { ...payload, status: 'validated' });
 
         const task = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
@@ -207,11 +241,11 @@ export default function EditDiaryPage() {
         
         const task = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
         if (task) {
-            await updateFormTask(task.id, { status: 'rejected' });
+            await updateFormTask(task.id, { status: 'reopened' });
         }
 
         toast({ title: 'Diário rejeitado e devolvido para o autor.' });
-        setRejectionModalOpen(false);
+        setIsRejectionModalOpen(false);
         router.push('/dashboard/manager-diary');
     };
     
@@ -298,16 +332,30 @@ export default function EditDiaryPage() {
                         </CardContent>
                      </Card>
                      
-                     <div className="flex justify-end gap-2 sticky bottom-0 py-4 bg-background z-10">
-                        {canSubmit && (
-                             <Button type="button" onClick={handleSubmitForValidation}><Send className="mr-2"/> Enviar para Validação</Button>
-                        )}
-                        {canValidate && (
-                            <>
-                                <Button type="button" variant="destructive" onClick={() => setIsRejectionModalOpen(true)}><X className="mr-2"/> Rejeitar</Button>
-                                <Button type="button" onClick={handleApprove}><Check className="mr-2"/> Validar Diário</Button>
-                            </>
-                        )}
+                     <div className="flex justify-between items-center gap-2 sticky bottom-0 py-4 bg-background z-10">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            {isSaving ? (
+                                <>
+                                <Loader2 className="h-4 w-4 animate-spin"/> Salvando...
+                                </>
+                            ) : (
+                                <>
+                                {!isDirty ? <Check className="h-4 w-4 text-green-500" /> : <Loader2 className="h-4 w-4 text-orange-500 animate-pulse"/> }
+                                {!isDirty ? 'Salvo' : 'Alterações pendentes' }
+                                </>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            {canSubmit && (
+                                <Button type="button" onClick={handleSubmitForValidation}><Send className="mr-2"/> Enviar para Validação</Button>
+                            )}
+                            {canValidate && (
+                                <>
+                                    <Button type="button" variant="destructive" onClick={() => setIsRejectionModalOpen(true)}><X className="mr-2"/> Rejeitar</Button>
+                                    <Button type="button" onClick={handleApprove}><Check className="mr-2"/> Validar Diário</Button>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </form>
             </Form>
