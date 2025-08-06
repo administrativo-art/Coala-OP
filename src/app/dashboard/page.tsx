@@ -192,14 +192,9 @@ function OperationalDashboard() {
           });
         }
       });
-      const ausencias = lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-      ausencias.forEach(a => {
-        const ausente = users.find(u => u.id === a.userId);
-        if(ausente) workers.add(ausente.username);
-      })
     });
     return workers;
-  }, [todaySchedule, kiosksToDisplay, users]);
+  }, [todaySchedule, kiosksToDisplay]);
   
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
