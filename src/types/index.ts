@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -248,7 +249,7 @@ export type DiarySignature = {
 export type DailyLog = {
   id: string; 
   logDate: string; // YYYY-MM-DD
-  status: 'draft' | 'em andamento' | 'submitted' | 'validated' | 'aberto' | 'finalizado';
+  status: 'draft' | 'submitted' | 'validated';
   author: {
     userId: string;
     username: string;

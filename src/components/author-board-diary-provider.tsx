@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -14,7 +15,6 @@ export interface AuthorBoardDiaryContextType {
   getLogById: (logId: string) => DailyLog | undefined;
   createOrGetDailyLog: () => Promise<DailyLog | null>;
   updateLog: (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
-  createOrUpdateLog: (logData: Partial<Omit<DailyLog, 'id'>>) => Promise<void>;
   deleteLog: (logId: string) => Promise<void>;
   todayLog: DailyLog | null;
 }
@@ -104,33 +104,6 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     }
   }, [user]);
   
-   const createOrUpdateLog = useCallback(async (logData: Partial<Omit<DailyLog, 'id'>>) => {
-        if (!user) return null;
-        
-        const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const q = query(collection(db, "authorboarddiary"), where("logDate", "==", todayStr), where("author.userId", "==", user.id));
-        const querySnapshot = await getDocs(q);
-
-        const now = new Date().toISOString();
-        const payload = { ...logData, updatedAt: now };
-
-        if (!querySnapshot.empty) {
-            const docRef = querySnapshot.docs[0].ref;
-            await updateDoc(docRef, payload);
-        } else {
-            const newLog = {
-                logDate: todayStr,
-                status: 'draft',
-                author: { userId: user.id, username: user.username },
-                activities: [],
-                createdAt: now,
-                ...payload
-            };
-            await addDoc(collection(db, 'authorboarddiary'), newLog);
-        }
-    }, [user]);
-
-
   const updateLog = useCallback(async (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => {
     if (!user) throw new Error("Usuário não autenticado.");
     const docRef = doc(db, 'authorboarddiary', logId);
@@ -167,10 +140,9 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
     getLogById,
     createOrGetDailyLog,
     updateLog,
-    createOrUpdateLog,
     deleteLog,
     todayLog,
-  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog, createOrUpdateLog, deleteLog, todayLog]);
+  }), [logs, loading, getLogById, createOrGetDailyLog, updateLog, deleteLog, todayLog]);
 
   return (
     <AuthorBoardDiaryContext.Provider value={value}>

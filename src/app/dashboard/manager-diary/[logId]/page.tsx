@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -83,7 +84,7 @@ export default function EditDiaryPage() {
 
     const [logEntry, setLogEntry] = useState<DailyLog | null>(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [isRejectionModalOpen, setRejectionModalOpen] = useState(false);
+    const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
     const [rejectionNotes, setRejectionNotes] = useState('');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
     const [lastAddedActivityId, setLastAddedActivityId] = useState<string | null>(null);
@@ -128,7 +129,7 @@ export default function EditDiaryPage() {
             setOpenAccordionItems(prev => [...new Set([...prev, lastAddedActivityId])]);
             setLastAddedActivityId(null); // Reset after expanding
         }
-    }, [lastAddedActivityId]);
+    }, [lastAddedActivityId, activityFields]); // Added activityFields to dependencies
     
     const getPayload = (): Partial<DailyLog> => {
         const values = form.getValues();

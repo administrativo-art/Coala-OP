@@ -12,7 +12,7 @@ import { useStockAudit } from './use-stock-audit'; // Importar o hook de auditor
 import { useTasks } from './use-tasks';
 import { format, parseISO } from 'date-fns';
 import { returnRequestStatuses, type ReturnRequest, type Task } from '@/types';
-import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck, FileText, BookOpen } from 'lucide-react';
+import { PackagePlus, ClipboardCheck, ShieldAlert, Truck, ShieldCheck as AuditIcon, FileText, BookOpen } from 'lucide-react';
 import { useAuthorBoardDiary } from './use-author-board-diary';
 
 export interface LegacyTask {
@@ -48,7 +48,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { requests: returnRequests, loading: returnRequestsLoading } = useReturnRequests();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { auditSessions, loading: auditLoading } = useStockAudit();
-  const { tasks: formTasks, loading: tasksLoading, addTask } = useTasks();
+  const { tasks: formTasks, loading: tasksLoading, addTask, updateTask: updateFormTask } = useTasks();
   const { logs, loading: diaryLoading } = useAuthorBoardDiary();
 
   const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading || diaryLoading;
@@ -83,12 +83,13 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                     });
-                } else if (existingTask && log.status !== 'submitted') {
+                } else if (existingTask && log.status !== 'submitted' && existingTask.status !== 'completed') {
                     // Logic to maybe remove the task if the diary is no longer submitted
+                    updateFormTask(existingTask.id, { status: 'completed' });
                 }
             });
         }
-  }, [logs, formTasks, loading, permissions, addTask, profiles]);
+  }, [logs, formTasks, loading, permissions, addTask, profiles, updateFormTask]);
 
 
   const legacyTasks = useMemo((): LegacyTask[] => {
@@ -105,7 +106,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                 title: `Auditoria de estoque em ${s.kioskName}`,
                 description: `Iniciada por ${s.auditedBy.username} em ${format(parseISO(s.startedAt), 'dd/MM/yyyy HH:mm')}`,
                 link: '/dashboard/stock/audit/stock-audit',
-                icon: ShieldCheck,
+                icon: AuditIcon,
                 createdAt: s.startedAt
             })
         })
