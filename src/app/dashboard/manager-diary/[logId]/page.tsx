@@ -86,6 +86,7 @@ export default function EditDiaryPage() {
     const [isRejectionModalOpen, setRejectionModalOpen] = useState(false);
     const [rejectionNotes, setRejectionNotes] = useState('');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
+    const [lastAddedActivityId, setLastAddedActivityId] = useState<string | null>(null);
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
@@ -120,6 +121,14 @@ export default function EditDiaryPage() {
             replace(entry.activities || []);
         }
     }, [logId, getLogById, replace, permissions.authorBoardDiary.create]);
+
+     // Effect to expand the new activity after it has been added to the form state
+    useEffect(() => {
+        if (lastAddedActivityId) {
+            setOpenAccordionItems(prev => [...prev, lastAddedActivityId]);
+            setLastAddedActivityId(null); // Reset after expanding
+        }
+    }, [lastAddedActivityId]);
     
     const getPayload = (): Partial<DailyLog> => {
         const values = form.getValues();
@@ -141,7 +150,7 @@ export default function EditDiaryPage() {
     const handleAddNewActivity = useCallback(() => {
         const newActivityId = `act-${Date.now()}`;
         appendActivity({ id: newActivityId, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [], durationMinutes: 60 });
-        setOpenAccordionItems(prev => [...prev, newActivityId]);
+        setLastAddedActivityId(newActivityId);
     }, [appendActivity]);
 
     const handleSubmitForValidation = async () => {
