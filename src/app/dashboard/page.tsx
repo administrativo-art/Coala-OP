@@ -176,25 +176,37 @@ function OperationalDashboard() {
   }, [kiosks]);
   
   const dailyAllocation = useMemo(() => {
-    const allocation = new Map<string, { type: 'shift' | 'folga' | 'ausencia'; details: string }>();
+    const allocation = new Map<string, 'shift' | 'folga' | 'ausencia'>();
     if (!todaySchedule) return allocation;
 
-    kiosksToDisplay.forEach(kiosk => {
-      ['T1', 'T2', 'T3'].forEach(turn => {
-        const shiftWorkers = (lookupShift(todaySchedule, kiosk, turn as any) as string || '').split(' + ').filter(Boolean);
-        shiftWorkers.forEach(name => {
-          allocation.set(name.trim(), { type: 'shift', details: `${kiosk.name} (${turn})` });
+    users.forEach(u => {
+      let isAllocated = false;
+      kiosksToDisplay.forEach(kiosk => {
+        if (isAllocated) return;
+
+        // Check for shift
+        ['T1', 'T2', 'T3'].forEach(turn => {
+          const shiftWorkers = (lookupShift(todaySchedule, kiosk, turn as any) as string || '').split(' + ').filter(Boolean);
+          if (shiftWorkers.includes(u.username)) {
+            allocation.set(u.username, 'shift');
+            isAllocated = true;
+          }
         });
-      });
-      const folgaWorkers = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
-      folgaWorkers.forEach(name => {
-        allocation.set(name.trim(), { type: 'folga', details: 'Folga Manual' });
-      });
-      const ausenciaWorkers = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-      ausenciaWorkers.forEach(absence => {
-        const workerName = users.find(u => u.id === absence.userId)?.username;
-        if (workerName) {
-          allocation.set(workerName.trim(), { type: 'ausencia', details: absence.reason });
+        if (isAllocated) return;
+        
+        // Check for manual folga
+        const folgaWorkers = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+        if (folgaWorkers.includes(u.username)) {
+          allocation.set(u.username, 'folga');
+          isAllocated = true;
+        }
+        if (isAllocated) return;
+
+        // Check for ausencia
+        const ausenciaWorkers = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+        if (ausenciaWorkers.some(a => a.userId === u.id)) {
+          allocation.set(u.username, 'ausencia');
+          isAllocated = true;
         }
       });
     });
@@ -268,16 +280,16 @@ function OperationalDashboard() {
                   const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '').split(' + ').filter(Boolean);
                   const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '').split(' + ').filter(Boolean);
                   const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '').split(' + ').filter(Boolean);
+                  const folgasManuais = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
                   const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
 
                   const kioskEmployees = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id));
                   
-                  const onDutyHere = [...t1, ...t2, ...t3];
-                  const onAusenciaHere = ausencias.map(a => users.find(u => u.id === a.userId)?.username).filter(Boolean) as string[];
-
-                  const folgas = kioskEmployees
-                    .filter(u => !dailyAllocation.has(u.username) && !onAusenciaHere.includes(u.username))
+                  const folgasAutomaticas = kioskEmployees
+                    .filter(u => !dailyAllocation.has(u.username) && !folgasManuais.includes(u.username))
                     .map(u => u.username);
+
+                  const folgas = [...new Set([...folgasManuais, ...folgasAutomaticas])];
                     
                   return (
                     <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
