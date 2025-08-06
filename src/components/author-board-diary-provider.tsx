@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type DailyLog } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, setDoc, query, where, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { format } from 'date-fns';
 
@@ -133,13 +133,13 @@ export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNo
 
   const updateLog = useCallback(async (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => {
     if (!user) throw new Error("Usuário não autenticado.");
-
+    const docRef = doc(db, 'authorboarddiary', logId);
     const now = new Date().toISOString();
     const payload = { ...logData, updatedAt: now };
     const cleanedPayload = cleanUndefined(payload);
 
     try {
-      await setDoc(doc(db, 'authorboarddiary', logId), cleanedPayload, { merge: true });
+      await updateDoc(docRef, cleanedPayload);
     } catch (error) {
       console.error("Error updating log:", error);
       throw error;

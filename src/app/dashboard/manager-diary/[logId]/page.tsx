@@ -117,15 +117,17 @@ export default function EditDiaryPage() {
             setLogEntry(entry);
             const canEdit = (entry.status === 'draft' || entry.status === 'em andamento') && permissions.authorBoardDiary.create;
             setIsEditing(canEdit);
-            
             replace(entry.activities || []);
+        } else if (!loading) {
+            // If the entry is not found and we are not loading, it might not exist.
+            // Consider redirecting or showing a "not found" message.
         }
-    }, [logId, getLogById, replace, permissions.authorBoardDiary.create]);
+    }, [logId, getLogById, replace, permissions.authorBoardDiary.create, loading]);
 
      // Effect to expand the new activity after it has been added to the form state
     useEffect(() => {
         if (lastAddedActivityId) {
-            setOpenAccordionItems(prev => [...prev, lastAddedActivityId]);
+            setOpenAccordionItems(prev => [...new Set([...prev, lastAddedActivityId])]);
             setLastAddedActivityId(null); // Reset after expanding
         }
     }, [lastAddedActivityId]);
@@ -189,7 +191,7 @@ export default function EditDiaryPage() {
             };
             updateLog(logEntry.id, payload);
         }
-    }, [debouncedFormValues, logEntry, isEditing]);
+    }, [debouncedFormValues, logEntry, isEditing, form.formState.isDirty]); // Removed updateLog and getPayload from dependencies
 
 
     if (loading) {
