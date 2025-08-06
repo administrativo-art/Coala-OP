@@ -218,8 +218,7 @@ function OperationalDashboard() {
         </Link>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-6 w-6" /> Escala de Hoje ({format(new Date(), 'dd/MM/yyyy')})
@@ -229,53 +228,48 @@ function OperationalDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-48">
-              <div className="space-y-4 pr-4">
-                {kiosksToDisplay.map(kiosk => {
-                  if (!todaySchedule) return (
-                    <div key={kiosk.id} className="p-3 border rounded-lg">
-                      <p className="font-semibold">{kiosk.name}</p>
-                      <p className="text-sm text-muted-foreground">Escala não definida para hoje.</p>
-                    </div>
-                  );
-                  
-                  const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '');
-                  const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '');
-                  const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '');
-                  const folgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '');
-                  const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {kiosksToDisplay.map(kiosk => {
+                if (!todaySchedule) return (
+                  <div key={kiosk.id} className="p-3 border rounded-lg">
+                    <p className="font-semibold">{kiosk.name}</p>
+                    <p className="text-sm text-muted-foreground">Escala não definida para hoje.</p>
+                  </div>
+                );
+                
+                const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '');
+                const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '');
+                const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '');
+                const folgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '');
+                const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
 
-                  const hasAnyEntry = t1 || t2 || t3 || folgas || ausencias.length > 0;
-                  
-                  return (
-                    <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold">{kiosk.name}</h4>
-                      </div>
-                      {hasAnyEntry ? (
-                        <div className="mt-2 space-y-1">
-                          {t1 && <p><strong>T1:</strong> {t1}</p>}
-                          {t2 && <p><strong>T2:</strong> {t2}</p>}
-                          {t3 && <p><strong>T3:</strong> {t3}</p>}
-                          {folgas && <p><strong>Folga:</strong> {folgas}</p>}
-                          {ausencias.length > 0 && ausencias.map(a => (
-                            <p key={a.userId} className="text-red-500 flex items-center gap-1">
-                              <UserMinus className="h-3 w-3" />
-                              <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
+                const hasAnyEntry = t1 || t2 || t3 || folgas || ausencias.length > 0;
+                
+                if (!hasAnyEntry) return null;
+
+                return (
+                  <div key={kiosk.id} className="p-3 border rounded-lg text-sm bg-muted/50">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold">{kiosk.name}</h4>
                     </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
+                    <div className="mt-2 space-y-1">
+                      {t1 && <p><strong>T1:</strong> {t1}</p>}
+                      {t2 && <p><strong>T2:</strong> {t2}</p>}
+                      {t3 && <p><strong>T3:</strong> {t3}</p>}
+                      {folgas && <p><strong>Folga:</strong> {folgas}</p>}
+                      {ausencias.length > 0 && ausencias.map(a => (
+                        <p key={a.userId} className="text-red-500 flex items-center gap-1">
+                          <UserMinus className="h-3 w-3" />
+                          <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
-
-            { user?.username === 'Tiago Brasil' && <OnlineUsersPanel /> }
-        </div>
       
       <AverageConsumptionChart />
 
@@ -437,3 +431,5 @@ export default function DashboardPage() {
         </div>
     );
 }
+
+    
