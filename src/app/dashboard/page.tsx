@@ -10,7 +10,6 @@ import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus } from 'lucide-react'
@@ -291,7 +290,7 @@ function OperationalDashboard() {
                         <Skeleton className="h-12 w-full" />
                     </div>
                 ) : todaySchedule ? (
-                    <Accordion type="multiple" className="w-full space-y-2">
+                    <div className="w-full space-y-2">
                         {kiosksToDisplay.map(kiosk => {
                             const t1 = lookupShift(todaySchedule, kiosk, 'T1') as string;
                             const t2 = lookupShift(todaySchedule, kiosk, 'T2') as string;
@@ -322,50 +321,46 @@ function OperationalDashboard() {
                             }
                             
                             return (
-                                <AccordionItem value={kiosk.id} key={kiosk.id} className="border-b-0">
-                                    <Card>
-                                        <div className="flex items-center pr-2">
-                                            <AccordionTrigger className="p-3 hover:no-underline flex-1 font-semibold text-base">
-                                                {kiosk.name}
-                                            </AccordionTrigger>
-                                            {permissions.team.manage && (
-                                              <Button variant="ghost" size="icon" onClick={() => handleEditDay(todaySchedule, kiosk.id)}>
-                                                  <Edit className="h-4 w-4 text-muted-foreground" />
-                                              </Button>
+                                <Card key={kiosk.id}>
+                                    <CardHeader className="flex flex-row items-center justify-between p-3">
+                                        <h4 className="font-semibold text-base">{kiosk.name}</h4>
+                                        {permissions.team.manage && (
+                                          <Button variant="ghost" size="icon" onClick={() => handleEditDay(todaySchedule, kiosk.id)}>
+                                              <Edit className="h-4 w-4 text-muted-foreground" />
+                                          </Button>
+                                        )}
+                                    </CardHeader>
+                                    <CardContent className="p-3 pt-0">
+                                        <div className="text-sm mt-2 space-y-1">
+                                            {isSunday ? (
+                                                t1 && <p><strong>Turno único:</strong> {t1}</p>
+                                            ) : (
+                                                <>
+                                                    {t1 && <p><strong>T1:</strong> {t1}</p>}
+                                                    {t2 && <p><strong>T2:</strong> {t2}</p>}
+                                                    {t3 && <p><strong>T3:</strong> {t3}</p>}
+                                                </>
+                                            )}
+                                            {combinedFolgas && <p className="text-muted-foreground"><strong>Folga:</strong> {combinedFolgas}</p>}
+                                            {ausencias.length > 0 && (
+                                                <div className="pt-2 mt-2 border-t border-dashed">
+                                                    {ausencias.map(a => {
+                                                        const employee = users.find(u => u.id === a.userId);
+                                                        return (
+                                                            <p key={a.userId} className="text-red-500 flex items-center gap-2">
+                                                                <UserMinus className="h-4 w-4"/>
+                                                                <strong>Ausente:</strong> {employee?.username} ({a.reason})
+                                                            </p>
+                                                        )
+                                                    })}
+                                                </div>
                                             )}
                                         </div>
-                                        <AccordionContent className="p-3 pt-0">
-                                            <div className="text-sm mt-2 space-y-1">
-                                                {isSunday ? (
-                                                    t1 && <p><strong>Turno único:</strong> {t1}</p>
-                                                ) : (
-                                                    <>
-                                                        {t1 && <p><strong>T1:</strong> {t1}</p>}
-                                                        {t2 && <p><strong>T2:</strong> {t2}</p>}
-                                                        {t3 && <p><strong>T3:</strong> {t3}</p>}
-                                                    </>
-                                                )}
-                                                {combinedFolgas && <p className="text-muted-foreground"><strong>Folga:</strong> {combinedFolgas}</p>}
-                                                {ausencias.length > 0 && (
-                                                    <div className="pt-2 mt-2 border-t border-dashed">
-                                                        {ausencias.map(a => {
-                                                            const employee = users.find(u => u.id === a.userId);
-                                                            return (
-                                                                <p key={a.userId} className="text-red-500 flex items-center gap-2">
-                                                                    <UserMinus className="h-4 w-4"/>
-                                                                    <strong>Ausente:</strong> {employee?.username} ({a.reason})
-                                                                </p>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </AccordionContent>
-                                    </Card>
-                                </AccordionItem>
+                                    </CardContent>
+                                </Card>
                             )
                         })}
-                    </Accordion>
+                    </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center text-muted-foreground text-center py-4">
                         <Users className="h-10 w-10 mb-2" />
