@@ -135,8 +135,6 @@ function OperationalDashboard() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { schedule, loading: scheduleLoading } = useMonthlySchedule();
   
-  const [dayToEdit, setDayToEdit] = useState<DailySchedule | null>(null);
-  const [kioskToEdit, setKioskToEdit] = useState<string | null>(null);
   const [todayISO, setTodayISO] = useState<string>('');
 
   useEffect(() => {
@@ -181,18 +179,6 @@ function OperationalDashboard() {
     });
   }, [kiosks]);
   
-  const handleEditDay = (dayData: DailySchedule, kioskId: string) => {
-    setDayToEdit(dayData);
-    setKioskToEdit(kioskId);
-  };
-  
-  const handleCloseModal = (open: boolean) => {
-    if (!open) {
-      setDayToEdit(null);
-      setKioskToEdit(null);
-    }
-  };
-
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
   if (initialLoading) {
@@ -303,7 +289,9 @@ function OperationalDashboard() {
                             if(t2) t2.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
                             if(t3) t3.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
 
-                            const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !workersInThisKiosk.has(u.username)).map(u => u.username);
+                            const autoFolgas = users
+                                .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !workersInThisKiosk.has(u.username))
+                                .map(u => u.username);
                             
                             const combinedFolgas = [...new Set([...(manualFolga as string).split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
 
@@ -324,11 +312,6 @@ function OperationalDashboard() {
                                 <Card key={kiosk.id}>
                                     <CardHeader className="flex flex-row items-center justify-between p-3">
                                         <h4 className="font-semibold text-base">{kiosk.name}</h4>
-                                        {permissions.team.manage && (
-                                          <Button variant="ghost" size="icon" onClick={() => handleEditDay(todaySchedule, kiosk.id)}>
-                                              <Edit className="h-4 w-4 text-muted-foreground" />
-                                          </Button>
-                                        )}
                                     </CardHeader>
                                     <CardContent className="p-3 pt-0">
                                         <div className="text-sm mt-2 space-y-1">
@@ -376,12 +359,6 @@ function OperationalDashboard() {
       
       <AverageConsumptionChart />
 
-      <EditScheduleModal 
-          dayData={dayToEdit}
-          kioskId={kioskToEdit}
-          onOpenChange={handleCloseModal}
-          users={users}
-      />
     </>
   )
 }
