@@ -23,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type DailyLog, type DiaryActivity } from '@/types';
 import { useDebounce } from 'use-debounce';
 import { Switch } from '@/components/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 
@@ -97,8 +97,6 @@ export default function EditDiaryPage() {
         control: form.control,
         name: "activities",
     });
-
-    const [debouncedFormValues] = useDebounce(form.watch(), 2000);
 
     const calculateDuration = (startTime: string, endTime: string): number => {
         try {
@@ -182,18 +180,6 @@ export default function EditDiaryPage() {
         router.push('/dashboard/manager-diary');
     };
     
-    // Auto-save effect
-    useEffect(() => {
-        if (logEntry && (logEntry.status === 'draft' || logEntry.status === 'em andamento') && form.formState.isDirty && isEditing) {
-            const payload: Partial<DailyLog> = {
-                ...getPayload(),
-                status: 'em andamento',
-            };
-            updateLog(logEntry.id, payload);
-        }
-    }, [debouncedFormValues, logEntry, isEditing, form.formState.isDirty]); // Removed updateLog and getPayload from dependencies
-
-
     if (loading) {
         return <Skeleton className="h-screen w-full" />
     }
@@ -219,7 +205,7 @@ export default function EditDiaryPage() {
                         <div>
                             <CardTitle>Diário de {format(parseISO(logEntry.logDate), 'dd/MM/yyyy')}</CardTitle>
                              <CardDescription>
-                                {isLocked ? "Este registro está bloqueado." : "As alterações são salvas automaticamente."}
+                                {isLocked ? "Este registro está bloqueado." : "Clique em 'Enviar para validação' para salvar as alterações."}
                             </CardDescription>
                         </div>
                         <div className="text-right">
