@@ -175,44 +175,6 @@ function OperationalDashboard() {
     });
   }, [kiosks]);
   
-  const dailyAllocation = useMemo(() => {
-    const allocation = new Map<string, 'shift' | 'folga' | 'ausencia'>();
-    if (!todaySchedule) return allocation;
-
-    users.forEach(u => {
-      let isAllocated = false;
-      kiosksToDisplay.forEach(kiosk => {
-        if (isAllocated) return;
-
-        // Check for shift
-        ['T1', 'T2', 'T3'].forEach(turn => {
-          const shiftWorkers = (lookupShift(todaySchedule, kiosk, turn as any) as string || '').split(' + ').filter(Boolean);
-          if (shiftWorkers.includes(u.username)) {
-            allocation.set(u.username, 'shift');
-            isAllocated = true;
-          }
-        });
-        if (isAllocated) return;
-        
-        // Check for manual folga
-        const folgaWorkers = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
-        if (folgaWorkers.includes(u.username)) {
-          allocation.set(u.username, 'folga');
-          isAllocated = true;
-        }
-        if (isAllocated) return;
-
-        // Check for ausencia
-        const ausenciaWorkers = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-        if (ausenciaWorkers.some(a => a.userId === u.id)) {
-          allocation.set(u.username, 'ausencia');
-          isAllocated = true;
-        }
-      });
-    });
-    return allocation;
-  }, [todaySchedule, kiosksToDisplay, users]);
-  
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
   if (initialLoading) {
@@ -277,19 +239,11 @@ function OperationalDashboard() {
                     </div>
                   );
                   
-                  const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '').split(' + ').filter(Boolean);
-                  const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '').split(' + ').filter(Boolean);
-                  const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '').split(' + ').filter(Boolean);
-                  const folgasManuais = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+                  const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '');
+                  const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '');
+                  const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '');
+                  const folgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '');
                   const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-
-                  const kioskEmployees = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id));
-                  
-                  const folgasAutomaticas = kioskEmployees
-                    .filter(u => !dailyAllocation.has(u.username) && !folgasManuais.includes(u.username))
-                    .map(u => u.username);
-
-                  const folgas = [...new Set([...folgasManuais, ...folgasAutomaticas])];
                     
                   return (
                     <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
@@ -297,10 +251,10 @@ function OperationalDashboard() {
                         <h4 className="font-semibold">{kiosk.name}</h4>
                       </div>
                       <div className="mt-2 space-y-1">
-                        {t1.length > 0 && <p><strong>T1:</strong> {t1.join(' + ')}</p>}
-                        {t2.length > 0 && <p><strong>T2:</strong> {t2.join(' + ')}</p>}
-                        {t3.length > 0 && <p><strong>T3:</strong> {t3.join(' + ')}</p>}
-                        {folgas.length > 0 && <p><strong>Folga:</strong> {folgas.join(' + ')}</p>}
+                        {t1 && <p><strong>T1:</strong> {t1}</p>}
+                        {t2 && <p><strong>T2:</strong> {t2}</p>}
+                        {t3 && <p><strong>T3:</strong> {t3}</p>}
+                        {folgas && <p><strong>Folga:</strong> {folgas}</p>}
                         {ausencias.length > 0 && ausencias.map(a => (
                           <p key={a.userId} className="text-red-500 flex items-center gap-1">
                             <UserMinus className="h-3 w-3" />
