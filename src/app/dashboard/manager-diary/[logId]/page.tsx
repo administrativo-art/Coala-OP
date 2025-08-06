@@ -120,7 +120,7 @@ export default function EditDiaryPage() {
             replace(initialActivities);
             form.reset({ activities: initialActivities });
         }
-    }, [logId, replace, form, getLogById]);
+    }, [logId, replace, form]);
 
 
     useEffect(() => {
