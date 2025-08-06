@@ -178,6 +178,23 @@ function OperationalDashboard() {
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
+
+  const workersOnDutyToday = useMemo(() => {
+      const workers = new Set<string>();
+      if (!todaySchedule) return workers;
+
+      kiosksToDisplay.forEach(kiosk => {
+          ['T1', 'T2', 'T3'].forEach(turn => {
+              const shift = lookupShift(todaySchedule, kiosk, turn as any);
+              if (typeof shift === 'string') {
+                  shift.split(' + ').forEach(name => {
+                      if (name.trim()) workers.add(name.trim());
+                  });
+              }
+          });
+      });
+      return workers;
+  }, [todaySchedule, kiosksToDisplay]);
   
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
@@ -284,13 +301,12 @@ function OperationalDashboard() {
                             
                             const manualFolga = lookupShift(todaySchedule, kiosk, 'Folga') as string;
 
-                            const workersInThisKiosk = new Set<string>();
-                            if(t1) t1.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
-                            if(t2) t2.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
-                            if(t3) t3.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
-
                             const autoFolgas = users
-                                .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !workersInThisKiosk.has(u.username))
+                                .filter(u => 
+                                    u.operacional && 
+                                    u.assignedKioskIds.includes(kiosk.id) && 
+                                    !workersOnDutyToday.has(u.username)
+                                )
                                 .map(u => u.username);
                             
                             const combinedFolgas = [...new Set([...(manualFolga as string).split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
