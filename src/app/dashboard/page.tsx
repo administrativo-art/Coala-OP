@@ -180,21 +180,26 @@ function OperationalDashboard() {
   }, [kiosks]);
 
   const workersOnDutyToday = useMemo(() => {
-      const workers = new Set<string>();
-      if (!todaySchedule) return workers;
+    const workers = new Set<string>();
+    if (!todaySchedule) return workers;
 
-      kiosksToDisplay.forEach(kiosk => {
-          ['T1', 'T2', 'T3'].forEach(turn => {
-              const shift = lookupShift(todaySchedule, kiosk, turn as any);
-              if (typeof shift === 'string') {
-                  shift.split(' + ').forEach(name => {
-                      if (name.trim()) workers.add(name.trim());
-                  });
-              }
-          });
-      });
-      return workers;
-  }, [todaySchedule, kiosksToDisplay]);
+    kiosksToDisplay.forEach(kiosk => {
+        ['T1', 'T2', 'T3'].forEach(turn => {
+            const shift = lookupShift(todaySchedule, kiosk, turn as any);
+            if (typeof shift === 'string' && shift) {
+                shift.split(' + ').forEach(name => {
+                    if (name.trim()) workers.add(name.trim());
+                });
+            }
+        });
+        const ausencias = lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+        ausencias.forEach(a => {
+            const ausente = users.find(u => u.id === a.userId);
+            if(ausente) workers.add(ausente.username);
+        })
+    });
+    return workers;
+  }, [todaySchedule, kiosksToDisplay, users]);
   
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
