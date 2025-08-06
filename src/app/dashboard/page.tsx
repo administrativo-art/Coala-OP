@@ -12,7 +12,7 @@ import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Edit, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus } from 'lucide-react'
 import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -20,16 +20,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { type DailySchedule, type ProductSimulation, type AbsenceEntry, type Kiosk } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
-import { EditScheduleModal } from "@/components/edit-schedule-modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PricingDashboard } from "@/components/pricing-dashboard"
 import { useProductSimulation } from "@/hooks/use-product-simulation"
 import { useCompanySettings } from "@/hooks/use-company-settings"
 import { AuditDashboard } from "@/components/audit-dashboard"
 import { useStockAudit } from "@/hooks/use-stock-audit"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useRouter } from "next/navigation"
-import { PendingTasksDashboard } from "@/components/pending-tasks-dashboard"
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories"
 import { useProducts } from "@/hooks/use-products"
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
@@ -179,22 +175,31 @@ function OperationalDashboard() {
     });
   }, [kiosks]);
   
-  const workersOnDutyToday = useMemo(() => {
-    const workers = new Set<string>();
-    if (!todaySchedule) return workers;
+  const dailyAllocation = useMemo(() => {
+    const allocation = new Map<string, { type: 'shift' | 'folga' | 'ausencia'; details: string }>();
+    if (!todaySchedule) return allocation;
 
     kiosksToDisplay.forEach(kiosk => {
       ['T1', 'T2', 'T3'].forEach(turn => {
-        const shift = lookupShift(todaySchedule, kiosk, turn as any);
-        if (typeof shift === 'string' && shift) {
-          shift.split(' + ').forEach(name => {
-            if (name.trim()) workers.add(name.trim());
-          });
+        const shiftWorkers = (lookupShift(todaySchedule, kiosk, turn as any) as string || '').split(' + ').filter(Boolean);
+        shiftWorkers.forEach(name => {
+          allocation.set(name.trim(), { type: 'shift', details: `${kiosk.name} (${turn})` });
+        });
+      });
+      const folgaWorkers = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+      folgaWorkers.forEach(name => {
+        allocation.set(name.trim(), { type: 'folga', details: 'Folga Manual' });
+      });
+      const ausenciaWorkers = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+      ausenciaWorkers.forEach(absence => {
+        const workerName = users.find(u => u.id === absence.userId)?.username;
+        if (workerName) {
+          allocation.set(workerName.trim(), { type: 'ausencia', details: absence.reason });
         }
       });
     });
-    return workers;
-  }, [todaySchedule, kiosksToDisplay]);
+    return allocation;
+  }, [todaySchedule, kiosksToDisplay, users]);
   
   const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
 
@@ -240,59 +245,64 @@ function OperationalDashboard() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Users className="h-6 w-6" /> Escala de Hoje ({format(new Date(), 'dd/MM/yyyy')})
-                    </CardTitle>
-                    <CardDescription>
-                        Colaboradores escalados para o dia de hoje em cada unidade.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ScrollArea className="h-48">
-                        <div className="space-y-4 pr-4">
-                            {kiosksToDisplay.map(kiosk => {
-                                if (!todaySchedule) return (
-                                    <div key={kiosk.id} className="p-3 border rounded-lg">
-                                        <p className="font-semibold">{kiosk.name}</p>
-                                        <p className="text-sm text-muted-foreground">Escala não definida para hoje.</p>
-                                    </div>
-                                );
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-6 w-6" /> Escala de Hoje ({format(new Date(), 'dd/MM/yyyy')})
+            </CardTitle>
+            <CardDescription>
+              Colaboradores escalados para o dia de hoje em cada unidade.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-48">
+              <div className="space-y-4 pr-4">
+                {kiosksToDisplay.map(kiosk => {
+                  if (!todaySchedule) return (
+                    <div key={kiosk.id} className="p-3 border rounded-lg">
+                      <p className="font-semibold">{kiosk.name}</p>
+                      <p className="text-sm text-muted-foreground">Escala não definida para hoje.</p>
+                    </div>
+                  );
+                  
+                  const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '').split(' + ').filter(Boolean);
+                  const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '').split(' + ').filter(Boolean);
+                  const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '').split(' + ').filter(Boolean);
+                  const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
 
-                                const t1 = lookupShift(todaySchedule, kiosk, 'T1') as string || '';
-                                const t2 = lookupShift(todaySchedule, kiosk, 'T2') as string || '';
-                                const t3 = lookupShift(todaySchedule, kiosk, 'T3') as string || '';
-                                const ausencias = lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-                                const manualFolgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+                  const kioskEmployees = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id));
+                  
+                  const onDutyHere = [...t1, ...t2, ...t3];
+                  const onAusenciaHere = ausencias.map(a => users.find(u => u.id === a.userId)?.username).filter(Boolean) as string[];
 
-                                const autoFolgas = users
-                                    .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !workersOnDutyToday.has(u.username))
-                                    .map(u => u.username);
-
-                                const allFolgas = [...new Set([...manualFolgas, ...autoFolgas])].join(' + ');
-
-                                return (
-                                    <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
-                                        <div className="flex items-center justify-between">
-                                            <h4 className="font-semibold">{kiosk.name}</h4>
-                                        </div>
-                                        <div className="mt-2 space-y-1">
-                                            {t1 && <p><strong>T1:</strong> {t1}</p>}
-                                            {t2 && <p><strong>T2:</strong> {t2}</p>}
-                                            {t3 && <p><strong>T3:</strong> {t3}</p>}
-                                            {allFolgas && <p><strong>Folga:</strong> {allFolgas}</p>}
-                                            {ausencias.length > 0 && ausencias.map(a => (
-                                                <p key={a.userId} className="text-red-500 flex items-center gap-1"><UserMinus className="h-3 w-3"/> <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})</p>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
+                  const folgas = kioskEmployees
+                    .filter(u => !dailyAllocation.has(u.username) && !onAusenciaHere.includes(u.username))
+                    .map(u => u.username);
+                    
+                  return (
+                    <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold">{kiosk.name}</h4>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {t1.length > 0 && <p><strong>T1:</strong> {t1.join(' + ')}</p>}
+                        {t2.length > 0 && <p><strong>T2:</strong> {t2.join(' + ')}</p>}
+                        {t3.length > 0 && <p><strong>T3:</strong> {t3.join(' + ')}</p>}
+                        {folgas.length > 0 && <p><strong>Folga:</strong> {folgas.join(' + ')}</p>}
+                        {ausencias.length > 0 && ausencias.map(a => (
+                          <p key={a.userId} className="text-red-500 flex items-center gap-1">
+                            <UserMinus className="h-3 w-3" />
+                            <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
             { user?.username === 'Tiago Brasil' && <OnlineUsersPanel /> }
         </div>
