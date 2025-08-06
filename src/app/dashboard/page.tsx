@@ -181,19 +181,6 @@ function OperationalDashboard() {
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
-
-  const todaysWorkers = useMemo(() => {
-      const working = new Set<string>();
-      if(todaySchedule) {
-          kiosksToDisplay.forEach(kiosk => {
-              ['T1', 'T2', 'T3'].forEach(turn => {
-                  const names = lookupShift(todaySchedule, kiosk, turn as any) as string;
-                  if(names) names.split(' + ').forEach((n: string) => working.add(n.trim()));
-              })
-          });
-      }
-      return working;
-  }, [todaySchedule, kiosksToDisplay]);
   
   const handleEditDay = (dayData: DailySchedule, kioskId: string) => {
     setDayToEdit(dayData);
@@ -311,7 +298,14 @@ function OperationalDashboard() {
                             const t3 = lookupShift(todaySchedule, kiosk, 'T3') as string;
                             
                             const manualFolga = lookupShift(todaySchedule, kiosk, 'Folga') as string;
-                            const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username)).map(u => u.username);
+
+                            const workersInThisKiosk = new Set<string>();
+                            if(t1) t1.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
+                            if(t2) t2.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
+                            if(t3) t3.split(' + ').forEach(n => workersInThisKiosk.add(n.trim()));
+
+                            const autoFolgas = users.filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !workersInThisKiosk.has(u.username)).map(u => u.username);
+                            
                             const combinedFolgas = [...new Set([...(manualFolga as string).split(' + ').filter(Boolean), ...autoFolgas])].join(' + ');
 
                             const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
