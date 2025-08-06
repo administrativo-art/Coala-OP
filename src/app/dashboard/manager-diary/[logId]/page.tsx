@@ -21,12 +21,14 @@ import { PlusCircle, Edit, Trash2, Calendar, User, Warehouse, Clock, MessageSqua
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { type DailyLog, type DiaryActivity } from '@/types';
+import { type DailyLog, type DiaryActivity, type Task } from '@/types';
 import { useDebounce } from 'use-debounce';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
+import { useTasks } from '@/hooks/use-tasks';
+import { useProfiles } from '@/hooks/use-profiles';
 
 // Zod Schemas
 const occurrenceSchema = z.object({
@@ -65,9 +67,6 @@ const getStatusBadge = (status: DailyLog['status']) => {
         case 'draft': return <Badge variant="outline">Rascunho</Badge>;
         case 'submitted': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Pendente de Validação</Badge>;
         case 'validated': return <Badge className="bg-green-100 text-green-800">Validado</Badge>;
-        case 'aberto': return <Badge variant="outline">Aberto</Badge>;
-        case 'em andamento': return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Em Andamento</Badge>;
-        case 'finalizado': return <Badge className="bg-green-100 text-green-800">Finalizado</Badge>;
         default: return <Badge variant="secondary">{status}</Badge>;
     }
 }
@@ -77,13 +76,13 @@ export default function EditDiaryPage() {
     const router = useRouter();
     const { logId } = params;
     
-    const { user, permissions } = useAuth();
+    const { user, permissions, profiles } = useAuth();
     const { kiosks } = useKiosks();
     const { getLogById, updateLog, loading } = useAuthorBoardDiary();
+    const { tasks: formTasks, addTask, updateTask: updateFormTask } = useTasks();
     const { toast } = useToast();
 
     const [logEntry, setLogEntry] = useState<DailyLog | null>(null);
-    const [isEditing, setIsEditing] = useState(false);
     const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
     const [rejectionNotes, setRejectionNotes] = useState('');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
@@ -114,22 +113,16 @@ export default function EditDiaryPage() {
         const entry = getLogById(logId as string);
         if (entry) {
             setLogEntry(entry);
-            const canEdit = (entry.status === 'draft' || entry.status === 'em andamento') && permissions.authorBoardDiary.create;
-            setIsEditing(canEdit);
             replace(entry.activities || []);
-        } else if (!loading) {
-            // If the entry is not found and we are not loading, it might not exist.
-            // Consider redirecting or showing a "not found" message.
         }
     }, [logId, getLogById, replace, permissions.authorBoardDiary.create, loading]);
 
-     // Effect to expand the new activity after it has been added to the form state
     useEffect(() => {
         if (lastAddedActivityId) {
             setOpenAccordionItems(prev => [...new Set([...prev, lastAddedActivityId])]);
-            setLastAddedActivityId(null); // Reset after expanding
+            setLastAddedActivityId(null);
         }
-    }, [lastAddedActivityId, activityFields]); // Added activityFields to dependencies
+    }, [lastAddedActivityId, activityFields]);
     
     const getPayload = (): Partial<DailyLog> => {
         const values = form.getValues();
@@ -155,9 +148,38 @@ export default function EditDiaryPage() {
     }, [appendActivity]);
 
     const handleSubmitForValidation = async () => {
-        if (!logEntry) return;
+        if (!logEntry || !user) return;
         const payload = getPayload();
+        
+        const adminProfile = profiles.find(p => p.isDefaultAdmin);
+        if (!adminProfile) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Perfil de administrador não encontrado para atribuir a tarefa.' });
+            return;
+        }
+
         await updateLog(logEntry.id, { ...payload, status: 'submitted' });
+        
+        // Create a task for validation
+        const taskId = `diary-${logEntry.id}`;
+        const existingTask = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
+        
+        if (!existingTask) {
+            await addTask({
+                title: `Validar Diário de ${logEntry.author.username}`,
+                description: `Revisar e aprovar o diário do dia ${format(parseISO(logEntry.logDate), 'dd/MM/yyyy')}.`,
+                status: 'awaiting_approval',
+                assigneeType: 'profile',
+                assigneeId: adminProfile.id,
+                requiresApproval: true,
+                approverType: 'profile',
+                approverId: adminProfile.id,
+                origin: { type: 'author_board_diary', id: logEntry.id },
+                history: [{ timestamp: new Date().toISOString(), action: 'created', author: { id: user.id, name: user.username } }],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            });
+        }
+        
         toast({ title: 'Diário enviado para validação!' });
         router.push('/dashboard/manager-diary');
     };
@@ -166,16 +188,28 @@ export default function EditDiaryPage() {
         if (!logEntry) return;
         const payload = getPayload();
         await updateLog(logEntry.id, { ...payload, status: 'validated' });
+
+        const task = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
+        if (task) {
+            await updateFormTask(task.id, { status: 'completed' });
+        }
+
         toast({ title: 'Diário validado com sucesso!' });
         router.push('/dashboard/manager-diary');
     };
 
     const handleReject = async () => {
-        if (!logEntry || !rejectionNotes) return;
+        if (!logEntry || !rejectionNotes || !user) return;
         await updateLog(logEntry.id, { 
             status: 'draft',
             notes: `Rejeitado por: ${user?.username}. Motivo: ${rejectionNotes}`
         });
+        
+        const task = formTasks.find(t => t.origin.id === logEntry.id && t.origin.type === 'author_board_diary');
+        if (task) {
+            await updateFormTask(task.id, { status: 'rejected' });
+        }
+
         toast({ title: 'Diário rejeitado e devolvido para o autor.' });
         setRejectionModalOpen(false);
         router.push('/dashboard/manager-diary');
@@ -191,7 +225,8 @@ export default function EditDiaryPage() {
     
     const isLocked = logEntry.status === 'submitted' || logEntry.status === 'validated';
     const canValidate = permissions.authorBoardDiary.validate && logEntry.status === 'submitted';
-    const canSubmit = (logEntry.status === 'draft' || logEntry.status === 'em andamento') && permissions.authorBoardDiary.create;
+    const canSubmit = (logEntry.status === 'draft') && permissions.authorBoardDiary.create;
+    const canEdit = (logEntry.status === 'draft') && permissions.authorBoardDiary.create;
 
     return (
         <div className="space-y-6">
@@ -206,7 +241,7 @@ export default function EditDiaryPage() {
                         <div>
                             <CardTitle>Diário de {format(parseISO(logEntry.logDate), 'dd/MM/yyyy')}</CardTitle>
                              <CardDescription>
-                                {isLocked ? "Este registro está bloqueado." : "Clique em 'Enviar para validação' para salvar as alterações."}
+                                {isLocked ? "Este registro está bloqueado pois já foi enviado ou validado." : "Clique em 'Enviar para validação' para salvar e submeter as alterações."}
                             </CardDescription>
                         </div>
                         <div className="text-right">
@@ -237,7 +272,7 @@ export default function EditDiaryPage() {
                                     <ActivityIcon className="h-6 w-6"/>
                                     <span>Atividades ({activityFields.length})</span>
                                 </div>
-                                {isEditing && (
+                                {canEdit && (
                                     <Button type="button" size="sm" onClick={handleAddNewActivity}>
                                         <PlusCircle className="mr-2 h-4 w-4"/> Nova Atividade
                                     </Button>
@@ -252,7 +287,7 @@ export default function EditDiaryPage() {
                                 onValueChange={setOpenAccordionItems}
                             >
                                 {activityFields.map((field, index) => (
-                                    <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={!isEditing} />
+                                    <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={!canEdit} />
                                 ))}
                                 {activityFields.length === 0 && (
                                     <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
@@ -269,7 +304,7 @@ export default function EditDiaryPage() {
                         )}
                         {canValidate && (
                             <>
-                                <Button type="button" variant="destructive" onClick={() => setRejectionModalOpen(true)}><X className="mr-2"/> Rejeitar</Button>
+                                <Button type="button" variant="destructive" onClick={() => setIsRejectionModalOpen(true)}><X className="mr-2"/> Rejeitar</Button>
                                 <Button type="button" onClick={handleApprove}><Check className="mr-2"/> Validar Diário</Button>
                             </>
                         )}
@@ -279,7 +314,7 @@ export default function EditDiaryPage() {
             
             <DeleteConfirmationDialog
                 open={isRejectionModalOpen}
-                onOpenChange={setRejectionModalOpen}
+                onOpenChange={setIsRejectionModalOpen}
                 onConfirm={handleReject}
                 title="Rejeitar diário?"
                 description={<Textarea placeholder="Descreva o motivo da rejeição aqui..." value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} />}
