@@ -244,24 +244,28 @@ function OperationalDashboard() {
                   const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '');
                   const folgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '');
                   const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-                    
+
+                  const hasAnyEntry = t1 || t2 || t3 || folgas || ausencias.length > 0;
+                  
                   return (
                     <div key={kiosk.id} className="p-3 border rounded-lg text-sm">
                       <div className="flex items-center justify-between">
                         <h4 className="font-semibold">{kiosk.name}</h4>
                       </div>
-                      <div className="mt-2 space-y-1">
-                        {t1 && <p><strong>T1:</strong> {t1}</p>}
-                        {t2 && <p><strong>T2:</strong> {t2}</p>}
-                        {t3 && <p><strong>T3:</strong> {t3}</p>}
-                        {folgas && <p><strong>Folga:</strong> {folgas}</p>}
-                        {ausencias.length > 0 && ausencias.map(a => (
-                          <p key={a.userId} className="text-red-500 flex items-center gap-1">
-                            <UserMinus className="h-3 w-3" />
-                            <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
-                          </p>
-                        ))}
-                      </div>
+                      {hasAnyEntry ? (
+                        <div className="mt-2 space-y-1">
+                          {t1 && <p><strong>T1:</strong> {t1}</p>}
+                          {t2 && <p><strong>T2:</strong> {t2}</p>}
+                          {t3 && <p><strong>T3:</strong> {t3}</p>}
+                          {folgas && <p><strong>Folga:</strong> {folgas}</p>}
+                          {ausencias.length > 0 && ausencias.map(a => (
+                            <p key={a.userId} className="text-red-500 flex items-center gap-1">
+                              <UserMinus className="h-3 w-3" />
+                              <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
