@@ -40,12 +40,12 @@ interface OnlineUser {
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    
-    const result = daySchedule[`${kiosk.id} ${turn}`];
-    
-    if (result !== undefined) {
-        return result;
-    }
+    // Prioriza a chave nova com ID, mas mantém o fallback para a chave antiga com nome
+    const byId   = daySchedule[`${kiosk.id} ${turn}`];
+    if (byId !== undefined) return byId;
+
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    if (byName !== undefined) return byName;
 
     return turn === 'Ausencia' ? [] : '';
 };
