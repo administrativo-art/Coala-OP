@@ -178,25 +178,25 @@ function OperationalDashboard() {
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
-
+  
   const workersOnDutyToday = useMemo(() => {
     const workers = new Set<string>();
     if (!todaySchedule) return workers;
 
     kiosksToDisplay.forEach(kiosk => {
-        ['T1', 'T2', 'T3'].forEach(turn => {
-            const shift = lookupShift(todaySchedule, kiosk, turn as any);
-            if (typeof shift === 'string' && shift) {
-                shift.split(' + ').forEach(name => {
-                    if (name.trim()) workers.add(name.trim());
-                });
-            }
-        });
-        const ausencias = lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-        ausencias.forEach(a => {
-            const ausente = users.find(u => u.id === a.userId);
-            if(ausente) workers.add(ausente.username);
-        })
+      ['T1', 'T2', 'T3'].forEach(turn => {
+        const shift = lookupShift(todaySchedule, kiosk, turn as any);
+        if (typeof shift === 'string' && shift) {
+          shift.split(' + ').forEach(name => {
+            if (name.trim()) workers.add(name.trim());
+          });
+        }
+      });
+      const ausencias = lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+      ausencias.forEach(a => {
+        const ausente = users.find(u => u.id === a.userId);
+        if(ausente) workers.add(ausente.username);
+      })
     });
     return workers;
   }, [todaySchedule, kiosksToDisplay, users]);
@@ -331,7 +331,7 @@ function OperationalDashboard() {
                             
                             return (
                                 <Card key={kiosk.id}>
-                                    <CardHeader className="flex flex-row items-center justify-between p-3">
+                                    <CardHeader className="p-3">
                                         <h4 className="font-semibold text-base">{kiosk.name}</h4>
                                     </CardHeader>
                                     <CardContent className="p-3 pt-0">
@@ -538,6 +538,3 @@ export default function DashboardPage() {
         </div>
     );
 }
-
-
-    
