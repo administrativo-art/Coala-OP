@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -85,6 +85,7 @@ export default function EditDiaryPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [isRejectionModalOpen, setRejectionModalOpen] = useState(false);
     const [rejectionNotes, setRejectionNotes] = useState('');
+    const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
 
     const form = useForm<DiaryFormValues>({
         resolver: zodResolver(diaryFormSchema),
@@ -136,6 +137,12 @@ export default function EditDiaryPage() {
             totalDurationMinutes: totalDuration,
         };
     };
+
+    const handleAddNewActivity = useCallback(() => {
+        const newActivityId = `act-${Date.now()}`;
+        appendActivity({ id: newActivityId, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [], durationMinutes: 60 });
+        setOpenAccordionItems(prev => [...prev, newActivityId]);
+    }, [appendActivity]);
 
     const handleSubmitForValidation = async () => {
         if (!logEntry) return;
@@ -233,14 +240,19 @@ export default function EditDiaryPage() {
                                     <span>Atividades ({activityFields.length})</span>
                                 </div>
                                 {isEditing && (
-                                    <Button type="button" size="sm" onClick={() => appendActivity({ id: `act-${Date.now()}`, kioskId: '', startTime: '08:00', endTime: '09:00', title: '', description: '', occurrences: [], durationMinutes: 60 })}>
+                                    <Button type="button" size="sm" onClick={handleAddNewActivity}>
                                         <PlusCircle className="mr-2 h-4 w-4"/> Nova Atividade
                                     </Button>
                                 )}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <Accordion type="multiple" className="w-full space-y-3">
+                            <Accordion 
+                                type="multiple" 
+                                className="w-full space-y-3"
+                                value={openAccordionItems}
+                                onValueChange={setOpenAccordionItems}
+                            >
                                 {activityFields.map((field, index) => (
                                     <ActivityItem key={field.id} activityIndex={index} control={form.control} removeActivity={removeActivity} kiosks={kiosks} isFinalized={!isEditing} />
                                 ))}
