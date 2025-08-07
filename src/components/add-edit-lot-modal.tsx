@@ -299,7 +299,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <FormItem>
                                                 <div className="flex items-center gap-1.5">
                                                     <FormLabel>Quantidade</FormLabel>
-                                                    {selectedProduct.countingInstruction && (
+                                                    {(selectedProduct.countingInstruction || selectedProduct.countingInstructionImageUrl) && (
                                                          <Popover>
                                                             <PopoverTrigger asChild>
                                                                 <button type="button" onClick={(e) => e.preventDefault()} className="flex items-center">
@@ -309,7 +309,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                             <PopoverContent>
                                                                 <div className="space-y-2">
                                                                     <p className="font-semibold">Instrução de Contagem</p>
-                                                                    <p className="text-sm text-muted-foreground">{selectedProduct.countingInstruction}</p>
+                                                                    {selectedProduct.countingInstruction && <p className="text-sm text-muted-foreground">{selectedProduct.countingInstruction}</p>}
                                                                     {selectedProduct.countingInstructionImageUrl && (
                                                                         <div className="mt-2">
                                                                             <Image src={selectedProduct.countingInstructionImageUrl} alt="Instrução visual" width={200} height={200} className="rounded-md object-contain"/>
