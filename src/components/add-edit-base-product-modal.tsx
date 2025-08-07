@@ -22,18 +22,22 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
+
+const stockLevelSchema = z.object({
+    kioskId: z.string(),
+    min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
+    override: z.boolean(),
+});
 
 const baseProductSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
   initialCostPerUnit: z.coerce.number().optional(),
-  stockLevels: z.array(z.object({
-      kioskId: z.string(),
-      min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
-  }))
+  stockLevels: z.array(stockLevelSchema)
 });
 
 type BaseProductFormValues = z.infer<typeof baseProductSchema>;
@@ -68,7 +72,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [] }
   });
 
-  const { fields } = useFieldArray({
+  const { fields, update } = useFieldArray({
     control: form.control,
     name: 'stockLevels'
   });
@@ -90,10 +94,14 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           category: productToEdit.category,
           unit: productToEdit.unit,
           initialCostPerUnit: productToEdit.lastEffectivePrice?.pricePerUnit ?? productToEdit.initialCostPerUnit ?? 0,
-          stockLevels: sortedKiosks.map(kiosk => ({
-            kioskId: kiosk.id,
-            min: productToEdit.stockLevels?.[kiosk.id]?.min ?? 0
-          }))
+          stockLevels: sortedKiosks.map(kiosk => {
+            const level = productToEdit.stockLevels?.[kiosk.id];
+            return {
+                kioskId: kiosk.id,
+                min: level?.min ?? 0,
+                override: level?.override ?? false,
+            };
+          })
         });
       } else {
         form.reset({
@@ -101,17 +109,17 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           category: 'Massa',
           unit: 'g',
           initialCostPerUnit: 0,
-          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0 }))
+          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, override: false }))
         });
       }
     }
   }, [productToEdit, open, form, sortedKiosks]);
 
   const onSubmit = (values: BaseProductFormValues) => {
-    const stockLevelsObject: { [kioskId: string]: { min: number } } = {};
+    const stockLevelsObject: { [kioskId: string]: { min: number, override: boolean } } = {};
     values.stockLevels.forEach(sl => {
-        if(sl.min !== undefined && sl.min > 0) {
-            stockLevelsObject[sl.kioskId] = { min: sl.min };
+        if(sl.min !== undefined && sl.min >= 0) {
+            stockLevelsObject[sl.kioskId] = { min: sl.min, override: sl.override };
         }
     });
 
@@ -254,11 +262,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           <TableBody>
                               {fields.map((field, index) => {
                                 const kiosk = sortedKiosks.find(k => k.id === field.kioskId);
-                                const isMatriz = kiosk?.id === 'matriz';
-                                const tooltipText = isMatriz
-                                  ? "Cálculo: Média do consumo mensal de toda a rede (arredondado para cima). Este valor é calculado com base no histórico de todos os relatórios."
-                                  : "Cálculo: (Média diária × 7) + (Média diária × 5) (arredondado para cima). Este valor é calculado com base no histórico de relatórios de consumo deste quiosque.";
-
                                 return (
                                   <TableRow key={field.id}>
                                     <TableCell className="font-medium">
@@ -269,19 +272,30 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                           <TooltipProvider>
                                               <Tooltip>
                                                   <TooltipTrigger asChild>
-                                                      <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                                                    <Button 
+                                                        type="button" 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        className={cn("h-8 w-8", field.override ? 'text-primary' : 'text-muted-foreground')}
+                                                        onClick={() => {
+                                                          const current = form.getValues(`stockLevels.${index}`);
+                                                          update(index, { ...current, override: !current.override });
+                                                        }}
+                                                    >
+                                                        {field.override ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                                                    </Button>
                                                   </TooltipTrigger>
                                                   <TooltipContent>
-                                                      <p className="max-w-xs">{tooltipText}</p>
+                                                      <p>{field.override ? 'Valor travado (manual)' : 'Valor automático (calculado)'}</p>
                                                   </TooltipContent>
                                               </Tooltip>
                                           </TooltipProvider>
                                           <FormField
                                               control={form.control}
                                               name={`stockLevels.${index}.min`}
-                                              render={({ field }) => (
+                                              render={({ field: minField }) => (
                                                   <FormItem>
-                                                      <FormControl><Input type="number" className="text-right w-32" {...field} value={field.value ?? ''} /></FormControl>
+                                                      <FormControl><Input type="number" className="text-right w-32" {...minField} value={minField.value ?? ''} /></FormControl>
                                                       <FormMessage />
                                                   </FormItem>
                                               )}

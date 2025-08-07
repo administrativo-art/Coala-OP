@@ -8,6 +8,7 @@ import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
 import { writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { type BaseProductStockLevel } from '@/types';
 
 export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport: rawAddReport, deleteReport } = useConsumptionAnalysis();
@@ -45,7 +46,7 @@ export function useValidatedConsumptionData() {
       const kioskList = kiosks.filter(k => k.id !== 'matriz');
 
       for (const bp of baseProducts) {
-        const newStockLevels: { [kioskId: string]: { min: number } } = { ...(bp.stockLevels || {}) };
+        const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
         
         let totalNetworkConsumption = 0;
         let totalNetworkMonths = new Set<string>();
@@ -53,6 +54,9 @@ export function useValidatedConsumptionData() {
         for (const k of kioskList) {
             const kioskReports = allReports.filter(r => r.kioskId === k.id);
             if (kioskReports.length === 0) continue;
+
+            const isOverridden = newStockLevels[k.id]?.override === true;
+            if (isOverridden) continue;
             
             const totalKioskConsumption = kioskReports.reduce((sum, r) => {
                 const item = r.results.find((res: any) => res.baseProductId === bp.id);
@@ -65,17 +69,18 @@ export function useValidatedConsumptionData() {
               const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
               
               if (kioskMinStock > 0) {
-                  newStockLevels[k.id] = { min: kioskMinStock };
+                  newStockLevels[k.id] = { min: kioskMinStock, override: false };
                   totalNetworkConsumption += totalKioskConsumption;
                   kioskReports.forEach(r => totalNetworkMonths.add(`${r.year}-${r.month}`));
               }
             }
         }
 
-        if (totalNetworkConsumption > 0 && totalNetworkMonths.size > 0) {
+        const isMatrizOverridden = newStockLevels['matriz']?.override === true;
+        if (!isMatrizOverridden && totalNetworkConsumption > 0 && totalNetworkMonths.size > 0) {
             const avgTotalMonthlyConsumption = totalNetworkConsumption / totalNetworkMonths.size;
              if (avgTotalMonthlyConsumption > 0) {
-                newStockLevels['matriz'] = { min: Math.ceil(avgTotalMonthlyConsumption) };
+                newStockLevels['matriz'] = { min: Math.ceil(avgTotalMonthlyConsumption), override: false };
             }
         }
         

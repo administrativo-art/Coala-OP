@@ -24,11 +24,16 @@ export type PriceHistoryEntry = {
   confirmedAt: string; // ISO String
 }
 
+export type BaseProductStockLevel = {
+    min: number;
+    override: boolean;
+};
+
 export type BaseProduct = {
   id: string;
   name: string;
   unit: string;
-  stockLevels: { [kioskId: string]: { min: number } };
+  stockLevels: { [kioskId: string]: BaseProductStockLevel };
   category: UnitCategory;
   lastEffectivePrice?: LastEffectivePrice | null;
   initialCostPerUnit?: number;
