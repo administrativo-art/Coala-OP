@@ -154,7 +154,7 @@ export function ItemManagement() {
                                     <AccordionTrigger className="p-0 pl-3 hover:no-underline rounded-lg w-full">
                                         <div className="flex items-center gap-3 w-full">
                                             {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />}
-                                            <span className="font-semibold">{product.baseName} {product.brand && ` - ${product.brand}`}</span>
+                                            <span className="font-semibold">{getProductFullName(product)}</span>
                                         </div>
                                     </AccordionTrigger>
                                 </div>

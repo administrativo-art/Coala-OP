@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -268,7 +269,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                     )}
                                                 >
                                                     {field.value ? (
-                                                    format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                                    format(field.value, "dd/MM/yyyy")
                                                     ) : (
                                                     <span>Escolha uma data</span>
                                                     )}
