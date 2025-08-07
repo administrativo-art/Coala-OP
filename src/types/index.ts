@@ -55,6 +55,7 @@ export type Product = {
   secondaryUnit?: string;
   notes?: string;
   countingInstruction?: string;
+  countingInstructionImageUrl?: string;
   pdfUnit?: string;
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days

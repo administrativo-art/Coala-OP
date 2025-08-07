@@ -26,7 +26,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StorageLocationManagementModal } from './storage-location-management-modal';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 
 const BarcodeScannerModal = dynamic(
@@ -301,16 +300,24 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                 <div className="flex items-center gap-1.5">
                                                     <FormLabel>Quantidade</FormLabel>
                                                     {selectedProduct.countingInstruction && (
-                                                         <TooltipProvider delayDuration={100}>
-                                                            <Tooltip>
-                                                                <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
+                                                         <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <button type="button" onClick={(e) => e.preventDefault()} className="flex items-center">
                                                                     <Info className="h-4 w-4 text-muted-foreground" />
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p className="max-w-xs">{selectedProduct.countingInstruction}</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
+                                                                </button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent>
+                                                                <div className="space-y-2">
+                                                                    <p className="font-semibold">Instrução de Contagem</p>
+                                                                    <p className="text-sm text-muted-foreground">{selectedProduct.countingInstruction}</p>
+                                                                    {selectedProduct.countingInstructionImageUrl && (
+                                                                        <div className="mt-2">
+                                                                            <Image src={selectedProduct.countingInstructionImageUrl} alt="Instrução visual" width={200} height={200} className="rounded-md object-contain"/>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
                                                     )}
                                                 </div>
                                             <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>

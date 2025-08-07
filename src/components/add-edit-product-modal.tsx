@@ -50,6 +50,7 @@ const productFormSchema = z.object({
   secondaryUnit: z.string().optional(),
   notes: z.string().optional(),
   countingInstruction: z.string().optional(),
+  countingInstructionImageUrl: z.string().optional(),
   baseProductId: z.string().optional(),
 });
 
@@ -69,8 +70,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const [isInstructionPhotoModalOpen, setIsInstructionPhotoModalOpen] = useState(false);
     const [isFetchingProduct, setIsFetchingProduct] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const instructionFileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -78,7 +81,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             secondaryUnitValue: undefined, secondaryUnit: 'g',
-            notes: '', countingInstruction: '', baseProductId: ''
+            notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: ''
         }
     });
     
@@ -99,6 +102,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     secondaryUnit: productToEdit.secondaryUnit || 'g',
                     notes: productToEdit.notes || '',
                     countingInstruction: productToEdit.countingInstruction || '',
+                    countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
                     baseProductId: productToEdit.baseProductId || '',
                 });
             } else {
@@ -106,7 +110,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     secondaryUnitValue: undefined, secondaryUnit: 'g',
-                    notes: '', countingInstruction: '', baseProductId: ''
+                    notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: ''
                 });
             }
         }
@@ -125,17 +129,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         setIsScannerOpen(false);
     };
 
-    const handlePhotoCaptured = async (dataUrl: string) => {
+    const handlePhotoCaptured = async (dataUrl: string, target: 'main' | 'instruction') => {
         try {
             const resized = await resizeImage(dataUrl, 512, 512);
-            form.setValue('imageUrl', resized, { shouldValidate: true, shouldDirty: true });
+            if (target === 'main') {
+                form.setValue('imageUrl', resized, { shouldValidate: true, shouldDirty: true });
+            } else {
+                form.setValue('countingInstructionImageUrl', resized, { shouldValidate: true, shouldDirty: true });
+            }
             toast({ title: "Foto capturada com sucesso!" });
         } catch (e) {
             toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
         }
     };
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'main' | 'instruction') => {
         const file = event.target.files?.[0];
         if (file) {
             if (file.size > 5 * 1024 * 1024) {
@@ -146,7 +154,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             reader.onloadend = async () => {
                 try {
                     const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-                    form.setValue('imageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
+                    if (target === 'main') {
+                        form.setValue('imageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
+                    } else {
+                        form.setValue('countingInstructionImageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
+                    }
                 } catch (error) {
                     toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.' });
                 }
@@ -226,7 +238,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
                                         </div>
                                     </div>
-                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
                                     <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 
@@ -286,25 +298,43 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     </div>
                                 </div>
 
-                                <FormField
-                                    control={form.control}
-                                    name="countingInstruction"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Instrução de contagem (opcional)</FormLabel>
-                                            <FormControl>
-                                                <Textarea
-                                                    placeholder="Ex: Contar por peso na balança, contar apenas pacotes fechados..."
-                                                    {...field}
-                                                    value={field.value ?? ''}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                
-                                 <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                                <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                    <h4 className="text-md font-medium">Instrução de contagem (opcional)</h4>
+                                    <FormField
+                                        control={form.control}
+                                        name="countingInstruction"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Texto da instrução</FormLabel>
+                                                <FormControl>
+                                                    <Textarea
+                                                        placeholder="Ex: Contar por peso na balança, contar apenas pacotes fechados..."
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <div className="space-y-2">
+                                        <FormLabel>Imagem de instrução (opcional)</FormLabel>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                                {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                            </div>
+                                        </div>
+                                        <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
+                                        <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
+                                </div>
+
+                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Insumo base</FormLabel>
                                         <div className="flex gap-2 items-center">
@@ -337,7 +367,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             </Dialog>
 
             {isScannerOpen && <BarcodeScannerModal open={isScannerOpen} onOpenChange={setIsScannerOpen} onScanSuccess={handleScanSuccess} />}
-            {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={handlePhotoCaptured} />}
+            {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'main')} />}
+            {isInstructionPhotoModalOpen && <PhotoCaptureModal open={isInstructionPhotoModalOpen} onOpenChange={setIsInstructionPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'instruction')} />}
         </>
     );
 }
