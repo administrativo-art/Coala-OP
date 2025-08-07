@@ -49,6 +49,7 @@ const productFormSchema = z.object({
   secondaryUnitValue: z.coerce.number().optional(),
   secondaryUnit: z.string().optional(),
   notes: z.string().optional(),
+  countingInstruction: z.string().optional(),
   baseProductId: z.string().optional(),
 });
 
@@ -77,7 +78,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             secondaryUnitValue: undefined, secondaryUnit: 'g',
-            notes: '', baseProductId: ''
+            notes: '', countingInstruction: '', baseProductId: ''
         }
     });
     
@@ -97,6 +98,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     secondaryUnitValue: productToEdit.secondaryUnitValue,
                     secondaryUnit: productToEdit.secondaryUnit || 'g',
                     notes: productToEdit.notes || '',
+                    countingInstruction: productToEdit.countingInstruction || '',
                     baseProductId: productToEdit.baseProductId || '',
                 });
             } else {
@@ -104,7 +106,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     secondaryUnitValue: undefined, secondaryUnit: 'g',
-                    notes: '', baseProductId: ''
+                    notes: '', countingInstruction: '', baseProductId: ''
                 });
             }
         }
@@ -283,6 +285,24 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             </Select><FormMessage /></FormItem>)}/>
                                     </div>
                                 </div>
+
+                                <FormField
+                                    control={form.control}
+                                    name="countingInstruction"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Instrução de contagem (opcional)</FormLabel>
+                                            <FormControl>
+                                                <Textarea
+                                                    placeholder="Ex: Contar por peso na balança, contar apenas pacotes fechados..."
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                                 
                                  <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                     <FormItem>

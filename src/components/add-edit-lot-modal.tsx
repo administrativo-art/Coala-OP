@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera, Settings, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Camera, Settings, AlertCircle, Info } from 'lucide-react';
 import { type LotEntry, type Kiosk, type Product, type BaseProduct } from '@/types';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StorageLocationManagementModal } from './storage-location-management-modal';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 
 const BarcodeScannerModal = dynamic(
@@ -298,7 +299,21 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                         name="quantity"
                                         render={({ field }) => (
                                             <FormItem>
-                                            <FormLabel>Quantidade</FormLabel>
+                                                <div className="flex items-center gap-1.5">
+                                                    <FormLabel>Quantidade</FormLabel>
+                                                    {selectedProduct.countingInstruction && (
+                                                         <TooltipProvider delayDuration={100}>
+                                                            <Tooltip>
+                                                                <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
+                                                                    <Info className="h-4 w-4 text-muted-foreground" />
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                    <p className="max-w-xs">{selectedProduct.countingInstruction}</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    )}
+                                                </div>
                                             <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>
                                             <FormMessage />
                                             </FormItem>
