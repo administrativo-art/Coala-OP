@@ -303,6 +303,7 @@ export function LotCard({
                 
                 let totalUnits: number;
                 let totalUnitsLabel: string;
+                let isRedundant = false;
 
                 if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                     totalUnits = lot.quantity * product.secondaryUnitValue;
@@ -310,6 +311,10 @@ export function LotCard({
                 } else {
                     totalUnits = lot.quantity * product.packageSize;
                     totalUnitsLabel = product.unit;
+                }
+                
+                if (totalUnits === lot.quantity && (totalUnitsLabel.toLowerCase() === 'un' || totalUnitsLabel.toLowerCase() === 'unidade')) {
+                  isRedundant = true;
                 }
 
                 return (
@@ -327,14 +332,23 @@ export function LotCard({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="text-center p-2 rounded-md bg-background w-28">
-                                <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
-                                <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
-                            </div>
-                            <div className="text-center p-2 rounded-md bg-background w-24">
-                                <div className="text-2xl font-bold">{lot.quantity}</div>
-                                <div className="text-xs text-muted-foreground">pacotes</div>
-                            </div>
+                            {isRedundant ? (
+                                <div className="text-center p-2 rounded-md bg-background w-28">
+                                    <div className="text-2xl font-bold">{lot.quantity}</div>
+                                    <div className="text-xs text-muted-foreground">unidades</div>
+                                </div>
+                            ) : (
+                                <>
+                                <div className="text-center p-2 rounded-md bg-background w-28">
+                                    <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
+                                    <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
+                                </div>
+                                <div className="text-center p-2 rounded-md bg-background w-24">
+                                    <div className="text-2xl font-bold">{lot.quantity}</div>
+                                    <div className="text-xs text-muted-foreground">pacotes</div>
+                                </div>
+                                </>
+                            )}
                             <div className="flex flex-col gap-0.5 border-l pl-1">
                                 {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
                                 {renderActionButton(lot, MinusCircle, "Baixa/Consumo", () => handleConsumeClick(lot), canEdit)}
