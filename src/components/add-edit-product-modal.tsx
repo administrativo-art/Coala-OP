@@ -207,7 +207,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const secondaryUnitCategory = useMemo(() => {
         switch(categoryWatch) {
             case 'Unidade': return 'Massa';
-            case 'Embalagem': return 'Unidade';
             default: return categoryWatch;
         }
     }, [categoryWatch]);

@@ -93,7 +93,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         
         try {
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
                 return total + (quantityToMove * valueOfOnePackageInBase);
             } 

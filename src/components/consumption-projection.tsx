@@ -6,7 +6,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
 import { differenceInDays, parseISO, addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -109,7 +109,7 @@ export function ConsumptionProjection() {
             let lotQtyInBaseUnit = 0;
             try {
                 if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                     const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                     lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
                 } else if (product.category === baseProduct.category) {

@@ -133,7 +133,7 @@ function AnalysisTab() {
             const quantityInPackages = lot.quantity;
 
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } 
@@ -189,7 +189,7 @@ function AnalysisTab() {
 
                 try {
                      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                         lotPackageSizeInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                     } else if (product.category === baseProduct.category) {
                         lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
