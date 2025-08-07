@@ -40,7 +40,7 @@ const PhotoCaptureModal = dynamic(
 
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
-  brand: z.string().min(1, 'A marca é obrigatória.'),
+  brand: z.string().optional(),
   barcode: z.string().optional(),
   imageUrl: z.string().optional(),
   category: z.enum(unitCategories),
