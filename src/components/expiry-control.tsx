@@ -342,18 +342,24 @@ function ExpiryControlContent() {
                             try {
                                 const productConfig = prodGroup.product;
                                 let valueInBaseUnit = 0;
+
+                                // Prioritize secondary unit for conversion
                                 if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
                                     const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category;
                                     const valueOfOnePackageInBase = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
                                     valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                                } else if (productConfig.category === baseProductConfig.category) {
-                                    const valueOfOnePackageInBase = convertValue(productConfig.packageSize, product.unit, baseProductConfig.unit, productConfig.category);
-                                    valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                                } 
+                                // Fallback to standard conversion if categories match
+                                else if (productConfig.category === baseProductConfig.category) {
+                                     const valueOfOnePackageInBase = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
+                                     valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
                                 } else {
-                                  throw new Error("Conversion not possible");
+                                  // If categories don't match and there's no secondary unit, conversion is not possible
+                                  throw new Error("Cannot convert between different categories without a secondary unit definition.");
                                 }
                                 totalConverted += valueInBaseUnit;
-                            } catch {
+                            } catch (e) {
+                                console.warn(`Could not convert ${prodGroup.product.baseName} for total calculation.`, e);
                                 conversionPossible = false;
                             }
                          }
@@ -582,3 +588,4 @@ export function ExpiryControl() {
         </Suspense>
     );
 }
+
