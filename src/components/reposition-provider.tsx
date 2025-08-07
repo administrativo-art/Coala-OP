@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type RepositionActivity, type RepositionItem } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
@@ -58,8 +58,26 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     };
 
     try {
-      const docRef = await addDoc(collection(db, 'repositionActivities'), newActivity);
-      return docRef.id;
+      const activityRef = await addDoc(collection(db, 'repositionActivities'), newActivity);
+      
+      // Reserve stock in a transaction
+      await runTransaction(db, async (transaction) => {
+        for (const item of data.items) {
+          for (const lotToMove of item.suggestedLots) {
+            const lotRef = doc(db, 'lots', lotToMove.lotId);
+            const lotDoc = await transaction.get(lotRef);
+            if (!lotDoc.exists()) {
+              throw new Error(`Lot ${lotToMove.lotId} not found`);
+            }
+            const currentData = lotDoc.data();
+            const currentReserved = currentData.reservedQuantity || 0;
+            const newReserved = currentReserved + lotToMove.quantityToMove;
+            transaction.update(lotRef, { reservedQuantity: newReserved });
+          }
+        }
+      });
+
+      return activityRef.id;
     } catch (error) {
       console.error("Error creating reposition activity:", error);
       return null;
@@ -84,12 +102,30 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   }, []);
   
   const deleteRepositionActivity = useCallback(async (activityId: string) => {
+    const activityToDelete = activities.find(a => a.id === activityId);
+    if (!activityToDelete) return;
+    
     try {
+      // Un-reserve stock in a transaction
+       await runTransaction(db, async (transaction) => {
+        for (const item of activityToDelete.items) {
+          for (const lotToMove of item.suggestedLots) {
+            const lotRef = doc(db, 'lots', lotToMove.lotId);
+            const lotDoc = await transaction.get(lotRef);
+            if (lotDoc.exists()) {
+                const currentData = lotDoc.data();
+                const currentReserved = currentData.reservedQuantity || 0;
+                const newReserved = Math.max(0, currentReserved - lotToMove.quantityToMove);
+                transaction.update(lotRef, { reservedQuantity: newReserved });
+            }
+          }
+        }
+      });
       await deleteDoc(doc(db, 'repositionActivities', activityId));
     } catch (error) {
       console.error("Error deleting reposition activity:", error);
     }
-  }, []);
+  }, [activities]);
   
   const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
     if (!user) throw new Error("Usuário não autenticado.");

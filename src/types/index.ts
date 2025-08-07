@@ -86,6 +86,7 @@ export type LotEntry = {
   expiryDate: string | null; // ISO String or null
   kioskId: string;
   quantity: number;
+  reservedQuantity?: number;
   imageUrl?: string;
   locationId?: string | null;
   locationName?: string | null;

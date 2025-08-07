@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type LotEntry, type MovementRecord, type MovementType } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
 export type MoveLotParams = {
@@ -180,7 +180,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
     try {
-      // Step 1: Read all destination lots outside the transaction
       const destinationLotPromises = paramsArray.map(params => {
         const destQuery = query(
           collection(db, "lots"),
@@ -199,9 +198,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         destinationLotMap.set(index, snap.empty ? null : snap.docs[0]);
       });
 
-      // Step 2: Run the transaction with only pre-fetched data
       await runTransaction(db, async (transaction) => {
-          // Read all source lots first
           const sourceLotPromises = paramsArray.map(params => transaction.get(doc(db, "lots", params.lotId)));
           const sourceLotDocs = await Promise.all(sourceLotPromises);
 
@@ -214,20 +211,28 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
 
-              if (sourceLot.kioskId === toKioskId || quantityToMove <= 0 || quantityToMove > sourceLot.quantity) {
-                  throw new Error(`Invalid move operation for lot ${lotId}: qty ${quantityToMove} > available ${sourceLot.quantity}`);
+              if (sourceLot.kioskId === toKioskId || quantityToMove <= 0) {
+                  throw new Error(`Invalid move operation for lot ${lotId}`);
               }
 
               const newSourceQuantity = sourceLot.quantity - quantityToMove;
-              transaction.update(sourceLotRef, { quantity: newSourceQuantity });
+              const newReservedQuantity = (sourceLot.reservedQuantity || 0) - quantityToMove;
+              
+              if (newSourceQuantity < 0 || newReservedQuantity < 0) {
+                  throw new Error(`Invalid quantity for lot ${lotId}: qty ${quantityToMove} > available ${sourceLot.quantity} or reserved ${sourceLot.reservedQuantity}`);
+              }
+              
+              transaction.update(sourceLotRef, { 
+                quantity: newSourceQuantity,
+                reservedQuantity: newReservedQuantity,
+              });
               
               const destDoc = destinationLotMap.get(index);
               let destLotId;
 
               if (destDoc) {
                   destLotId = destDoc.id;
-                  const newQuantity = destDoc.data().quantity + quantityToMove;
-                  transaction.update(destDoc.ref, { quantity: newQuantity });
+                  transaction.update(destDoc.ref, { quantity: increment(quantityToMove) });
               } else {
                   const newDestLotRef = doc(collection(db, "lots"));
                   destLotId = newDestLotRef.id;
@@ -238,6 +243,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                       expiryDate: sourceLot.expiryDate,
                       kioskId: toKioskId,
                       quantity: quantityToMove,
+                      reservedQuantity: 0,
                       imageUrl: sourceLot.imageUrl,
                       locationId: null,
                       locationName: null,
@@ -380,5 +386,3 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-    

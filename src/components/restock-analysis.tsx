@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -174,9 +173,10 @@ function AnalysisTab() {
             const availableMatrizLots = lotsInMatriz
                 .filter(lot => {
                     const p = productMap.get(lot.productId);
-                    return p?.baseProductId === baseProduct.id && lot.quantity > 0;
+                    const availableQty = lot.quantity - (lot.reservedQuantity || 0);
+                    return p?.baseProductId === baseProduct.id && availableQty > 0;
                 })
-                .sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+                .sort((a,b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
             
             let needed = restockNeeded;
             const suggestionList: SuggestedLot[] = [];
@@ -185,6 +185,7 @@ function AnalysisTab() {
                 if (needed <= 0) break;
                 const product = productMap.get(lot.productId)!;
                 let lotPackageSizeInBase = 0;
+                const availableQty = lot.quantity - (lot.reservedQuantity || 0);
 
                 try {
                      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
@@ -201,14 +202,15 @@ function AnalysisTab() {
                 
                 if (lotPackageSizeInBase > 0) {
                     const packagesToMeetNeed = Math.ceil(needed / lotPackageSizeInBase);
-                    const packagesToMove = Math.min(lot.quantity, packagesToMeetNeed);
+                    const packagesToMove = Math.min(availableQty, packagesToMeetNeed);
                     
-                    suggestionList.push({
-                        lot,
-                        quantityToMove: packagesToMove
-                    });
-
-                    needed -= packagesToMove * lotPackageSizeInBase;
+                    if (packagesToMove > 0) {
+                        suggestionList.push({
+                            lot,
+                            quantityToMove: packagesToMove
+                        });
+                        needed -= packagesToMove * lotPackageSizeInBase;
+                    }
                 }
             }
             if(suggestionList.length > 0) {
@@ -426,5 +428,3 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
-
-    
