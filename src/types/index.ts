@@ -218,54 +218,19 @@ export type ProductSimulation = {
 };
 
 // Manager's Diary Types
-export type DiaryOccurrence = {
-  id: string;
-  description: string;
-  identifiedCause?: string;
-  actionTaken?: string;
-  result?: string;
-  requiresEscalation?: boolean;
-  escalatedTo?: string;
-};
-
-export type DiaryActivity = {
-  id: string;
-  kioskId: string;
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
-  durationMinutes: number;
-  title: string;
-  description?: string;
-  occurrences: DiaryOccurrence[];
-};
-
-export type DiarySignature = {
-    dataUrl: string;
-    signedAt: string; // ISO String
-    manager?: {
-      userId: string;
-      username: string;
-    }
-}
-
+export type DiaryOccurrence = {};
+export type DiaryActivity = {};
 export type DailyLog = {
-  id: string; 
-  logDate: string; // YYYY-MM-DD
-  status: 'draft' | 'submitted' | 'validated';
-  author: {
-    userId: string;
-    username: string;
-    profileName?: string;
-  };
-  activities: DiaryActivity[];
-  notes?: string;
-  signatures?: {
-    managerSignature?: DiarySignature;
-  };
-  totalActivities?: number;
-  totalDurationMinutes?: number;
-  createdAt: string; // ISO String
-  updatedAt: string; // ISO String
+    id: string;
+    logDate: string;
+    status: 'draft' | 'submitted' | 'validated' | 'aberto' | 'em andamento' | 'finalizado';
+    author: {
+        userId: string;
+        username: string;
+    },
+    totalDurationMinutes?: number;
+    totalActivities?: number;
+    notes?: string;
 };
 
 

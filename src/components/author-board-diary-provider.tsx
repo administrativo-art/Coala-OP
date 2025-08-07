@@ -1,5 +1,4 @@
-
-
+// This provider has been removed as per user request.
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,118 +20,29 @@ export interface AuthorBoardDiaryContextType {
 
 export const AuthorBoardDiaryContext = createContext<AuthorBoardDiaryContextType | undefined>(undefined);
 
-const cleanUndefined = (obj: any): any => {
-    if (obj === null || obj === undefined) {
-        return null;
-    }
-    if (Array.isArray(obj)) {
-        return obj.map(v => cleanUndefined(v));
-    }
-    if (typeof obj === 'object') {
-        return Object.entries(obj).reduce((acc, [key, value]) => {
-            if (value !== undefined) {
-                acc[key] = cleanUndefined(value);
-            }
-            return acc;
-        }, {} as {[key: string]: any});
-    }
-    return obj;
-}
-
-
 export function AuthorBoardDiaryProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    if (!user) {
-        setLoading(false);
-        setLogs([]);
-        return;
-    }
-
-    const q = query(collection(db, "authorboarddiary"));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyLog));
-      setLogs(allLogs.sort((a,b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime()));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching logs:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
+    setLoading(false);
+  }, []);
+  
   const getLogById = useCallback((logId: string) => {
-    return logs.find(log => log.id === logId);
-  }, [logs]);
-
-  const createOrGetDailyLog = useCallback(async (): Promise<DailyLog | null> => {
-    if (!user) throw new Error("Usuário não autenticado.");
-
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const q = query(collection(db, "authorboarddiary"), where("author.userId", "==", user.id), where("logDate", "==", todayStr));
-
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-        const existingDoc = querySnapshot.docs[0];
-        return { id: existingDoc.id, ...existingDoc.data() } as DailyLog;
-    }
-
-    const now = new Date().toISOString();
-    const newLogData: Omit<DailyLog, 'id'> = {
-        logDate: todayStr,
-        status: 'draft',
-        author: {
-            userId: user.id,
-            username: user.username,
-        },
-        activities: [],
-        createdAt: now,
-        updatedAt: now,
-    };
-    
-    try {
-        const docRef = await addDoc(collection(db, 'authorboarddiary'), newLogData);
-        return { id: docRef.id, ...newLogData };
-    } catch (error) {
-        console.error("Error creating new log:", error);
-        return null;
-    }
-  }, [user]);
-  
-  const updateLog = useCallback(async (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => {
-    if (!user) throw new Error("Usuário não autenticado.");
-    const docRef = doc(db, 'authorboarddiary', logId);
-    const now = new Date().toISOString();
-    const payload = { ...logData, updatedAt: now };
-    const cleanedPayload = cleanUndefined(payload);
-
-    try {
-      await updateDoc(docRef, cleanedPayload);
-    } catch (error) {
-      console.error("Error updating log:", error);
-      throw error;
-    }
-  }, [user]);
-  
-  const deleteLog = useCallback(async (logId: string) => {
-    try {
-        await deleteDoc(doc(db, 'authorboarddiary', logId));
-    } catch (error) {
-        console.error("Error deleting log:", error);
-        throw error;
-    }
+    return undefined;
   }, []);
 
-  const todayLog = useMemo(() => {
-    if (!user) return null;
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return logs.find(log => log.author.userId === user.id && log.logDate === todayStr) || null;
-  }, [logs, user]);
+  const createOrGetDailyLog = useCallback(async (): Promise<DailyLog | null> => {
+    return null;
+  }, []);
+  
+  const updateLog = useCallback(async (logId: string, logData: Partial<Omit<DailyLog, 'id'>>) => {
+  }, []);
+  
+  const deleteLog = useCallback(async (logId: string) => {
+  }, []);
+
+  const todayLog = null;
 
   const value = useMemo(() => ({
     logs,

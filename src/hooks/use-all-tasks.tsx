@@ -53,45 +53,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   const loading = authLoading || itemAdditionLoading || stockCountsLoading || returnRequestsLoading || repositionLoading || auditLoading || tasksLoading || diaryLoading;
 
-    useEffect(() => {
-        if (!loading && permissions?.authorBoardDiary?.validate && profiles) {
-            const submittedDiaries = logs.filter(log => log.status === 'submitted');
-            submittedDiaries.forEach(log => {
-                const taskId = `diary-${log.id}`;
-                const existingTask = formTasks.find(t => t.origin.id === log.id && t.origin.type === 'author_board_diary');
-                const adminProfile = profiles.find(p => p.isDefaultAdmin);
-
-                if (!existingTask && adminProfile) {
-                    addTask({
-                        title: `Validar Diário de ${log.author.username}`,
-                        description: `Revisar e aprovar o diário do dia ${format(parseISO(log.logDate), 'dd/MM/yyyy')}.`,
-                        status: 'awaiting_approval',
-                        assigneeType: 'profile',
-                        assigneeId: adminProfile.id,
-                        requiresApproval: true,
-                        approverType: 'profile',
-                        approverId: adminProfile.id,
-                        origin: {
-                            type: 'author_board_diary',
-                            id: log.id,
-                        },
-                        history: [{
-                            timestamp: new Date().toISOString(),
-                            action: 'created',
-                            author: { id: 'system', name: 'Sistema' },
-                        }],
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                    });
-                } else if (existingTask && log.status !== 'submitted' && existingTask.status !== 'completed') {
-                    // Logic to maybe remove the task if the diary is no longer submitted
-                    updateFormTask(existingTask.id, { status: 'completed' });
-                }
-            });
-        }
-  }, [logs, formTasks, loading, permissions, addTask, profiles, updateFormTask]);
-
-
   const legacyTasks = useMemo((): LegacyTask[] => {
     if (!user || !permissions || loading) return [];
 

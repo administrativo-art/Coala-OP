@@ -1,10 +1,4 @@
-
-
-"use client";
-
-import { ManagerDiary } from "@/components/manager-diary";
-
+// This page has been removed as per user request.
 export default function ManagerDiaryPage() {
-    return <ManagerDiary />;
+    return null;
 }
-
