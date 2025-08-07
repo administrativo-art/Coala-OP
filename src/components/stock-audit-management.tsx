@@ -264,7 +264,7 @@ function AuditForm({
                                             <div className="space-y-1">
                                                 <p className="font-semibold">{product ? getProductFullName(product) : item.productName}</p>
                                                 <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
-                                                <p className="text-sm text-muted-foreground">Val: {format(parseISO(item.expiryDate), 'dd/MM/yyyy')}</p>
+                                                <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
                                             </div>
                                         </div>
                                         <Separator />
@@ -462,7 +462,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
             productName: getProductFullName(product),
             lotId: lot.id,
             lotNumber: lot.lotNumber,
-            expiryDate: lot.expiryDate,
+            expiryDate: lot.expiryDate || '',
             systemQuantity: lot.quantity,
             countedQuantity: 0,
             divergences: [],
@@ -592,5 +592,3 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
-
-    

@@ -22,9 +22,9 @@ interface ProjectionResult {
     productName: string;
     daysRemaining: number;
     projectedConsumption: number;
-    status: 'ok' | 'at_risk' | 'no_data';
+    status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry';
     projectedConsumptionDate: Date | null;
-    expiryDate: Date;
+    expiryDate: Date | null;
 }
 
 export function ConsumptionProjection() {
@@ -70,6 +70,18 @@ export function ConsumptionProjection() {
         const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
         
         return kioskLots.map(lot => {
+            if (!lot.expiryDate) {
+                 return {
+                    lot,
+                    productName: getProductFullName(products.find(p => p.id === lot.productId)),
+                    daysRemaining: Infinity,
+                    projectedConsumption: 0,
+                    status: 'no_expiry',
+                    projectedConsumptionDate: null,
+                    expiryDate: null,
+                };
+            }
+
             const product = products.find(p => p.id === lot.productId);
             const expiryDate = parseISO(lot.expiryDate);
 
@@ -141,6 +153,8 @@ export function ConsumptionProjection() {
                 return <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Risco de vencimento</Badge>;
             case 'no_data':
                 return <Badge variant="outline">Sem dados de consumo</Badge>;
+             case 'no_expiry':
+                return <Badge variant="secondary">Validade indefinida</Badge>;
         }
     };
     
@@ -193,7 +207,7 @@ export function ConsumptionProjection() {
                                         <TableCell className="font-medium">{result.productName}</TableCell>
                                         <TableCell>{result.lot.lotNumber}</TableCell>
                                         <TableCell className="text-center font-semibold">
-                                            {format(result.expiryDate, 'dd/MM/yyyy', { locale: ptBR })}
+                                            {result.expiryDate ? format(result.expiryDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-center">
                                             {result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}

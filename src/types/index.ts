@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -84,7 +83,7 @@ export type LotEntry = {
   productId: string;
   productName: string;
   lotNumber: string;
-  expiryDate: string; // ISO String
+  expiryDate: string | null; // ISO String or null
   kioskId: string;
   quantity: number;
   imageUrl?: string;

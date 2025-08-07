@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import Image from 'next/image';
@@ -38,6 +37,9 @@ export type GroupedProduct = {
 };
 
 const getStatus = (lot: LotEntry, product?: Product) => {
+    if (!lot.expiryDate) {
+        return { variant: "secondary", text: 'Validade indefinida' };
+    }
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const expiry = parseISO(lot.expiryDate);
@@ -214,7 +216,7 @@ export function LotCard({
     
     const productName = getProductFullName(product);
     const lotNumber = lot.lotNumber;
-    const expiryDate = format(parseISO(lot.expiryDate), "dd/MM/yyyy");
+    const expiryDate = lot.expiryDate ? format(parseISO(lot.expiryDate), "dd/MM/yyyy") : 'Indefinida';
     const kioskName = getKioskName(lot.kioskId);
     const locationName = getLocationName(lot.locationId);
 
@@ -275,7 +277,7 @@ export function LotCard({
                                     {productGroup.lots.slice(0, 4).map(lot => (
                                         <div key={lot.id} className="p-2 border rounded-md text-sm">
                                             <p className="font-semibold">Lote: {lot.lotNumber}</p>
-                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
                                             <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}</p>
                                         </div>
                                     ))}
@@ -301,29 +303,14 @@ export function LotCard({
                 
                 let totalUnits: number;
                 let totalUnitsLabel: string;
-                let showTotalUnitsCard = false;
 
                 if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                     totalUnits = lot.quantity * product.secondaryUnitValue;
                     totalUnitsLabel = product.secondaryUnit;
-                    showTotalUnitsCard = true;
                 } else {
                     totalUnits = lot.quantity * product.packageSize;
                     totalUnitsLabel = product.unit;
-                    // Show if unit is not 'un' or 'pacote(s)'
-                    showTotalUnitsCard = !['un', 'pacote(s)', 'unidade', 'unidades'].includes(product.unit.toLowerCase());
                 }
-
-                // Override: always show if it's different from the package count unit
-                if (totalUnitsLabel.toLowerCase() !== 'pacote(s)') {
-                    showTotalUnitsCard = true;
-                }
-                
-                // Hide if total is zero
-                if(totalUnits === 0) {
-                    showTotalUnitsCard = false;
-                }
-
 
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
@@ -336,16 +323,14 @@ export function LotCard({
                             </div>
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
-                                <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>
+                                {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {showTotalUnitsCard && (
-                                <div className="text-center p-2 rounded-md bg-background w-28">
-                                    <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
-                                    <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
-                                </div>
-                            )}
+                            <div className="text-center p-2 rounded-md bg-background w-28">
+                                <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
+                                <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
+                            </div>
                             <div className="text-center p-2 rounded-md bg-background w-24">
                                 <div className="text-2xl font-bold">{lot.quantity}</div>
                                 <div className="text-xs text-muted-foreground">pacotes</div>

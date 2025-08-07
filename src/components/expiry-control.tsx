@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from 'react';
@@ -126,6 +125,14 @@ function ExpiryControlContent() {
     
     const preFilteredLots = activeLots.filter(lot => {
         if (statusFilters.length === 0) return true;
+        
+        // Handle "no_expiry" filter
+        if (statusFilters.includes('no_expiry') && !lot.expiryDate) {
+            return true;
+        }
+
+        if (!lot.expiryDate) return false;
+
         const product = products.find(p => p.id === lot.productId);
         const urgentThreshold = product?.urgentThreshold ?? 7;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
@@ -138,7 +145,7 @@ function ExpiryControlContent() {
       const search = searchTerm.toLowerCase();
       const product = products.find(p => p.id === lot.productId);
       if (!product) return false;
-      const expiryDateFormatted = format(parseISO(lot.expiryDate), 'dd/MM/yyyy');
+      const expiryDateFormatted = lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'indefinida';
       const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
 
       const productBase = baseProducts.find(bp => bp.id === product.baseProductId);
@@ -198,7 +205,12 @@ function ExpiryControlContent() {
     groups.forEach(baseGroup => {
         baseGroup.brands.forEach(brandGroup => {
             brandGroup.products.forEach(productGroup => {
-                productGroup.lots.sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+                productGroup.lots.sort((a,b) => {
+                    if (!a.expiryDate && !b.expiryDate) return 0;
+                    if (!a.expiryDate) return 1;
+                    if (!b.expiryDate) return -1;
+                    return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+                });
             });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
@@ -459,6 +471,13 @@ function ExpiryControlContent() {
                             onSelect={(e) => e.preventDefault()}
                         >
                             Vencidos
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilters.includes('no_expiry')}
+                            onCheckedChange={(checked) => handleStatusFilterChange('no_expiry', !!checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            Validade indefinida
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">

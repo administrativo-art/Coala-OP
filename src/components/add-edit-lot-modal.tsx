@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon, Camera, Settings, AlertCircle, Info } from 'lucide-react';
+import { Calendar as CalendarIcon, Camera, Settings, AlertCircle, Info, X } from 'lucide-react';
 import { type LotEntry, type Kiosk, type Product, type BaseProduct } from '@/types';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
@@ -35,7 +35,7 @@ const BarcodeScannerModal = dynamic(
 
 const lotFormSchema = z.object({
   lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
-  expiryDate: z.date({ required_error: 'A data de validade é obrigatória.' }),
+  expiryDate: z.date().optional().nullable(),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   locationId: z.string().optional(),
   quantity: z.coerce.number().min(0, 'A quantidade não pode ser negativa.'),
@@ -114,7 +114,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
         setSelectedProductId(lotToEdit.productId);
         form.reset({
           ...lotToEdit,
-          expiryDate: new Date(lotToEdit.expiryDate),
+          expiryDate: lotToEdit.expiryDate ? new Date(lotToEdit.expiryDate) : null,
           locationId: lotToEdit.locationId || '',
           imageUrl: lotToEdit.imageUrl || product?.imageUrl || '',
         });
@@ -151,7 +151,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 ...values,
                 productId: selectedProduct.id,
                 productName: getProductFullName(selectedProduct),
-                expiryDate: values.expiryDate.toISOString(),
+                expiryDate: values.expiryDate ? values.expiryDate.toISOString() : null,
                 locationId: values.locationId || null,
                 locationName: location?.name || null,
                 locationCode: location?.code || null,
@@ -163,7 +163,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 productId: selectedProduct.id,
                 productName: getProductFullName(selectedProduct),
                 lotNumber: values.lotNumber,
-                expiryDate: values.expiryDate.toISOString(),
+                expiryDate: values.expiryDate ? values.expiryDate.toISOString() : null,
                 kioskId: values.kioskId,
                 quantity: values.quantity,
                 imageUrl: values.imageUrl || selectedProduct.imageUrl || '',
@@ -260,26 +260,39 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <Popover>
                                             <PopoverTrigger asChild>
                                                 <FormControl>
-                                                <Button
-                                                    variant={"outline"}
-                                                    className={cn(
-                                                    "w-full pl-3 text-left font-normal",
-                                                    !field.value && "text-muted-foreground"
-                                                    )}
-                                                >
-                                                    {field.value ? (
-                                                    format(field.value, "dd/MM/yyyy")
-                                                    ) : (
-                                                    <span>Escolha uma data</span>
-                                                    )}
-                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                                </Button>
+                                                    <div className="relative">
+                                                        <Button
+                                                            variant={"outline"}
+                                                            className={cn(
+                                                            "w-full pl-3 text-left font-normal",
+                                                            !field.value && "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {field.value ? (
+                                                            format(field.value, "dd/MM/yyyy")
+                                                            ) : (
+                                                            <span>Indefinida</span>
+                                                            )}
+                                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                        {field.value && (
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="absolute right-10 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                                onClick={() => field.onChange(null)}
+                                                            >
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 </FormControl>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-auto p-0" align="start">
                                                 <Calendar
                                                 mode="single"
-                                                selected={field.value}
+                                                selected={field.value ?? undefined}
                                                 onSelect={field.onChange}
                                                 disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                                                 initialFocus
