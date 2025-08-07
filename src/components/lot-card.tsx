@@ -298,8 +298,8 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const totalUnits = (product.secondaryUnitValue || 0) * lot.quantity;
-                const totalUnitsLabel = product.secondaryUnit || 'unidades';
+                const totalUnits = (product.packageSize || 0) * lot.quantity;
+                const totalUnitsLabel = product.unit || 'unidades';
 
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
@@ -316,7 +316,7 @@ export function LotCard({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {totalUnits > 0 && (
+                            {totalUnits > 0 && product.unit !== 'un' && (
                                 <div className="text-center p-2 rounded-md bg-background w-28">
                                     <div className="text-2xl font-bold">{totalUnits.toLocaleString()}</div>
                                     <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
