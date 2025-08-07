@@ -298,8 +298,17 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const totalUnits = (product.packageSize || 0) * lot.quantity;
-                const totalUnitsLabel = product.unit || 'unidades';
+                
+                let totalUnits: number;
+                let totalUnitsLabel: string;
+
+                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                    totalUnits = lot.quantity * product.secondaryUnitValue;
+                    totalUnitsLabel = product.secondaryUnit;
+                } else {
+                    totalUnits = lot.quantity * product.packageSize;
+                    totalUnitsLabel = product.unit;
+                }
 
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
@@ -316,9 +325,9 @@ export function LotCard({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {totalUnits > 0 && product.unit !== 'un' && (
+                            {totalUnits > 0 && totalUnitsLabel.toLowerCase() !== 'un' && totalUnitsLabel.toLowerCase() !== 'pacote(s)' && (
                                 <div className="text-center p-2 rounded-md bg-background w-28">
-                                    <div className="text-2xl font-bold">{totalUnits.toLocaleString()}</div>
+                                    <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
                                     <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
                                 </div>
                             )}
