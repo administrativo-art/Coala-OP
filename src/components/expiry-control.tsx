@@ -330,55 +330,48 @@ function ExpiryControlContent() {
       <div className="space-y-6">
          {groupedData.map(baseGroup => {
              const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
-             let totalGroupQuantity = 0;
-             let displayUnit = baseGroup.isBaseProduct ? 'pacotes' : '';
+             let totalPackages = 0;
+             let totalConverted = 0;
+             let conversionPossible = baseGroup.isBaseProduct;
 
-             if (baseGroup.isBaseProduct && baseProductConfig) {
-                 displayUnit = baseProductConfig.unit;
-                 
-                 const lotTotalValues = baseGroup.brands.flatMap(brand => 
-                     brand.products.flatMap(prodGroup => {
-                         const productConfig = prodGroup.product;
-                         return prodGroup.lots.map(lot => {
-                             try {
+             baseGroup.brands.forEach(brand => {
+                 brand.products.forEach(prodGroup => {
+                     prodGroup.lots.forEach(lot => {
+                         totalPackages += lot.quantity;
+                         if (conversionPossible && baseProductConfig) {
+                            try {
+                                const productConfig = prodGroup.product;
+                                let valueInBaseUnit = 0;
                                 if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
-                                    const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category === 'Embalagem' ? 'Unidade' : productConfig.category;
-                                    return lot.quantity * convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
-                                } 
-                                if (productConfig.category === baseProductConfig.category) {
-                                     return lot.quantity * convertValue(productConfig.packageSize, product.unit, baseProductConfig.unit, product.category);
+                                    const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category;
+                                    const valueOfOnePackageInBase = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
+                                    valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                                } else if (productConfig.category === baseProductConfig.category) {
+                                    const valueOfOnePackageInBase = convertValue(productConfig.packageSize, product.unit, baseProductConfig.unit, productConfig.category);
+                                    valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                                } else {
+                                  throw new Error("Conversion not possible");
                                 }
-                             } catch { /* empty */ }
-                             return -1; // Flag for non-convertible
-                         });
-                     })
-                 );
-                 
-                 const totalConverted = lotTotalValues.reduce((sum, val) => sum + (val >= 0 ? val : 0), 0);
-
-                 if (lotTotalValues.some(v => v === -1)) {
-                     displayUnit = "pacotes";
-                     totalGroupQuantity = baseGroup.brands.reduce((total, brand) => 
-                         total + brand.products.reduce((prodTotal, prod) => 
-                             prodTotal + prod.lots.reduce((lotTotal, lot) => lotTotal + lot.quantity, 0), 0), 0);
-                 } else {
-                     totalGroupQuantity = totalConverted;
-                 }
-             } else {
-                  totalGroupQuantity = baseGroup.brands.reduce((brandAcc, brand) => 
-                     brandAcc + brand.products.reduce((prodAcc, prod) => 
-                         prodAcc + prod.lots.reduce((lotAcc, lot) => lotAcc + lot.quantity, 0)
-                     , 0)
-                 , 0);
-             }
+                                totalConverted += valueInBaseUnit;
+                            } catch {
+                                conversionPossible = false;
+                            }
+                         }
+                     });
+                 });
+             });
              
-             const displayQuantity = totalGroupQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 });
+             const displayTotalConverted = conversionPossible ? `${totalConverted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${baseProductConfig?.unit}` : '';
+             const displayTotalPackages = `${totalPackages} unid.`;
 
              return (
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
                      <div className="flex items-baseline justify-between border-b pb-2">
                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
-                         <span className="text-sm font-semibold text-muted-foreground">{displayQuantity} {displayUnit}</span>
+                         <div className="text-right">
+                           {conversionPossible && <span className="text-lg font-semibold text-primary">{displayTotalConverted}</span>}
+                           <span className="text-sm font-semibold text-muted-foreground"> / {displayTotalPackages}</span>
+                         </div>
                      </div>
                      <div className="space-y-4">
                         {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(productGroup => (
