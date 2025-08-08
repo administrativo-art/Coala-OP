@@ -28,6 +28,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 
 const BarcodeScannerModal = dynamic(
@@ -125,6 +126,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const enableLogisticsWatch = form.watch('enableLogistics');
     const enableSecondaryUnitWatch = form.watch('enableSecondaryUnit');
     const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
+    const baseProductIdWatch = form.watch('baseProductId');
 
     useEffect(() => {
         if (open) {
@@ -297,6 +299,15 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             default: return categoryWatch;
         }
     }, [categoryWatch]);
+    
+    const showCategoryMismatchWarning = useMemo(() => {
+        if (!baseProductIdWatch) return false;
+        const baseProduct = baseProducts.find(bp => bp.id === baseProductIdWatch);
+        if (!baseProduct) return false;
+        
+        return baseProduct.category !== categoryWatch && !enableSecondaryUnitWatch;
+    }, [baseProductIdWatch, categoryWatch, enableSecondaryUnitWatch, baseProducts]);
+
 
     return (
         <>
@@ -447,6 +458,15 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     </FormItem>
                                 )}/>
                                 
+                                {showCategoryMismatchWarning && (
+                                     <Alert variant="destructive">
+                                        <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
+                                        <AlertDescription>
+                                            A categoria deste insumo é diferente da categoria do produto base. Para que a conversão funcione, você <b>precisa</b> habilitar e preencher a "Qtd por Embalagem (Opcional)".
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+
                                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                             </div>
                         </ScrollArea>

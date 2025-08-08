@@ -132,17 +132,25 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     setIsProcessing(false);
   };
   
-  const formatQuantity = (quantity: number, product: any) => {
+  const formatQuantity = (quantity: number, product: any): string => {
     if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
         const boxes = Math.floor(quantity / product.multiplo_caixa);
         const units = quantity % product.multiplo_caixa;
         let result = '';
-        if (boxes > 0) result += `${boxes} ${product.rotulo_caixa}(s) `;
-        if (units > 0) result += `+ ${units} un`;
-        return result.trim().replace(/^\+/, '').trim();
+        if (boxes > 0) result += `${boxes} ${product.rotulo_caixa}(s)`;
+        if (units > 0) result += `${result ? ' + ' : ''}${units} un`;
+        return result.trim() || `${quantity} un`;
     }
     return `${quantity} un`;
   };
+  
+  const formatAvailableStock = (quantity: number, product: any): string => {
+      if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
+        const boxes = Math.floor(quantity / product.multiplo_caixa);
+        return `${quantity} un (${boxes} ${product.rotulo_caixa}(s))`;
+    }
+    return `${quantity} un`;
+  }
 
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
@@ -169,19 +177,30 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                         <div>
                           <p className="font-semibold">{getProductFullName(product)}</p>
                           <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'}</p>
-                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatQuantity(lot.quantity, product)}</p>
+                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatAvailableStock(lot.quantity, product)}</p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground"/>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.quantity`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl><Input type="number" {...field} max={lot.quantity} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <div className="space-y-1">
+                            <Label htmlFor={`items.${index}.quantity`} className="text-xs">Qtd. a Mover</Label>
+                             <FormField
+                              control={form.control}
+                              name={`items.${index}.quantity`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input 
+                                        id={`items.${index}.quantity`} 
+                                        type="number" {...field} 
+                                        max={lot.quantity} 
+                                        className="bg-background"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <p className="text-xs text-center text-primary font-medium">{formatQuantity(watchedItems[index]?.quantity, product)}</p>
+                        </div>
                         <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
                       </div>
                     );
@@ -212,7 +231,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
             <DialogFooter className="pt-4 border-t flex-col sm:flex-row sm:justify-between items-center shrink-0">
                 <div className="text-sm font-semibold">
                     Total a ser movido:
-                    <span className="text-primary ml-2">{totalSuggestedInBaseUnit.toLocaleString()} / {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}</span>
+                    <span className="text-primary ml-2">{totalSuggestedInBaseUnit.toLocaleString(undefined, { maximumFractionDigits: 2 })} / {suggestionResult.restockNeeded.toLocaleString()} {suggestionResult.baseProduct.unit}</span>
                 </div>
                 <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

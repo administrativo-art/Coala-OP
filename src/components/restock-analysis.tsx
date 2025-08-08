@@ -136,13 +136,12 @@ function AnalysisTab() {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category; // Simple fallback
-                 if (secondaryUnitCategory === baseProduct.category) {
-                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
-                 } else {
-                    throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                 if (secondaryUnitCategory !== baseProduct.category) {
+                     throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
                  }
+                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else {
                 throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
             }
