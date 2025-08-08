@@ -10,12 +10,13 @@ import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, ArrowRight } from 'lucide-react';
 import { convertValue } from '@/lib/conversion';
+import { Label } from '@/components/ui/label';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -147,9 +148,9 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
   const formatAvailableStock = (quantity: number, product: any): string => {
       if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
         const boxes = Math.floor(quantity / product.multiplo_caixa);
-        return `${quantity} un (${boxes} ${product.rotulo_caixa}(s))`;
+        return `${quantity} unidades (${boxes} ${product.rotulo_caixa}(s))`;
     }
-    return `${quantity} un`;
+    return `${quantity} unidades`;
   }
 
   return (
@@ -177,7 +178,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                         <div>
                           <p className="font-semibold">{getProductFullName(product)}</p>
                           <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'}</p>
-                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatAvailableStock(lot.quantity, product)}</p>
+                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatAvailableStock(lot.quantity - (lot.reservedQuantity || 0), product)}</p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground"/>
                         <div className="space-y-1">
