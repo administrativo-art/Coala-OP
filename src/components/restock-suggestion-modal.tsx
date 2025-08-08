@@ -75,7 +75,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
   const availableLotsToAdd = useMemo(() => {
     const selectedLotIds = new Set(fields.map(f => f.lotId));
     return matrizLots.filter(l => !selectedLotIds.has(l.id) && l.quantity > 0)
-        .sort((a,b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
+        .sort((a,b) => (a.expiryDate && b.expiryDate) ? new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime() : 0);
   }, [matrizLots, fields]);
 
   const watchedItems = form.watch('items');
@@ -93,6 +93,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         try {
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                 const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                if (secondaryUnitCategory !== suggestionResult.baseProduct.category) return total;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
                 return total + (quantityToMove * valueOfOnePackageInBase);
             } 

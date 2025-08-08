@@ -93,7 +93,7 @@ function AnalysisTab() {
     
     await createRepositionActivity({
         kioskOriginId: 'matriz',
-        kioskOriginName: 'Centro de distribuição',
+        kioskOriginName: 'Centro de distribuição - Matriz',
         kioskDestinationId: destinationKiosk.id,
         kioskDestinationName: destinationKiosk.name,
         items: stagedItems,
@@ -136,8 +136,7 @@ function AnalysisTab() {
                 const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
-            } 
-            else if (product.category === baseProduct.category) {
+            } else if (product.category === baseProduct.category) {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else {
@@ -176,7 +175,7 @@ function AnalysisTab() {
                     const availableQty = lot.quantity - (lot.reservedQuantity || 0);
                     return p?.baseProductId === baseProduct.id && availableQty > 0;
                 })
-                .sort((a,b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
+                .sort((a,b) => (a.expiryDate && b.expiryDate) ? new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime() : 0);
             
             let needed = restockNeeded;
             const suggestionList: SuggestedLot[] = [];
@@ -190,6 +189,7 @@ function AnalysisTab() {
                 try {
                      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                         const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                         if (secondaryUnitCategory !== baseProduct.category) continue;
                         lotPackageSizeInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                     } else if (product.category === baseProduct.category) {
                         lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
