@@ -243,6 +243,25 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const onSubmit = (values: ProductFormValues) => {
+        // Validation Trava 1
+        if (values.baseProductId) {
+            const baseProduct = baseProducts.find(bp => bp.id === values.baseProductId);
+            if (baseProduct) {
+                const insumoCategory = values.category;
+                const baseProductCategory = baseProduct.category;
+
+                if (insumoCategory !== baseProductCategory && !values.enableSecondaryUnit) {
+                    toast({
+                        variant: "destructive",
+                        title: "Vínculo Inválido",
+                        description: `A categoria do insumo (${insumoCategory}) é diferente da do produto base (${baseProductCategory}). Ative e preencha a "Qtd por Embalagem (Opcional)" para criar a regra de conversão.`,
+                        duration: 8000,
+                    });
+                    return; // Stop submission
+                }
+            }
+        }
+
         const productData: Omit<Product, 'id'> = {
             baseName: values.baseName,
             brand: values.brand,
