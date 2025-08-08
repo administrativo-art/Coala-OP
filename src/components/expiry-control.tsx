@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -329,55 +329,57 @@ function ExpiryControlContent() {
     return (
       <div className="space-y-6">
          {groupedData.map(baseGroup => {
-             const baseProductConfig = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
-             let totalPackages = 0;
-             let totalConverted = 0;
-             let conversionPossible = baseGroup.isBaseProduct;
+              let totalPackages = 0;
+              let totalConverted = 0;
+              let referenceUnit = '';
+              let conversionPossible = true;
 
-             baseGroup.brands.forEach(brand => {
-                 brand.products.forEach(prodGroup => {
-                     prodGroup.lots.forEach(lot => {
-                         totalPackages += lot.quantity;
-                         if (conversionPossible && baseProductConfig) {
-                            try {
-                                const productConfig = prodGroup.product;
-                                let valueInBaseUnit = 0;
+              baseGroup.brands.forEach(brand => {
+                brand.products.forEach(prodGroup => {
+                  prodGroup.lots.forEach(lot => {
+                    totalPackages += lot.quantity;
+                    const productConfig = prodGroup.product;
+                    let lotTotalValue = 0;
+                    let lotTotalUnit = '';
 
-                                // Prioritize secondary unit for conversion
-                                if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
-                                    const secondaryUnitCategory = productConfig.category === 'Unidade' ? 'Massa' : productConfig.category;
-                                    const valueOfOnePackageInBase = convertValue(productConfig.secondaryUnitValue, productConfig.secondaryUnit, baseProductConfig.unit, secondaryUnitCategory);
-                                    valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                                } 
-                                // Fallback to standard conversion if categories match
-                                else if (productConfig.category === baseProductConfig.category) {
-                                     const valueOfOnePackageInBase = convertValue(productConfig.packageSize, productConfig.unit, baseProductConfig.unit, productConfig.category);
-                                     valueInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                                } else {
-                                  // If categories don't match and there's no secondary unit, conversion is not possible
-                                  throw new Error("Cannot convert between different categories without a secondary unit definition.");
-                                }
-                                totalConverted += valueInBaseUnit;
-                            } catch (e) {
-                                console.warn(`Could not convert ${prodGroup.product.baseName} for total calculation.`, e);
-                                conversionPossible = false;
-                            }
-                         }
-                     });
-                 });
-             });
+                    if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
+                        lotTotalValue = lot.quantity * productConfig.secondaryUnitValue;
+                        lotTotalUnit = productConfig.secondaryUnit;
+                    } else {
+                        lotTotalValue = lot.quantity * productConfig.packageSize;
+                        lotTotalUnit = productConfig.unit;
+                    }
+
+                    if (!referenceUnit) {
+                        referenceUnit = lotTotalUnit;
+                    }
+                    
+                    if (conversionPossible) {
+                        try {
+                           const converted = convertValue(lotTotalValue, lotTotalUnit, referenceUnit, productConfig.category);
+                           totalConverted += converted;
+                        } catch (e) {
+                           conversionPossible = false;
+                           console.warn("Could not perform summary conversion for", baseGroup.name, e);
+                        }
+                    }
+                  });
+                });
+              });
+
+             const displayTotalConverted = conversionPossible ? `${totalConverted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${referenceUnit}` : 'Conversão Indisponível';
              
-             const displayTotalConverted = conversionPossible ? `${totalConverted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${baseProductConfig?.unit}` : '';
-             const displayTotalPackages = `${totalPackages} unid.`;
-
              return (
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
                      <div className="flex items-baseline justify-between border-b pb-2">
                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
-                         <div className="text-right">
-                           {conversionPossible && <span className="text-lg font-semibold text-primary">{displayTotalConverted}</span>}
-                           <span className="text-sm font-semibold text-muted-foreground"> / {displayTotalPackages}</span>
-                         </div>
+                         {totalPackages > 0 && (
+                            <div className="flex items-center gap-2 text-sm sm:text-base">
+                              <span className="font-semibold text-primary">{displayTotalConverted}</span>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
+                              <Badge variant="secondary" className="px-3 py-1 text-sm">{totalPackages} pacotes/unidade</Badge>
+                            </div>
+                         )}
                      </div>
                      <div className="space-y-4">
                         {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(productGroup => (
@@ -588,4 +590,3 @@ export function ExpiryControl() {
         </Suspense>
     );
 }
-
