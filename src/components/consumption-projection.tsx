@@ -22,7 +22,7 @@ interface ProjectionResult {
     productName: string;
     daysRemaining: number;
     projectedConsumption: number;
-    status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry';
+    status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry' | 'conversion_error';
     projectedConsumptionDate: Date | null;
     expiryDate: Date | null;
 }
@@ -103,35 +103,43 @@ export function ConsumptionProjection() {
                 };
             }
             
-            const daysRemaining = Math.max(0, differenceInDays(expiryDate, new Date()));
-            const projectedConsumption = dailyAvg * daysRemaining;
-            
             let lotQtyInBaseUnit = 0;
             try {
-                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
-                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                } else if (product.category === baseProduct.category) {
+                if (product.category === baseProduct.category) {
                     const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                    if (secondaryUnitCategory !== baseProduct.category) {
+                         throw new Error('Incompatible secondary unit category');
+                    }
+                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
                 } else {
-                    return null;
+                    throw new Error('Incompatible categories without secondary unit');
                 }
             } catch (err) {
                  console.error("Error converting lot quantity for projection:", err);
-                 return null;
+                 return {
+                    lot,
+                    productName: getProductFullName(product),
+                    daysRemaining: 0,
+                    projectedConsumption: 0,
+                    status: 'conversion_error',
+                    projectedConsumptionDate: null,
+                    expiryDate
+                };
             }
             
             const daysToConsume = lotQtyInBaseUnit > 0 && dailyAvg > 0 ? lotQtyInBaseUnit / dailyAvg : Infinity;
             const projectedConsumptionDate = isFinite(daysToConsume) ? addDays(new Date(), daysToConsume) : null;
-            const status = projectedConsumption >= lotQtyInBaseUnit ? 'ok' : 'at_risk';
+            const status = (projectedConsumptionDate && projectedConsumptionDate < expiryDate) ? 'ok' : 'at_risk';
             
             return {
                 lot,
                 productName: getProductFullName(product),
-                daysRemaining,
-                projectedConsumption,
+                daysRemaining: differenceInDays(expiryDate, new Date()),
+                projectedConsumption: 0, // This KPI was not clearly defined, removing for now
                 status,
                 projectedConsumptionDate,
                 expiryDate
@@ -155,6 +163,8 @@ export function ConsumptionProjection() {
                 return <Badge variant="outline">Sem dados de consumo</Badge>;
              case 'no_expiry':
                 return <Badge variant="secondary">Validade indefinida</Badge>;
+             case 'conversion_error':
+                return <Badge variant="destructive">Erro de conversão</Badge>;
         }
     };
     

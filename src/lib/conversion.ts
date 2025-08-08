@@ -24,6 +24,7 @@ export const getUnitsForCategory = (category: UnitCategory): string[] => {
 export { unitCategories };
 
 export function convertValue(value: number, fromUnit: string, toUnit: string, category: UnitCategory): number {
+  if (value === 0) return 0;
   if (!value || !fromUnit || !toUnit || !category) return 0;
   
   if (fromUnit.toLowerCase() === toUnit.toLowerCase()) {
@@ -32,8 +33,7 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
 
   const categoryUnits = units[category];
   if (!categoryUnits) {
-    console.error(`Invalid category provided: ${category}`);
-    return 0;
+    throw new Error(`Categoria inválida fornecida: ${category}`);
   }
 
   const findUnitKey = (unit: string) => {
@@ -49,8 +49,7 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
   const toUnitKey = findUnitKey(toUnit);
 
   if (!fromUnitKey || !toUnitKey) {
-    console.error(`Invalid unit provided for category ${category}. From: ${fromUnit}, To: ${toUnit}`);
-    return 0;
+    throw new Error(`Unidade inválida para a categoria ${category}. De: ${fromUnit}, Para: ${toUnit}`);
   }
   
   const valueInBaseUnit = value * categoryUnits[fromUnitKey];

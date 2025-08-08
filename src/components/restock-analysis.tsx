@@ -132,13 +132,17 @@ function AnalysisTab() {
             let valueInBaseUnit = 0;
             const quantityInPackages = lot.quantity;
 
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
-                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
-            } else if (product.category === baseProduct.category) {
+            if (product.category === baseProduct.category) {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+            } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category; // Simple fallback
+                 if (secondaryUnitCategory === baseProduct.category) {
+                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+                 } else {
+                    throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
+                 }
             } else {
                 throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
             }
@@ -187,12 +191,12 @@ function AnalysisTab() {
                 const availableQty = lot.quantity - (lot.reservedQuantity || 0);
 
                 try {
-                     if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                     if (product.category === baseProduct.category) {
+                        lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                         const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
                          if (secondaryUnitCategory !== baseProduct.category) continue;
                         lotPackageSizeInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    } else if (product.category === baseProduct.category) {
-                        lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     } else {
                         continue;
                     }
