@@ -287,7 +287,7 @@ export function LotCard({
                     </Popover>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
+                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</p>
                     {product.secondaryUnit && product.secondaryUnitValue && (
                         <p><strong>Qtd por embalagem:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
                     )}
