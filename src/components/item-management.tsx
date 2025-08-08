@@ -208,7 +208,11 @@ export function ItemManagement() {
                                             <span className="text-muted-foreground">-</span>
                                         )}
                                     </TableCell>
-                                    <TableCell>{product.packageSize}{product.unit}</TableCell>
+                                    <TableCell>
+                                        {product.packageSize}
+                                        {product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}
+                                        {product.unit}
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
