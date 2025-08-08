@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useContext } from 'react';
@@ -11,3 +12,4 @@ export const useProducts = (): ProductsContextType => {
   }
   return context;
 };
+

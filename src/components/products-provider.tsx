@@ -152,7 +152,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   
   const getProductFullName = useCallback((product: Product | null | undefined) => {
     if (!product) return '';
-    const sizePart = (product.packageSize && product.unit) ? ` ${product.packageSize}${product.unit}` : '';
+    const space = product.unit?.toLowerCase() === 'pacote' ? ' ' : '';
+    const sizePart = (product.packageSize && product.unit) ? ` ${product.packageSize}${space}${product.unit}` : '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
     return `${product.baseName}${sizePart}${brandPart}`;
   }, []);
