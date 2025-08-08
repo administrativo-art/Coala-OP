@@ -19,13 +19,15 @@ import { fetchProductInfo } from '@/ai/flows/fetch-product-info-flow';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Camera, Trash2, Upload, Info, Settings, Search, Loader2 } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from './ui/separator';
+import { Switch } from './ui/switch';
+import { cn } from '@/lib/utils';
 
 
 const BarcodeScannerModal = dynamic(
@@ -46,15 +48,45 @@ const productFormSchema = z.object({
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
-  secondaryUnitValue: z.coerce.number().optional(),
-  secondaryUnit: z.string().optional(),
   notes: z.string().optional(),
-  countingInstruction: z.string().optional(),
-  countingInstructionImageUrl: z.string().optional(),
   baseProductId: z.string().optional(),
+
+  // Conditional sections
+  enableLogistics: z.boolean().optional(),
   multiplo_caixa: z.coerce.number().optional(),
   rotulo_caixa: z.string().optional(),
+
+  enableSecondaryUnit: z.boolean().optional(),
+  secondaryUnitValue: z.coerce.number().optional(),
+  secondaryUnit: z.string().optional(),
+  
+  enableCountingInstruction: z.boolean().optional(),
+  countingInstruction: z.string().optional(),
+  countingInstructionImageUrl: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.enableLogistics) {
+        if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
+            ctx.addIssue({ path: ['multiplo_caixa'], message: 'Deve ser > 0.' });
+        }
+        if (!data.rotulo_caixa || data.rotulo_caixa.trim() === '') {
+            ctx.addIssue({ path: ['rotulo_caixa'], message: 'Obrigatório.' });
+        }
+    }
+    if (data.enableSecondaryUnit) {
+        if (!data.secondaryUnitValue || data.secondaryUnitValue <= 0) {
+            ctx.addIssue({ path: ['secondaryUnitValue'], message: 'Deve ser > 0.' });
+        }
+        if (!data.secondaryUnit) {
+            ctx.addIssue({ path: ['secondaryUnit'], message: 'Obrigatório.' });
+        }
+    }
+    if (data.enableCountingInstruction) {
+        if (!data.countingInstruction && !data.countingInstructionImageUrl) {
+            ctx.addIssue({ path: ['countingInstruction'], message: 'Adicione um texto ou uma imagem.' });
+        }
+    }
 });
+
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
 
@@ -82,14 +114,18 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
-            secondaryUnitValue: undefined, secondaryUnit: 'g',
-            notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: '',
-            multiplo_caixa: undefined, rotulo_caixa: ''
+            notes: '', baseProductId: '',
+            enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
+            enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
+            enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
         }
     });
     
     const categoryWatch = form.watch('category');
-    
+    const enableLogisticsWatch = form.watch('enableLogistics');
+    const enableSecondaryUnitWatch = form.watch('enableSecondaryUnit');
+    const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
+
     useEffect(() => {
         if (open) {
             if (productToEdit) {
@@ -101,29 +137,35 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     category: productToEdit.category,
                     packageSize: productToEdit.packageSize,
                     unit: productToEdit.unit,
-                    secondaryUnitValue: productToEdit.secondaryUnitValue,
-                    secondaryUnit: productToEdit.secondaryUnit || 'g',
                     notes: productToEdit.notes || '',
-                    countingInstruction: productToEdit.countingInstruction || '',
-                    countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
                     baseProductId: productToEdit.baseProductId || '',
+                    // Switches
+                    enableLogistics: !!productToEdit.multiplo_caixa,
                     multiplo_caixa: productToEdit.multiplo_caixa || undefined,
                     rotulo_caixa: productToEdit.rotulo_caixa || '',
+                    
+                    enableSecondaryUnit: !!productToEdit.secondaryUnitValue,
+                    secondaryUnitValue: productToEdit.secondaryUnitValue,
+                    secondaryUnit: productToEdit.secondaryUnit || 'g',
+
+                    enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
+                    countingInstruction: productToEdit.countingInstruction || '',
+                    countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
                 });
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
-                    secondaryUnitValue: undefined, secondaryUnit: 'g',
-                    notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: '',
-                    multiplo_caixa: undefined, rotulo_caixa: '',
+                    notes: '', baseProductId: '',
+                    enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
+                    enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
+                    enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
                 });
             }
         }
     }, [open, productToEdit, form]);
     
     useEffect(() => {
-        // Only update the unit if the category has changed and it's a new product form.
         if (form.formState.isDirty && !productToEdit) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
         }
@@ -201,7 +243,27 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const onSubmit = (values: ProductFormValues) => {
-        const productData = { ...values };
+        const productData: Omit<Product, 'id'> = {
+            baseName: values.baseName,
+            brand: values.brand,
+            barcode: values.barcode,
+            imageUrl: values.imageUrl,
+            category: values.category,
+            packageSize: values.packageSize,
+            unit: values.unit,
+            notes: values.notes,
+            baseProductId: values.baseProductId,
+            
+            multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
+            rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
+            
+            secondaryUnitValue: values.enableSecondaryUnit ? values.secondaryUnitValue : undefined,
+            secondaryUnit: values.enableSecondaryUnit ? values.secondaryUnit : undefined,
+            
+            countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
+            countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
+        };
+
         if (productToEdit) {
             updateProduct({ ...productToEdit, ...productData });
         } else {
@@ -285,70 +347,66 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
                                 
-                                
-                                <Separator/>
-                                <div className="p-4 border rounded-lg bg-muted/30">
-                                    <h4 className="text-md font-medium mb-2">Detalhes logísticos (opcional)</h4>
-                                     <p className="text-sm text-muted-foreground mb-4">
-                                        Use esta seção para otimizar a separação no estoque, agrupando insumos em caixas ou fardos.
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                    </div>
-                                </div>
+                                <Separator />
 
-                                <div className="p-4 border rounded-lg bg-muted/30">
-                                    <h4 className="text-md font-medium mb-2">Qtd por Embalagem (opcional)</h4>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                        Use esta seção se o estoque geral (produto base) for controlado por uma unidade diferente da do insumo. Ex: um insumo em "unidades" controlado por "peso" no estoque geral.
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-4">
-                                            <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                            <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                {getUnitsForCategory(secondaryUnitCategory).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                                            </SelectContent>
-                                            </Select><FormMessage /></FormItem>)}/>
-                                    </div>
-                                </div>
-
-                                <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-                                    <h4 className="text-md font-medium">Instrução de contagem (opcional)</h4>
-                                    <FormField
-                                        control={form.control}
-                                        name="countingInstruction"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Texto da instrução</FormLabel>
-                                                <FormControl>
-                                                    <Textarea
-                                                        placeholder="Ex: Contar por peso na balança, contar apenas pacotes fechados..."
-                                                        {...field}
-                                                        value={field.value ?? ''}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <div className="space-y-2">
-                                        <FormLabel>Imagem de instrução (opcional)</FormLabel>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                                {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                                <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                                {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
-                                            </div>
+                                <FormField control={form.control} name="enableLogistics" render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                        <div className="space-y-0.5"><FormLabel>Detalhes Logísticos (Opcional)</FormLabel><FormDescription>Otimize a separação no estoque, agrupando em caixas ou fardos.</FormDescription></div>
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                    </FormItem>
+                                )} />
+                                {enableLogisticsWatch && (
+                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                         </div>
-                                        <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
-                                        <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     </div>
-                                </div>
+                                )}
+                                
+                                <FormField control={form.control} name="enableSecondaryUnit" render={({ field }) => (
+                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                        <div className="space-y-0.5"><FormLabel>Qtd por Embalagem (Opcional)</FormLabel><FormDescription>Use se o estoque geral for controlado por uma unidade diferente.</FormDescription></div>
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                    </FormItem>
+                                )} />
+                                {enableSecondaryUnitWatch && (
+                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(secondaryUnitCategory).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
+                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                        <div className="space-y-0.5"><FormLabel>Instrução de Contagem (Opcional)</FormLabel><FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription></div>
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                    </FormItem>
+                                )} />
+                                {enableCountingInstructionWatch && (
+                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                        <FormField control={form.control} name="countingInstruction" render={({ field }) => (<FormItem><FormLabel>Texto da instrução</FormLabel><FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <div className="space-y-2">
+                                            <FormLabel>Imagem de instrução (opcional)</FormLabel>
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                                    {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                                </div>
+                                                <div className="flex flex-col gap-2">
+                                                    <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                    <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                    {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                                </div>
+                                            </div>
+                                            <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
+                                            <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <Separator />
 
                                 <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                     <FormItem>
