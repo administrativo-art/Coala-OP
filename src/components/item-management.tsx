@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -8,34 +7,60 @@ import Image from 'next/image';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { type Product } from '@/types';
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from './ui/checkbox';
 import { ScrollArea } from './ui/scroll-area';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { PlusCircle, Edit, Trash2, Archive, Settings, Box } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox } from 'lucide-react';
 import { ArchivedProductsModal } from './archived-products-modal';
 import { AddEditProductModal } from './add-edit-product-modal';
-import { BaseProductManagement } from './base-product-management';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Input } from './ui/input';
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Badge } from './ui/badge';
+
 
 export function ItemManagement() {
   const { products, loading: productsLoading, getProductFullName, updateProduct, deleteMultipleProducts } = useProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { lists, loading: listsLoading } = usePredefinedLists();
 
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBaseProductModalOpen, setIsBaseProductModalOpen] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
+
+  const baseProductMap = useMemo(() => {
+    return new Map(baseProducts.map(bp => [bp.id, bp.name]));
+  }, [baseProducts]);
+
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
+
+  const filteredProducts = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    if (!searchLower) return activeProducts;
+
+    return activeProducts.filter(p => {
+        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.toLowerCase() : '';
+        return getProductFullName(p).toLowerCase().includes(searchLower) ||
+               (p.barcode && p.barcode.includes(searchLower)) ||
+               (baseProductName && baseProductName.includes(searchLower));
+    });
+  }, [activeProducts, searchTerm, getProductFullName, baseProductMap]);
+
 
   const handleEdit = (product: Product) => {
     setProductToEdit(product);
@@ -54,18 +79,7 @@ export function ItemManagement() {
           alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
           return;
       }
-      setProductToDelete(product);
-  };
-  
-  const handleDeleteConfirm = async () => {
-      if (productToDelete) {
-          setIsDeleting(true);
-          try { 
-            const productRef = products.find(p => p.id === productToDelete.id);
-            if(productRef) await deleteMultipleProducts([productRef.id]); 
-          } 
-          finally { setIsDeleting(false); setProductToDelete(null); }
-      }
+      setProductsToDelete([product]);
   };
   
   const handleArchiveClick = (product: Product) => {
@@ -86,10 +100,8 @@ export function ItemManagement() {
     });
   };
 
-  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
-
   const handleSelectAllChange = (isSelected: boolean) => {
-      setSelectedProducts(isSelected ? new Set(activeProducts.map(p => p.id)) : new Set());
+      setSelectedProducts(isSelected ? new Set(filteredProducts.map(p => p.id)) : new Set());
   };
 
   const handleDeleteSelectedClick = () => {
@@ -109,84 +121,133 @@ export function ItemManagement() {
       }
   };
 
-  const allProductsSelected = activeProducts.length > 0 && selectedProducts.size === activeProducts.length;
+  const allFilteredProductsSelected = filteredProducts.length > 0 && selectedProducts.size === filteredProducts.length;
 
   return (
     <>
       <Card>
         <CardHeader>
           <CardTitle>Insumos cadastrados</CardTitle>
-          <CardDescription>Adicione insumos e agrupe-os em "produtos base" para gerenciar o estoque.</CardDescription>
+          <CardDescription>Adicione, edite e agrupe os insumos (itens físicos) que compõem seu estoque.</CardDescription>
         </CardHeader>
-        <CardContent className="p-6 space-y-6">
-            <div className="flex gap-2">
-              <Button onClick={handleAddNewClick} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo insumo
-              </Button>
-              <Button variant="outline" onClick={() => setIsBaseProductModalOpen(true)} className="w-full">
-                <Box className="mr-2 h-4 w-4" /> Gerenciar produto base
-              </Button>
-               <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)} className="w-full">
-                <Archive className="mr-2" /> Ver arquivados
-              </Button>
-            </div>
-
-            <div className="flex flex-col flex-1 overflow-hidden">
-                {activeProducts.length > 0 && (
-                <div className="flex items-center gap-3 px-3 py-2 mb-2 border rounded-md bg-muted/50">
-                    <Checkbox id="select-all-active-products" checked={allProductsSelected} onCheckedChange={(checked) => handleSelectAllChange(!!checked)} aria-label="Selecionar todos"/>
-                    <label htmlFor="select-all-active-products" className="text-sm font-medium leading-none cursor-pointer">Selecionar todos</label>
+        <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={handleAddNewClick} className="w-full sm:w-auto">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo
+                </Button>
+                <div className="relative flex-grow">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por insumo, marca, cód. de barras..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full"
+                    />
                 </div>
-                )}
-                <ScrollArea className="h-96 pr-4 -mr-4">
-                    <Accordion type="multiple" className="w-full space-y-2">
-                        {productsLoading || listsLoading || lotsLoading ? (
-                             [...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)
-                        ) : activeProducts.length > 0 ? activeProducts.map(product => (
-                        <AccordionItem value={product.id} key={product.id} className="border-none">
-                            <Card>
-                                <div className="flex items-center p-4">
-                                    <Checkbox
-                                        id={`active-product-${product.id}`}
-                                        checked={selectedProducts.has(product.id)}
-                                        onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
-                                    />
-                                    <AccordionTrigger className="p-0 pl-3 hover:no-underline rounded-lg w-full">
-                                        <div className="flex items-center gap-3 w-full">
-                                            {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />}
+            </div>
+             <div className="flex gap-2">
+                 <Button variant="outline" onClick={() => setIsBaseProductModalOpen(true)}>
+                    <Box className="mr-2 h-4 w-4" /> Gerenciar produto base
+                </Button>
+                <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)}>
+                    <Archive className="mr-2 h-4 w-4" /> Ver arquivados
+                </Button>
+            </div>
+            
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-10">
+                                <Checkbox 
+                                    checked={allFilteredProductsSelected} 
+                                    onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
+                                    aria-label="Selecionar todos"
+                                />
+                            </TableHead>
+                            <TableHead className="w-[40%]">Insumo</TableHead>
+                            <TableHead>Produto Base</TableHead>
+                            <TableHead>Embalagem</TableHead>
+                            <TableHead>Cód. Barras</TableHead>
+                            <TableHead className="w-16 text-right">Ações</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            [...Array(5)].map((_, i) => (
+                                <TableRow key={i}>
+                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                                </TableRow>
+                            ))
+                        ) : filteredProducts.length > 0 ? (
+                            filteredProducts.map(product => (
+                                <TableRow key={product.id}>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedProducts.has(product.id)}
+                                            onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-3">
+                                            {product.imageUrl ? (
+                                                <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                                    <Box className="h-5 w-5 text-muted-foreground" />
+                                                </div>
+                                            )}
                                             <span className="font-semibold">{getProductFullName(product)}</span>
                                         </div>
-                                    </AccordionTrigger>
-                                </div>
-                                <AccordionContent className="p-4 pt-0 text-sm text-muted-foreground">
-                                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit}</p>
-                                    <p><strong>Categoria:</strong> {product.category}</p>
-                                    <p><strong>Cód. barras:</strong> {product.barcode || 'N/A'}</p>
-                                    {product.notes && <p><strong>Notas:</strong> {product.notes}</p>}
-                                    <div className="flex items-center gap-1 mt-4 pt-4 border-t">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /> <span className="sr-only">Editar</span></Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /> <span className="sr-only">Arquivar</span></Button>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /> <span className="sr-only">Excluir</span></Button>
+                                    </TableCell>
+                                    <TableCell>
+                                        {product.baseProductId ? (
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
+                                        ) : (
+                                            <span className="text-muted-foreground">-</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{product.packageSize}{product.unit}</TableCell>
+                                    <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
+                                    <TableCell className="text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={() => handleArchiveClick(product)}><Archive className="mr-2 h-4 w-4" /> Arquivar</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Inbox className="h-10 w-10" />
+                                        <span>Nenhum insumo encontrado.</span>
                                     </div>
-                                </AccordionContent>
-                            </Card>
-                        </AccordionItem>
-                        )) : (
-                             <div className="text-center py-12 text-muted-foreground">
-                                <p>Nenhum insumo cadastrado.</p>
-                                <p className="text-sm">Clique em "Adicionar novo insumo" para começar.</p>
-                            </div>
+                                </TableCell>
+                            </TableRow>
                         )}
-                    </Accordion>
-                </ScrollArea>
-                {activeProducts.length > 0 && (
-                    <div className="pt-4 border-t mt-4 shrink-0 flex justify-start">
-                        <Button type="button" variant="destructive" onClick={handleDeleteSelectedClick} disabled={selectedProducts.size === 0}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
-                        </Button>
-                    </div>
-                )}
+                    </TableBody>
+                </Table>
             </div>
+            {selectedProducts.size > 0 && (
+                 <div className="pt-2">
+                    <Button variant="destructive" onClick={handleDeleteSelectedClick}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
+                    </Button>
+                </div>
+            )}
         </CardContent>
       </Card>
       
@@ -209,9 +270,16 @@ export function ItemManagement() {
             </div>
         </DialogContent>
       </Dialog>
-
-      {productToDelete && <DeleteConfirmationDialog open={!!productToDelete} isDeleting={isDeleting} onOpenChange={() => setProductToDelete(null)} onConfirm={handleDeleteConfirm} itemName={`o insumo "${getProductFullName(productToDelete)}"`} />}
-      {productsToDelete.length > 0 && <DeleteConfirmationDialog open={productsToDelete.length > 0} isDeleting={isDeleting} onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} onConfirm={handleDeleteMultipleConfirm} itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`} />}
+      
+      {productsToDelete.length > 0 && 
+        <DeleteConfirmationDialog 
+            open={productsToDelete.length > 0} 
+            isDeleting={isDeleting} 
+            onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} 
+            onConfirm={handleDeleteMultipleConfirm} 
+            itemName={productsToDelete.length > 1 ? `os ${productsToDelete.length} insumos selecionados` : `o insumo "${getProductFullName(productsToDelete[0])}"`}
+        />
+      }
     </>
   );
 }
