@@ -92,7 +92,7 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
         <DialogHeader>
           <DialogTitle>Registrar baixa do lote</DialogTitle>
           <DialogDescription>
-            Registrando baixa para {lot.productName} (lote: {lot.lotNumber}). Disponível: {lot.quantity}.
+            Registrando baixa para {lot.productName} (lote: {lot.lotNumber}). Disponível: {lot.quantity.toLocaleString('pt-BR')}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -277,7 +277,7 @@ export function LotCard({
                                     {productGroup.lots.slice(0, 4).map(lot => (
                                         <div key={lot.id} className="p-2 border rounded-md text-sm">
                                             <p className="font-semibold">Lote: {lot.lotNumber}</p>
-                                            <p className="text-muted-foreground">Qtd: {lot.quantity} | Val: {lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                            <p className="text-muted-foreground">Qtd: {lot.quantity.toLocaleString('pt-BR')} | Val: {lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
                                             <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}</p>
                                         </div>
                                     ))}
@@ -334,7 +334,7 @@ export function LotCard({
                         <div className="flex items-center gap-2">
                             {isRedundant ? (
                                 <div className="text-center p-2 rounded-md bg-background w-28">
-                                    <div className="text-2xl font-bold">{lot.quantity}</div>
+                                    <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
                                     <div className="text-xs text-muted-foreground">unidades</div>
                                 </div>
                             ) : (
@@ -344,7 +344,7 @@ export function LotCard({
                                     <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
                                 </div>
                                 <div className="text-center p-2 rounded-md bg-background w-24">
-                                    <div className="text-2xl font-bold">{lot.quantity}</div>
+                                    <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
                                     <div className="text-xs text-muted-foreground">pacotes</div>
                                 </div>
                                 </>

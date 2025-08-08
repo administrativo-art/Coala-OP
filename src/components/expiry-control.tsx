@@ -26,7 +26,7 @@ import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
-import { Badge } from './ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -330,9 +330,7 @@ function ExpiryControlContent() {
       <div className="space-y-6">
          {groupedData.map(baseGroup => {
               let totalPackages = 0;
-              let totalConverted = 0;
-              let referenceUnit = '';
-              let conversionPossible = true;
+              const convertedTotals: { [unit: string]: number } = {};
 
               baseGroup.brands.forEach(brand => {
                 brand.products.forEach(prodGroup => {
@@ -350,34 +348,55 @@ function ExpiryControlContent() {
                         lotTotalUnit = productConfig.unit;
                     }
 
-                    if (!referenceUnit) {
-                        referenceUnit = lotTotalUnit;
-                    }
-                    
-                    if (conversionPossible) {
-                        try {
-                           const converted = convertValue(lotTotalValue, lotTotalUnit, referenceUnit, productConfig.category);
-                           totalConverted += converted;
-                        } catch (e) {
-                           conversionPossible = false;
-                           console.warn("Could not perform summary conversion for", baseGroup.name, e);
+                    if (lotTotalValue > 0) {
+                        if (!convertedTotals[lotTotalUnit]) {
+                            convertedTotals[lotTotalUnit] = 0;
                         }
+                        convertedTotals[lotTotalUnit] += lotTotalValue;
                     }
                   });
                 });
               });
 
-             const displayTotalConverted = conversionPossible ? `${totalConverted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${referenceUnit}` : 'Conversão Indisponível';
-             
+              const firstUnit = Object.keys(convertedTotals)[0];
+              let totalConvertedDisplay = "Conversão Indisponível";
+
+              if (firstUnit) {
+                  const allInSameUnit = Object.keys(convertedTotals).length === 1;
+                  if (allInSameUnit) {
+                      totalConvertedDisplay = `${convertedTotals[firstUnit].toLocaleString('pt-BR')} ${firstUnit}`;
+                  } else {
+                       let sumInFirstUnit = 0;
+                       let possible = true;
+                       const baseProduct = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
+                       
+                       for (const unit in convertedTotals) {
+                           try {
+                               sumInFirstUnit += convertValue(convertedTotals[unit], unit, firstUnit, baseProduct!.category);
+                           } catch (e) {
+                               possible = false;
+                               break;
+                           }
+                       }
+                       if (possible) {
+                           totalConvertedDisplay = `${sumInFirstUnit.toLocaleString('pt-BR')} ${firstUnit}`;
+                       }
+                  }
+              } else if (totalPackages > 0) {
+                  totalConvertedDisplay = "0"; // Handle cases with packages but no convertible value
+              } else {
+                  totalConvertedDisplay = "0";
+              }
+
              return (
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
                      <div className="flex items-baseline justify-between border-b pb-2">
                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
                          {totalPackages > 0 && (
                             <div className="flex items-center gap-2 text-sm sm:text-base">
-                              <span className="font-semibold text-primary">{displayTotalConverted}</span>
+                              <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
                               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                              <Badge variant="secondary" className="px-3 py-1 text-sm">{totalPackages} pacotes/unidade</Badge>
+                              <Badge variant="secondary" className="px-3 py-1 text-sm">{totalPackages.toLocaleString('pt-BR')} pacotes/unidade</Badge>
                             </div>
                          )}
                      </div>

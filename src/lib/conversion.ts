@@ -60,17 +60,17 @@ export function convertValue(value: number, fromUnit: string, toUnit: string, ca
 }
 
 export function formatQuantity(quantity: number, unit: string): string {
-    if (unit.toLowerCase() === 'un' || unit.toLowerCase() === 'pacote(s)') {
-        return quantity.toLocaleString();
+    if (unit.toLowerCase() === 'un' || unit.toLowerCase() === 'pacote(s)' || unit.toLowerCase() === 'pacotes') {
+        return quantity.toLocaleString('pt-BR');
     }
     
     // Mostra decimais se não for um número inteiro
     if (quantity % 1 !== 0) {
-        return quantity.toLocaleString(undefined, {
+        return quantity.toLocaleString('pt-BR', {
             minimumFractionDigits: 1,
             maximumFractionDigits: 3
         });
     }
 
-    return quantity.toLocaleString();
+    return quantity.toLocaleString('pt-BR');
 }
