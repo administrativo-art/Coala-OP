@@ -24,6 +24,7 @@ import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Badge } from './ui/badge';
+import { BaseProductManagement } from './base-product-management';
 
 
 export function ItemManagement() {
