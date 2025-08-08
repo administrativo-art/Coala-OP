@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -76,7 +75,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
   const availableLotsToAdd = useMemo(() => {
     const selectedLotIds = new Set(fields.map(f => f.lotId));
     return matrizLots.filter(l => !selectedLotIds.has(l.id) && l.quantity > 0)
-        .sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+        .sort((a,b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
   }, [matrizLots, fields]);
 
   const watchedItems = form.watch('items');
@@ -131,6 +130,18 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     onStage(repositionItem);
     setIsProcessing(false);
   };
+  
+  const formatQuantity = (quantity: number, product: any) => {
+    if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
+        const boxes = Math.floor(quantity / product.multiplo_caixa);
+        const units = quantity % product.multiplo_caixa;
+        let result = '';
+        if (boxes > 0) result += `${boxes} ${product.rotulo_caixa}(s) `;
+        if (units > 0) result += `+ ${units} un`;
+        return result.trim().replace(/^\+/, '').trim();
+    }
+    return `${quantity} un`;
+  };
 
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
@@ -153,11 +164,11 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                     if (!product) return null;
                     
                     return (
-                      <div key={field.id} className="grid grid-cols-[1fr_auto_120px_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
+                      <div key={field.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
                         <div>
                           <p className="font-semibold">{getProductFullName(product)}</p>
-                          <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR})}</p>
-                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {lot.quantity} unid.</p>
+                          <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'}</p>
+                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatQuantity(lot.quantity, product)}</p>
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground"/>
                         <FormField

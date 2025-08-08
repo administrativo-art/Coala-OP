@@ -60,6 +60,8 @@ export type Product = {
   notes?: string;
   countingInstruction?: string;
   countingInstructionImageUrl?: string;
+  multiplo_caixa?: number;
+  rotulo_caixa?: string;
   pdfUnit?: string;
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days

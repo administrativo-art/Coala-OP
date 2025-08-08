@@ -52,6 +52,8 @@ const productFormSchema = z.object({
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
   baseProductId: z.string().optional(),
+  multiplo_caixa: z.coerce.number().optional(),
+  rotulo_caixa: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -81,7 +83,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             secondaryUnitValue: undefined, secondaryUnit: 'g',
-            notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: ''
+            notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: '',
+            multiplo_caixa: undefined, rotulo_caixa: ''
         }
     });
     
@@ -104,13 +107,16 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
                     baseProductId: productToEdit.baseProductId || '',
+                    multiplo_caixa: productToEdit.multiplo_caixa || undefined,
+                    rotulo_caixa: productToEdit.rotulo_caixa || '',
                 });
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     secondaryUnitValue: undefined, secondaryUnit: 'g',
-                    notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: ''
+                    notes: '', countingInstruction: '', countingInstructionImageUrl: '', baseProductId: '',
+                    multiplo_caixa: undefined, rotulo_caixa: '',
                 });
             }
         }
@@ -281,6 +287,17 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 
                                 <Separator/>
+                                <div className="p-4 border rounded-lg bg-muted/30">
+                                    <h4 className="text-md font-medium mb-2">Detalhes logísticos (opcional)</h4>
+                                     <p className="text-sm text-muted-foreground mb-4">
+                                        Use esta seção para otimizar a separação no estoque, agrupando insumos em caixas ou fardos.
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
+                                </div>
+
                                 <div className="p-4 border rounded-lg bg-muted/30">
                                     <h4 className="text-md font-medium mb-2">Qtd por Embalagem (opcional)</h4>
                                     <p className="text-sm text-muted-foreground mb-4">
