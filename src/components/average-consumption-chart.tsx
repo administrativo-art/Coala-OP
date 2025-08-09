@@ -344,4 +344,3 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
-
