@@ -63,6 +63,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     resolver: zodResolver(importSchema),
     defaultValues: {
         year: new Date().getFullYear().toString(),
+        month: '',
     }
   });
 
@@ -210,7 +211,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
   };
 
   const handleClose = () => {
-    form.reset();
+    form.reset({ year: new Date().getFullYear().toString(), month: '' });
     setValidationResult(null);
     onOpenChange(false);
   }
@@ -229,11 +230,16 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     return map;
   }, [validationResult]);
 
-  const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
+    const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
         const counts = new Map<string, number>();
         const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
         const dailyWorkers = new Map<string, Set<string>>();
         const { month, year } = form.getValues();
+        
+        if (!month || !year) {
+             return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+        }
+
         const monthDate = new Date(parseInt(year), parseInt(month) - 1);
         const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
         const previousScheduleMap = new Map<string, DailySchedule>();
@@ -285,7 +291,6 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
             users.forEach(user => {
                 let workedToday = false;
                 let isOnFolga = false;
-                let isAusente = false;
 
                 if (daySchedule) {
                     kiosks.forEach(kiosk => {
@@ -305,16 +310,12 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
                         if (folgaNames.includes(user.username)) {
                             isOnFolga = true;
                         }
-                        const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-                        if (ausencias.some(a => a.userId === user.id)) {
-                            isAusente = true;
-                        }
                     });
                 }
 
                 const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
                 
-                if (workedToday && !isOnFolga && !isAusente) {
+                if (workedToday && !isOnFolga) {
                     const newCount = yesterdayCount + 1;
                     counts.set(`${dayISO}-${user.id}`, newCount);
                     if (newCount > 6) {
