@@ -64,8 +64,8 @@ export default function RootLayout({
                 <CompanySettingsProvider>
                   <EntitiesProvider>
                     <BaseProductsProvider>
-                      <PurchaseProvider>
-                        <ProductsProvider>
+                      <ProductsProvider>
+                        <PurchaseProvider>
                           <ProductSimulationCategoryProvider>
                             <ProductSimulationProvider>
                               <ExpiryProductsProvider>
@@ -99,8 +99,8 @@ export default function RootLayout({
                               </ExpiryProductsProvider>
                             </ProductSimulationProvider>
                           </ProductSimulationCategoryProvider>
-                        </ProductsProvider>
-                      </PurchaseProvider>
+                        </PurchaseProvider>
+                      </ProductsProvider>
                     </BaseProductsProvider>
                   </EntitiesProvider>
                 </CompanySettingsProvider>
