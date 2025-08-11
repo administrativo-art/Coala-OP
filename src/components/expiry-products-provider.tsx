@@ -1,11 +1,11 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type LotEntry, type MovementRecord, type MovementType } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType, type User } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment } from 'firebase/firestore';
-import { useAuth } from '@/hooks/use-auth';
 
 export type MoveLotParams = {
   lotId: string;
@@ -14,8 +14,6 @@ export type MoveLotParams = {
   fromKioskId: string;
   fromKioskName: string;
   toKioskName: string;
-  movedByUserId: string;
-  movedByUsername: string;
   productName: string; // This should be the full formatted name
   lotNumber: string;
   productId: string;
@@ -31,19 +29,18 @@ export type ConsumeLotParams = {
 export interface ExpiryProductsContextType {
   lots: LotEntry[];
   loading: boolean;
-  addLot: (lot: Omit<LotEntry, 'id'>) => Promise<void>;
+  addLot: (lot: Omit<LotEntry, 'id'>, user: User) => Promise<void>;
   updateLot: (lot: Partial<LotEntry> & { id: string }) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
-  moveMultipleLots: (params: MoveLotParams[]) => Promise<void>;
-  consumeFromLot: (params: ConsumeLotParams) => Promise<void>;
-  adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }) => Promise<void>;
+  moveMultipleLots: (params: MoveLotParams[], user: User) => Promise<void>;
+  consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
+  adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
 
 export function ExpiryProductsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
   const [lots, setLots] = useState<LotEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +63,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     batch.set(movementHistoryRef, record);
   };
 
-  const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>) => {
+  const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>, user: User) => {
     if (!user) throw new Error("Usuário não autenticado");
 
     const batch = writeBatch(db);
@@ -133,7 +130,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     } catch (error) {
         console.error("Error adding lot:", error);
     }
-  }, [user]);
+  }, []);
   
   const updateLot = useCallback(async (updatedLot: Partial<LotEntry> & { id: string }) => {
     const lotRef = doc(db, "lots", updatedLot.id);
@@ -178,7 +175,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
- const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[]) => {
+ const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User) => {
     try {
       const destinationLotPromises = paramsArray.map(params => {
         const destQuery = query(
@@ -204,7 +201,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
           const sourceLotDocs = await Promise.all(sourceLotPromises);
 
           for (const [index, params] of paramsArray.entries()) {
-              const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName, movedByUserId, movedByUsername } = params;
+              const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName } = params;
               const sourceLotRef = doc(db, "lots", lotId);
               
               const sourceLotDoc = sourceLotDocs[index];
@@ -259,8 +256,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                   productName: productName,
                   lotNumber: lotNumber,
                   quantityChange: quantityToMove,
-                  userId: movedByUserId,
-                  username: movedByUsername,
+                  userId: user.id,
+                  username: user.username,
                   timestamp: now
               };
 
@@ -293,7 +290,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const consumeFromLot = useCallback(async (params: ConsumeLotParams) => {
+  const consumeFromLot = useCallback(async (params: ConsumeLotParams, user: User) => {
     if (!user) {
         throw new Error("Usuário de baixa não autenticado.");
     }
@@ -330,10 +327,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         transaction.set(movementRef, movementRecord);
         transaction.update(lotRef, { quantity: newQuantity });
     });
-  }, [user]);
+  }, []);
 
-  const adjustLotQuantity = useCallback(async (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }) => {
-    if (!user) {
+  const adjustLotQuantity = useCallback(async (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => {
+    if (!approvedBy) {
         throw new Error("Usuário de aprovação não autenticado.");
     }
     await runTransaction(db, async (transaction) => {
@@ -351,7 +348,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         if (difference === 0) return; // No change needed
 
         const movementType: MovementType = difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-        const movementNotes = `Ajuste de estoque aprovado por ${user.username}. Contado por ${countedBy.username}.`;
+        const movementNotes = `Ajuste de estoque aprovado por ${approvedBy.username}. Contado por ${countedBy.username}.`;
 
         const movementRecord: Omit<MovementRecord, 'id'> = {
             lotId: lotId,
@@ -361,8 +358,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             type: movementType,
             quantityChange: Math.abs(difference),
             fromKioskId: currentLot.kioskId,
-            userId: user.id,
-            username: user.username,
+            userId: approvedBy.id,
+            username: approvedBy.username,
             timestamp: new Date().toISOString(),
             notes: movementNotes,
         };
@@ -371,7 +368,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         transaction.set(movementRef, movementRecord);
         transaction.update(lotRef, { quantity: newQuantity });
     });
-}, [user]);
+}, []);
 
   const value: ExpiryProductsContextType = useMemo(() => ({
       lots,
@@ -387,5 +384,3 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-    

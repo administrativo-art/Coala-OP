@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
-import { type LotEntry, type Kiosk, type Product } from '@/types';
+import { type LotEntry, type Kiosk, type Product, type User } from '@/types';
 import { type MoveLotParams } from './expiry-products-provider';
 
 type MoveStockModalProps = {
@@ -21,7 +21,7 @@ type MoveStockModalProps = {
   onOpenChange: (open: boolean) => void;
   lotToMove: LotEntry;
   kiosks: Kiosk[];
-  onMoveConfirm: (params: MoveLotParams[]) => void;
+  onMoveConfirm: (params: MoveLotParams[], user: User) => void;
 };
 
 export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveConfirm }: MoveStockModalProps) {
@@ -60,12 +60,10 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
         fromKioskId: lotToMove.kioskId,
         fromKioskName: fromKioskName,
         toKioskName: toKioskName,
-        movedByUserId: user.id,
-        movedByUsername: user.username,
         productName: product ? getProductFullName(product) : lotToMove.productName,
         lotNumber: lotToMove.lotNumber,
     };
-    onMoveConfirm([params]);
+    onMoveConfirm([params], user);
     onOpenChange(false);
   };
   

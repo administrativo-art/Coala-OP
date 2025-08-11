@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -173,6 +174,7 @@ function AuditForm({
   onCancel: () => Promise<void>,
 }) {
   const { products, getProductFullName } = useProducts();
+  const { user } = useAuth();
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -208,6 +210,7 @@ function AuditForm({
   };
   
   const handleFinalizeClick = async () => {
+    if (!user) return;
     const isValid = await form.trigger();
     if (!isValid) {
       toast({
@@ -492,11 +495,11 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   }
 
   const handleFinalize = async (items: StockAuditItem[]) => {
-    if(!activeSession) return;
+    if(!activeSession || !user) return;
 
     for (const item of items) {
         if (item.systemQuantity !== item.countedQuantity) {
-            await adjustLotQuantity(item.lotId, item.countedQuantity, activeSession.auditedBy);
+            await adjustLotQuantity(item.lotId, item.countedQuantity, activeSession.auditedBy, user);
         }
     }
     

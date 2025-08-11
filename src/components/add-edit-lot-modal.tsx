@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StorageLocationManagementModal } from './storage-location-management-modal';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { useAuth } from '@/hooks/use-auth';
 
 
 const BarcodeScannerModal = dynamic(
@@ -49,7 +50,7 @@ type AddEditLotModalProps = {
   onOpenChange: (open: boolean) => void;
   lotToEdit: LotEntry | null;
   kiosks: Kiosk[];
-  addLot: (lot: Omit<LotEntry, 'id'>) => void;
+  addLot: (lot: Omit<LotEntry, 'id'>, user: any) => void;
   updateLot: (lot: LotEntry) => void;
   lots: LotEntry[];
 };
@@ -60,6 +61,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   const { products, getProductFullName, updateProduct } = useProducts();
   const { locations } = useLocations();
   const { baseProducts } = useBaseProducts();
+  const { user } = useAuth();
   const isEditing = !!lotToEdit;
   
   const [selectedBaseProductId, setSelectedBaseProductId] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   }, [lotToEdit, open, form, products]);
   
   const onSubmit = async (values: LotFormValues) => {
-    if (!selectedProduct) {
+    if (!selectedProduct || !user) {
         return;
     }
 
@@ -171,7 +173,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 locationName: location?.name || null,
                 locationCode: location?.code || null,
             };
-            await addLot(newLotData);
+            await addLot(newLotData, user);
         }
     
         onOpenChange(false);
