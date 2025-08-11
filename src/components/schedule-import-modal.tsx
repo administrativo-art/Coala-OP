@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Papa from 'papaparse';
-import { format, parse, parseISO, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+import { format, parse, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, subDays, getYear, getMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -18,7 +18,7 @@ import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { type DailySchedule } from '@/types';
+import { type DailySchedule, type Kiosk, type User, type AbsenceEntry } from '@/types';
 import { Loader2, Upload, FileDown, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { ScrollArea } from './ui/scroll-area';
@@ -40,8 +40,18 @@ type ValidationResult = {
   data: DailySchedule[];
 };
 
+const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
+    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
+    const byId = daySchedule[`${kiosk.id} ${turn}`];
+    if (byId !== undefined) return byId;
+    const byName = daySchedule[`${kiosk.name} ${turn}`];
+    if (byName !== undefined) return byName;
+    return turn === 'Ausencia' ? [] : '';
+};
+
+
 export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
-  const { createFullMonthSchedule, fetchSchedule } = useMonthlySchedule();
+  const { createFullMonthSchedule, fetchSchedule, previousMonthSchedule } = useMonthlySchedule();
   const { kiosks } = useKiosks();
   const { users } = useAuth();
   const { toast } = useToast();
@@ -219,6 +229,107 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     return map;
   }, [validationResult]);
 
+  const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
+        const counts = new Map<string, number>();
+        const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
+        const dailyWorkers = new Map<string, Set<string>>();
+        const { month, year } = form.getValues();
+        const monthDate = new Date(parseInt(year), parseInt(month) - 1);
+        const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
+        const previousScheduleMap = new Map<string, DailySchedule>();
+        previousMonthSchedule.forEach(daySchedule => {
+            previousScheduleMap.set(daySchedule.id, daySchedule);
+        });
+
+        if (users.length === 0 || kiosks.length === 0) {
+            return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+        }
+        
+        const initialCounts = new Map<string, number>();
+        const lastDayOfPrevMonth = endOfMonth(subMonths(monthDate, 1));
+        const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+        const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+
+        users.forEach(user => {
+            let workedLastDay = false;
+            if (lastDaySchedule) {
+                kiosks.forEach(kiosk => {
+                    ['T1', 'T2', 'T3'].forEach(turn => {
+                        const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if (shiftWorkers.includes(user.username)) {
+                            workedLastDay = true;
+                        }
+                    });
+                });
+            }
+            initialCounts.set(user.id, workedLastDay ? 1 : 0);
+        });
+
+        daysInMonth.forEach(day => {
+            const dayISO = format(day, 'yyyy-MM-dd');
+            const daySchedule = validationScheduleMap.get(dayISO);
+            const todaysAssignments = new Map<string, string>();
+            const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+            
+            const workersToday = new Set<string>();
+            if (daySchedule) {
+                kiosks.forEach(kiosk => {
+                    ['T1', 'T2', 'T3'].forEach(turn => {
+                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        shiftWorkers.forEach(name => workersToday.add(name));
+                    });
+                });
+            }
+            dailyWorkers.set(dayISO, workersToday);
+
+            users.forEach(user => {
+                let workedToday = false;
+                let isOnFolga = false;
+                let isAusente = false;
+
+                if (daySchedule) {
+                    kiosks.forEach(kiosk => {
+                        ['T1', 'T2', 'T3'].forEach(turn => {
+                            const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                            if (shiftWorkers.includes(user.username)) {
+                                workedToday = true;
+                                const key = `${dayISO}-${user.username}`;
+                                if (todaysAssignments.has(key)) {
+                                    warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
+                                } else {
+                                    todaysAssignments.set(key, kiosk.name);
+                                }
+                            }
+                        });
+                        const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
+                        if (folgaNames.includes(user.username)) {
+                            isOnFolga = true;
+                        }
+                        const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+                        if (ausencias.some(a => a.userId === user.id)) {
+                            isAusente = true;
+                        }
+                    });
+                }
+
+                const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
+                
+                if (workedToday && !isOnFolga && !isAusente) {
+                    const newCount = yesterdayCount + 1;
+                    counts.set(`${dayISO}-${user.id}`, newCount);
+                    if (newCount > 6) {
+                        warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+                    }
+                } else {
+                    counts.set(`${dayISO}-${user.id}`, 0);
+                }
+            });
+        });
+
+        return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+    }, [validationScheduleMap, users, kiosks, form, previousMonthSchedule]);
+
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
@@ -268,9 +379,9 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
                         onEditDay={() => {}}
                         canManage={false}
                         users={users}
-                        workDayCounts={new Map()}
-                        warnings={new Map()}
-                        todaysWorkersMap={new Map()}
+                        workDayCounts={workDayCounts}
+                        warnings={warnings}
+                        todaysWorkersMap={todaysWorkersMap}
                     />
                 </div>
               </>
