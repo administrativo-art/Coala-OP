@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useUsers } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { type DailySchedule } from '@/types';
 import { Loader2, Upload, FileDown, AlertTriangle } from 'lucide-react';
@@ -41,7 +41,7 @@ type ValidationResult = {
 export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
   const { createFullMonthSchedule, fetchSchedule } = useMonthlySchedule();
   const { kiosks } = useKiosks();
-  const { users } = useUsers();
+  const { users } = useAuth();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -282,10 +282,4 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
       </DialogContent>
     </Dialog>
   );
-}
-
-// Helper hook
-function useUsers() {
-  const { users } = useAuth();
-  return { users };
 }
