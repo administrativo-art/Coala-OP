@@ -535,5 +535,3 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     </>
   );
 }
-
-    
