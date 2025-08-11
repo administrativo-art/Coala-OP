@@ -29,7 +29,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } = usePurchase();
+    const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } from usePurchase();
     const { products, getProductFullName } = useProducts();
     const { toast } = useToast();
     
@@ -186,14 +186,22 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                         <Download className="h-5 w-5"/>
                                     </Button>
                                 )}
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="text-destructive hover:text-destructive shrink-0"
-                                    onClick={() => setIsDeleteConfirmOpen(true)}
-                                >
-                                    <Trash2 className="h-5 w-5" />
-                                </Button>
+                                <DeleteConfirmationDialog
+                                    open={isDeleteConfirmOpen}
+                                    onOpenChange={setIsDeleteConfirmOpen}
+                                    onConfirm={handleDeleteSession}
+                                    itemName={`a pesquisa "${session.description}"`}
+                                    description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta pesquisa serão perdidos."
+                                    triggerButton={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive shrink-0"
+                                        >
+                                            <Trash2 className="h-5 w-5" />
+                                        </Button>
+                                    }
+                                />
                             </div>
                         </div>
                     </CardHeader>
@@ -230,13 +238,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 </Card>
             </AccordionItem>
             </Accordion>
-            <DeleteConfirmationDialog 
-                open={isDeleteConfirmOpen}
-                onOpenChange={setIsDeleteConfirmOpen}
-                onConfirm={handleDeleteSession}
-                itemName={`a pesquisa "${session.description}"`}
-                description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta pesquisa serão perdidos."
-            />
             <DeleteConfirmationDialog
                 open={isConfirmModalOpen}
                 onOpenChange={setIsConfirmModalOpen}

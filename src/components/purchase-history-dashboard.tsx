@@ -183,9 +183,17 @@ function PriceHistoryList() {
                                         </TableCell>
                                         {canDeleteHistory && (
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setEntryToDelete(entry)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                <DeleteConfirmationDialog 
+                                                    open={false}
+                                                    onOpenChange={() => {}}
+                                                    onConfirm={handleDeleteConfirm}
+                                                    itemName={`o registro de preço de "${entry.productName}"`}
+                                                    triggerButton={
+                                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setEntryToDelete(entry)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    }
+                                                />
                                             </TableCell>
                                         )}
                                     </TableRow>
@@ -195,12 +203,6 @@ function PriceHistoryList() {
                     </div>
                 </ScrollArea>
             )}
-             <DeleteConfirmationDialog 
-                open={!!entryToDelete}
-                onOpenChange={() => setEntryToDelete(null)}
-                onConfirm={handleDeleteConfirm}
-                itemName={`o registro de preço de "${entryToDelete?.productName}"`}
-            />
         </div>
     );
 }

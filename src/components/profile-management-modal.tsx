@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -36,7 +35,7 @@ const permissionsSchema = z.object({
     stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
-    team: z.object({ manage: z.boolean(), view: z.boolean() }),
+    team: z.object({ manage: z.boolean, view: z.boolean() }),
     purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
     itemRequests: z.object({ manage: z.boolean() }),
@@ -338,7 +337,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         <span className="font-medium">{profile.name}</span>
                         {canEdit && <div className="flex gap-2">
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
+                            <DeleteConfirmationDialog
+                                open={false}
+                                onOpenChange={()=>{}}
+                                onConfirm={handleDeleteConfirm}
+                                itemName={`o perfil "${profileToDelete?.name}"`}
+                                triggerButton={
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
+                                }
+                            />
                         </div>}
                       </div>
                     )) : (
@@ -352,14 +359,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
           </div>
         </DialogContent>
       </Dialog>
-      {profileToDelete && (
-        <DeleteConfirmationDialog
-          open={!!profileToDelete}
-          onOpenChange={() => setProfileToDelete(null)}
-          onConfirm={handleDeleteConfirm}
-          itemName={`o perfil "${profileToDelete.name}"`}
-        />
-      )}
     </>
   );
 }
