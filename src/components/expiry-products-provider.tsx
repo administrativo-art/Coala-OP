@@ -185,8 +185,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
           collection(db, "lots"),
           where("productId", "==", params.productId),
           where("lotNumber", "==", params.lotNumber),
-          where("kioskId", "==", params.toKioskId),
-          where("locationId", "==", null)
+          where("kioskId", "==", params.toKioskId)
         );
         return getDocs(destQuery);
       });
@@ -195,7 +194,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       
       const destinationLotMap = new Map<number, import("firebase/firestore").QueryDocumentSnapshot | null>();
       destinationLotSnapshots.forEach((snap, index) => {
-        destinationLotMap.set(index, snap.empty ? null : snap.docs[0]);
+        // Find the best match: prefer one without a location first.
+        const withoutLocation = snap.docs.find(d => !d.data().locationId);
+        destinationLotMap.set(index, withoutLocation || (snap.empty ? null : snap.docs[0]));
       });
 
       await runTransaction(db, async (transaction) => {
@@ -386,3 +387,5 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+    
