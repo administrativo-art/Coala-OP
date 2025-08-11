@@ -194,6 +194,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
+            // Se o usuário está de folga, ausente, ou não trabalhou, zera a contagem.
             counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
