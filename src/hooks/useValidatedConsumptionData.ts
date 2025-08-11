@@ -1,5 +1,4 @@
 
-
       // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
@@ -105,14 +104,6 @@ export function useValidatedConsumptionData() {
     }
     return reportId;
   }, [rawAddReport, reports, calculateAndApplyAllMinimumStocks]);
-
-
-  useEffect(() => {
-    if(!loadingReports && !loadingBases && !loadingKiosks && reports.length > 0 && baseProducts.length > 0) {
-        calculateAndApplyAllMinimumStocks(reports);
-    }
-  }, [loadingReports, loadingBases, loadingKiosks, reports, baseProducts, calculateAndApplyAllMinimumStocks]);
-
 
   return {
     reports,
