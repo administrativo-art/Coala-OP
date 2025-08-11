@@ -142,7 +142,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       const dayISO = format(day, 'yyyy-MM-dd');
       const daySchedule = scheduleMap.get(dayISO);
       const todaysAssignments = new Map<string, string>();
-      const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
       
       const workersToday = new Set<string>();
       if (daySchedule) {
@@ -180,16 +179,28 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             });
           }
 
-          const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
-          
           if (workedToday && !isAusente) {
+            const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+            let workedYesterday = false;
+            if(day.getDate() === 1){
+                workedYesterday = (initialCounts.get(user.id) || 0) > 0;
+            } else {
+                const prevDaySchedule = scheduleMap.get(prevDayISO);
+                kiosksToDisplay.forEach(kiosk => {
+                    ['T1', 'T2', 'T3'].forEach(turn => {
+                        const shiftWorkers = (lookupShift(prevDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if(shiftWorkers.includes(user.username)) workedYesterday = true;
+                    });
+                });
+            }
+
+            const yesterdayCount = workedYesterday ? (counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0) : 0;
             const newCount = yesterdayCount + 1;
             counts.set(`${dayISO}-${user.id}`, newCount);
             if (newCount > 6) {
                 warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
-            // Se o usuário não trabalhou ou está ausente, zera a contagem.
             counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
