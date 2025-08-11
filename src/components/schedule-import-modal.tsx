@@ -1,12 +1,12 @@
 
 "use client";
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Papa from 'papaparse';
-import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, parseISO, endOfDay } from 'date-fns';
+import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, endOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -23,8 +23,6 @@ import { Loader2, Upload, FileDown, AlertTriangle, Check, ChevronsUpDown } from 
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { ScrollArea } from './ui/scroll-area';
 import { ScheduleTableView } from './schedule-table';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { cn } from '@/lib/utils';
 
 
@@ -60,7 +58,6 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
   const [isLoading, setIsLoading] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
-  const [isMonthPopoverOpen, setIsMonthPopoverOpen] = useState(false);
 
   const form = useForm<ImportFormValues>({
     resolver: zodResolver(importSchema),
@@ -186,7 +183,6 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
       return {
           isValid: errors.length === 0,
-          errors,
           data: fullMonthSchedule,
       };
   };
@@ -356,56 +352,22 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
                   control={form.control}
                   name="month"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
+                    <FormItem>
                       <FormLabel>Mês</FormLabel>
-                      <Popover open={isMonthPopoverOpen} onOpenChange={setIsMonthPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className="justify-between"
-                            >
-                              {field.value
-                                ? months.find(
-                                    (month) => month.value === field.value
-                                  )?.label
-                                : "Selecione o mês"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                          <Command>
-                            <CommandInput placeholder="Buscar mês..." />
-                            <CommandEmpty>Nenhum mês encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              <CommandList>
-                                {months.map((month) => (
-                                  <CommandItem
-                                    value={month.label}
-                                    key={month.value}
-                                    onSelect={() => {
-                                      form.setValue("month", month.value)
-                                      setIsMonthPopoverOpen(false)
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        month.value === field.value
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    {month.label}
-                                  </CommandItem>
-                                ))}
-                              </CommandList>
-                            </CommandGroup>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o mês" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {months.map(month => (
+                            <SelectItem key={month.value} value={month.value}>
+                              {month.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
