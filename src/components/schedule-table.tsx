@@ -108,9 +108,10 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
             const dateStr = format(date, 'yyyy-MM-dd');
             const daySchedule = scheduleMap.get(dateStr);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            const isSunday = date.getDay() === 0;
 
             return (
-                <TableRow key={dateStr} className={cn(isWeekend && 'bg-muted/30')}>
+                <TableRow key={dateStr} className={cn(isWeekend && 'bg-muted/30', isSunday && 'bg-destructive/10')}>
                 <TableCell className={cn("px-2 py-3 align-top font-semibold", isToday(date) && "bg-accent/20 text-accent-foreground")}>
                     <p>{format(date, 'dd')}</p>
                     <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
