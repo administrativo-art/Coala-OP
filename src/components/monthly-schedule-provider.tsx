@@ -93,9 +93,9 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     }
   }, [currentYear, currentMonth]);
 
-  const createFullMonthSchedule = useCallback(async (scheduleData: Record<string, any>) => {
-    const monthPadded = currentMonth.toString().padStart(2, '0');
-    const collectionPath = `escala/${currentYear}-${monthPadded}/dias`;
+  const createFullMonthSchedule = useCallback(async (scheduleData: Record<string, any>, year: number, month: number) => {
+    const monthPadded = month.toString().padStart(2, '0');
+    const collectionPath = `escala/${year}-${monthPadded}/dias`;
     const batch = writeBatch(db);
 
     for (const dateId in scheduleData) {
@@ -114,7 +114,7 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
       throw error;
     }
 
-  }, [currentYear, currentMonth]);
+  }, []);
 
 
   const value: MonthlyScheduleContextType = useMemo(() => ({

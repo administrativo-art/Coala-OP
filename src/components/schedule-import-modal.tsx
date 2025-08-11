@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Papa from 'papaparse';
-import { format, parse, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, subDays, getYear, getMonth, subMonths } from 'date-fns';
+import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, parseISO, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -19,12 +19,13 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { type DailySchedule, type Kiosk, type User, type AbsenceEntry } from '@/types';
-import { Loader2, Upload, FileDown, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, FileDown, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { ScrollArea } from './ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { cn } from '@/lib/utils';
 import { ScheduleTableView } from './schedule-table';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+
 
 const importSchema = z.object({
   month: z.string().min(1, 'Selecione o mês.'),
@@ -58,12 +59,13 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
   const [isLoading, setIsLoading] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [isMonthPopoverOpen, setIsMonthPopoverOpen] = useState(false);
 
   const form = useForm<ImportFormValues>({
     resolver: zodResolver(importSchema),
     defaultValues: {
         year: new Date().getFullYear().toString(),
-        month: '',
+        month: (new Date().getMonth() + 1).toString(),
     }
   });
 
@@ -199,10 +201,10 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     }, {} as Record<string, DailySchedule>);
     
     try {
-        await createFullMonthSchedule(scheduleToSave);
-        await fetchSchedule(parseInt(year), parseInt(month));
+        await createFullMonthSchedule(scheduleToSave, parseInt(year, 10), parseInt(month, 10));
+        await fetchSchedule(parseInt(year, 10), parseInt(month, 10));
         toast({ title: "Sucesso!", description: `A escala para ${month}/${year} foi importada.` });
-        onOpenChange(false);
+        handleClose();
     } catch(e) {
         toast({ variant: 'destructive', title: "Erro ao salvar", description: "Não foi possível salvar a escala." });
     } finally {
@@ -211,7 +213,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
   };
 
   const handleClose = () => {
-    form.reset({ year: new Date().getFullYear().toString(), month: '' });
+    form.reset({ year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString() });
     setValidationResult(null);
     onOpenChange(false);
   }
@@ -230,105 +232,109 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     return map;
   }, [validationResult]);
 
-    const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
-        const counts = new Map<string, number>();
-        const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
-        const dailyWorkers = new Map<string, Set<string>>();
-        const { month, year } = form.getValues();
-        
-        if (!month || !year) {
-             return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
-        }
+  const { workDayCounts, warnings, todaysWorkersMap } = useMemo(() => {
+    const counts = new Map<string, number>();
+    const warningsMap = new Map<string, { type: 'overwork' | 'conflict'; message: string }>();
+    const dailyWorkers = new Map<string, Set<string>>();
+    const { month, year } = form.getValues();
+    
+    if (!month || !year || !validationResult?.isValid) {
+         return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+    }
 
-        const monthDate = new Date(parseInt(year), parseInt(month) - 1);
-        const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
-        const previousScheduleMap = new Map<string, DailySchedule>();
-        previousMonthSchedule.forEach(daySchedule => {
-            previousScheduleMap.set(daySchedule.id, daySchedule);
-        });
+    const monthDate = new Date(parseInt(year), parseInt(month) - 1);
+    if (isNaN(monthDate.getTime())) {
+        return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+    }
 
-        if (users.length === 0 || kiosks.length === 0) {
-            return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+    const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
+    const previousScheduleMap = new Map<string, DailySchedule>();
+    previousMonthSchedule.forEach(daySchedule => {
+        previousScheduleMap.set(daySchedule.id, daySchedule);
+    });
+
+    if (users.length === 0 || kiosks.length === 0) {
+        return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+    }
+    
+    const initialCounts = new Map<string, number>();
+    const lastDayOfPrevMonth = endOfMonth(subMonths(monthDate, 1));
+    const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+    const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+
+    users.forEach(user => {
+        let workedLastDay = false;
+        if (lastDaySchedule) {
+            kiosks.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                    if (shiftWorkers.includes(user.username)) {
+                        workedLastDay = true;
+                    }
+                });
+            });
         }
+        initialCounts.set(user.id, workedLastDay ? 1 : 0);
+    });
+
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = validationScheduleMap.get(dayISO);
+        const todaysAssignments = new Map<string, string>();
+        const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
         
-        const initialCounts = new Map<string, number>();
-        const lastDayOfPrevMonth = endOfMonth(subMonths(monthDate, 1));
-        const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
-        const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+        const workersToday = new Set<string>();
+        if (daySchedule) {
+            kiosks.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                    const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                    shiftWorkers.forEach(name => workersToday.add(name));
+                });
+            });
+        }
+        dailyWorkers.set(dayISO, workersToday);
 
         users.forEach(user => {
-            let workedLastDay = false;
-            if (lastDaySchedule) {
-                kiosks.forEach(kiosk => {
-                    ['T1', 'T2', 'T3'].forEach(turn => {
-                        const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                        if (shiftWorkers.includes(user.username)) {
-                            workedLastDay = true;
-                        }
-                    });
-                });
-            }
-            initialCounts.set(user.id, workedLastDay ? 1 : 0);
-        });
+            let workedToday = false;
+            let isOnFolga = false;
 
-        daysInMonth.forEach(day => {
-            const dayISO = format(day, 'yyyy-MM-dd');
-            const daySchedule = validationScheduleMap.get(dayISO);
-            const todaysAssignments = new Map<string, string>();
-            const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
-            
-            const workersToday = new Set<string>();
             if (daySchedule) {
                 kiosks.forEach(kiosk => {
                     ['T1', 'T2', 'T3'].forEach(turn => {
                         const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                        shiftWorkers.forEach(name => workersToday.add(name));
-                    });
-                });
-            }
-            dailyWorkers.set(dayISO, workersToday);
-
-            users.forEach(user => {
-                let workedToday = false;
-                let isOnFolga = false;
-
-                if (daySchedule) {
-                    kiosks.forEach(kiosk => {
-                        ['T1', 'T2', 'T3'].forEach(turn => {
-                            const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                            if (shiftWorkers.includes(user.username)) {
-                                workedToday = true;
-                                const key = `${dayISO}-${user.username}`;
-                                if (todaysAssignments.has(key)) {
-                                    warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
-                                } else {
-                                    todaysAssignments.set(key, kiosk.name);
-                                }
+                        if (shiftWorkers.includes(user.username)) {
+                            workedToday = true;
+                            const key = `${dayISO}-${user.username}`;
+                            if (todaysAssignments.has(key)) {
+                                warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
+                            } else {
+                                todaysAssignments.set(key, kiosk.name);
                             }
-                        });
-                        const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
-                        if (folgaNames.includes(user.username)) {
-                            isOnFolga = true;
                         }
                     });
-                }
-
-                const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
-                
-                if (workedToday && !isOnFolga) {
-                    const newCount = yesterdayCount + 1;
-                    counts.set(`${dayISO}-${user.id}`, newCount);
-                    if (newCount > 6) {
-                        warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+                    const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
+                    if (folgaNames.includes(user.username)) {
+                        isOnFolga = true;
                     }
-                } else {
-                    counts.set(`${dayISO}-${user.id}`, 0);
-                }
-            });
-        });
+                });
+            }
 
-        return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
-    }, [validationScheduleMap, users, kiosks, form, previousMonthSchedule]);
+            const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
+            
+            if (workedToday && !isOnFolga) {
+                const newCount = yesterdayCount + 1;
+                counts.set(`${dayISO}-${user.id}`, newCount);
+                if (newCount > 6) {
+                    warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+                }
+            } else {
+                counts.set(`${dayISO}-${user.id}`, 0);
+            }
+        });
+    });
+
+    return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
+}, [validationScheduleMap, users, kiosks, form, previousMonthSchedule, validationResult]);
 
 
   return (
@@ -345,9 +351,64 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
               <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="month" render={({ field }) => (
-                  <FormItem><FormLabel>Mês</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-                )}/>
+                <FormField
+                  control={form.control}
+                  name="month"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Mês</FormLabel>
+                      <Popover open={isMonthPopoverOpen} onOpenChange={setIsMonthPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="justify-between"
+                            >
+                              {field.value
+                                ? months.find(
+                                    (month) => month.value === field.value
+                                  )?.label
+                                : "Selecione o mês"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                          <Command>
+                            <CommandInput placeholder="Buscar mês..." />
+                            <CommandEmpty>Nenhum mês encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandList>
+                                {months.map((month) => (
+                                  <CommandItem
+                                    value={month.label}
+                                    key={month.value}
+                                    onSelect={() => {
+                                      form.setValue("month", month.value)
+                                      setIsMonthPopoverOpen(false)
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        month.value === field.value
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    {month.label}
+                                  </CommandItem>
+                                ))}
+                              </CommandList>
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField control={form.control} name="year" render={({ field }) => (
                   <FormItem><FormLabel>Ano</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                 )}/>
@@ -370,7 +431,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
               <>
                 <Alert variant="default" className="bg-green-50 border-green-200 text-green-800 [&>svg]:text-green-600">
                     <AlertTitle>Validação Concluída com Sucesso!</AlertTitle>
-                    <AlertDescription>{validationResult.data.length} dias da escala serão atualizados.</AlertDescription>
+                    <AlertDescription>{validationResult.data.length} dias da escala serão criados ou atualizados.</AlertDescription>
                 </Alert>
                 <div className="flex-1 overflow-auto">
                     <ScheduleTableView
