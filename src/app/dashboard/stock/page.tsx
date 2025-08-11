@@ -1,4 +1,4 @@
-import { StockManagement } from '@/components/stock-management'
+import { StockManagement } from './management';
 
 export default function StockPage() {
     return <StockManagement />
