@@ -51,6 +51,9 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
   const form = useForm<ImportFormValues>({
     resolver: zodResolver(importSchema),
+    defaultValues: {
+        year: new Date().getFullYear().toString(),
+    }
   });
 
   const handleDownloadTemplate = () => {
