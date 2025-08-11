@@ -25,6 +25,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { ScheduleTableView } from './schedule-table';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { cn } from '@/lib/utils';
 
 
 const importSchema = z.object({
