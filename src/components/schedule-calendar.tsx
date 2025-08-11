@@ -241,7 +241,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         emptyScheduleData[dayISO] = emptyDay;
     });
     
-    await createFullMonthSchedule(emptyScheduleData);
+    await createFullMonthSchedule(emptyScheduleData, getYear(currentDate), getMonth(currentDate) + 1);
     setIsClearConfirmationOpen(false);
   };
 
@@ -306,7 +306,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       newScheduleData[dayISO] = newDaySchedule;
     });
 
-    await createFullMonthSchedule(newScheduleData);
+    await createFullMonthSchedule(newScheduleData, getYear(currentDate), getMonth(currentDate) + 1);
     setIsGenerateConfirmationOpen(false);
   };
   
