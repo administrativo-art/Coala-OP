@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScheduleTableView } from './schedule-table';
@@ -20,6 +20,7 @@ import autoTable from 'jspdf-autotable';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from './ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { ScheduleImportModal } from './schedule-import-modal';
 
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -39,6 +40,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
   const [initialSelectionDone, setInitialSelectionDone] = useState(false);
 
@@ -432,6 +434,9 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
                     </Button>
+                     <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                        <Upload className="mr-2 h-4 w-4" /> Importar Escala via CSV
+                    </Button>
                     <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Mês
@@ -516,6 +521,11 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 confirmButtonVariant="default"
             />
         )}
+
+        <ScheduleImportModal
+            open={isImportModalOpen}
+            onOpenChange={setIsImportModalOpen}
+        />
     </>
   );
 }
