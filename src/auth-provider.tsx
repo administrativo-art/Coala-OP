@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (querySnapshot.empty && !localStorage.getItem('users_seeded') && profilesContext.adminProfileId) {
             console.log("No users found. Seeding master user...");
             const masterUser: Omit<User, 'id'> = {
-              username: 'master',
+              username: 'Tiago Brasil',
               password: 'master',
               profileId: profilesContext.adminProfileId,
               kioskId: 'matriz',
