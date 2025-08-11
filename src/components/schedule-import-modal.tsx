@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from 'react';
@@ -5,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Papa from 'papaparse';
-import { format, parse, parseISO } from 'date-fns';
+import { format, parse, parseISO, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -22,6 +23,8 @@ import { Loader2, Upload, FileDown, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { ScrollArea } from './ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { cn } from '@/lib/utils';
+import { ScheduleTableView } from './schedule-table';
 
 const importSchema = z.object({
   month: z.string().min(1, 'Selecione o mês.'),
@@ -145,10 +148,29 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
           }
       });
       
+      const importedDates = Object.values(scheduleByDay) as DailySchedule[];
+      const fullMonthSchedule: DailySchedule[] = [];
+      const monthDate = new Date(parseInt(year), parseInt(month) - 1);
+      const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
+
+      daysInMonth.forEach(day => {
+          const dayISO = format(day, 'yyyy-MM-dd');
+          const existingDay = importedDates.find(d => d.id === dayISO);
+          if (existingDay) {
+              fullMonthSchedule.push(existingDay);
+          } else {
+              fullMonthSchedule.push({
+                  id: dayISO,
+                  diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
+              });
+          }
+      });
+
+
       return {
           isValid: errors.length === 0,
           errors,
-          data: Object.values(scheduleByDay) as DailySchedule[],
+          data: fullMonthSchedule,
       };
   };
   
@@ -186,9 +208,17 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
     label: format(new Date(0, i), 'MMMM', { locale: ptBR }),
   }));
 
+  const validationScheduleMap = useMemo(() => {
+    const map = new Map<string, DailySchedule>();
+    if (validationResult?.data) {
+        validationResult.data.forEach(day => map.set(day.id, day));
+    }
+    return map;
+  }, [validationResult]);
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Importar Escala de Trabalho via CSV</DialogTitle>
           <DialogDescription>
@@ -227,34 +257,19 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
                     <AlertTitle>Validação Concluída com Sucesso!</AlertTitle>
                     <AlertDescription>{validationResult.data.length} dias da escala serão atualizados.</AlertDescription>
                 </Alert>
-                <ScrollArea className="flex-1">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Quiosque</TableHead>
-                                <TableHead>Turno</TableHead>
-                                <TableHead>Colaborador(es)</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {validationResult.data.flatMap(day => 
-                                Object.keys(day).filter(key => key.includes(' ')).map(key => {
-                                    const [kioskId, turno] = key.split(' ');
-                                    const kiosk = kiosks.find(k => k.id === kioskId);
-                                    return (
-                                        <TableRow key={`${day.id}-${key}`}>
-                                            <TableCell>{format(parseISO(day.id), 'dd/MM/yyyy')}</TableCell>
-                                            <TableCell>{kiosk?.name}</TableCell>
-                                            <TableCell>{turno}</TableCell>
-                                            <TableCell className="font-semibold">{day[key]}</TableCell>
-                                        </TableRow>
-                                    );
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
-                </ScrollArea>
+                <div className="flex-1 overflow-auto">
+                    <ScheduleTableView
+                        kiosks={kiosks}
+                        scheduleMap={validationScheduleMap}
+                        dates={validationResult.data.map(d => parseISO(d.id))}
+                        onEditDay={() => {}}
+                        canManage={false}
+                        users={users}
+                        workDayCounts={new Map()}
+                        warnings={new Map()}
+                        todaysWorkersMap={new Map()}
+                    />
+                </div>
               </>
             ) : (
                 <>
