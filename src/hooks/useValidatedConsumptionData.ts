@@ -1,5 +1,4 @@
-
-      // src/hooks/useValidatedConsumptionData.ts
+// src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useBaseProducts } from './use-base-products';
@@ -98,6 +97,7 @@ export function useValidatedConsumptionData() {
   
   const addReport = useCallback(async (reportData: any) => {
     const reportId = await rawAddReport(reportData);
+    // This calculation is moved to be called only when a new report is added.
     if (reportId) {
         const newReportsList = [...reports, { ...reportData, id: reportId }];
         await calculateAndApplyAllMinimumStocks(newReportsList);
