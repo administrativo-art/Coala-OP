@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Papa from 'papaparse';
-import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, endOfDay, parseISO } from 'date-fns';
+import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, endOfDay, parseISO, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -183,6 +183,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
       return {
           isValid: errors.length === 0,
+          errors,
           data: fullMonthSchedule,
       };
   };
@@ -285,7 +286,9 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
             kiosks.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
                     const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                    shiftWorkers.forEach(name => workersToday.add(name));
+                    shiftWorkers.forEach(name => {
+                        if (name) workersToday.add(name);
+                    });
                 });
             });
         }
