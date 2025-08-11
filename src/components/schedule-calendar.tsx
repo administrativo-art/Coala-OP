@@ -119,6 +119,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
     users.forEach(user => {
       let workedLastDay = false;
+      let onFolgaLastDay = false;
+
       if (lastDaySchedule) {
         kiosksToDisplay.forEach(kiosk => {
           ['T1', 'T2', 'T3'].forEach(turn => {
@@ -127,9 +129,13 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
               workedLastDay = true;
             }
           });
+          const folgaNames = (lookupShift(lastDaySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
+          if (folgaNames.includes(user.username)) {
+            onFolgaLastDay = true;
+          }
         });
       }
-      initialCounts.set(user.id, workedLastDay ? 1 : 0);
+      initialCounts.set(user.id, (workedLastDay && !onFolgaLastDay) ? 1 : 0);
     });
     
     daysInMonth.forEach(day => {
