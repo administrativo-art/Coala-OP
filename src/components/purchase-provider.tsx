@@ -2,11 +2,10 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseItem, type LastEffectivePrice, type PriceHistoryEntry, type PurchaseSession } from '@/types';
+import { type PurchaseItem, type LastEffectivePrice, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { useBaseProducts } from '@/hooks/use-base-products';
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
@@ -18,7 +17,7 @@ export interface PurchaseContextType {
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
   deletePurchaseItem: (itemId: string) => Promise<void>;
-  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
+  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number, baseProducts: BaseProduct[]) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
 
@@ -26,8 +25,7 @@ export const PurchaseContext = createContext<PurchaseContextType | undefined>(un
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
-
+    
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
@@ -138,7 +136,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
 
-    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number) => {
+    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number, baseProducts: BaseProduct[]) => {
         if (!user) return;
         const itemToConfirm = items.find(i => i.id === itemId);
         if (!itemToConfirm) return;
@@ -183,7 +181,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
             console.error("Error confirming purchase:", error);
         }
-    }, [user, items, baseProducts, sessions]);
+    }, [user, items, sessions]);
     
     const deletePriceHistoryEntry = useCallback(async (historyId: string) => {
         try {
@@ -197,7 +195,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         sessions,
         items,
         priceHistory,
-        loading: loading || loadingBaseProducts,
+        loading,
         addSession,
         closeSession,
         deleteSession,
@@ -205,7 +203,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         deletePurchaseItem,
         confirmPurchase,
         deletePriceHistoryEntry,
-    }), [sessions, items, priceHistory, loading, loadingBaseProducts, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, confirmPurchase, deletePriceHistoryEntry]);
+    }), [sessions, items, priceHistory, loading, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, confirmPurchase, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

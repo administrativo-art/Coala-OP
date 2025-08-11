@@ -29,7 +29,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } from usePurchase();
+    const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } = usePurchase();
     const { products, getProductFullName } = useProducts();
     const { toast } = useToast();
     
@@ -129,7 +129,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 
                 const pricePerUnit = findPricePerUnit(item);
                 if (pricePerUnit !== null) {
-                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
+                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit, baseProducts);
                     confirmedCount++;
                 }
             }
