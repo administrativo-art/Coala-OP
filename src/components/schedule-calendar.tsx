@@ -157,7 +157,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
       users.forEach(user => {
           let workedToday = false;
-          let isOnFolga = false;
           let isAusente = false;
 
           if (daySchedule) {
@@ -174,10 +173,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     }
                   }
                 });
-                 const folgaNames = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
-                 if (folgaNames.includes(user.username)) {
-                    isOnFolga = true;
-                 }
                  const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
                  if (ausencias.some(a => a.userId === user.id)) {
                     isAusente = true;
@@ -187,14 +182,14 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
           const yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0;
           
-          if (workedToday && !isOnFolga && !isAusente) {
+          if (workedToday && !isAusente) {
             const newCount = yesterdayCount + 1;
             counts.set(`${dayISO}-${user.id}`, newCount);
             if (newCount > 6) {
                 warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
             }
           } else {
-            // Se o usuário está de folga, ausente, ou não trabalhou, zera a contagem.
+            // Se o usuário não trabalhou ou está ausente, zera a contagem.
             counts.set(`${dayISO}-${user.id}`, 0);
           }
       });
