@@ -133,12 +133,10 @@ export function PurchaseAlertCard() {
                 orderStatus = 'sem_lead_time';
             }
             
-            if (orderStatus === 'urgent' || orderStatus === 'soon') {
-                allResults.push({ baseProductId: baseProduct.id, baseProductName: baseProduct.name, ruptureDate, orderDate, orderStatus });
-            }
+            allResults.push({ baseProductId: baseProduct.id, baseProductName: baseProduct.name, ruptureDate, orderDate, orderStatus });
         });
 
-        return allResults.sort((a,b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
+        return allResults.sort((a,b) => (a.orderDate?.getTime() || Infinity) - (b.orderDate?.getTime() || Infinity));
 
     }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
 
@@ -146,45 +144,46 @@ export function PurchaseAlertCard() {
         return <Skeleton className="h-32" />
     }
 
-    const urgentItems = projectionResults.filter(p => p.orderStatus === 'urgent');
-    const soonItems = projectionResults.filter(p => p.orderStatus === 'soon');
-    const alertCount = urgentItems.length + soonItems.length;
+    const getStatusBadge = (item: GroupedProjectionResult) => {
+        if (!item.orderDate) return null;
     
+        const daysToOrder = differenceInDays(item.orderDate, new Date());
+    
+        if (daysToOrder <= 0) {
+            return <Badge variant="destructive">Pedir agora</Badge>;
+        }
+        if (daysToOrder <= 7) {
+            return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Pedir em breve</Badge>;
+        }
+        return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
+    };
+
     return (
         <Link href="/dashboard/stock/analysis/projection" className="col-span-1 lg:col-span-2">
             <Card className="hover:bg-muted/50 transition-colors h-full">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm font-medium">
                         <ShoppingCart className="h-4 w-4" /> Alerta de Compras
-                         {alertCount > 0 && (
-                            <Badge variant="destructive" className="h-5">{alertCount}</Badge>
+                         {projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length > 0 && (
+                            <Badge variant="destructive" className="h-5">{projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length}</Badge>
                          )}
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {alertCount === 0 ? (
+                    {projectionResults.length === 0 ? (
                         <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full py-4">
                             <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>
-                            <p className="font-semibold">Estoque em dia!</p>
-                            <p className="text-xs">Nenhum item com necessidade de compra imediata.</p>
+                            <p className="font-semibold">Nenhum item com Lead Time</p>
+                            <p className="text-xs">Configure o lead time para os produtos base para ver os alertas de compra.</p>
                         </div>
                     ) : (
                         <div className="space-y-2">
-                             {urgentItems.length > 0 && urgentItems.map(item => (
-                                <div key={item.baseProductId} className="flex items-center justify-between text-sm p-2 rounded-md bg-destructive/10">
-                                    <span className="font-semibold text-destructive">{item.baseProductName}</span>
-                                    <div className="flex items-center gap-1 text-destructive">
-                                        <BellRing className="h-3 w-3"/>
-                                        <span>Pedir agora</span>
-                                    </div>
-                                </div>
-                             ))}
-                             {soonItems.length > 0 && soonItems.map(item => (
-                                <div key={item.baseProductId} className="flex items-center justify-between text-sm p-2 rounded-md bg-orange-500/10">
-                                    <span className="font-semibold text-orange-600">{item.baseProductName}</span>
-                                    <div className="flex items-center gap-1 text-orange-600">
-                                        <BellRing className="h-3 w-3"/>
-                                        <span>Pedir até {item.orderDate ? format(item.orderDate, 'dd/MM') : ''}</span>
+                             {projectionResults.map(item => (
+                                <div key={item.baseProductId} className="flex items-center justify-between text-sm p-2 rounded-md">
+                                    <span className="font-semibold">{item.baseProductName}</span>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <span>Pedir até {item.orderDate ? format(item.orderDate, 'dd/MM') : 'N/A'}</span>
+                                        {getStatusBadge(item)}
                                     </div>
                                 </div>
                              ))}
