@@ -36,15 +36,27 @@ const formatToISODate = (date: Date): ISODate => {
 const addISODays = (isoDate: ISODate, days: number): ISODate => {
     const date = parseISODate(isoDate);
     date.setDate(date.getDate() + days);
-    return formatToISODate(date);
+    return fmtDate(dt);
 };
+const diffISODays = (a: ISODate, b: ISODate): number => {
+  // dias entre b (fim) e a (início), truncado a inteiros
+  const da = parseISODate(a);
+  const db = parseISODate(b);
+  return Math.floor((db.getTime() - da.getTime()) / (24 * 60 * 60 * 1000));
+}
 
-const diffISODays = (isoDateA: ISODate, isoDateB: ISODate): number => {
-    const dateA = startOfDay(parseISODate(isoDateA));
-    const dateB = startOfDay(parseISODate(isoDateB));
-    return differenceInDays(dateB, dateA);
+// Re-defining internal helpers based on the correct logic provided.
+const fmtDate = (d: Date): ISODate => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
-
+const addDays = (d: ISODate, n: number): ISODate => {
+  const dt = parseISODate(d);
+  dt.setDate(dt.getDate() + n);
+  return fmtDate(dt);
+};
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -191,7 +203,7 @@ export function ConsumptionProjection() {
                 }
                 
                 const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
-                const projectedEndDateISO = addISODays(startDateISO, daysToConsumeLot);
+                const projectedEndDateISO = addDays(startDateISO, daysToConsumeLot);
                 
                 const validDaysForConsumption = Math.max(0, diffISODays(startDateISO, expiryDateISO));
                 const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
@@ -204,7 +216,7 @@ export function ConsumptionProjection() {
                 if (estimatedLoss > 0) {
                     status = 'at_risk';
                     projectedConsumptionDate = parseISODate(expiryDateISO); // It won't be fully consumed
-                    nextConsumptionStartDate = addISODays(expiryDateISO, 1);
+                    nextConsumptionStartDate = addDays(expiryDateISO, 1);
                 } else {
                     projectedConsumptionDate = parseISODate(projectedEndDateISO);
                     nextConsumptionStartDate = projectedEndDateISO;
