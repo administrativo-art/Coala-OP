@@ -8,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { differenceInDays, parseISO, addDays, format } from 'date-fns';
+import { differenceInDays, parseISO, addDays, format, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -54,10 +54,7 @@ export function ConsumptionProjection() {
         if (!selectedKioskId || loading) return [];
 
         const dailyAverages = new Map<string, number>();
-        
-        const reportsForAnalysis = selectedKioskId === 'matriz'
-            ? consumptionHistory
-            : consumptionHistory.filter(report => report.kioskId === selectedKioskId);
+        const reportsForAnalysis = selectedKioskId === 'matriz' ? consumptionHistory : consumptionHistory.filter(report => report.kioskId === selectedKioskId);
 
         baseProducts.forEach(bp => {
             const consumptionData: { [monthYear: string]: number } = {};
@@ -82,98 +79,116 @@ export function ConsumptionProjection() {
         
         const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
         
-        return kioskLots.map(lot => {
+        const lotsByBaseProduct = kioskLots.reduce((acc, lot) => {
             const product = products.find(p => p.id === lot.productId);
-            if (!product || !product.baseProductId || !selectedBaseProductIds.includes(product.baseProductId)) return null;
-
-            if (!lot.expiryDate) {
-                 return {
-                    lot,
-                    productName: getProductFullName(product),
-                    daysRemaining: Infinity,
-                    projectedLoss: 0,
-                    baseUnit: '',
-                    status: 'no_expiry',
-                    projectedConsumptionDate: null,
-                    expiryDate: null,
-                };
-            }
-
-            const expiryDate = parseISO(lot.expiryDate);
-
-            const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
-            if (!baseProduct) return null;
-
-            const dailyAvg = dailyAverages.get(baseProduct.id);
-            if (dailyAvg === undefined || dailyAvg <= 0) {
-                return {
-                    lot,
-                    productName: getProductFullName(product),
-                    daysRemaining: 0,
-                    projectedLoss: 0,
-                    baseUnit: baseProduct.unit,
-                    status: 'no_data',
-                    projectedConsumptionDate: null,
-                    expiryDate
-                };
-            }
-            
-            let lotQtyInBaseUnit = 0;
-            try {
-                if (product.category === baseProduct.category) {
-                    const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                    const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
-                    if (secondaryUnitCategory !== baseProduct.category) {
-                         throw new Error('Incompatible secondary unit category');
-                    }
-                    const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                } else {
-                    throw new Error('Incompatible categories without secondary unit');
+            if (product && product.baseProductId && selectedBaseProductIds.includes(product.baseProductId)) {
+                if (!acc[product.baseProductId]) {
+                    acc[product.baseProductId] = [];
                 }
-            } catch (err) {
-                 console.error("Error converting lot quantity for projection:", err);
-                 return {
-                    lot,
-                    productName: getProductFullName(product),
-                    daysRemaining: 0,
-                    projectedLoss: 0,
-                    baseUnit: baseProduct.unit,
-                    status: 'conversion_error',
-                    projectedConsumptionDate: null,
-                    expiryDate
-                };
+                acc[product.baseProductId].push(lot);
             }
-            
-            const daysToConsume = lotQtyInBaseUnit > 0 && dailyAvg > 0 ? lotQtyInBaseUnit / dailyAvg : Infinity;
-            const projectedConsumptionDate = isFinite(daysToConsume) ? addDays(new Date(), daysToConsume) : null;
-            const status = (projectedConsumptionDate && projectedConsumptionDate < expiryDate) ? 'ok' : 'at_risk';
-            
-            const daysRemaining = differenceInDays(expiryDate, new Date());
-            let projectedLoss = 0;
-            if (status === 'at_risk' && daysRemaining > 0) {
-                const consumptionUntilExpiry = dailyAvg * daysRemaining;
-                projectedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
-            }
+            return acc;
+        }, {} as Record<string, import('@/types').LotEntry[]>);
 
-            return {
-                lot,
-                productName: getProductFullName(product),
-                daysRemaining,
-                projectedLoss,
-                baseUnit: baseProduct.unit,
-                status,
-                projectedConsumptionDate,
-                expiryDate
-            };
-        }).filter((item): item is ProjectionResult => item !== null)
-          .sort((a,b) => {
-             if (a.status === 'at_risk' && b.status !== 'at_risk') return -1;
-             if (b.status === 'at_risk' && a.status !== 'at_risk') return 1;
-             return a.daysRemaining - b.daysRemaining;
-          });
+        const allResults: ProjectionResult[] = [];
+
+        Object.keys(lotsByBaseProduct).forEach(baseProductId => {
+            const groupLots = lotsByBaseProduct[baseProductId].sort((a,b) => {
+                if (!a.expiryDate) return 1;
+                if (!b.expiryDate) return -1;
+                return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+            });
+
+            const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
+            if (!baseProduct) return;
+
+            const dailyAvg = dailyAverages.get(baseProductId);
+            let consumptionStartsOn = new Date();
+
+            for (const lot of groupLots) {
+                const product = products.find(p => p.id === lot.productId)!;
+                let result: ProjectionResult;
+
+                if (!lot.expiryDate) {
+                    result = {
+                        lot, productName: getProductFullName(product), daysRemaining: Infinity,
+                        projectedLoss: 0, baseUnit: '', status: 'no_expiry',
+                        projectedConsumptionDate: null, expiryDate: null,
+                    };
+                    allResults.push(result);
+                    continue;
+                }
+
+                const expiryDate = parseISO(lot.expiryDate);
+                const daysRemaining = differenceInDays(expiryDate, new Date());
+
+                if (dailyAvg === undefined || dailyAvg <= 0) {
+                     result = {
+                        lot, productName: getProductFullName(product), daysRemaining,
+                        projectedLoss: 0, baseUnit: baseProduct.unit, status: 'no_data',
+                        projectedConsumptionDate: null, expiryDate
+                    };
+                    allResults.push(result);
+                    continue;
+                }
+
+                let lotQtyInBaseUnit = 0;
+                let hasConversionError = false;
+                try {
+                     if (product.category === baseProduct.category) {
+                        const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                        lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                    } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                        if (secondaryUnitCategory !== baseProduct.category) throw new Error('Incompatible secondary unit category');
+                        const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                        lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                    } else {
+                        throw new Error('Incompatible categories without secondary unit');
+                    }
+                } catch (err) {
+                    console.error("Error converting lot quantity for projection:", err);
+                    hasConversionError = true;
+                }
+
+                if (hasConversionError) {
+                     result = {
+                        lot, productName: getProductFullName(product), daysRemaining,
+                        projectedLoss: 0, baseUnit: baseProduct.unit, status: 'conversion_error',
+                        projectedConsumptionDate: null, expiryDate
+                    };
+                    allResults.push(result);
+                    continue;
+                }
+                
+                const daysToConsume = lotQtyInBaseUnit / dailyAvg;
+                const projectedConsumptionDate = addDays(consumptionStartsOn, daysToConsume);
+                
+                let status: ProjectionResult['status'] = 'ok';
+                let projectedLoss = 0;
+
+                if (isAfter(projectedConsumptionDate, expiryDate)) {
+                    status = 'at_risk';
+                    const daysAfterExpiry = differenceInDays(projectedConsumptionDate, expiryDate);
+                    projectedLoss = daysAfterExpiry * dailyAvg;
+                }
+                
+                result = {
+                    lot, productName: getProductFullName(product), daysRemaining,
+                    projectedLoss, baseUnit: baseProduct.unit, status,
+                    projectedConsumptionDate, expiryDate
+                };
+
+                allResults.push(result);
+                consumptionStartsOn = projectedConsumptionDate;
+            }
+        });
+
+        return allResults.sort((a,b) => {
+            if (a.status === 'at_risk' && b.status !== 'at_risk') return -1;
+            if (b.status === 'at_risk' && a.status !== 'at_risk') return 1;
+            return a.daysRemaining - b.daysRemaining;
+        });
 
     }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds]);
     
@@ -225,11 +240,11 @@ export function ConsumptionProjection() {
                                 Filtrar insumos ({selectedBaseProductIds.length})
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64">
+                        <DropdownMenuContent className="w-64" onSelect={(e) => e.preventDefault()}>
                             <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds(baseProducts.map(p => p.id)); }}>Selecionar todos</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds([]); }}>Limpar seleção</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds([])}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
                             {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
@@ -237,7 +252,6 @@ export function ConsumptionProjection() {
                                     key={product.id}
                                     checked={selectedBaseProductIds.includes(product.id)}
                                     onCheckedChange={(checked) => handleBaseProductSelection(product.id, !!checked)}
-                                    onSelect={(e) => e.preventDefault()}
                                 >
                                     {product.name}
                                 </DropdownMenuCheckboxItem>
