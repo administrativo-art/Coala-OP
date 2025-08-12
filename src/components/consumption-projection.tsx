@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -15,7 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Package, Inbox } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from './ui/scroll-area';
 
 interface ProjectionResult {
     lot: import('@/types').LotEntry;
@@ -35,8 +38,17 @@ export function ConsumptionProjection() {
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { reports: consumptionHistory, isLoading: consumptionLoading } = useValidatedConsumptionData();
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+    const [selectedBaseProductIds, setSelectedBaseProductIds] = useState<string[]>([]);
+    const [initialSelectionMade, setInitialSelectionMade] = useState(false);
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
+
+    useEffect(() => {
+        if (!initialSelectionMade && baseProducts.length > 0) {
+          setSelectedBaseProductIds(baseProducts.map(p => p.id));
+          setInitialSelectionMade(true);
+        }
+    }, [baseProducts, initialSelectionMade]);
 
     const projectionResults = useMemo((): ProjectionResult[] => {
         if (!selectedKioskId || loading) return [];
@@ -71,10 +83,13 @@ export function ConsumptionProjection() {
         const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
         
         return kioskLots.map(lot => {
+            const product = products.find(p => p.id === lot.productId);
+            if (!product || !product.baseProductId || !selectedBaseProductIds.includes(product.baseProductId)) return null;
+
             if (!lot.expiryDate) {
                  return {
                     lot,
-                    productName: getProductFullName(products.find(p => p.id === lot.productId)),
+                    productName: getProductFullName(product),
                     daysRemaining: Infinity,
                     projectedLoss: 0,
                     baseUnit: '',
@@ -84,10 +99,7 @@ export function ConsumptionProjection() {
                 };
             }
 
-            const product = products.find(p => p.id === lot.productId);
             const expiryDate = parseISO(lot.expiryDate);
-
-            if (!product || !product.baseProductId) return null;
 
             const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
             if (!baseProduct) return null;
@@ -163,7 +175,7 @@ export function ConsumptionProjection() {
              return a.daysRemaining - b.daysRemaining;
           });
 
-    }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName]);
+    }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds]);
     
     const getStatusBadge = (result: ProjectionResult) => {
         switch (result.status) {
@@ -180,6 +192,16 @@ export function ConsumptionProjection() {
         }
     };
     
+    const handleBaseProductSelection = (baseProductId: string, checked: boolean) => {
+        setSelectedBaseProductIds(current => {
+            if (checked) {
+                return [...current, baseProductId];
+            } else {
+                return current.filter(id => id !== baseProductId);
+            }
+        });
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -187,15 +209,42 @@ export function ConsumptionProjection() {
                 <CardDescription>
                     Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem, com base na média de consumo.
                 </CardDescription>
-                <div className="pt-2">
+                <div className="pt-2 flex flex-col sm:flex-row gap-2">
                     <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
-                        <SelectTrigger className="w-full max-w-sm">
+                        <SelectTrigger className="w-full sm:max-w-xs">
                             <SelectValue placeholder="Selecione um quiosque..." />
                         </SelectTrigger>
                         <SelectContent>
                             {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-auto" disabled={!selectedKioskId}>
+                                <ListFilter className="mr-2 h-4 w-4" />
+                                Filtrar insumos ({selectedBaseProductIds.length})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64">
+                            <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds([])}>Limpar seleção</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-60">
+                            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
+                                <DropdownMenuCheckboxItem
+                                    key={product.id}
+                                    checked={selectedBaseProductIds.includes(product.id)}
+                                    onCheckedChange={(checked) => handleBaseProductSelection(product.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {product.name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardHeader>
             <CardContent>
@@ -209,7 +258,7 @@ export function ConsumptionProjection() {
                 ) : projectionResults.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Nenhum lote encontrado para este quiosque.</p>
+                        <p className="mt-4 font-semibold">Nenhum lote encontrado para este quiosque e filtros.</p>
                     </div>
                 ) : (
                     <div className="rounded-md border">
@@ -251,3 +300,5 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
+    
