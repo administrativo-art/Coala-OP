@@ -8,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { differenceInDays, parseISO, addDays, format, isAfter } from 'date-fns';
+import { format, parse, isBefore, startOfDay, addDays, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,9 +19,35 @@ import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter } from 'lucide-r
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
+import { type LotEntry } from '@/types';
+
+type ISODate = string; // "YYYY-MM-DD"
+
+// Helper functions for date manipulation to avoid timezone issues.
+const parseISODate = (isoDate: ISODate): Date => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0); // Use midday to avoid DST shifts
+};
+
+const formatToISODate = (date: Date): ISODate => {
+    return format(date, 'yyyy-MM-dd');
+};
+
+const addISODays = (isoDate: ISODate, days: number): ISODate => {
+    const date = parseISODate(isoDate);
+    date.setDate(date.getDate() + days);
+    return formatToISODate(date);
+};
+
+const diffISODays = (isoDateA: ISODate, isoDateB: ISODate): number => {
+    const dateA = startOfDay(parseISODate(isoDateA));
+    const dateB = startOfDay(parseISODate(isoDateB));
+    return differenceInDays(dateB, dateA);
+};
+
 
 interface ProjectionResult {
-    lot: import('@/types').LotEntry;
+    lot: LotEntry;
     productName: string;
     daysRemaining: number;
     projectedLoss: number;
@@ -88,12 +114,14 @@ export function ConsumptionProjection() {
                 acc[product.baseProductId].push(lot);
             }
             return acc;
-        }, {} as Record<string, import('@/types').LotEntry[]>);
+        }, {} as Record<string, LotEntry[]>);
 
         const allResults: ProjectionResult[] = [];
+        const todayISO = formatToISODate(new Date());
 
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
-            let consumptionStartsOn = new Date();
+            let consumptionTrackerDate = todayISO;
+            
             const groupLots = lotsByBaseProduct[baseProductId].sort((a,b) => {
                 if (!a.expiryDate) return 1;
                 if (!b.expiryDate) return -1;
@@ -118,15 +146,15 @@ export function ConsumptionProjection() {
                     allResults.push(result);
                     continue;
                 }
-
-                const expiryDate = parseISO(lot.expiryDate);
-                const daysRemaining = differenceInDays(expiryDate, new Date());
+                
+                const expiryDateISO = formatToISODate(new Date(lot.expiryDate));
+                const daysRemaining = diffISODays(todayISO, expiryDateISO);
 
                 if (dailyAvg === undefined || dailyAvg <= 0) {
                      result = {
                         lot, productName: getProductFullName(product), daysRemaining,
-                        projectedLoss: 0, baseUnit: baseProduct.unit, status: 'no_data',
-                        projectedConsumptionDate: null, expiryDate
+                        projectedLoss: lot.quantity, baseUnit: baseProduct.unit, status: 'no_data',
+                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO)
                     };
                     allResults.push(result);
                     continue;
@@ -155,32 +183,40 @@ export function ConsumptionProjection() {
                      result = {
                         lot, productName: getProductFullName(product), daysRemaining,
                         projectedLoss: 0, baseUnit: baseProduct.unit, status: 'conversion_error',
-                        projectedConsumptionDate: null, expiryDate
+                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO)
                     };
                     allResults.push(result);
                     continue;
                 }
                 
-                const daysToConsume = lotQtyInBaseUnit / dailyAvg;
-                const projectedConsumptionDate = addDays(consumptionStartsOn, daysToConsume);
-                
-                let status: ProjectionResult['status'] = 'ok';
-                let projectedLoss = 0;
+                const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
+                const projectedEndDate = addISODays(consumptionTrackerDate, daysToConsumeLot);
 
-                if (isAfter(projectedConsumptionDate, expiryDate)) {
+                const validDaysForConsumption = Math.max(0, diffISODays(consumptionTrackerDate, expiryDateISO) + 1);
+                const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
+                const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
+                
+                let projectedConsumptionDate: Date;
+                let nextConsumptionStartDate: ISODate;
+                let status: ProjectionResult['status'] = 'ok';
+
+                if (estimatedLoss > 0) {
                     status = 'at_risk';
-                    const daysAfterExpiry = differenceInDays(projectedConsumptionDate, expiryDate);
-                    projectedLoss = daysAfterExpiry * dailyAvg;
+                    projectedConsumptionDate = parseISODate(expiryDateISO); // It won't be fully consumed
+                    nextConsumptionStartDate = addISODays(expiryDateISO, 1);
+                } else {
+                    projectedConsumptionDate = parseISODate(projectedEndDate);
+                    nextConsumptionStartDate = projectedEndDate;
                 }
                 
                 result = {
                     lot, productName: getProductFullName(product), daysRemaining,
-                    projectedLoss, baseUnit: baseProduct.unit, status,
-                    projectedConsumptionDate, expiryDate
+                    projectedLoss: estimatedLoss, baseUnit: baseProduct.unit, status,
+                    projectedConsumptionDate, expiryDate: parseISODate(expiryDateISO)
                 };
 
                 allResults.push(result);
-                consumptionStartsOn = projectedConsumptionDate;
+                consumptionTrackerDate = nextConsumptionStartDate;
             }
         });
 
@@ -315,5 +351,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
-    
