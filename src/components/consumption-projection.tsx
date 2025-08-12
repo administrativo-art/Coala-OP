@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parse } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,13 +24,17 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 
 type ISODate = string; // "YYYY-MM-DD"
 
-// Consistent date helpers to avoid timezone issues
-const fmtDate = (d: Date): ISODate => {
-  return format(d, 'yyyy-MM-dd');
+// Helper functions for date manipulation to avoid timezone issues.
+const parseISODate = (isoDate: ISODate): Date => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0); // Use midday to avoid DST shifts
 };
 
-const parseISODate = (isoDate: ISODate): Date => {
-    return parse(isoDate, 'yyyy-MM-dd', new Date());
+const fmtDate = (d: Date): ISODate => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 const addDays = (d: ISODate, n: number): ISODate => {
@@ -39,10 +44,11 @@ const addDays = (d: ISODate, n: number): ISODate => {
 };
 
 const diffISODays = (a: ISODate, b: ISODate): number => {
+  // dias entre b (fim) e a (início), truncado a inteiros
   const da = parseISODate(a);
   const db = parseISODate(b);
   return Math.floor((db.getTime() - da.getTime()) / (24 * 60 * 60 * 1000));
-};
+}
 
 
 interface ProjectionResult {
@@ -127,8 +133,8 @@ export function ConsumptionProjection() {
             let consumptionTrackerDate = todayISO;
             
             const groupLots = lotsByBaseProduct[baseProductId].sort((a,b) => {
-                const ae = a.expiryDate ? fmtDate(parseISODate(a.expiryDate.split('T')[0])) : '9999-12-31';
-                const be = b.expiryDate ? fmtDate(parseISODate(b.expiryDate.split('T')[0])) : '9999-12-31';
+                const ae = a.expiryDate ? fmtDate(parseISO(a.expiryDate.split('T')[0])) : '9999-12-31';
+                const be = b.expiryDate ? fmtDate(parseISO(b.expiryDate.split('T')[0])) : '9999-12-31';
                 if (ae !== be) return ae < be ? -1 : 1;
                 return String(a.lotNumber ?? a.id).localeCompare(String(b.lotNumber ?? b.id));
             });
@@ -147,7 +153,9 @@ export function ConsumptionProjection() {
                  let lotQtyInBaseUnit = 0;
                  let hasConversionError = false;
                  try {
-                      if (product.category === baseProduct.category) {
+                      if (product.unit === baseProduct.unit) {
+                        lotQtyInBaseUnit = lot.quantity * product.packageSize;
+                      } else if (product.category === baseProduct.category) {
                          const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                          lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
                      } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
@@ -175,7 +183,7 @@ export function ConsumptionProjection() {
                     continue;
                 }
                 
-                const expiryDateISO = fmtDate(parseISODate(lot.expiryDate.split('T')[0]));
+                const expiryDateISO = fmtDate(parseISO(lot.expiryDate.split('T')[0]));
                 const daysRemaining = diffISODays(todayISO, expiryDateISO);
 
                 if (hasConversionError) {
