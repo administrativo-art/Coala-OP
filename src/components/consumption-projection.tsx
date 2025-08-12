@@ -33,30 +33,18 @@ const formatToISODate = (date: Date): ISODate => {
     return format(date, 'yyyy-MM-dd');
 };
 
-const addISODays = (isoDate: ISODate, days: number): ISODate => {
-    const date = parseISODate(isoDate);
-    date.setDate(date.getDate() + days);
-    return fmtDate(dt);
+const addDays = (d: ISODate, n: number): ISODate => {
+  const dt = parseISODate(d);
+  dt.setDate(dt.getDate() + n);
+  return formatToISODate(dt);
 };
+
 const diffISODays = (a: ISODate, b: ISODate): number => {
   // dias entre b (fim) e a (início), truncado a inteiros
   const da = parseISODate(a);
   const db = parseISODate(b);
   return Math.floor((db.getTime() - da.getTime()) / (24 * 60 * 60 * 1000));
 }
-
-// Re-defining internal helpers based on the correct logic provided.
-const fmtDate = (d: Date): ISODate => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-const addDays = (d: ISODate, n: number): ISODate => {
-  const dt = parseISODate(d);
-  dt.setDate(dt.getDate() + n);
-  return fmtDate(dt);
-};
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -66,6 +54,7 @@ interface ProjectionResult {
     baseUnit: string;
     status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry' | 'conversion_error';
     projectedConsumptionDate: Date | null;
+    projectedConsumptionStartDate: Date | null;
     expiryDate: Date | null;
 }
 
@@ -155,6 +144,7 @@ export function ConsumptionProjection() {
                         lot, productName: getProductFullName(product), daysRemaining: Infinity,
                         projectedLoss: 0, baseUnit: '', status: 'no_expiry',
                         projectedConsumptionDate: null, expiryDate: null,
+                        projectedConsumptionStartDate: null,
                     };
                     allResults.push(result);
                     continue;
@@ -167,7 +157,8 @@ export function ConsumptionProjection() {
                      result = {
                         lot, productName: getProductFullName(product), daysRemaining,
                         projectedLoss: lot.quantity, baseUnit: baseProduct.unit, status: 'no_data',
-                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO)
+                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO),
+                        projectedConsumptionStartDate: parseISODate(startDateISO),
                     };
                     allResults.push(result);
                     continue;
@@ -196,36 +187,38 @@ export function ConsumptionProjection() {
                      result = {
                         lot, productName: getProductFullName(product), daysRemaining,
                         projectedLoss: 0, baseUnit: baseProduct.unit, status: 'conversion_error',
-                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO)
+                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO),
+                        projectedConsumptionStartDate: parseISODate(startDateISO),
                     };
                     allResults.push(result);
                     continue;
                 }
                 
                 const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
-                const projectedEndDateISO = addDays(startDateISO, daysToConsumeLot);
                 
                 const validDaysForConsumption = Math.max(0, diffISODays(startDateISO, expiryDateISO));
                 const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
                 const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
                 
-                let projectedConsumptionDate: Date;
+                let projectedEndDateISO: ISODate;
                 let nextConsumptionStartDate: ISODate;
                 let status: ProjectionResult['status'] = 'ok';
 
                 if (estimatedLoss > 0) {
                     status = 'at_risk';
-                    projectedConsumptionDate = parseISODate(expiryDateISO); // It won't be fully consumed
+                    projectedEndDateISO = expiryDateISO;
                     nextConsumptionStartDate = addDays(expiryDateISO, 1);
                 } else {
-                    projectedConsumptionDate = parseISODate(projectedEndDateISO);
+                    projectedEndDateISO = addDays(startDateISO, daysToConsumeLot);
                     nextConsumptionStartDate = projectedEndDateISO;
                 }
                 
                 result = {
                     lot, productName: getProductFullName(product), daysRemaining,
                     projectedLoss: estimatedLoss, baseUnit: baseProduct.unit, status,
-                    projectedConsumptionDate, expiryDate: parseISODate(expiryDateISO)
+                    projectedConsumptionDate: parseISODate(projectedEndDateISO),
+                    projectedConsumptionStartDate: parseISODate(startDateISO),
+                    expiryDate: parseISODate(expiryDateISO)
                 };
 
                 allResults.push(result);
@@ -331,8 +324,8 @@ export function ConsumptionProjection() {
                                 <TableRow>
                                     <TableHead>Insumo</TableHead>
                                     <TableHead>Lote</TableHead>
-                                    <TableHead className="text-center">Vencimento do Lote</TableHead>
-                                    <TableHead className="text-center">Previsão de Término</TableHead>
+                                    <TableHead className="text-center">Período de Consumo</TableHead>
+                                    <TableHead className="text-center">Vencimento</TableHead>
                                     <TableHead className="text-center">Perda Estimada</TableHead>
                                     <TableHead className="text-center">Situação</TableHead>
                                 </TableRow>
@@ -342,11 +335,13 @@ export function ConsumptionProjection() {
                                     <TableRow key={result.lot.id}>
                                         <TableCell className="font-medium">{result.productName}</TableCell>
                                         <TableCell>{result.lot.lotNumber}</TableCell>
+                                        <TableCell className="text-center">
+                                            {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
+                                                `${format(result.projectedConsumptionStartDate, 'dd/MM/yy')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
+                                            ) : 'N/A'}
+                                        </TableCell>
                                         <TableCell className="text-center font-semibold">
                                             {result.expiryDate ? format(result.expiryDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-center text-destructive font-bold">
                                             {result.status === 'at_risk' && result.projectedLoss > 0 
