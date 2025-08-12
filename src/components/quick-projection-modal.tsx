@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle, BellRing, CalendarDays, ShoppingCart, Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -103,6 +103,12 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
     const suggestedOrderQty = monthlyAvg * coverageMonths;
 
+    let finalConsumptionDate = null;
+    if (ruptureDate && dailyAvg > 0 && suggestedOrderQty > 0) {
+        const daysOfNewStock = Math.floor(suggestedOrderQty / dailyAvg);
+        finalConsumptionDate = addDays(ruptureDate, daysOfNewStock);
+    }
+
     return {
       dailyAvg,
       monthlyAvg,
@@ -114,7 +120,8 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
       orderDate,
       orderStatus,
       leadTime,
-      suggestedOrderQty
+      suggestedOrderQty,
+      finalConsumptionDate,
     };
   }, [baseProduct, lots, products, consumptionHistory, coverageMonths]);
 
@@ -181,6 +188,9 @@ Projeção para ${baseProduct.name}:
                     <CardContent className="p-4 pt-0 space-y-2">
                         <div className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-primary" /><span className="font-semibold text-xl">{projection.suggestedOrderQty.toFixed(0)} {baseProduct.unit}</span></div>
                         <div className="text-sm">Para cobrir {coverageMonths} mês(es) de consumo.</div>
+                        {projection.finalConsumptionDate && (
+                            <div className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /><span>Consumo até: {format(projection.finalConsumptionDate, 'dd/MM/yyyy')}</span></div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
