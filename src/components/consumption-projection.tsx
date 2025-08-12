@@ -228,8 +228,8 @@ export function ConsumptionProjection() {
                         <DropdownMenuContent className="w-64">
                             <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds([])}>Limpar seleção</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds(baseProducts.map(p => p.id)); }}>Selecionar todos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds([]); }}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
                             {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
