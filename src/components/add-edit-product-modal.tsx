@@ -380,13 +380,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 <Separator />
 
                                 <FormField control={form.control} name="enableLogistics" render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-blue-100/40 dark:bg-blue-900/20">
                                         <div className="space-y-0.5"><FormLabel>Detalhes Logísticos (Opcional)</FormLabel><FormDescription>Otimize a separação no estoque, agrupando em caixas ou fardos.</FormDescription></div>
                                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                     </FormItem>
                                 )} />
                                 {enableLogisticsWatch && (
-                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                    <div className="p-4 border rounded-lg bg-blue-100/20 dark:bg-blue-900/10 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
@@ -395,13 +395,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 )}
                                 
                                 <FormField control={form.control} name="enableSecondaryUnit" render={({ field }) => (
-                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-green-100/40 dark:bg-green-900/20">
                                         <div className="space-y-0.5"><FormLabel>Qtd por Embalagem (Opcional)</FormLabel><FormDescription>Use se o estoque geral for controlado por uma unidade diferente.</FormDescription></div>
                                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                     </FormItem>
                                 )} />
                                 {enableSecondaryUnitWatch && (
-                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                    <div className="p-4 border rounded-lg bg-green-100/20 dark:bg-green-900/10 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(secondaryUnitCategory).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
@@ -410,13 +410,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 )}
                                 
                                 <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
-                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-purple-100/40 dark:bg-purple-900/20">
                                         <div className="space-y-0.5"><FormLabel>Instrução de Contagem (Opcional)</FormLabel><FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription></div>
                                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                     </FormItem>
                                 )} />
                                 {enableCountingInstructionWatch && (
-                                    <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                                    <div className="p-4 border rounded-lg bg-purple-100/20 dark:bg-purple-900/10 space-y-4">
                                         <FormField control={form.control} name="countingInstruction" render={({ field }) => (<FormItem><FormLabel>Texto da instrução</FormLabel><FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                         <div className="space-y-2">
                                             <FormLabel>Imagem de instrução (opcional)</FormLabel>
@@ -485,3 +485,5 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         </>
     );
 }
+
+    
