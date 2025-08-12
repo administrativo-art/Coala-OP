@@ -240,11 +240,11 @@ export function ConsumptionProjection() {
                                 Filtrar insumos ({selectedBaseProductIds.length})
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64" onSelect={(e) => e.preventDefault()}>
+                        <DropdownMenuContent className="w-64">
                             <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setSelectedBaseProductIds([])}>Limpar seleção</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds(baseProducts.map(p => p.id)); }}>Selecionar todos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds([]); }}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-60">
                             {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
@@ -252,6 +252,7 @@ export function ConsumptionProjection() {
                                     key={product.id}
                                     checked={selectedBaseProductIds.includes(product.id)}
                                     onCheckedChange={(checked) => handleBaseProductSelection(product.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
                                 >
                                     {product.name}
                                 </DropdownMenuCheckboxItem>
