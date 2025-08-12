@@ -12,8 +12,8 @@ import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus } from 'lucide-react'
-import { differenceInDays, parseISO, formatDistanceToNow } from 'date-fns'
+import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus, ShoppingCart } from 'lucide-react'
+import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -30,6 +30,7 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { useProducts } from "@/hooks/use-products"
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { PurchaseAlertCard } from "@/components/purchase-alert-card"
 
 interface OnlineUser {
     id: string;
@@ -106,7 +107,7 @@ function OnlineUsersPanel() {
                                  <div>
                                     <p className="font-semibold">{user.username}</p>
                                     <p className="text-sm text-muted-foreground">
-                                        Visto por último: {formatDistanceToNow(user.last_seen, { locale: ptBR, addSuffix: true })}
+                                        Visto por último: {format(user.last_seen, "'às' HH:mm", { locale: ptBR })}
                                     </p>
                                 </div>
                                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -200,7 +201,7 @@ function OperationalDashboard() {
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Link href="/dashboard/stock/inventory-control">
         <Card className="hover:bg-muted/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -223,6 +224,7 @@ function OperationalDashboard() {
           </CardContent>
         </Card>
         </Link>
+        <PurchaseAlertCard />
       </div>
       
       <Card>
