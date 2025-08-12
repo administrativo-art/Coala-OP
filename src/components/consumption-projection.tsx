@@ -59,7 +59,7 @@ export function ConsumptionProjection() {
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { reports: consumptionHistory, isLoading: consumptionLoading } = useValidatedConsumptionData();
-    const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+    const [selectedKioskId, setSelectedKioskId] = useState<string>('matriz'); // Default to matriz
     const [selectedBaseProductIds, setSelectedBaseProductIds] = useState<string[]>([]);
     const [initialSelectionMade, setInitialSelectionMade] = useState(false);
     const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
@@ -109,14 +109,13 @@ export function ConsumptionProjection() {
     }, []);
 
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
-        if (!selectedKioskId || loading) return [];
+        if (loading) return [];
+        const currentKioskId = 'matriz'; // Always use Matriz data for projection
 
-        const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
+        const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[currentKioskId];
         const adjustmentFactor = 1 + (simulationPercentage / 100);
 
-        const kioskReports = selectedKioskId === 'matriz'
-            ? consumptionHistory
-            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+        const kioskReports = consumptionHistory.filter(r => r.kioskId === currentKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         kioskReports.forEach(report => {
@@ -142,7 +141,7 @@ export function ConsumptionProjection() {
             }
         });
         
-        const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
+        const kioskLots = lots.filter(lot => lot.kioskId === currentKioskId && lot.quantity > 0);
         
         const lotsByBaseProduct = kioskLots.reduce((acc, lot) => {
             const product = products.find(p => p.id === lot.productId);
@@ -259,7 +258,7 @@ export function ConsumptionProjection() {
 
         return allResults;
 
-    }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage]);
+    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage]);
     
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
@@ -354,7 +353,7 @@ export function ConsumptionProjection() {
     
      const handleExportPdf = () => {
         const doc = new jsPDF();
-        const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+        const kioskName = kiosks.find(k => k.id === 'matriz')?.name || 'Matriz';
 
         doc.setFontSize(18);
         doc.text(`Projeção de Consumo - ${kioskName}`, 14, 22);
@@ -405,22 +404,14 @@ export function ConsumptionProjection() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Projeção de Consumo vs. Vencimento</CardTitle>
+                <CardTitle>Projeção de Consumo vs. Vencimento (Matriz)</CardTitle>
                 <CardDescription>
-                    Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem, com base na média de consumo.
+                    Verifique se os lotes em estoque na Matriz serão consumidos antes de vencerem, com base na média de consumo da mesma.
                 </CardDescription>
                 <div className="pt-2 flex flex-wrap items-center gap-2">
-                    <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
-                        <SelectTrigger className="w-full sm:max-w-xs">
-                            <SelectValue placeholder="Selecione um quiosque..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full sm:w-auto" disabled={!selectedKioskId}>
+                            <Button variant="outline" className="w-full sm:w-auto">
                                 <ListFilter className="mr-2 h-4 w-4" />
                                 Filtrar insumos ({selectedBaseProductIds.length})
                             </Button>
@@ -469,11 +460,6 @@ export function ConsumptionProjection() {
             <CardContent>
                 {loading ? (
                     <Skeleton className="h-64 w-full" />
-                ) : !selectedKioskId ? (
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <Package className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Selecione um quiosque para iniciar a análise.</p>
-                    </div>
                 ) : finalFilteredAndSortedResults.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="mx-auto h-12 w-12" />

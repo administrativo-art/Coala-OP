@@ -80,8 +80,9 @@ export function PurchaseAlertCard() {
 
         if (baseProductsWithLeadTime.length === 0) return [];
 
+        const matrizReports = consumptionHistory.filter(r => r.kioskId === 'matriz');
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
-        consumptionHistory.forEach(report => {
+        matrizReports.forEach(report => {
             const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(res => {
                 if (res.baseProductId) {
@@ -104,19 +105,18 @@ export function PurchaseAlertCard() {
         const today = new Date();
 
         baseProductsWithLeadTime.forEach(baseProduct => {
-            const kioskParams = Object.values(baseProduct.stockLevels || {});
-            const totalSafetyStock = kioskParams.reduce((sum, level) => sum + (level.safetyStock || 0), 0);
-            const leadTime = Math.max(...kioskParams.map(sl => sl.leadTime || 0));
+            const matrizStockLevels = baseProduct.stockLevels?.['matriz'];
+            const leadTime = matrizStockLevels?.leadTime || 0;
             const dailyAvg = dailyAverages.get(baseProduct.id) ?? 0;
             
             const totalStockInBase = lots
-                .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id)
+                .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id && lot.kioskId === 'matriz')
                 .reduce((sum, lot) => {
                     const product = productsById.get(lot.productId)!;
                     return sum + toBaseUnits(product, lot.quantity, baseProduct);
                 }, 0);
                 
-            const effectiveStock = Math.max(0, totalStockInBase - totalSafetyStock);
+            const effectiveStock = Math.max(0, totalStockInBase - (matrizStockLevels?.safetyStock || 0));
 
             let ruptureDate: Date | null = null;
             if (dailyAvg > 0 && effectiveStock > 0) {
@@ -130,7 +130,7 @@ export function PurchaseAlertCard() {
             if (leadTime > 0) {
                 if(ruptureDate) {
                     orderDate = addDays(ruptureDate, -leadTime);
-                    const daysToOrder = differenceInDays(orderDate, today);
+                    const daysToOrder = differenceInDays(orderDate, new Date());
                     if (daysToOrder <= 0) orderStatus = 'urgent';
                     else if (daysToOrder <= 7) orderStatus = 'soon';
                     else orderStatus = 'ok';
@@ -156,7 +156,7 @@ export function PurchaseAlertCard() {
     }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
 
     if (loading) {
-        return <Skeleton className="h-32 col-span-full" />
+        return <Skeleton className="h-[250px] col-span-full" />
     }
 
     const getStatusBadge = (item: GroupedProjectionResult) => {
@@ -178,7 +178,7 @@ export function PurchaseAlertCard() {
             <Card className="hover:bg-muted/50 transition-colors h-full">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                        <ShoppingCart className="h-4 w-4" /> Alerta de Compras
+                        <ShoppingCart className="h-4 w-4" /> Alerta de Compras (Matriz)
                          {projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length > 0 && (
                             <Badge variant="destructive" className="h-5">{projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length}</Badge>
                          )}
@@ -192,7 +192,7 @@ export function PurchaseAlertCard() {
                             <p className="text-xs">Configure o lead time para os produtos base para ver os alertas de compra.</p>
                         </div>
                     ) : (
-                        <ScrollArea className="h-32">
+                        <ScrollArea className="h-[150px]">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
