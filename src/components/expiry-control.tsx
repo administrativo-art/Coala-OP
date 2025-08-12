@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -331,6 +331,7 @@ function ExpiryControlContent() {
          {groupedData.map(baseGroup => {
               let totalPackages = 0;
               const convertedTotals: { [unit: string]: number } = {};
+              const baseProduct = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
 
               baseGroup.brands.forEach(brand => {
                 brand.products.forEach(prodGroup => {
@@ -368,7 +369,6 @@ function ExpiryControlContent() {
                   } else {
                        let sumInFirstUnit = 0;
                        let possible = true;
-                       const baseProduct = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
                        
                        for (const unit in convertedTotals) {
                            try {
@@ -405,6 +405,7 @@ function ExpiryControlContent() {
                             <LotCard
                                 key={productGroup.product.id}
                                 productGroup={productGroup}
+                                baseProduct={baseProduct || undefined}
                                 getProductFullName={getProductFullName}
                                 kiosks={kiosks}
                                 locations={locations}
@@ -481,21 +482,18 @@ function ExpiryControlContent() {
                         <DropdownMenuCheckboxItem
                             checked={statusFilters.includes('expiring')}
                             onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
-                            onSelect={(e) => e.preventDefault()}
                         >
                             Vencendo em breve
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
                             checked={statusFilters.includes('expired')}
                             onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
-                            onSelect={(e) => e.preventDefault()}
                         >
                             Vencidos
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
                             checked={statusFilters.includes('no_expiry')}
                             onCheckedChange={(checked) => handleStatusFilterChange('no_expiry', !!checked)}
-                            onSelect={(e) => e.preventDefault()}
                         >
                             Validade indefinida
                         </DropdownMenuCheckboxItem>
@@ -530,7 +528,6 @@ function ExpiryControlContent() {
                                     key={kiosk.id}
                                     checked={selectedKiosks.includes(kiosk.id)}
                                     onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
-                                    onSelect={(e) => e.preventDefault()}
                                 >
                                     {kiosk.name}
                                 </DropdownMenuCheckboxItem>
@@ -596,7 +593,7 @@ function ExpiryControlContent() {
       
       <ZeroedLotsAuditModal
         open={isAuditModalOpen}
-        onOpenChange={setIsAuditModalOpen}
+        onOpenChange={setIsHistoryModalOpen}
       />
     </>
   );
