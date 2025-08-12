@@ -41,12 +41,14 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
   const projection = useMemo(() => {
     const productMap = new Map(products.map(p => [p.id, p]));
     
-    // Use only 'matriz' data
-    const matrizConsumptionReports = consumptionHistory.filter(r => r.kioskId === 'matriz');
+    // Use only 'matriz' data for stock
     const matrizLots = lots.filter(lot => lot.kioskId === 'matriz');
     
+    // Aggregate consumption from all kiosks EXCEPT matriz itself to represent network consumption
+    const networkConsumptionReports = consumptionHistory.filter(r => r.kioskId !== 'matriz');
+
     const monthlyConsumption: Record<string, number> = {};
-    matrizConsumptionReports.forEach(report => {
+    networkConsumptionReports.forEach(report => {
         const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
         const totalForMonth = report.results
             .filter(res => res.baseProductId === baseProduct.id)
