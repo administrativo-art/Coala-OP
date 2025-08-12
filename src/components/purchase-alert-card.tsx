@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from 'react';
@@ -6,13 +7,13 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
 import { format, addDays, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox } from 'lucide-react';
+import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays } from 'lucide-react';
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
@@ -141,7 +142,7 @@ export function PurchaseAlertCard() {
     }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
 
     if (loading) {
-        return <Skeleton className="h-32" />
+        return <Skeleton className="h-32 col-span-1 lg:col-span-2" />
     }
 
     const getStatusBadge = (item: GroupedProjectionResult) => {
@@ -177,16 +178,23 @@ export function PurchaseAlertCard() {
                             <p className="text-xs">Configure o lead time para os produtos base para ver os alertas de compra.</p>
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
+                             <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground px-2">
+                                <div className="col-span-1">Insumo</div>
+                                <div className="text-center">Data Pedido</div>
+                                <div className="text-center">Data Ruptura</div>
+                                <div className="text-right">Status</div>
+                            </div>
+                            <ScrollArea className="h-20">
                              {projectionResults.map(item => (
-                                <div key={item.baseProductId} className="flex items-center justify-between text-sm p-2 rounded-md">
-                                    <span className="font-semibold">{item.baseProductName}</span>
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                        <span>Pedir até {item.orderDate ? format(item.orderDate, 'dd/MM') : 'N/A'}</span>
-                                        {getStatusBadge(item)}
-                                    </div>
+                                <div key={item.baseProductId} className="grid grid-cols-4 items-center gap-2 text-sm p-2 rounded-md">
+                                    <span className="font-semibold truncate col-span-1">{item.baseProductName}</span>
+                                    <span className="text-center">{item.orderDate ? format(item.orderDate, 'dd/MM') : 'N/A'}</span>
+                                    <span className="text-center">{item.ruptureDate ? format(item.ruptureDate, 'dd/MM') : 'N/A'}</span>
+                                    <div className="flex justify-end">{getStatusBadge(item)}</div>
                                 </div>
                              ))}
+                            </ScrollArea>
                         </div>
                     )}
                 </CardContent>
@@ -194,3 +202,5 @@ export function PurchaseAlertCard() {
         </Link>
     );
 }
+
+    
