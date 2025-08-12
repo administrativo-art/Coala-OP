@@ -475,15 +475,12 @@ export function ConsumptionProjection() {
                                                 <TableHead className="text-center">Taxa/dia</TableHead>
                                                 {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
                                                 {renderSortableHeader('Vencimento', 'expiryDate')}
-                                                <TableHead className="text-center">Nível Consumo</TableHead>
                                                 <TableHead className="text-center">Perda Estimada</TableHead>
                                                 <TableHead className="text-center">Situação</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {group.lots.map(result => {
-                                                const consumptionPercentage = result.lotQtyInBaseUnit > 0 ? ((result.lotQtyInBaseUnit - result.projectedLoss) / result.lotQtyInBaseUnit) * 100 : 0;
-                                                return (
+                                            {group.lots.map(result => (
                                                 <TableRow key={result.lot.id}>
                                                     <TableCell className="font-medium">{result.productName}</TableCell>
                                                     <TableCell>{result.lot.lotNumber}</TableCell>
@@ -502,18 +499,6 @@ export function ConsumptionProjection() {
                                                             </div>
                                                         ) : 'N/A'}
                                                     </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger>
-                                                                    <Progress value={consumptionPercentage} className={cn(consumptionPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p>Previsto consumir {consumptionPercentage.toFixed(1)}% do lote.</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                    </TableCell>
                                                     <TableCell className="text-center text-destructive font-bold">
                                                         {result.status === 'at_risk' && result.projectedLoss > 0 ? (
                                                             <TooltipProvider>
@@ -530,7 +515,7 @@ export function ConsumptionProjection() {
                                                     </TableCell>
                                                     <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                                                 </TableRow>
-                                            )})}
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </div>
@@ -542,3 +527,4 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
