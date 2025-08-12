@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp, Download } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -24,6 +24,8 @@ import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type ISODate = string; // "YYYY-MM-DD"
 
@@ -116,7 +118,7 @@ export function ConsumptionProjection() {
       baseProduct: typeof baseProducts[number]
     ): number => {
       if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
         const perPackageInBase = convertValue(
           product.secondaryUnitValue,
           product.secondaryUnit,
@@ -391,6 +393,46 @@ export function ConsumptionProjection() {
         if (days <= 30) return 'bg-yellow-500/20';
         return '';
     };
+    
+     const handleExportPdf = () => {
+        const doc = new jsPDF();
+        const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+
+        doc.setFontSize(18);
+        doc.text(`Projeção de Consumo - ${kioskName}`, 14, 22);
+        
+        let yPos = 30;
+
+        finalFilteredAndSortedResults.forEach(group => {
+            if (yPos > 250) {
+                doc.addPage();
+                yPos = 20;
+            }
+            doc.setFontSize(14);
+            doc.text(group.baseProductName, 14, yPos);
+            yPos += 5;
+
+            const tableData = group.lots.map(result => [
+                result.productName,
+                result.lotNumber,
+                result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yy') : 'N/A',
+                result.expiryDate ? format(result.expiryDate, 'dd/MM/yy') : 'N/A',
+                result.projectedLoss > 0 ? `${result.projectedLoss.toFixed(2)} ${result.baseUnit}` : '-',
+                result.status
+            ]);
+            
+            autoTable(doc, {
+                startY: yPos,
+                head: [['Insumo', 'Lote', 'Consumo até', 'Vencimento', 'Perda', 'Status']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: '#273344' }
+            });
+            yPos = (doc as any).lastAutoTable.finalY + 10;
+        });
+
+        doc.save(`projecao_consumo_${kioskName.replace(/\s/g, '_')}.pdf`);
+    };
 
     return (
         <Card>
@@ -419,6 +461,11 @@ export function ConsumptionProjection() {
                             <DropdownMenuItem onSelect={() => setShowOnlyAtRisk(prev => !prev)}>
                                 <DropdownMenuCheckboxItem checked={showOnlyAtRisk} onCheckedChange={() => {}} onSelect={e => e.preventDefault()} />
                                 Mostrar somente em risco
+                            </DropdownMenuItem>
+                             <DropdownMenuSeparator />
+                             <DropdownMenuItem onSelect={handleExportPdf} disabled={finalFilteredAndSortedResults.length === 0}>
+                                <Download className="mr-2 h-4 w-4" />
+                                Exportar PDF
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
