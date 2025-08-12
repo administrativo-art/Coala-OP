@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -27,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { QuickProjectionModal } from './quick-projection-modal';
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -479,79 +478,93 @@ export function ConsumptionProjection() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {finalFilteredAndSortedResults.map(group => (
-                            <div key={group.baseProductId} className="rounded-md border">
-                                <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
-                                    <div className="flex justify-between items-center">
-                                      <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                      <div className="flex items-center gap-2">
-                                        {group.suggestedOrderQty && <Badge><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProducts.find(bp => bp.id === group.baseProductId)?.unit}</Badge>}
-                                        {getOrderStatusBadge(group.orderStatus)}
-                                      </div>
+                        {finalFilteredAndSortedResults.map(group => {
+                            const baseProduct = baseProducts.find(bp => bp.id === group.baseProductId);
+                            return (
+                                <div key={group.baseProductId} className="rounded-md border">
+                                    <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
+                                        <div className="flex justify-between items-center">
+                                          <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
+                                          <div className="flex items-center gap-2">
+                                            {group.suggestedOrderQty && (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>Cálculo: (Média Mensal) x (Meses para Cobrir)</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            )}
+                                            {getOrderStatusBadge(group.orderStatus)}
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                            {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
+                                            {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
+                                        </div>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                        {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
-                                        {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
-                                    </div>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                {renderSortableHeader('Insumo', 'productName')}
-                                                <TableHead>Lote</TableHead>
-                                                <TableHead className="text-center">Qtd. (Base)</TableHead>
-                                                <TableHead className="text-center">Taxa/dia</TableHead>
-                                                {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
-                                                {renderSortableHeader('Vencimento', 'expiryDate')}
-                                                <TableHead className="text-center">Perda Estimada</TableHead>
-                                                <TableHead className="text-center">Situação</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {group.lots.map(result => (
-                                                <TableRow key={result.lot.id}>
-                                                    <TableCell className="font-medium">{result.productName}</TableCell>
-                                                    <TableCell>{result.lot.lotNumber}</TableCell>
-                                                    <TableCell className="text-center">{result.lotQtyInBaseUnit.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
-                                                    <TableCell className="text-center">{result.dailyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
-                                                    <TableCell className="text-center">
-                                                        {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
-                                                            `${format(result.projectedConsumptionStartDate, 'dd/MM/yy')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
-                                                        ) : 'N/A'}
-                                                    </TableCell>
-                                                    <TableCell className={cn("text-center font-semibold rounded-md", getExpiryColorClass(result.daysRemaining))}>
-                                                        {result.expiryDate ? (
-                                                            <div className="flex flex-col items-center">
-                                                                <span>{format(result.expiryDate, 'dd/MM/yyyy')}</span>
-                                                                <span className="text-xs text-muted-foreground">({result.daysRemaining} dias)</span>
-                                                            </div>
-                                                        ) : 'N/A'}
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-destructive font-bold">
-                                                        {result.status === 'at_risk' && result.projectedLoss > 0 ? (
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span className="flex items-center justify-center gap-1 cursor-help">
-                                                                            {result.projectedLossCost > 0 && `${result.projectedLossCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} `}
-                                                                            ({result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit})
-                                                                            <HelpCircle className="h-3 w-3" />
-                                                                        </span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent><p>Estimativa de perda se o consumo se mantiver.</p></TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                            ) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    {renderSortableHeader('Insumo', 'productName')}
+                                                    <TableHead>Lote</TableHead>
+                                                    <TableHead className="text-center">Qtd. (Base)</TableHead>
+                                                    <TableHead className="text-center">Taxa/dia</TableHead>
+                                                    {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
+                                                    {renderSortableHeader('Vencimento', 'expiryDate')}
+                                                    <TableHead className="text-center">Perda Estimada</TableHead>
+                                                    <TableHead className="text-center">Situação</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {group.lots.map(result => (
+                                                    <TableRow key={result.lot.id}>
+                                                        <TableCell className="font-medium">{result.productName}</TableCell>
+                                                        <TableCell>{result.lot.lotNumber}</TableCell>
+                                                        <TableCell className="text-center">{result.lotQtyInBaseUnit.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
+                                                        <TableCell className="text-center">{result.dailyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
+                                                        <TableCell className="text-center">
+                                                            {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
+                                                                `${format(result.projectedConsumptionStartDate, 'dd/MM/yy')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
+                                                            ) : 'N/A'}
+                                                        </TableCell>
+                                                        <TableCell className={cn("text-center font-semibold rounded-md", getExpiryColorClass(result.daysRemaining))}>
+                                                            {result.expiryDate ? (
+                                                                <div className="flex flex-col items-center">
+                                                                    <span>{format(result.expiryDate, 'dd/MM/yyyy')}</span>
+                                                                    <span className="text-xs text-muted-foreground">({result.daysRemaining} dias)</span>
+                                                                </div>
+                                                            ) : 'N/A'}
+                                                        </TableCell>
+                                                        <TableCell className="text-center text-destructive font-bold">
+                                                            {result.status === 'at_risk' && result.projectedLoss > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="flex items-center justify-center gap-1 cursor-help">
+                                                                                {result.projectedLossCost > 0 && `${result.projectedLossCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} `}
+                                                                                ({result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit})
+                                                                                <HelpCircle className="h-3 w-3" />
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent><p>Estimativa de perda se o consumo se mantiver.</p></TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                                ) : '-'}
+                                                        </TableCell>
+                                                        <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 )}
             </CardContent>
