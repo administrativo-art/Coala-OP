@@ -15,10 +15,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle, BellRing, CalendarDays, ShoppingCart, Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { Label } from './ui/label';
 
 interface QuickProjectionModalProps {
   baseProduct: BaseProduct;
