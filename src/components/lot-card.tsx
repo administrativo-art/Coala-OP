@@ -30,6 +30,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { formatQuantity } from '@/lib/conversion';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useRouter } from 'next/navigation';
+import { QuickProjectionModal } from './quick-projection-modal';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -141,6 +142,7 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
 
 type LotCardProps = {
   productGroup: GroupedProduct;
+  baseProduct?: BaseProduct;
   getProductFullName: (product: Product) => string;
   kiosks: Kiosk[];
   locations: Location[];
@@ -156,6 +158,7 @@ type LotCardProps = {
 
 export function LotCard({
     productGroup,
+    baseProduct,
     getProductFullName,
     kiosks,
     locations,
@@ -170,9 +173,9 @@ export function LotCard({
 }: LotCardProps) {
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
-  const { baseProducts } = useBaseProducts();
   const router = useRouter();
   const [lotToConsume, setLotToConsume] = useState<LotEntry | null>(null);
+  const [isProjectionModalOpen, setIsProjectionModalOpen] = useState(false);
 
   const handleConsumeClick = (lot: LotEntry) => {
     setLotToConsume(lot);
@@ -187,12 +190,10 @@ export function LotCard({
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
   const { product } = productGroup;
-  const baseProduct = useMemo(() => baseProducts.find(bp => bp.id === product.baseProductId), [baseProducts, product.baseProductId]);
-  const hasLeadTime = !!(baseProduct && baseProduct.leadTime && baseProduct.leadTime > 0);
+  const hasLeadTime = !!(baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0));
 
   const handleGoToProjection = () => {
-      if(!baseProduct) return;
-      router.push(`/dashboard/stock/analysis/projection?baseProductId=${baseProduct.id}`);
+      setIsProjectionModalOpen(true);
   }
   
   const handlePrintLabel = async (lot: LotEntry, product: Product) => {
@@ -304,7 +305,7 @@ export function LotCard({
                                     <LineChart className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Ver projeção de consumo</p></TooltipContent>
+                            <TooltipContent><p>Ver projeção de compra</p></TooltipContent>
                          </Tooltip></TooltipProvider>
                     )}
                 </div>
@@ -390,6 +391,12 @@ export function LotCard({
         lot={lotToConsume}
         onClose={() => setLotToConsume(null)}
         onConfirm={handleConfirmConsumption}
+      />
+    )}
+    {isProjectionModalOpen && baseProduct && (
+      <QuickProjectionModal
+        baseProduct={baseProduct}
+        onOpenChange={setIsProjectionModalOpen}
       />
     )}
     </>

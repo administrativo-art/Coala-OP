@@ -9,7 +9,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays as addDaysFns, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,40 +28,6 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ISODate = string; // "YYYY-MM-DD"
-
-// Helper to move date formatters to the top for clarity.
-const fmtDate = (d: Date): ISODate => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
-// Helper functions for date manipulation to avoid timezone issues.
-const parseISODate = (isoDate: ISODate): Date => {
-    const [year, month, day] = isoDate.split('-').map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0); // Use midday to avoid DST shifts
-};
-
-const formatToISODate = (date: Date): ISODate => {
-    return fmtDate(date);
-};
-
-const addDays = (d: ISODate, n: number): ISODate => {
-  const dt = parseISODate(d);
-  dt.setDate(dt.getDate() + n);
-  return fmtDate(dt);
-};
-
-const diffISODays = (a: ISODate, b: ISODate): number => {
-  // dias entre b (fim) e a (início), truncado a inteiros
-  const da = parseISODate(a);
-  const db = parseISODate(b);
-  return Math.floor((db.getTime() - da.getTime()) / (24 * 60 * 60 * 1000));
-}
-
-
 interface ProjectionResult {
     lot: LotEntry;
     productName: string;
@@ -69,7 +35,7 @@ interface ProjectionResult {
     dailyAvg: number;
     daysRemaining: number;
     projectedLoss: number;
-    projectedLossCost: number; // New field for financial loss
+    projectedLossCost: number; 
     baseUnit: string;
     status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry' | 'conversion_error';
     projectedConsumptionDate: Date | null;
@@ -84,7 +50,7 @@ interface GroupedProjectionResult {
     ruptureDate: Date | null;
     suggestedOrderQty: number | null;
     orderDate: Date | null;
-    orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data';
+    orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data' | 'sem_lead_time';
 }
 
 export function ConsumptionProjection() {
@@ -109,14 +75,12 @@ export function ConsumptionProjection() {
         }
     }, [baseProducts, initialSelectionMade]);
 
-    // Mapa para buscar product rápido
     const productsById = useMemo(() => {
       const m = new Map<string, typeof products[number]>();
       products.forEach(p => m.set(p.id, p));
       return m;
     }, [products]);
 
-    // Converte "qtd de pacotes" do SKU para unidade base do insumo
     const toBaseUnits = useCallback((
       product: typeof products[number],
       packagesQty: number,
@@ -142,50 +106,38 @@ export function ConsumptionProjection() {
       return packagesQty * perPackageInBase;
     }, []);
 
-
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (!selectedKioskId || loading) return [];
 
+        const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
+        const adjustmentFactor = 1 + (simulationPercentage / 100);
+
+        const kioskReports = selectedKioskId === 'matriz'
+            ? consumptionHistory
+            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+
+        const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
+        kioskReports.forEach(report => {
+            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+            report.results.forEach(res => {
+                if (res.baseProductId) {
+                    if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
+                    monthlyConsumptionByBaseId[res.baseProductId][key] = (monthlyConsumptionByBaseId[res.baseProductId][key] || 0) + res.consumedQuantity;
+                }
+            });
+        });
+
         const dailyAverages = new Map<string, number>();
         const monthlyAverages = new Map<string, number>();
-        const adjustmentFactor = 1 + (simulationPercentage / 100);
         
-        // Calcula taxa diária por insumo base em UNIDADE BASE
-        baseProducts.forEach(bp => {
-          const monthlyTotalsBase: Record<string, number> = {};
-
-          const reportsToUse =
-            selectedKioskId === 'matriz'
-              ? consumptionHistory
-              : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
-
-          reportsToUse.forEach(report => {
-            report.results.forEach(res => {
-              if (res.baseProductId !== bp.id) return;
-
-              let qtyBase = 0;
-              if (typeof (res as any).quantityInBase === 'number') {
-                qtyBase = (res as any).quantityInBase;
-              } else {
-                const pr = res.productId ? productsById.get(res.productId) : undefined;
-                if (pr) {
-                  qtyBase = toBaseUnits(pr, res.consumedQuantity ?? 0, bp);
-                } else {
-                  qtyBase = res.consumedQuantity ?? 0;
-                }
-              }
-
-              const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-              monthlyTotalsBase[key] = (monthlyTotalsBase[key] || 0) + qtyBase;
-            });
-          });
-
-          const months = Object.values(monthlyTotalsBase).filter(v => v > 0);
-          if (months.length > 0) {
-            const monthlyAvgBase = months.reduce((s, v) => s + v, 0) / months.length;
-            monthlyAverages.set(bp.id, monthlyAvgBase);
-            dailyAverages.set(bp.id, monthlyAvgBase / 30);
-          }
+        Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
+            const months = Object.values(monthlyData);
+            if (months.length > 0) {
+                const totalConsumption = months.reduce((sum, val) => sum + val, 0);
+                const avg = totalConsumption / months.length;
+                monthlyAverages.set(baseId, avg);
+                dailyAverages.set(baseId, avg / 30);
+            }
         });
         
         const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
@@ -193,124 +145,105 @@ export function ConsumptionProjection() {
         const lotsByBaseProduct = kioskLots.reduce((acc, lot) => {
             const product = products.find(p => p.id === lot.productId);
             if (product && product.baseProductId && selectedBaseProductIds.includes(product.baseProductId)) {
-                if (!acc[product.baseProductId]) {
-                    acc[product.baseProductId] = [];
-                }
+                if (!acc[product.baseProductId]) acc[product.baseProductId] = [];
                 acc[product.baseProductId].push(lot);
             }
             return acc;
         }, {} as Record<string, LotEntry[]>);
 
         const allResults: GroupedProjectionResult[] = [];
-        const todayISO = formatToISODate(new Date());
+        const today = new Date();
 
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
-            let consumptionTrackerDate = todayISO;
-            let lastConsumptionDate: Date | null = null;
+            let currentStockDate = today;
             
             const groupLots = lotsByBaseProduct[baseProductId].sort((a, b) => {
-              const ae = a.expiryDate ? formatToISODate(parseISO(a.expiryDate.split('T')[0])) : '9999-12-31';
-              const be = b.expiryDate ? formatToISODate(parseISO(b.expiryDate.split('T')[0])) : '9999-12-31';
-              if (ae !== be) return ae < be ? -1 : 1;
-              const ar = (a as any).receivedAt ?? '';
-              const br = (b as any).receivedAt ?? '';
-              if (ar !== br) return ar < br ? -1 : 1;
-              return String(a.lotNumber ?? a.id).localeCompare(String(b.lotNumber ?? b.id));
+              const dateA = a.expiryDate ? parseISO(a.expiryDate) : new Date('9999-12-31');
+              const dateB = b.expiryDate ? parseISO(b.expiryDate) : new Date('9999-12-31');
+              return dateA.getTime() - dateB.getTime();
             });
 
             const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
             if (!baseProduct) return;
 
+            const kioskParams = kioskStockLevels(baseProduct);
             const dailyAvg = (dailyAverages.get(baseProductId) ?? 0) * adjustmentFactor;
             const projectedLots: ProjectionResult[] = [];
 
+            let totalStockInBase = groupLots.reduce((sum, lot) => {
+                const product = productsById.get(lot.productId)!;
+                return sum + toBaseUnits(product, lot.quantity, baseProduct);
+            }, 0);
+            
+            totalStockInBase -= (kioskParams?.safetyStock || 0);
+
+            let ruptureDate: Date | null = null;
+            if (dailyAvg > 0 && totalStockInBase > 0) {
+                const daysUntilRupture = Math.floor(totalStockInBase / dailyAvg);
+                ruptureDate = addDaysFns(today, daysUntilRupture);
+            }
+
             for (const lot of groupLots) {
                 const product = products.find(p => p.id === lot.productId)!;
-                let result: Omit<ProjectionResult, 'status'>;
-                let status: ProjectionResult['status'];
-                const startDateISO = consumptionTrackerDate;
-
                 let lotQtyInBaseUnit = 0;
-                let hasConversionError = false;
                 try {
                   lotQtyInBaseUnit = toBaseUnits(product, lot.quantity, baseProduct);
                 } catch (err) {
-                    console.error("Error converting lot quantity for projection:", err);
-                    hasConversionError = true;
+                  projectedLots.push({ status: 'conversion_error', lot, productName: getProductFullName(product), lotQtyInBaseUnit: 0, dailyAvg, daysRemaining: 0, projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, projectedConsumptionStartDate: null, expiryDate: null });
+                  continue;
                 }
 
                 if (!lot.expiryDate) {
-                    status = 'no_expiry';
-                    result = {
-                        lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Number.MAX_SAFE_INTEGER,
-                        projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, 
-                        projectedConsumptionStartDate: null, expiryDate: null,
-                    };
-                    projectedLots.push({ ...result, status });
+                    projectedLots.push({ status: 'no_expiry', lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Infinity, projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, projectedConsumptionStartDate: null, expiryDate: null });
                     continue;
                 }
                 
-                const expiryDateISO = formatToISODate(parseISO(lot.expiryDate.split('T')[0]));
-                const daysRemaining = diffISODays(todayISO, expiryDateISO);
+                const expiryDate = parseISO(lot.expiryDate);
+                const daysRemaining = differenceInDays(expiryDate, today);
 
-                if (hasConversionError) {
-                    status = 'conversion_error';
-                } else if (dailyAvg <= 0) {
-                     status = 'no_data';
-                } else {
-                    const validDaysForConsumption = Math.max(0, diffISODays(startDateISO, expiryDateISO) + 1);
-                    const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
-                    const projectedEndDateISO_Inclusive = addDays(startDateISO, Math.max(0, daysToConsumeLot - 1));
-                    const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
-                    const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
-                    const lastPrice = baseProduct.lastEffectivePrice?.pricePerUnit ?? 0;
-                    
-                    let projectedEndDateISO: ISODate;
-                    let nextConsumptionStartDate: ISODate;
-
-                    if (estimatedLoss > 0) {
-                      status = 'at_risk';
-                      projectedEndDateISO = expiryDateISO;
-                      nextConsumptionStartDate = addDays(expiryDateISO, 1);
-                    } else {
-                      status = 'ok';
-                      projectedEndDateISO = projectedEndDateISO_Inclusive;
-                      nextConsumptionStartDate = addDays(projectedEndDateISO, 1);
-                    }
-                    lastConsumptionDate = parseISODate(projectedEndDateISO);
-
-                    result = {
-                        lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
-                        projectedLoss: estimatedLoss, projectedLossCost: estimatedLoss * lastPrice, baseUnit: baseProduct.unit,
-                        projectedConsumptionDate: parseISODate(projectedEndDateISO),
-                        projectedConsumptionStartDate: parseISODate(startDateISO),
-                        expiryDate: parseISODate(expiryDateISO)
-                    };
-                    projectedLots.push({ ...result, status });
-                    consumptionTrackerDate = nextConsumptionStartDate;
+                if (dailyAvg <= 0) {
+                    projectedLots.push({ status: 'no_data', lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining, projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, projectedConsumptionStartDate: null, expiryDate });
                     continue;
                 }
 
-                 result = {
+                const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
+                const projectedConsumptionDate = addDaysFns(currentStockDate, daysToConsumeLot - 1);
+                
+                let projectedLoss = 0;
+                if(isAfter(projectedConsumptionDate, expiryDate)){
+                    const daysOfLoss = differenceInDays(projectedConsumptionDate, expiryDate);
+                    projectedLoss = daysOfLoss * dailyAvg;
+                }
+                projectedLoss = Math.min(lotQtyInBaseUnit, projectedLoss);
+                
+                const lastPrice = baseProduct.lastEffectivePrice?.pricePerUnit ?? 0;
+
+                projectedLots.push({
                     lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
-                    projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null,
-                    projectedConsumptionStartDate: parseISODate(startDateISO), expiryDate: parseISODate(expiryDateISO)
-                };
-                projectedLots.push({ ...result, status });
+                    projectedLoss, projectedLossCost: projectedLoss * lastPrice, baseUnit: baseProduct.unit,
+                    projectedConsumptionDate: projectedConsumptionDate,
+                    projectedConsumptionStartDate: currentStockDate,
+                    expiryDate: expiryDate,
+                    status: projectedLoss > 0 ? 'at_risk' : 'ok'
+                });
+                currentStockDate = addDaysFns(projectedConsumptionDate, 1);
             }
 
             let orderDate = null;
             let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
-            if (baseProduct.leadTime && baseProduct.leadTime > 0 && lastConsumptionDate) {
-                orderDate = new Date(lastConsumptionDate);
-                orderDate.setDate(orderDate.getDate() - baseProduct.leadTime);
-
-                const daysToOrder = diffISODays(todayISO, formatToISODate(orderDate));
-                if (daysToOrder <= 0) orderStatus = 'urgent';
-                else if (daysToOrder <= 7) orderStatus = 'soon';
-                else orderStatus = 'ok';
-            }
             
+            if (kioskParams?.leadTime && kioskParams.leadTime > 0) {
+                if(ruptureDate) {
+                    orderDate = addDaysFns(ruptureDate, -kioskParams.leadTime);
+                    const daysToOrder = differenceInDays(orderDate, today);
+                    if (daysToOrder <= 0) orderStatus = 'urgent';
+                    else if (daysToOrder <= 7) orderStatus = 'soon';
+                    else orderStatus = 'ok';
+                }
+            } else {
+                orderStatus = 'sem_lead_time';
+            }
+
             let suggestedOrderQty = null;
             if (baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {
                 const monthlyAvg = monthlyAverages.get(baseProductId) || 0;
@@ -318,15 +251,7 @@ export function ConsumptionProjection() {
             }
             
             if (projectedLots.length > 0) {
-                allResults.push({
-                    baseProductId,
-                    baseProductName: baseProduct.name,
-                    lots: projectedLots,
-                    ruptureDate: lastConsumptionDate,
-                    orderDate,
-                    orderStatus,
-                    suggestedOrderQty
-                });
+                allResults.push({ baseProductId, baseProductName: baseProduct.name, lots: projectedLots, ruptureDate, orderDate, orderStatus, suggestedOrderQty });
             }
         });
 
@@ -464,6 +389,16 @@ export function ConsumptionProjection() {
 
         doc.save(`projecao_consumo_${kioskName.replace(/\s/g, '_')}.pdf`);
     };
+    
+    const getOrderStatusBadge = (status: GroupedProjectionResult['orderStatus']) => {
+        switch(status) {
+            case 'ok': return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
+            case 'soon': return <Badge variant="destructive" className="bg-yellow-500 text-white">Pedir em breve</Badge>;
+            case 'urgent': return <Badge variant="destructive">Urgente</Badge>;
+            case 'sem_lead_time': return <Badge variant="outline">Sem Lead Time</Badge>;
+            default: return <Badge variant="secondary">Sem Dados</Badge>;
+        }
+    };
 
     return (
         <Card>
@@ -549,7 +484,10 @@ export function ConsumptionProjection() {
                                 <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
                                     <div className="flex justify-between items-center">
                                       <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                      {group.suggestedOrderQty && <Badge><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProducts.find(bp => bp.id === group.baseProductId)?.unit}</Badge>}
+                                      <div className="flex items-center gap-2">
+                                        {group.suggestedOrderQty && <Badge><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProducts.find(bp => bp.id === group.baseProductId)?.unit}</Badge>}
+                                        {getOrderStatusBadge(group.orderStatus)}
+                                      </div>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                         {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
@@ -620,3 +558,4 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+

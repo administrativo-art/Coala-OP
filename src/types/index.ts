@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -26,6 +27,8 @@ export type PriceHistoryEntry = {
 
 export type BaseProductStockLevel = {
     min: number;
+    safetyStock: number;
+    leadTime: number;
     override: boolean;
 };
 
@@ -37,7 +40,6 @@ export type BaseProduct = {
   category: UnitCategory;
   lastEffectivePrice?: LastEffectivePrice | null;
   initialCostPerUnit?: number;
-  leadTime?: number;
   consumptionMonths?: number;
 }
 

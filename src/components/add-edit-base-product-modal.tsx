@@ -22,7 +22,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
 
@@ -30,6 +30,8 @@ import { Separator } from './ui/separator';
 const stockLevelSchema = z.object({
     kioskId: z.string(),
     min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
+    safetyStock: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
+    leadTime: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     override: z.boolean(),
 });
 
@@ -39,7 +41,6 @@ const baseProductSchema = z.object({
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
   initialCostPerUnit: z.coerce.number().optional(),
   stockLevels: z.array(stockLevelSchema),
-  leadTime: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
   consumptionMonths: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
 });
 
@@ -72,7 +73,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], leadTime: 0, consumptionMonths: 0 }
+    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], consumptionMonths: 0 }
   });
 
   const { fields, update } = useFieldArray({
@@ -102,10 +103,11 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
             return {
                 kioskId: kiosk.id,
                 min: level?.min ?? 0,
+                safetyStock: level?.safetyStock ?? 0,
+                leadTime: level?.leadTime ?? 0,
                 override: level?.override ?? false,
             };
           }),
-          leadTime: productToEdit.leadTime,
           consumptionMonths: productToEdit.consumptionMonths,
         });
       } else {
@@ -114,8 +116,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           category: 'Massa',
           unit: 'g',
           initialCostPerUnit: 0,
-          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, override: false })),
-          leadTime: 0,
+          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, safetyStock: 0, leadTime: 0, override: false })),
           consumptionMonths: 0,
         });
       }
@@ -123,11 +124,14 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   }, [productToEdit, open, form, sortedKiosks]);
 
   const onSubmit = (values: BaseProductFormValues) => {
-    const stockLevelsObject: { [kioskId: string]: { min: number, override: boolean } } = {};
+    const stockLevelsObject: { [kioskId: string]: { min: number, safetyStock: number, leadTime: number, override: boolean } } = {};
     values.stockLevels.forEach(sl => {
-        if(sl.min !== undefined && sl.min >= 0) {
-            stockLevelsObject[sl.kioskId] = { min: sl.min, override: sl.override };
-        }
+        stockLevelsObject[sl.kioskId] = { 
+            min: sl.min ?? 0,
+            safetyStock: sl.safetyStock ?? 0,
+            leadTime: sl.leadTime ?? 0,
+            override: sl.override 
+        };
     });
 
     const dataPayload = {
@@ -135,7 +139,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       category: values.category,
       unit: values.unit,
       stockLevels: stockLevelsObject,
-      leadTime: values.leadTime,
       consumptionMonths: values.consumptionMonths,
     };
 
@@ -178,7 +181,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{productToEdit ? 'Editar produto base' : 'Novo produto base'}</DialogTitle>
             <DialogDescription>
@@ -260,34 +263,25 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                   />
 
                   <Separator />
-                  <h3 className="text-md font-medium pt-2">Parâmetros de compra (opcional)</h3>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="leadTime" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground"/>Lead Time (dias)</FormLabel>
-                            <FormControl><Input type="number" placeholder="Ex: 7" {...field} value={field.value ?? ''} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
+                  <FormField control={form.control} name="consumptionMonths" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1.5"><Calendar className="h-4 w-4 text-muted-foreground"/>Sugerir Pedido para (meses)</FormLabel>
+                        <FormControl><Input type="number" placeholder="Ex: 2" {...field} value={field.value ?? ''} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
                     )}/>
-                    <FormField control={form.control} name="consumptionMonths" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="flex items-center gap-1.5"><Calendar className="h-4 w-4 text-muted-foreground"/>Sugerir Pedido para (meses)</FormLabel>
-                            <FormControl><Input type="number" placeholder="Ex: 2" {...field} value={field.value ?? ''} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                  </div>
                   
                   <Separator />
-                  <h3 className="text-md font-medium pt-2">Níveis de estoque mínimo (opcional)</h3>
+                  <h3 className="text-md font-medium pt-2">Parâmetros por quiosque (opcional)</h3>
 
                   <div className="rounded-md border">
                       <Table>
                           <TableHeader>
                               <TableRow>
                                   <TableHead>Quiosque</TableHead>
-                                  <TableHead className="text-right">Quantidade mínima</TableHead>
+                                  <TableHead className="text-center">Estoque Mínimo</TableHead>
+                                  <TableHead className="text-center">Estoque Segurança</TableHead>
+                                  <TableHead className="text-center">Lead Time (dias)</TableHead>
                               </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -299,39 +293,19 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                       {kiosk?.name}
                                     </TableCell>
                                     <TableCell>
-                                      <div className="flex items-center justify-end gap-2">
-                                          <TooltipProvider>
-                                              <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Button 
-                                                        type="button" 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        className={cn("h-8 w-8", field.override ? 'text-primary' : 'text-muted-foreground')}
-                                                        onClick={() => {
-                                                          const current = form.getValues(`stockLevels.${index}`);
-                                                          update(index, { ...current, override: !current.override });
-                                                        }}
-                                                    >
-                                                        {field.override ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                                                    </Button>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                      <p>{field.override ? 'Valor travado (manual)' : 'Valor automático (calculado)'}</p>
-                                                  </TooltipContent>
-                                              </Tooltip>
-                                          </TooltipProvider>
-                                          <FormField
-                                              control={form.control}
-                                              name={`stockLevels.${index}.min`}
-                                              render={({ field: minField }) => (
-                                                  <FormItem>
-                                                      <FormControl><Input type="number" className="text-right w-32" {...minField} value={minField.value ?? ''} /></FormControl>
-                                                      <FormMessage />
-                                                  </FormItem>
-                                              )}
-                                          />
-                                      </div>
+                                       <FormField control={form.control} name={`stockLevels.${index}.min`} render={({ field: minField }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...minField} value={minField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                    </TableCell>
+                                     <TableCell>
+                                       <FormField control={form.control} name={`stockLevels.${index}.safetyStock`} render={({ field: safetyField }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...safetyField} value={safetyField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                    </TableCell>
+                                     <TableCell>
+                                       <FormField control={form.control} name={`stockLevels.${index}.leadTime`} render={({ field: leadTimeField }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...leadTimeField} value={leadTimeField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
                                     </TableCell>
                                   </TableRow>
                                 )}
@@ -361,5 +335,3 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
-
-    
