@@ -19,7 +19,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { type LotEntry, type Product } from '@/types';
+import { type LotEntry, type Product, type BaseProduct } from '@/types';
 import { LotCard, type GroupedProduct } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
@@ -29,6 +29,7 @@ import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Badge } from '@/components/ui/badge';
 import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QuickProjectionModal } from './quick-projection-modal';
 
 
 const BarcodeScannerModal = dynamic(
@@ -44,6 +45,7 @@ export type GroupedByBrand = {
 export type GroupedByBaseProduct = {
   isBaseProduct: boolean;
   baseProductId: string | null;
+  baseProduct: BaseProduct | null;
   name: string;
   brands: GroupedByBrand[];
   hasLeadTime: boolean;
@@ -77,6 +79,7 @@ function ExpiryControlContent() {
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
 
   useEffect(() => {
     if (searchQuery) {
@@ -181,6 +184,7 @@ function ExpiryControlContent() {
         groups.set(baseProductId, {
           isBaseProduct: isBaseProdGroup,
           baseProductId: product.baseProductId || null,
+          baseProduct,
           name: groupName,
           brands: [],
           hasLeadTime,
@@ -396,8 +400,12 @@ function ExpiryControlContent() {
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
                      <div className="flex items-baseline justify-between border-b pb-2">
                         <div className="flex items-center gap-2">
-                         <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
-                         {baseGroup.hasLeadTime && <LineChart className="h-5 w-5 text-blue-500" />}
+                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
+                          {baseGroup.hasLeadTime && (
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600" onClick={() => setQuickProjectionProduct(baseGroup.baseProduct)}>
+                                  <LineChart className="h-5 w-5" />
+                              </Button>
+                          )}
                         </div>
                          {totalPackages > 0 && (
                             <div className="flex items-center gap-2 text-sm sm:text-base">
@@ -412,7 +420,6 @@ function ExpiryControlContent() {
                             <LotCard
                                 key={productGroup.product.id}
                                 productGroup={productGroup}
-                                baseProduct={baseProduct || undefined}
                                 getProductFullName={getProductFullName}
                                 kiosks={kiosks}
                                 locations={locations}
@@ -602,6 +609,12 @@ function ExpiryControlContent() {
         open={isAuditModalOpen}
         onOpenChange={setIsAuditModalOpen}
       />
+      {quickProjectionProduct && (
+        <QuickProjectionModal 
+            baseProduct={quickProjectionProduct}
+            onOpenChange={() => setQuickProjectionProduct(null)}
+        />
+      )}
     </>
   );
 }
