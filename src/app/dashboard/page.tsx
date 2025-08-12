@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
-import { useValidatedConsumptionData } from "@/hooks/use-validated-consumption-data"
+import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
