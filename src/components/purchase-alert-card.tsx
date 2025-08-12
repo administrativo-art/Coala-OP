@@ -17,10 +17,15 @@ import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+
 
 interface GroupedProjectionResult {
     baseProductId: string;
     baseProductName: string;
+    baseProductUnit: string;
+    currentStock: number;
+    dailyAvg: number;
     ruptureDate: Date | null;
     orderDate: Date | null;
     orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data' | 'sem_lead_time';
@@ -134,7 +139,16 @@ export function PurchaseAlertCard() {
                 orderStatus = 'sem_lead_time';
             }
             
-            allResults.push({ baseProductId: baseProduct.id, baseProductName: baseProduct.name, ruptureDate, orderDate, orderStatus });
+            allResults.push({ 
+                baseProductId: baseProduct.id, 
+                baseProductName: baseProduct.name,
+                baseProductUnit: baseProduct.unit,
+                currentStock: totalStockInBase,
+                dailyAvg,
+                ruptureDate, 
+                orderDate, 
+                orderStatus 
+            });
         });
 
         return allResults.sort((a,b) => (a.orderDate?.getTime() || Infinity) - (b.orderDate?.getTime() || Infinity));
@@ -142,7 +156,7 @@ export function PurchaseAlertCard() {
     }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
 
     if (loading) {
-        return <Skeleton className="h-32 col-span-1 lg:col-span-2" />
+        return <Skeleton className="h-32 col-span-full" />
     }
 
     const getStatusBadge = (item: GroupedProjectionResult) => {
@@ -160,10 +174,10 @@ export function PurchaseAlertCard() {
     };
 
     return (
-        <Link href="/dashboard/stock/analysis/projection" className="col-span-1 lg:col-span-2">
+        <Link href="/dashboard/stock/analysis/projection" className="col-span-full">
             <Card className="hover:bg-muted/50 transition-colors h-full">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
                         <ShoppingCart className="h-4 w-4" /> Alerta de Compras
                          {projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length > 0 && (
                             <Badge variant="destructive" className="h-5">{projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length}</Badge>
@@ -178,29 +192,35 @@ export function PurchaseAlertCard() {
                             <p className="text-xs">Configure o lead time para os produtos base para ver os alertas de compra.</p>
                         </div>
                     ) : (
-                        <div className="space-y-1">
-                             <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground px-2">
-                                <div className="col-span-1">Insumo</div>
-                                <div className="text-center">Data Pedido</div>
-                                <div className="text-center">Data Ruptura</div>
-                                <div className="text-right">Status</div>
-                            </div>
-                            <ScrollArea className="h-20">
-                             {projectionResults.map(item => (
-                                <div key={item.baseProductId} className="grid grid-cols-4 items-center gap-2 text-sm p-2 rounded-md">
-                                    <span className="font-semibold truncate col-span-1">{item.baseProductName}</span>
-                                    <span className="text-center">{item.orderDate ? format(item.orderDate, 'dd/MM') : 'N/A'}</span>
-                                    <span className="text-center">{item.ruptureDate ? format(item.ruptureDate, 'dd/MM') : 'N/A'}</span>
-                                    <div className="flex justify-end">{getStatusBadge(item)}</div>
-                                </div>
-                             ))}
-                            </ScrollArea>
-                        </div>
+                        <ScrollArea className="h-32">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Insumo</TableHead>
+                                        <TableHead className="text-right">Estoque Atual</TableHead>
+                                        <TableHead className="text-right">Consumo/dia</TableHead>
+                                        <TableHead className="text-center">Data Pedido</TableHead>
+                                        <TableHead className="text-center">Data Ruptura</TableHead>
+                                        <TableHead className="text-right">Status</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                 {projectionResults.map(item => (
+                                    <TableRow key={item.baseProductId}>
+                                        <TableCell className="font-semibold truncate">{item.baseProductName}</TableCell>
+                                        <TableCell className="text-right">{item.currentStock.toFixed(1)} {item.baseProductUnit}</TableCell>
+                                        <TableCell className="text-right">{item.dailyAvg.toFixed(1)} {item.baseProductUnit}</TableCell>
+                                        <TableCell className="text-center">{item.orderDate ? format(item.orderDate, 'dd/MM') : 'N/A'}</TableCell>
+                                        <TableCell className="text-center">{item.ruptureDate ? format(item.ruptureDate, 'dd/MM') : 'N/A'}</TableCell>
+                                        <TableCell className="text-right">{getStatusBadge(item)}</TableCell>
+                                    </TableRow>
+                                 ))}
+                                </TableBody>
+                            </Table>
+                        </ScrollArea>
                     )}
                 </CardContent>
             </Card>
         </Link>
     );
 }
-
-    
