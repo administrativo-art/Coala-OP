@@ -21,7 +21,8 @@ interface ProjectionResult {
     lot: import('@/types').LotEntry;
     productName: string;
     daysRemaining: number;
-    projectedConsumption: number;
+    projectedLoss: number;
+    baseUnit: string;
     status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry' | 'conversion_error';
     projectedConsumptionDate: Date | null;
     expiryDate: Date | null;
@@ -75,7 +76,8 @@ export function ConsumptionProjection() {
                     lot,
                     productName: getProductFullName(products.find(p => p.id === lot.productId)),
                     daysRemaining: Infinity,
-                    projectedConsumption: 0,
+                    projectedLoss: 0,
+                    baseUnit: '',
                     status: 'no_expiry',
                     projectedConsumptionDate: null,
                     expiryDate: null,
@@ -96,7 +98,8 @@ export function ConsumptionProjection() {
                     lot,
                     productName: getProductFullName(product),
                     daysRemaining: 0,
-                    projectedConsumption: 0,
+                    projectedLoss: 0,
+                    baseUnit: baseProduct.unit,
                     status: 'no_data',
                     projectedConsumptionDate: null,
                     expiryDate
@@ -124,7 +127,8 @@ export function ConsumptionProjection() {
                     lot,
                     productName: getProductFullName(product),
                     daysRemaining: 0,
-                    projectedConsumption: 0,
+                    projectedLoss: 0,
+                    baseUnit: baseProduct.unit,
                     status: 'conversion_error',
                     projectedConsumptionDate: null,
                     expiryDate
@@ -135,11 +139,19 @@ export function ConsumptionProjection() {
             const projectedConsumptionDate = isFinite(daysToConsume) ? addDays(new Date(), daysToConsume) : null;
             const status = (projectedConsumptionDate && projectedConsumptionDate < expiryDate) ? 'ok' : 'at_risk';
             
+            const daysRemaining = differenceInDays(expiryDate, new Date());
+            let projectedLoss = 0;
+            if (status === 'at_risk' && daysRemaining > 0) {
+                const consumptionUntilExpiry = dailyAvg * daysRemaining;
+                projectedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
+            }
+
             return {
                 lot,
                 productName: getProductFullName(product),
-                daysRemaining: differenceInDays(expiryDate, new Date()),
-                projectedConsumption: 0, // This KPI was not clearly defined, removing for now
+                daysRemaining,
+                projectedLoss,
+                baseUnit: baseProduct.unit,
                 status,
                 projectedConsumptionDate,
                 expiryDate
@@ -208,6 +220,7 @@ export function ConsumptionProjection() {
                                     <TableHead>Lote</TableHead>
                                     <TableHead className="text-center">Vencimento do Lote</TableHead>
                                     <TableHead className="text-center">Previsão de Término</TableHead>
+                                    <TableHead className="text-center">Perda Estimada</TableHead>
                                     <TableHead className="text-center">Situação</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -221,6 +234,11 @@ export function ConsumptionProjection() {
                                         </TableCell>
                                         <TableCell className="text-center">
                                             {result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-center text-destructive font-bold">
+                                            {result.status === 'at_risk' && result.projectedLoss > 0 
+                                                ? `${result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} ${result.baseUnit}`
+                                                : '-'}
                                         </TableCell>
                                         <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                                     </TableRow>
