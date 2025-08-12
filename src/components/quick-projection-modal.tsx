@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -42,9 +41,12 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
   const projection = useMemo(() => {
     const productMap = new Map(products.map(p => [p.id, p]));
     
-    // Aggregate consumption data for all kiosks
+    // Use only 'matriz' data
+    const matrizConsumptionReports = consumptionHistory.filter(r => r.kioskId === 'matriz');
+    const matrizLots = lots.filter(lot => lot.kioskId === 'matriz');
+    
     const monthlyConsumption: Record<string, number> = {};
-    consumptionHistory.forEach(report => {
+    matrizConsumptionReports.forEach(report => {
         const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
         const totalForMonth = report.results
             .filter(res => res.baseProductId === baseProduct.id)
@@ -61,7 +63,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
     let totalStock = 0;
     let hasConversionError = false;
-    lots.filter(lot => productMap.get(lot.productId)?.baseProductId === baseProduct.id)
+    matrizLots.filter(lot => productMap.get(lot.productId)?.baseProductId === baseProduct.id)
       .forEach(lot => {
         const product = productMap.get(lot.productId);
         if (!product) return;
@@ -80,10 +82,10 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
             hasConversionError = true;
         }
     });
-
-    const allKioskStockLevels = Object.values(baseProduct.stockLevels || {});
-    const totalSafetyStock = allKioskStockLevels.reduce((sum, level) => sum + (level.safetyStock || 0), 0);
-    const effectiveStock = Math.max(0, totalStock - totalSafetyStock);
+    
+    const matrizStockLevels = baseProduct.stockLevels?.['matriz'];
+    const safetyStock = matrizStockLevels?.safetyStock || 0;
+    const effectiveStock = Math.max(0, totalStock - safetyStock);
     
     const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
     const ruptureDate = daysOfCoverage !== Infinity ? addDays(new Date(), daysOfCoverage) : null;
@@ -91,7 +93,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
     let orderDate = null;
     let orderStatus: 'ok' | 'soon' | 'urgent' | 'sem_lead_time' = 'sem_lead_time';
 
-    const leadTime = Object.values(baseProduct.stockLevels || {}).find(sl => sl.leadTime && sl.leadTime > 0)?.leadTime;
+    const leadTime = matrizStockLevels?.leadTime;
 
     if (ruptureDate && leadTime && leadTime > 0) {
         orderDate = addDays(ruptureDate, -leadTime);
@@ -113,7 +115,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
       dailyAvg,
       monthlyAvg,
       totalStock,
-      totalSafetyStock,
+      totalSafetyStock: safetyStock,
       effectiveStock,
       daysOfCoverage,
       ruptureDate,
@@ -157,7 +159,7 @@ Projeção para ${baseProduct.name}:
         <DialogHeader>
           <DialogTitle>Projeção Rápida: {baseProduct.name}</DialogTitle>
           <DialogDescription>
-            Análise de compra baseada na média de consumo de toda a rede.
+            Análise de compra baseada na média de consumo da Matriz.
           </DialogDescription>
         </DialogHeader>
 
