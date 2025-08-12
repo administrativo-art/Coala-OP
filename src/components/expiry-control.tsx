@@ -46,6 +46,7 @@ export type GroupedByBaseProduct = {
   baseProductId: string | null;
   name: string;
   brands: GroupedByBrand[];
+  hasLeadTime: boolean;
 };
 
 
@@ -173,6 +174,8 @@ function ExpiryControlContent() {
       const groupName = baseProduct ? baseProduct.name : getProductFullName(product);
       const isBaseProdGroup = !!baseProduct;
       const brandName = product.brand || 'Sem Marca';
+      
+      const hasLeadTime = !!(baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0));
 
       if (!groups.has(baseProductId)) {
         groups.set(baseProductId, {
@@ -180,6 +183,7 @@ function ExpiryControlContent() {
           baseProductId: product.baseProductId || null,
           name: groupName,
           brands: [],
+          hasLeadTime,
         });
       }
 
@@ -391,7 +395,10 @@ function ExpiryControlContent() {
              return (
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
                      <div className="flex items-baseline justify-between border-b pb-2">
+                        <div className="flex items-center gap-2">
                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
+                         {baseGroup.hasLeadTime && <LineChart className="h-5 w-5 text-blue-500" />}
+                        </div>
                          {totalPackages > 0 && (
                             <div className="flex items-center gap-2 text-sm sm:text-base">
                               <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
