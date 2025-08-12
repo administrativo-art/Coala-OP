@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle, BellRing, CalendarDays, ShoppingCart, Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -66,7 +66,16 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
         const product = productMap.get(lot.productId);
         if (!product) return;
         try {
-            totalStock += convertValue(lot.quantity * product.packageSize, product.unit, baseProduct.unit, product.category);
+            const quantityInPackages = lot.quantity || 0;
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                totalStock += quantityInPackages * valueOfOnePackageInBase;
+            } 
+            else if (product.category === baseProduct.category) {
+                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 totalStock += quantityInPackages * valueOfOnePackageInBase;
+            }
         } catch {
             hasConversionError = true;
         }
