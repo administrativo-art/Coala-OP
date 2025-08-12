@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -8,29 +7,29 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO, startOfDay, differenceInDays } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { type LotEntry } from '@/types';
+import { type LotEntry, type BaseProduct } from '@/types';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 type ISODate = string; // "YYYY-MM-DD"
 
-// Helper functions for date manipulation to avoid timezone issues.
-const parseISODate = (isoDate: ISODate): Date => {
-    const [year, month, day] = isoDate.split('-').map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0); // Use midday to avoid DST shifts
+// Consistent date helpers to avoid timezone issues
+const fmtDate = (d: Date): ISODate => {
+  return format(d, 'yyyy-MM-dd');
 };
 
-const formatToISODate = (date: Date): ISODate => {
-    return format(date, 'yyyy-MM-dd');
+const parseISODate = (isoDate: ISODate): Date => {
+    return parse(isoDate, 'yyyy-MM-dd', new Date());
 };
 
 const addDays = (d: ISODate, n: number): ISODate => {
@@ -39,25 +38,18 @@ const addDays = (d: ISODate, n: number): ISODate => {
   return fmtDate(dt);
 };
 
-// This is a new helper function for date formatting, which can be useful
-// for consistent date representation across the component.
-const fmtDate = (d: Date): ISODate => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
 const diffISODays = (a: ISODate, b: ISODate): number => {
-  // dias entre b (fim) e a (início), truncado a inteiros
   const da = parseISODate(a);
   const db = parseISODate(b);
   return Math.floor((db.getTime() - da.getTime()) / (24 * 60 * 60 * 1000));
-}
+};
+
 
 interface ProjectionResult {
     lot: LotEntry;
     productName: string;
+    lotQtyInBaseUnit: number;
+    dailyAvg: number;
     daysRemaining: number;
     projectedLoss: number;
     baseUnit: string;
@@ -76,6 +68,8 @@ export function ConsumptionProjection() {
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
     const [selectedBaseProductIds, setSelectedBaseProductIds] = useState<string[]>([]);
     const [initialSelectionMade, setInitialSelectionMade] = useState(false);
+    const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
+    const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
 
@@ -127,134 +121,155 @@ export function ConsumptionProjection() {
         }, {} as Record<string, LotEntry[]>);
 
         const allResults: ProjectionResult[] = [];
-        const todayISO = formatToISODate(new Date());
+        const todayISO = fmtDate(new Date());
 
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
             let consumptionTrackerDate = todayISO;
             
             const groupLots = lotsByBaseProduct[baseProductId].sort((a,b) => {
-                if (!a.expiryDate) return 1;
-                if (!b.expiryDate) return -1;
-                return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+                const ae = a.expiryDate ? fmtDate(parseISODate(a.expiryDate.split('T')[0])) : '9999-12-31';
+                const be = b.expiryDate ? fmtDate(parseISODate(b.expiryDate.split('T')[0])) : '9999-12-31';
+                if (ae !== be) return ae < be ? -1 : 1;
+                return String(a.lotNumber ?? a.id).localeCompare(String(b.lotNumber ?? b.id));
             });
 
             const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
             if (!baseProduct) return;
 
-            const dailyAvg = dailyAverages.get(baseProductId);
+            const dailyAvg = dailyAverages.get(baseProductId) ?? 0;
 
             for (const lot of groupLots) {
                 const product = products.find(p => p.id === lot.productId)!;
-                let result: ProjectionResult;
+                let result: Omit<ProjectionResult, 'status'>;
+                let status: ProjectionResult['status'];
                 const startDateISO = consumptionTrackerDate;
 
+                 let lotQtyInBaseUnit = 0;
+                 let hasConversionError = false;
+                 try {
+                      if (product.category === baseProduct.category) {
+                         const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                         lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                     } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                         const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                         if (secondaryUnitCategory !== baseProduct.category) throw new Error('Incompatible secondary unit category');
+                         const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                         lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
+                     } else {
+                         throw new Error('Incompatible categories without secondary unit');
+                     }
+                 } catch (err) {
+                     console.error("Error converting lot quantity for projection:", err);
+                     hasConversionError = true;
+                 }
+
+
                 if (!lot.expiryDate) {
+                    status = 'no_expiry';
                     result = {
-                        lot, productName: getProductFullName(product), daysRemaining: Infinity,
-                        projectedLoss: 0, baseUnit: '', status: 'no_expiry',
-                        projectedConsumptionDate: null, expiryDate: null,
-                        projectedConsumptionStartDate: null,
+                        lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Number.MAX_SAFE_INTEGER,
+                        projectedLoss: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, 
+                        projectedConsumptionStartDate: null, expiryDate: null,
                     };
-                    allResults.push(result);
+                    allResults.push({ ...result, status });
                     continue;
                 }
                 
-                const expiryDateISO = formatToISODate(new Date(lot.expiryDate));
+                const expiryDateISO = fmtDate(parseISODate(lot.expiryDate.split('T')[0]));
                 const daysRemaining = diffISODays(todayISO, expiryDateISO);
 
-                if (dailyAvg === undefined || dailyAvg <= 0) {
-                     result = {
-                        lot, productName: getProductFullName(product), daysRemaining,
-                        projectedLoss: lot.quantity, baseUnit: baseProduct.unit, status: 'no_data',
-                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO),
-                        projectedConsumptionStartDate: parseISODate(startDateISO),
-                    };
-                    allResults.push(result);
-                    continue;
-                }
-
-                let lotQtyInBaseUnit = 0;
-                let hasConversionError = false;
-                try {
-                     if (product.category === baseProduct.category) {
-                        const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                        lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                    } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
-                        if (secondaryUnitCategory !== baseProduct.category) throw new Error('Incompatible secondary unit category');
-                        const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                        lotQtyInBaseUnit = lot.quantity * valueOfOnePackageInBase;
-                    } else {
-                        throw new Error('Incompatible categories without secondary unit');
-                    }
-                } catch (err) {
-                    console.error("Error converting lot quantity for projection:", err);
-                    hasConversionError = true;
-                }
-
                 if (hasConversionError) {
-                     result = {
-                        lot, productName: getProductFullName(product), daysRemaining,
-                        projectedLoss: 0, baseUnit: baseProduct.unit, status: 'conversion_error',
-                        projectedConsumptionDate: null, expiryDate: parseISODate(expiryDateISO),
-                        projectedConsumptionStartDate: parseISODate(startDateISO),
-                    };
-                    allResults.push(result);
-                    continue;
-                }
-                
-                const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
-                
-                const validDaysForConsumption = Math.max(0, diffISODays(startDateISO, expiryDateISO));
-                const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
-                const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
-                
-                let projectedEndDateISO: ISODate;
-                let nextConsumptionStartDate: ISODate;
-                let status: ProjectionResult['status'] = 'ok';
-
-                if (estimatedLoss > 0) {
-                    status = 'at_risk';
-                    projectedEndDateISO = expiryDateISO;
-                    nextConsumptionStartDate = addDays(expiryDateISO, 1);
+                    status = 'conversion_error';
+                } else if (dailyAvg <= 0) {
+                     status = 'no_data';
                 } else {
-                    projectedEndDateISO = addDays(startDateISO, daysToConsumeLot);
-                    nextConsumptionStartDate = projectedEndDateISO;
-                }
-                
-                result = {
-                    lot, productName: getProductFullName(product), daysRemaining,
-                    projectedLoss: estimatedLoss, baseUnit: baseProduct.unit, status,
-                    projectedConsumptionDate: parseISODate(projectedEndDateISO),
-                    projectedConsumptionStartDate: parseISODate(startDateISO),
-                    expiryDate: parseISODate(expiryDateISO)
-                };
+                    const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
+                    const validDaysForConsumption = Math.max(0, diffISODays(startDateISO, expiryDateISO) + 1);
+                    const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
+                    const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
+                    
+                    let projectedEndDateISO: ISODate;
+                    if (estimatedLoss > 0.001) { // Use tolerance for float comparison
+                        status = 'at_risk';
+                        projectedEndDateISO = expiryDateISO;
+                        consumptionTrackerDate = addDays(expiryDateISO, 1);
+                    } else {
+                        status = 'ok';
+                        projectedEndDateISO = addDays(startDateISO, Math.max(0, daysToConsumeLot - 1));
+                        consumptionTrackerDate = addDays(projectedEndDateISO, 1);
+                    }
 
-                allResults.push(result);
-                consumptionTrackerDate = nextConsumptionStartDate;
+                    result = {
+                        lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
+                        projectedLoss: estimatedLoss, baseUnit: baseProduct.unit,
+                        projectedConsumptionDate: parseISODate(projectedEndDateISO),
+                        projectedConsumptionStartDate: parseISODate(startDateISO),
+                        expiryDate: parseISODate(expiryDateISO)
+                    };
+                    allResults.push({ ...result, status });
+                    continue; // Skip to next lot
+                }
+
+                // Common result structure for errors/no_data
+                 result = {
+                    lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
+                    projectedLoss: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null,
+                    projectedConsumptionStartDate: parseISODate(startDateISO), expiryDate: parseISODate(expiryDateISO)
+                };
+                allResults.push({ ...result, status });
             }
         });
 
-        return allResults.sort((a,b) => {
-            if (a.status === 'at_risk' && b.status !== 'at_risk') return -1;
-            if (b.status === 'at_risk' && a.status !== 'at_risk') return 1;
-            return a.daysRemaining - b.daysRemaining;
-        });
+        return allResults;
 
     }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds]);
     
+    const finalFilteredAndSortedResults = useMemo(() => {
+        let results = projectionResults;
+        if (showOnlyAtRisk) {
+            results = results.filter(r => r.status === 'at_risk');
+        }
+
+        return results.sort((a, b) => {
+            const key = sortConfig.key;
+            let valA = a[key as keyof ProjectionResult];
+            let valB = b[key as keyof ProjectionResult];
+
+            // Special handling for productName which is not on the object itself
+            if(key === 'productName') {
+                valA = a.productName;
+                valB = b.productName;
+            }
+
+            if (valA === null || valA === undefined) return 1;
+            if (valB === null || valB === undefined) return -1;
+            
+            let comparison = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+                comparison = valA.localeCompare(valB);
+            } else if (typeof valA === 'number' && typeof valB === 'number') {
+                comparison = valA - valB;
+            } else if (valA instanceof Date && valB instanceof Date) {
+                comparison = valA.getTime() - valB.getTime();
+            }
+
+            return sortConfig.direction === 'asc' ? comparison : -comparison;
+        });
+
+    }, [projectionResults, showOnlyAtRisk, sortConfig]);
+
     const getStatusBadge = (result: ProjectionResult) => {
         switch (result.status) {
             case 'ok':
-                return <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> Será consumido</Badge>;
+                return <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>;
             case 'at_risk':
-                return <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Risco de vencimento</Badge>;
+                return <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Risco</Badge>;
             case 'no_data':
-                return <Badge variant="outline">Sem dados de consumo</Badge>;
+                return <Badge variant="outline">Sem dados</Badge>;
              case 'no_expiry':
-                return <Badge variant="secondary">Validade indefinida</Badge>;
+                return <Badge variant="secondary">S/ Vencimento</Badge>;
              case 'conversion_error':
-                return <Badge variant="destructive">Erro de conversão</Badge>;
+                return <Badge variant="destructive">Erro Conversão</Badge>;
         }
     };
     
@@ -267,6 +282,23 @@ export function ConsumptionProjection() {
             }
         });
     };
+    
+    const handleSort = (key: keyof ProjectionResult | 'productName') => {
+        if (sortConfig.key === key) {
+            setSortConfig({ key, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' });
+        } else {
+            setSortConfig({ key, direction: 'asc' });
+        }
+    };
+
+    const renderSortableHeader = (label: string, key: keyof ProjectionResult | 'productName') => (
+        <TableHead className="cursor-pointer" onClick={() => handleSort(key)}>
+            <div className="flex items-center gap-2">
+                {label}
+                {sortConfig.key === key && <ArrowDownUp className="h-3 w-3" />}
+            </div>
+        </TableHead>
+    );
 
     return (
         <Card>
@@ -292,8 +324,12 @@ export function ConsumptionProjection() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-64">
-                            <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
+                            <DropdownMenuItem onSelect={() => setShowOnlyAtRisk(prev => !prev)}>
+                                <DropdownMenuCheckboxItem checked={showOnlyAtRisk} onCheckedChange={() => {}} onSelect={e => e.preventDefault()} />
+                                Mostrar somente em risco
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds(baseProducts.map(p => p.id)); }}>Selecionar todos</DropdownMenuItem>
                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds([]); }}>Limpar seleção</DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -321,7 +357,7 @@ export function ConsumptionProjection() {
                         <Package className="mx-auto h-12 w-12" />
                         <p className="mt-4 font-semibold">Selecione um quiosque para iniciar a análise.</p>
                     </div>
-                ) : projectionResults.length === 0 ? (
+                ) : finalFilteredAndSortedResults.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="mx-auto h-12 w-12" />
                         <p className="mt-4 font-semibold">Nenhum lote encontrado para este quiosque e filtros.</p>
@@ -331,31 +367,49 @@ export function ConsumptionProjection() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Insumo</TableHead>
+                                    {renderSortableHeader('Insumo', 'productName')}
                                     <TableHead>Lote</TableHead>
-                                    <TableHead className="text-center">Período de Consumo</TableHead>
-                                    <TableHead className="text-center">Vencimento</TableHead>
+                                    <TableHead className="text-center">Qtd. (Base)</TableHead>
+                                    <TableHead className="text-center">Taxa/dia</TableHead>
+                                    {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
+                                    {renderSortableHeader('Vencimento', 'expiryDate')}
                                     <TableHead className="text-center">Perda Estimada</TableHead>
-                                    <TableHead className="text-center">Situação</TableHead>
+                                    <TableHead className="text-center">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {projectionResults.map(result => (
+                                {finalFilteredAndSortedResults.map(result => (
                                     <TableRow key={result.lot.id}>
                                         <TableCell className="font-medium">{result.productName}</TableCell>
                                         <TableCell>{result.lot.lotNumber}</TableCell>
+                                        <TableCell className="text-center">{result.lotQtyInBaseUnit.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
+                                        <TableCell className="text-center">{result.dailyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
                                         <TableCell className="text-center">
                                             {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
-                                                `${format(result.projectedConsumptionStartDate, 'dd/MM/yy')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
+                                                `${format(result.projectedConsumptionStartDate, 'dd/MM')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
                                             ) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-center font-semibold">
-                                            {result.expiryDate ? format(result.expiryDate, 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
+                                            {result.expiryDate ? (
+                                                <div className="flex flex-col items-center">
+                                                    <span>{format(result.expiryDate, 'dd/MM/yyyy')}</span>
+                                                    <span className="text-xs text-muted-foreground">({result.daysRemaining} dias)</span>
+                                                </div>
+                                            ) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-center text-destructive font-bold">
-                                            {result.status === 'at_risk' && result.projectedLoss > 0 
-                                                ? `${result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} ${result.baseUnit}`
-                                                : '-'}
+                                            {result.status === 'at_risk' && result.projectedLoss > 0 ? (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="flex items-center justify-center gap-1 cursor-help">
+                                                                {result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit} <HelpCircle className="h-3 w-3" />
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent><p>Estimativa de perda se o consumo se mantiver.</p></TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                ) : '-'}
                                         </TableCell>
                                         <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                                     </TableRow>
@@ -368,5 +422,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
-    
