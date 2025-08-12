@@ -9,7 +9,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO, addDays as addDaysFns, isAfter } from 'date-fns';
+import { format, parseISO, addDays as addDaysFns, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -558,4 +558,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
