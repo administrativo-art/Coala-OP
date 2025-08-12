@@ -36,7 +36,16 @@ const formatToISODate = (date: Date): ISODate => {
 const addDays = (d: ISODate, n: number): ISODate => {
   const dt = parseISODate(d);
   dt.setDate(dt.getDate() + n);
-  return formatToISODate(dt);
+  return fmtDate(dt);
+};
+
+// This is a new helper function for date formatting, which can be useful
+// for consistent date representation across the component.
+const fmtDate = (d: Date): ISODate => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 const diffISODays = (a: ISODate, b: ISODate): number => {
@@ -359,3 +368,5 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
+    
