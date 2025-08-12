@@ -153,9 +153,13 @@ function OperationalDashboard() {
   const expiringSoonLots = useMemo(() => {
     if (lotsLoading) return [];
     return lotsInKiosk.filter(lot => {
+        if (!lot.expiryDate) return false;
         const days = differenceInDays(parseISO(lot.expiryDate), new Date());
         return days >= 0 && days <= 7 && lot.quantity > 0;
-    }).sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+    }).sort((a,b) => {
+        if (!a.expiryDate || !b.expiryDate) return 0;
+        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    });
   }, [lotsInKiosk, lotsLoading]);
 
   const expiringSoonCount = useMemo(() => {
@@ -164,7 +168,10 @@ function OperationalDashboard() {
 
   const expiredCount = useMemo(() => {
      if (lotsLoading) return 0;
-    return lotsInKiosk.filter(lot => differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0).length;
+    return lotsInKiosk.filter(lot => {
+        if (!lot.expiryDate) return false;
+        return differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0;
+    }).length;
   }, [lotsInKiosk, lotsLoading]);
 
   const kiosksToDisplay = useMemo(() => {
