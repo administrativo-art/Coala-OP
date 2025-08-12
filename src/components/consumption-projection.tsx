@@ -65,6 +65,8 @@ export function ConsumptionProjection() {
     const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
     const [simulationPercentage, setSimulationPercentage] = useState<number>(0);
+    const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
+
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
 
@@ -370,7 +372,7 @@ export function ConsumptionProjection() {
 
             const tableData = group.lots.map(result => [
                 result.productName,
-                result.lotNumber,
+                result.lot.lotNumber,
                 result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yy') : 'N/A',
                 result.expiryDate ? format(result.expiryDate, 'dd/MM/yy') : 'N/A',
                 result.projectedLoss > 0 ? `${result.projectedLoss.toFixed(2)} ${result.baseUnit}` : '-',
@@ -487,11 +489,13 @@ export function ConsumptionProjection() {
                                         <div className="flex justify-between items-center">
                                           <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
                                           <div className="flex items-center gap-2">
-                                            {group.suggestedOrderQty && (
+                                            {group.suggestedOrderQty !== null && (
                                                 <TooltipProvider>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
+                                                            <div>
+                                                                <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
+                                                            </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
                                                             <p>Cálculo: (Média Mensal) x (Meses para Cobrir)</p>
