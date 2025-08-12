@@ -110,15 +110,17 @@ export function ConsumptionProjection() {
 
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading) return [];
-        const currentKioskId = 'matriz'; // Always use Matriz data for projection
-
-        const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[currentKioskId];
+        
+        const isMatriz = selectedKioskId === 'matriz';
         const adjustmentFactor = 1 + (simulationPercentage / 100);
+        const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const kioskReports = consumptionHistory.filter(r => r.kioskId === currentKioskId);
+        const relevantReports = isMatriz 
+            ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
-        kioskReports.forEach(report => {
+        relevantReports.forEach(report => {
             const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(res => {
                 if (res.baseProductId) {
@@ -141,7 +143,7 @@ export function ConsumptionProjection() {
             }
         });
         
-        const kioskLots = lots.filter(lot => lot.kioskId === currentKioskId && lot.quantity > 0);
+        const kioskLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
         
         const lotsByBaseProduct = kioskLots.reduce((acc, lot) => {
             const product = products.find(p => p.id === lot.productId);
@@ -258,7 +260,7 @@ export function ConsumptionProjection() {
 
         return allResults;
 
-    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage]);
+    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage, selectedKioskId]);
     
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
@@ -404,11 +406,21 @@ export function ConsumptionProjection() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Projeção de Consumo vs. Vencimento (Matriz)</CardTitle>
+                <CardTitle>Projeção de Consumo vs. Vencimento</CardTitle>
                 <CardDescription>
-                    Verifique se os lotes em estoque na Matriz serão consumidos antes de vencerem, com base na média de consumo da mesma.
+                   Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem. Para a Matriz, a projeção utiliza a soma do consumo dos outros quiosques.
                 </CardDescription>
                 <div className="pt-2 flex flex-wrap items-center gap-2">
+                     <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                        <SelectTrigger className="w-full sm:w-[250px]">
+                           <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {kiosks.map(k => (
+                               <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                     </Select>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
@@ -474,28 +486,32 @@ export function ConsumptionProjection() {
                                     <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
                                         <div className="flex justify-between items-center">
                                           <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                          <div className="flex items-center gap-2">
-                                            {group.suggestedOrderQty !== null && (
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div>
-                                                                <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
-                                                            </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>Cálculo: (Média Mensal) x (Meses para Cobrir)</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            )}
-                                            {getOrderStatusBadge(group.orderStatus)}
+                                          {selectedKioskId === 'matriz' && 
+                                            <div className="flex items-center gap-2">
+                                              {group.suggestedOrderQty !== null && (
+                                                  <TooltipProvider>
+                                                      <Tooltip>
+                                                          <TooltipTrigger asChild>
+                                                              <div>
+                                                                  <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
+                                                              </div>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                              <p>Cálculo: (Média Mensal) x (Meses para Cobrir)</p>
+                                                          </TooltipContent>
+                                                      </Tooltip>
+                                                  </TooltipProvider>
+                                              )}
+                                              {getOrderStatusBadge(group.orderStatus)}
+                                            </div>
+                                          }
+                                        </div>
+                                        {selectedKioskId === 'matriz' && 
+                                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                              {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
+                                              {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
                                           </div>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                            {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
-                                            {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
-                                        </div>
+                                        }
                                     </div>
                                     <div className="overflow-x-auto">
                                         <Table>
