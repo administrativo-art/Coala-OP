@@ -593,7 +593,7 @@ function ExpiryControlContent() {
       
       <ZeroedLotsAuditModal
         open={isAuditModalOpen}
-        onOpenChange={setIsHistoryModalOpen}
+        onOpenChange={setIsAuditModalOpen}
       />
     </>
   );
