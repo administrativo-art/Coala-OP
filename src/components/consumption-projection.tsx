@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO, addDays as addDaysFns, isAfter, differenceInDays } from 'date-fns';
+import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -179,7 +180,7 @@ export function ConsumptionProjection() {
             let ruptureDate: Date | null = null;
             if (dailyAvg > 0 && totalStockInBase > 0) {
                 const daysUntilRupture = Math.floor(totalStockInBase / dailyAvg);
-                ruptureDate = addDaysFns(today, daysUntilRupture);
+                ruptureDate = addDays(today, daysUntilRupture);
             }
 
             for (const lot of groupLots) {
@@ -206,7 +207,7 @@ export function ConsumptionProjection() {
                 }
 
                 const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
-                const projectedConsumptionDate = addDaysFns(currentStockDate, daysToConsumeLot - 1);
+                const projectedConsumptionDate = addDays(currentStockDate, daysToConsumeLot - 1);
                 
                 let projectedLoss = 0;
                 if(isAfter(projectedConsumptionDate, expiryDate)){
@@ -225,7 +226,7 @@ export function ConsumptionProjection() {
                     expiryDate: expiryDate,
                     status: projectedLoss > 0 ? 'at_risk' : 'ok'
                 });
-                currentStockDate = addDaysFns(projectedConsumptionDate, 1);
+                currentStockDate = addDays(projectedConsumptionDate, 1);
             }
 
             let orderDate = null;
@@ -233,7 +234,7 @@ export function ConsumptionProjection() {
             
             if (kioskParams?.leadTime && kioskParams.leadTime > 0) {
                 if(ruptureDate) {
-                    orderDate = addDaysFns(ruptureDate, -kioskParams.leadTime);
+                    orderDate = addDays(ruptureDate, -kioskParams.leadTime);
                     const daysToOrder = differenceInDays(orderDate, today);
                     if (daysToOrder <= 0) orderStatus = 'urgent';
                     else if (daysToOrder <= 7) orderStatus = 'soon';
@@ -394,7 +395,7 @@ export function ConsumptionProjection() {
             case 'ok': return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
             case 'soon': return <Badge variant="destructive" className="bg-yellow-500 text-white">Pedir em breve</Badge>;
             case 'urgent': return <Badge variant="destructive">Urgente</Badge>;
-            case 'sem_lead_time': return <Badge variant="outline">Sem Lead Time</Badge>;
+            case 'sem_lead_time': return null;
             default: return <Badge variant="secondary">Sem Dados</Badge>;
         }
     };
