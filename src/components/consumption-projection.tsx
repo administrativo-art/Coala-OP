@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -112,8 +113,8 @@ export function ConsumptionProjection() {
       baseProduct: typeof baseProducts[number]
     ): number => {
       // Se a unidade do produto é a mesma do insumo base, a "quantidade" é o próprio valor
-      if (product.unit.toLowerCase() === baseProduct.unit.toLowerCase()) {
-        return packagesQty * product.packageSize;
+      if (product.unit.toLowerCase() === 'un' && baseProduct.unit.toLowerCase() === 'un') {
+        return packagesQty;
       }
       
       // Se houver uma unidade secundária, ela tem prioridade para a conversão
