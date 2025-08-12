@@ -93,6 +93,7 @@ export function ConsumptionProjection() {
         const allResults: ProjectionResult[] = [];
 
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
+            let consumptionStartsOn = new Date();
             const groupLots = lotsByBaseProduct[baseProductId].sort((a,b) => {
                 if (!a.expiryDate) return 1;
                 if (!b.expiryDate) return -1;
@@ -103,7 +104,6 @@ export function ConsumptionProjection() {
             if (!baseProduct) return;
 
             const dailyAvg = dailyAverages.get(baseProductId);
-            let consumptionStartsOn = new Date();
 
             for (const lot of groupLots) {
                 const product = products.find(p => p.id === lot.productId)!;
