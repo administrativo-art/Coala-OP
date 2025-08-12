@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -15,13 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 type ISODate = string; // "YYYY-MM-DD"
@@ -65,6 +66,7 @@ interface ProjectionResult {
     dailyAvg: number;
     daysRemaining: number;
     projectedLoss: number;
+    projectedLossCost: number; // New field for financial loss
     baseUnit: string;
     status: 'ok' | 'at_risk' | 'no_data' | 'no_expiry' | 'conversion_error';
     projectedConsumptionDate: Date | null;
@@ -89,6 +91,7 @@ export function ConsumptionProjection() {
     const [initialSelectionMade, setInitialSelectionMade] = useState(false);
     const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
+    const [simulationPercentage, setSimulationPercentage] = useState<number>(0);
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
 
@@ -112,12 +115,6 @@ export function ConsumptionProjection() {
       packagesQty: number,
       baseProduct: typeof baseProducts[number]
     ): number => {
-      // Se a unidade do produto é a mesma do insumo base, a "quantidade" é o próprio valor
-      if (product.unit.toLowerCase() === 'un' && baseProduct.unit.toLowerCase() === 'un') {
-        return packagesQty;
-      }
-      
-      // Se houver uma unidade secundária, ela tem prioridade para a conversão
       if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
         const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
         const perPackageInBase = convertValue(
@@ -129,7 +126,6 @@ export function ConsumptionProjection() {
         return packagesQty * perPackageInBase;
       }
       
-      // Conversão direta do "tamanho do pacote" para a unidade base
       const perPackageInBase = convertValue(
         product.packageSize ?? 1,
         product.unit,
@@ -144,6 +140,7 @@ export function ConsumptionProjection() {
         if (!selectedKioskId || loading) return [];
 
         const dailyAverages = new Map<string, number>();
+        const adjustmentFactor = 1 + (simulationPercentage / 100);
         
         // Calcula taxa diária por insumo base em UNIDADE BASE
         baseProducts.forEach(bp => {
@@ -205,20 +202,16 @@ export function ConsumptionProjection() {
               const ae = a.expiryDate ? formatToISODate(parseISO(a.expiryDate.split('T')[0])) : '9999-12-31';
               const be = b.expiryDate ? formatToISODate(parseISO(b.expiryDate.split('T')[0])) : '9999-12-31';
               if (ae !== be) return ae < be ? -1 : 1;
-
-              // @ts-ignore
-              const ar = a.receivedAt ?? '';
-              // @ts-ignore
-              const br = b.receivedAt ?? '';
+              const ar = (a as any).receivedAt ?? '';
+              const br = (b as any).receivedAt ?? '';
               if (ar !== br) return ar < br ? -1 : 1;
-
               return String(a.lotNumber ?? a.id).localeCompare(String(b.lotNumber ?? b.id));
             });
 
             const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
             if (!baseProduct) return;
 
-            const dailyAvg = dailyAverages.get(baseProductId) ?? 0;
+            const dailyAvg = (dailyAverages.get(baseProductId) ?? 0) * adjustmentFactor;
             const projectedLots: ProjectionResult[] = [];
 
             for (const lot of groupLots) {
@@ -240,7 +233,7 @@ export function ConsumptionProjection() {
                     status = 'no_expiry';
                     result = {
                         lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Number.MAX_SAFE_INTEGER,
-                        projectedLoss: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, 
+                        projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, 
                         projectedConsumptionStartDate: null, expiryDate: null,
                     };
                     projectedLots.push({ ...result, status });
@@ -260,6 +253,7 @@ export function ConsumptionProjection() {
                     const projectedEndDateISO_Inclusive = addDays(startDateISO, Math.max(0, daysToConsumeLot - 1));
                     const consumptionUntilExpiry = Math.min(lotQtyInBaseUnit, validDaysForConsumption * dailyAvg);
                     const estimatedLoss = Math.max(0, lotQtyInBaseUnit - consumptionUntilExpiry);
+                    const lastPrice = baseProduct.lastEffectivePrice?.pricePerUnit ?? 0;
                     
                     let projectedEndDateISO: ISODate;
                     let nextConsumptionStartDate: ISODate;
@@ -276,7 +270,7 @@ export function ConsumptionProjection() {
 
                     result = {
                         lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
-                        projectedLoss: estimatedLoss, baseUnit: baseProduct.unit,
+                        projectedLoss: estimatedLoss, projectedLossCost: estimatedLoss * lastPrice, baseUnit: baseProduct.unit,
                         projectedConsumptionDate: parseISODate(projectedEndDateISO),
                         projectedConsumptionStartDate: parseISODate(startDateISO),
                         expiryDate: parseISODate(expiryDateISO)
@@ -288,7 +282,7 @@ export function ConsumptionProjection() {
 
                  result = {
                     lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
-                    projectedLoss: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null,
+                    projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null,
                     projectedConsumptionStartDate: parseISODate(startDateISO), expiryDate: parseISODate(expiryDateISO)
                 };
                 projectedLots.push({ ...result, status });
@@ -305,7 +299,7 @@ export function ConsumptionProjection() {
 
         return allResults;
 
-    }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits]);
+    }, [selectedKioskId, loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage]);
     
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
@@ -405,7 +399,7 @@ export function ConsumptionProjection() {
                 <CardDescription>
                     Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem, com base na média de consumo.
                 </CardDescription>
-                <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                <div className="pt-2 flex flex-wrap items-center gap-2">
                     <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
                         <SelectTrigger className="w-full sm:max-w-xs">
                             <SelectValue placeholder="Selecione um quiosque..." />
@@ -445,6 +439,16 @@ export function ConsumptionProjection() {
                             </ScrollArea>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    <div className="relative w-full sm:w-auto">
+                        <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="number"
+                            placeholder="Simular consumo (+/- %)"
+                            className="w-full sm:w-[200px] pl-10"
+                            value={simulationPercentage || ''}
+                            onChange={(e) => setSimulationPercentage(Number(e.target.value))}
+                        />
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>
@@ -505,7 +509,9 @@ export function ConsumptionProjection() {
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
                                                                         <span className="flex items-center justify-center gap-1 cursor-help">
-                                                                            {result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit} <HelpCircle className="h-3 w-3" />
+                                                                            {result.projectedLossCost > 0 && `${result.projectedLossCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} `}
+                                                                            ({result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit})
+                                                                            <HelpCircle className="h-3 w-3" />
                                                                         </span>
                                                                     </TooltipTrigger>
                                                                     <TooltipContent><p>Estimativa de perda se o consumo se mantiver.</p></TooltipContent>
@@ -528,3 +534,6 @@ export function ConsumptionProjection() {
     );
 }
 
+    
+
+    
