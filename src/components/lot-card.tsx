@@ -174,7 +174,6 @@ export function LotCard({
   const { consumeFromLot } = useExpiryProducts();
   const router = useRouter();
   const [lotToConsume, setLotToConsume] = useState<LotEntry | null>(null);
-  const [isProjectionModalOpen, setIsProjectionModalOpen] = useState(false);
 
   const handleConsumeClick = (lot: LotEntry) => {
     setLotToConsume(lot);
@@ -189,11 +188,6 @@ export function LotCard({
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
   const { product } = productGroup;
-  const hasLeadTime = !!(baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0));
-
-  const handleGoToProjection = () => {
-      setIsProjectionModalOpen(true);
-  }
   
   const handlePrintLabel = async (lot: LotEntry, product: Product) => {
     const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes.find(s => s.id === '6080') || labelSizes[0];
@@ -297,16 +291,6 @@ export function LotCard({
                             </ScrollArea>
                         </PopoverContent>
                     </Popover>
-                    {hasLeadTime && (
-                         <TooltipProvider><Tooltip delayDuration={100}>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-500" onClick={handleGoToProjection}>
-                                    <LineChart className="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Ver projeção de compra</p></TooltipContent>
-                         </Tooltip></TooltipProvider>
-                    )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     <p><strong>Embalagem:</strong> {product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</p>
@@ -390,12 +374,6 @@ export function LotCard({
         lot={lotToConsume}
         onClose={() => setLotToConsume(null)}
         onConfirm={handleConfirmConsumption}
-      />
-    )}
-    {isProjectionModalOpen && baseProduct && (
-      <QuickProjectionModal
-        baseProduct={baseProduct}
-        onOpenChange={setIsProjectionModalOpen}
       />
     )}
     </>
