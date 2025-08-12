@@ -22,8 +22,9 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info, Lock, Unlock } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Separator } from './ui/separator';
 
 
 const stockLevelSchema = z.object({
@@ -37,7 +38,9 @@ const baseProductSchema = z.object({
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
   initialCostPerUnit: z.coerce.number().optional(),
-  stockLevels: z.array(stockLevelSchema)
+  stockLevels: z.array(stockLevelSchema),
+  leadTime: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
+  consumptionMonths: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
 });
 
 type BaseProductFormValues = z.infer<typeof baseProductSchema>;
@@ -69,7 +72,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [] }
+    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], leadTime: 0, consumptionMonths: 0 }
   });
 
   const { fields, update } = useFieldArray({
@@ -101,7 +104,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                 min: level?.min ?? 0,
                 override: level?.override ?? false,
             };
-          })
+          }),
+          leadTime: productToEdit.leadTime,
+          consumptionMonths: productToEdit.consumptionMonths,
         });
       } else {
         form.reset({
@@ -109,7 +114,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           category: 'Massa',
           unit: 'g',
           initialCostPerUnit: 0,
-          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, override: false }))
+          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, override: false })),
+          leadTime: 0,
+          consumptionMonths: 0,
         });
       }
     }
@@ -123,13 +130,19 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         }
     });
 
+    const dataPayload = {
+      name: values.name,
+      category: values.category,
+      unit: values.unit,
+      stockLevels: stockLevelsObject,
+      leadTime: values.leadTime,
+      consumptionMonths: values.consumptionMonths,
+    };
+
     if (productToEdit) {
-      const updatedProduct = { 
+      const updatedProduct: any = { 
         ...productToEdit,
-        name: values.name,
-        category: values.category,
-        unit: values.unit,
-        stockLevels: stockLevelsObject
+        ...dataPayload
       };
       
       if (!productToEdit.lastEffectivePrice) {
@@ -140,11 +153,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     } else {
        const newProduct = {
-        name: values.name,
-        category: values.category,
-        unit: values.unit,
+        ...dataPayload,
         initialCostPerUnit: values.initialCostPerUnit,
-        stockLevels: stockLevelsObject
       };
       addBaseProduct(newProduct);
     }
@@ -168,7 +178,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
+        <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{productToEdit ? 'Editar produto base' : 'Novo produto base'}</DialogTitle>
             <DialogDescription>
@@ -248,8 +258,29 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           </FormItem>
                       )}
                   />
+
+                  <Separator />
+                  <h3 className="text-md font-medium pt-2">Parâmetros de compra (opcional)</h3>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="leadTime" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground"/>Lead Time (dias)</FormLabel>
+                            <FormControl><Input type="number" placeholder="Ex: 7" {...field} value={field.value ?? ''} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                    <FormField control={form.control} name="consumptionMonths" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="flex items-center gap-1.5"><Calendar className="h-4 w-4 text-muted-foreground"/>Sugerir Pedido para (meses)</FormLabel>
+                            <FormControl><Input type="number" placeholder="Ex: 2" {...field} value={field.value ?? ''} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                  </div>
                   
-                  <h3 className="text-md font-medium border-t pt-4">Níveis de estoque mínimo (opcional)</h3>
+                  <Separator />
+                  <h3 className="text-md font-medium pt-2">Níveis de estoque mínimo (opcional)</h3>
 
                   <div className="rounded-md border">
                       <Table>

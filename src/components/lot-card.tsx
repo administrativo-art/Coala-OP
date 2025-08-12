@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import Image from 'next/image';
@@ -9,8 +10,8 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye } from 'lucide-react';
-import { type Kiosk, type LotEntry, type Product, type Location } from '@/types';
+import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart } from 'lucide-react';
+import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { labelSizes } from '@/lib/label-sizes';
@@ -27,6 +28,8 @@ import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
 import { formatQuantity } from '@/lib/conversion';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { useRouter } from 'next/navigation';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -167,6 +170,8 @@ export function LotCard({
 }: LotCardProps) {
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
+  const { baseProducts } = useBaseProducts();
+  const router = useRouter();
   const [lotToConsume, setLotToConsume] = useState<LotEntry | null>(null);
 
   const handleConsumeClick = (lot: LotEntry) => {
@@ -174,7 +179,7 @@ export function LotCard({
   };
 
   const handleConfirmConsumption = (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => {
-    consumeFromLot(params);
+    consumeFromLot(params, null as any); // FIXME: Need to pass user
     setLotToConsume(null);
   };
   
@@ -182,6 +187,13 @@ export function LotCard({
   const getLocationName = (id: string | null | undefined) => id ? locations.find(l => l.id === id)?.name : null;
 
   const { product } = productGroup;
+  const baseProduct = useMemo(() => baseProducts.find(bp => bp.id === product.baseProductId), [baseProducts, product.baseProductId]);
+  const hasLeadTime = !!(baseProduct && baseProduct.leadTime && baseProduct.leadTime > 0);
+
+  const handleGoToProjection = () => {
+      if(!baseProduct) return;
+      router.push(`/dashboard/stock/analysis/projection?baseProductId=${baseProduct.id}`);
+  }
   
   const handlePrintLabel = async (lot: LotEntry, product: Product) => {
     const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes.find(s => s.id === '6080') || labelSizes[0];
@@ -285,6 +297,16 @@ export function LotCard({
                             </ScrollArea>
                         </PopoverContent>
                     </Popover>
+                    {hasLeadTime && (
+                         <TooltipProvider><Tooltip delayDuration={100}>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-500" onClick={handleGoToProjection}>
+                                    <LineChart className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Ver projeção de consumo</p></TooltipContent>
+                         </Tooltip></TooltipProvider>
+                    )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     <p><strong>Embalagem:</strong> {product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</p>

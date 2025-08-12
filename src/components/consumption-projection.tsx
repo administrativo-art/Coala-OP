@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -16,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -80,6 +81,10 @@ interface GroupedProjectionResult {
     baseProductId: string;
     baseProductName: string;
     lots: ProjectionResult[];
+    ruptureDate: Date | null;
+    suggestedOrderQty: number | null;
+    orderDate: Date | null;
+    orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data';
 }
 
 export function ConsumptionProjection() {
@@ -142,6 +147,7 @@ export function ConsumptionProjection() {
         if (!selectedKioskId || loading) return [];
 
         const dailyAverages = new Map<string, number>();
+        const monthlyAverages = new Map<string, number>();
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         
         // Calcula taxa diária por insumo base em UNIDADE BASE
@@ -177,6 +183,7 @@ export function ConsumptionProjection() {
           const months = Object.values(monthlyTotalsBase).filter(v => v > 0);
           if (months.length > 0) {
             const monthlyAvgBase = months.reduce((s, v) => s + v, 0) / months.length;
+            monthlyAverages.set(bp.id, monthlyAvgBase);
             dailyAverages.set(bp.id, monthlyAvgBase / 30);
           }
         });
@@ -199,6 +206,7 @@ export function ConsumptionProjection() {
 
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
             let consumptionTrackerDate = todayISO;
+            let lastConsumptionDate: Date | null = null;
             
             const groupLots = lotsByBaseProduct[baseProductId].sort((a, b) => {
               const ae = a.expiryDate ? formatToISODate(parseISO(a.expiryDate.split('T')[0])) : '9999-12-31';
@@ -269,6 +277,7 @@ export function ConsumptionProjection() {
                       projectedEndDateISO = projectedEndDateISO_Inclusive;
                       nextConsumptionStartDate = addDays(projectedEndDateISO, 1);
                     }
+                    lastConsumptionDate = parseISODate(projectedEndDateISO);
 
                     result = {
                         lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining,
@@ -289,12 +298,34 @@ export function ConsumptionProjection() {
                 };
                 projectedLots.push({ ...result, status });
             }
+
+            let orderDate = null;
+            let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
+            if (baseProduct.leadTime && baseProduct.leadTime > 0 && lastConsumptionDate) {
+                orderDate = new Date(lastConsumptionDate);
+                orderDate.setDate(orderDate.getDate() - baseProduct.leadTime);
+
+                const daysToOrder = diffISODays(todayISO, formatToISODate(orderDate));
+                if (daysToOrder <= 0) orderStatus = 'urgent';
+                else if (daysToOrder <= 7) orderStatus = 'soon';
+                else orderStatus = 'ok';
+            }
+            
+            let suggestedOrderQty = null;
+            if (baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {
+                const monthlyAvg = monthlyAverages.get(baseProductId) || 0;
+                suggestedOrderQty = monthlyAvg * baseProduct.consumptionMonths;
+            }
             
             if (projectedLots.length > 0) {
                 allResults.push({
                     baseProductId,
                     baseProductName: baseProduct.name,
                     lots: projectedLots,
+                    ruptureDate: lastConsumptionDate,
+                    orderDate,
+                    orderStatus,
+                    suggestedOrderQty
                 });
             }
         });
@@ -515,7 +546,16 @@ export function ConsumptionProjection() {
                     <div className="space-y-4">
                         {finalFilteredAndSortedResults.map(group => (
                             <div key={group.baseProductId} className="rounded-md border">
-                                <h3 className="text-lg font-semibold p-4 bg-muted/50 rounded-t-md">{group.baseProductName}</h3>
+                                <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
+                                      {group.suggestedOrderQty && <Badge><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProducts.find(bp => bp.id === group.baseProductId)?.unit}</Badge>}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
+                                        {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
+                                    </div>
+                                </div>
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>

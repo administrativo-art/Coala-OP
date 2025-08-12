@@ -37,6 +37,8 @@ export type BaseProduct = {
   category: UnitCategory;
   lastEffectivePrice?: LastEffectivePrice | null;
   initialCostPerUnit?: number;
+  leadTime?: number;
+  consumptionMonths?: number;
 }
 
 export type Location = {
