@@ -5,16 +5,17 @@ import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { type Task, type TaskHistoryItem } from '@/types';
+import { type Task, type TaskHistoryItem, type TaskOrigin } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
+import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -39,6 +40,30 @@ const getStatusInfo = (status: Task['status']) => {
             return { label: 'Desconhecido', color: 'bg-gray-400 text-white' };
     }
 }
+
+function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
+    const { baseProducts } = useBaseProducts();
+    
+    if (origin.type !== 'consumption-projection') {
+        return null;
+    }
+
+    const baseProduct = baseProducts.find(bp => bp.id === origin.id);
+    const productName = baseProduct?.name || 'Insumo não encontrado';
+
+    return (
+        <div className="p-3 border rounded-lg bg-blue-500/5">
+            <h4 className="text-sm font-semibold flex items-center gap-2 mb-2 text-blue-700 dark:text-blue-300">
+                <ShoppingCart className="h-4 w-4" /> Detalhes da Tarefa de Compra
+            </h4>
+            <div className="space-y-1 text-sm">
+                <p><strong>Origem:</strong> Projeção de Consumo</p>
+                <p><strong>Insumo:</strong> {productName}</p>
+            </div>
+        </div>
+    );
+}
+
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { user, users, profiles } = useAuth();
@@ -65,7 +90,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     if (status === 'awaiting_approval') {
         if (approverType === 'user' && approverId === user.id) return true;
         if (approverType === 'profile' && user.profileId === approverId) return true;
-    } else {
+    } else if (status === 'pending' || status === 'reopened' || status === 'in_progress') {
         if (assigneeType === 'user' && assigneeId === user.id) return true;
         if (assigneeType === 'profile' && user.profileId === assigneeId) return true;
     }
@@ -102,7 +127,8 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const newHistory = [...task.history, addHistoryItem('approved')];
       
       if(task.origin.type === 'author_board_diary'){
-          await createOrGetDailyLog({ status: 'validated' });
+          const log = await createOrGetDailyLog();
+          if(log) await updateTask(log.id, {status: 'validated'});
       }
       
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
@@ -118,7 +144,8 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
       
        if(task.origin.type === 'author_board_diary'){
-          await createOrGetDailyLog({ status: 'draft' });
+          const log = await createOrGetDailyLog();
+          if(log) await updateTask(log.id, {status: 'draft'});
       }
       
       await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });
@@ -170,9 +197,11 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
               {task.description && 
                 <div className="p-3 border rounded-lg">
                     <h4 className="text-sm font-semibold flex items-center gap-2"><MessageSquare /> Descrição</h4>
-                    <p className="text-sm mt-1">{task.description}</p>
+                    <p className="text-sm mt-1 whitespace-pre-wrap">{task.description}</p>
                 </div>
               }
+              
+              <TaskOriginDetails origin={task.origin} />
               
               <div>
                   <h3 className="font-semibold text-lg flex items-center gap-2 mb-2"><History /> Histórico</h3>
