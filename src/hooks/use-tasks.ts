@@ -5,7 +5,6 @@
 import { useContext } from 'react';
 import { TaskContext, type TaskContextType } from '@/components/task-provider';
 
-// This hook is now deprecated. Please use useAllTasks instead.
 export const useTasks = (): TaskContextType => {
   const context = useContext(TaskContext);
   if (context === undefined) {
@@ -13,3 +12,4 @@ export const useTasks = (): TaskContextType => {
   }
   return context;
 };
+

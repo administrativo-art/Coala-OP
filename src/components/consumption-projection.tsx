@@ -6,7 +6,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
 import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo, Check } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -30,6 +30,7 @@ import { QuickProjectionModal } from './quick-projection-modal';
 import { useTasks } from '@/hooks/use-tasks';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -57,7 +58,7 @@ interface GroupedProjectionResult {
 }
 
 function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
-    const { addTask } = useTasks();
+    const { tasks, addTask } = useTasks();
     const { profiles } = useProfiles();
     const { toast } = useToast();
 
@@ -87,7 +88,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
             assigneeType: 'profile',
             assigneeId: adminProfile.id,
             requiresApproval: false,
-            origin: { type: 'form', id: 'consumption-projection' },
+            origin: { type: 'consumption-projection', id: alert.baseProductId },
             history: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -95,6 +96,15 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
         });
 
         toast({ title: 'Tarefa criada!', description: `Uma tarefa de compra para ${alert.baseProductName} foi criada e atribuída.` });
+    };
+    
+    const taskExistsFor = (baseProductId: string) => {
+        return tasks.some(task => 
+            task.origin.type === 'consumption-projection' &&
+            task.origin.id === baseProductId &&
+            task.status !== 'completed' &&
+            task.status !== 'rejected'
+        );
     };
 
     if (alerts.length === 0) {
@@ -120,6 +130,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {alerts.map(alert => {
                         const criticalDate = isMatriz ? alert.orderDate : alert.ruptureDate;
+                        const taskAlreadyExists = taskExistsFor(alert.baseProductId);
                         return (
                             <div key={alert.baseProductId} className="p-4 border rounded-lg bg-card shadow-sm flex flex-col gap-3">
                                 <p className="font-semibold">{alert.baseProductName}</p>
@@ -135,9 +146,9 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                                         </Badge>
                                     </div>
                                 </div>
-                                 <Button size="sm" variant="outline" onClick={() => handleCreateTask(alert)}>
-                                    <ListTodo className="mr-2 h-4 w-4" />
-                                    Criar Tarefa
+                                 <Button size="sm" variant="outline" onClick={() => handleCreateTask(alert)} disabled={taskAlreadyExists}>
+                                    {taskAlreadyExists ? <Check className="mr-2 h-4 w-4" /> : <ListTodo className="mr-2 h-4 w-4" />}
+                                    {taskAlreadyExists ? 'Tarefa Criada' : 'Criar Tarefa'}
                                 </Button>
                             </div>
                         )
@@ -161,6 +172,7 @@ export function ConsumptionProjection() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
     const [simulationPercentage, setSimulationPercentage] = useState<number>(0);
     const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
+    const router = useRouter();
 
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
@@ -686,6 +698,13 @@ export function ConsumptionProjection() {
                     </div>
                 )}
             </CardContent>
+             {quickProjectionProduct && (
+                <QuickProjectionModal 
+                    baseProduct={quickProjectionProduct}
+                    onOpenChange={() => setQuickProjectionProduct(null)}
+                />
+            )}
         </Card>
     );
 }
+
