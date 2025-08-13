@@ -63,7 +63,7 @@ export function useValidatedConsumptionData() {
               if (kioskConsumption > 0) {
                   kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
               }
-              continue;
+              continue; // Skip auto-calculation for this kiosk
           };
 
           const kioskReports = allReports.filter(r => r.kioskId === k.id);
@@ -77,14 +77,14 @@ export function useValidatedConsumptionData() {
           if (totalKioskConsumption > 0) {
             const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
             const dailyAvg = avgMonthlyConsumption / 30;
-            const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
+            const kioskMinStock = Math.ceil((dailyAvg * 12)); // 12 days coverage
             
             if (kioskMinStock > 0) {
                 newStockLevels[k.id] = { 
                     ...(newStockLevels[k.id] || {}),
                     min: kioskMinStock, 
                     override: false 
-                  };
+                };
             }
             
             totalNetworkConsumption += totalKioskConsumption;
@@ -107,10 +107,13 @@ export function useValidatedConsumptionData() {
           }
       }
       
-      productsToUpdate.push({
-          ...bp,
-          stockLevels: newStockLevels,
-      });
+      // Only stage for update if stockLevels actually changed
+      if (JSON.stringify(newStockLevels) !== JSON.stringify(bp.stockLevels)) {
+        productsToUpdate.push({
+            ...bp,
+            stockLevels: newStockLevels,
+        });
+      }
     }
 
     if (productsToUpdate.length > 0) {

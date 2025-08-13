@@ -40,7 +40,7 @@ export function PurchaseAlertCard() {
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, loading: productsLoading } = useProducts();
-    const { reports: consumptionHistory, isLoading: consumptionLoading } = useValidatedConsumptionData();
+    const { reports: consumptionHistory, isLoading: consumptionLoading, baseProducts: validatedBaseProducts } = useValidatedConsumptionData();
     
     const [selectedKioskId, setSelectedKioskId] = useState('matriz');
 
@@ -76,111 +76,39 @@ export function PurchaseAlertCard() {
         );
         return packagesQty * perPackageInBase;
     }, []);
-
+    
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading || !selectedKioskId) return [];
 
         const today = new Date();
 
-        // MATRIZ LOGIC: Based on network consumption and lead time
-        if (selectedKioskId === 'matriz') {
-            const baseProductsWithLeadTime = baseProducts.filter(bp =>
-                Object.values(bp.stockLevels || {}).some(sl => sl.leadTime && sl.leadTime > 0)
-            );
-            if (baseProductsWithLeadTime.length === 0) return [];
+        const getDailyAverage = (baseProductId: string, forKioskId: string) => {
+            const relevantReports = forKioskId === 'matriz'
+                ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+                : consumptionHistory.filter(r => r.kioskId === forKioskId);
 
-            const networkKioskIds = kiosks.filter(k => k.id !== 'matriz').map(k => k.id);
-            const networkConsumptionReports = consumptionHistory.filter(r => networkKioskIds.includes(r.kioskId));
-            
-            const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
-            networkConsumptionReports.forEach(report => {
+            const monthlyConsumption: Record<string, number> = {};
+            relevantReports.forEach(report => {
                 const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-                report.results.forEach(res => {
-                    if (res.baseProductId) {
-                        if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
-                        monthlyConsumptionByBaseId[res.baseProductId][key] = (monthlyConsumptionByBaseId[res.baseProductId][key] || 0) + res.consumedQuantity;
-                    }
-                });
-            });
+                const totalForMonth = report.results
+                    .filter(res => res.baseProductId === baseProductId)
+                    .reduce((sum, res) => sum + res.consumedQuantity, 0);
 
-            const dailyAverages = new Map<string, number>();
-            Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
-                const months = Object.values(monthlyData);
-                if (months.length > 0) {
-                    const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-                    dailyAverages.set(baseId, (totalConsumption / months.length) / 30);
+                if (totalForMonth > 0) {
+                    monthlyConsumption[key] = (monthlyConsumption[key] || 0) + totalForMonth;
                 }
             });
 
-            const allResults: GroupedProjectionResult[] = [];
+            const months = Object.values(monthlyConsumption);
+            if (months.length === 0) return 0;
 
-            baseProductsWithLeadTime.forEach(baseProduct => {
-                const matrizStockLevels = baseProduct.stockLevels?.['matriz'];
-                const leadTime = matrizStockLevels?.leadTime || 0;
-                const dailyAvg = dailyAverages.get(baseProduct.id) ?? 0;
-                
-                const totalStockInBase = lots
-                    .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id && lot.kioskId === 'matriz')
-                    .reduce((sum, lot) => {
-                        const product = productsById.get(lot.productId)!;
-                        return sum + toBaseUnits(product, lot.quantity, baseProduct);
-                    }, 0);
-                    
-                const effectiveStock = Math.max(0, totalStockInBase - (matrizStockLevels?.safetyStock || 0));
-                const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
-                const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
-                
-                let orderDate: Date | null = null;
-                let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
-                
-                if (leadTime > 0 && ruptureDate) {
-                    orderDate = addDays(ruptureDate, -leadTime);
-                    const daysToOrder = differenceInDays(orderDate, today);
-                    if (daysToOrder <= 0) orderStatus = 'urgent';
-                    else if (daysToOrder <= 7) orderStatus = 'soon';
-                    else orderStatus = 'ok';
-                } else if (!leadTime) {
-                    orderStatus = 'sem_lead_time';
-                }
-                
-                allResults.push({ 
-                    baseProductId: baseProduct.id, 
-                    baseProductName: baseProduct.name,
-                    baseProductUnit: baseProduct.unit,
-                    currentStock: totalStockInBase,
-                    minimumStock: matrizStockLevels?.min || 0,
-                    dailyAvg,
-                    daysOfCoverage,
-                    ruptureDate, 
-                    orderDate, 
-                    orderStatus 
-                });
-            });
-            return allResults.sort((a,b) => (a.orderDate?.getTime() || Infinity) - (b.orderDate?.getTime() || Infinity));
-        }
+            const totalConsumption = months.reduce((sum, val) => sum + val, 0);
+            return (totalConsumption / months.length) / 30;
+        };
 
-        // KIOSK LOGIC: Based on its own consumption and 15-day rupture window
-        const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
-        consumptionHistory.filter(r => r.kioskId === selectedKioskId).forEach(report => {
-            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-            report.results.forEach(res => {
-                if(res.baseProductId){
-                    if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
-                    monthlyConsumptionByBaseId[res.baseProductId][key] = (monthlyConsumptionByBaseId[res.baseProductId][key] || 0) + res.consumedQuantity;
-                }
-            });
-        });
-        
-        const dailyAverages = new Map<string, number>();
-        Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
-            const months = Object.values(monthlyData);
-            if (months.length > 0) {
-                const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-                dailyAverages.set(baseId, (totalConsumption / months.length) / 30);
-            }
-        });
-
-        return baseProducts.map(baseProduct => {
+        return validatedBaseProducts.map(baseProduct => {
+            const dailyAvg = getDailyAverage(baseProduct.id, selectedKioskId);
+            
             const totalStockInBase = lots
                 .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id && lot.kioskId === selectedKioskId)
                 .reduce((sum, lot) => {
@@ -188,33 +116,56 @@ export function PurchaseAlertCard() {
                     return sum + toBaseUnits(product, lot.quantity, baseProduct);
                 }, 0);
             
-            const dailyAvg = dailyAverages.get(baseProduct.id) ?? 0;
-            const daysOfCoverage = dailyAvg > 0 ? Math.floor(totalStockInBase / dailyAvg) : Infinity;
+            const kioskParams = baseProduct.stockLevels?.[selectedKioskId];
+            const minimumStock = kioskParams?.min || 0;
+            const safetyStock = kioskParams?.safetyStock || 0;
+            const leadTime = kioskParams?.leadTime || 0;
+
+            const effectiveStock = Math.max(0, totalStockInBase - safetyStock);
+            const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
+            
+            let orderStatus: GroupedProjectionResult['orderStatus'] = 'ok';
+            let orderDate: Date | null = null;
             const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
-            let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
-            if (ruptureDate) {
-                 const daysToRupture = differenceInDays(ruptureDate, today);
-                 if (daysToRupture <= 7) orderStatus = 'urgent';
-                 else if (daysToRupture <= 15) orderStatus = 'soon';
-                 else orderStatus = 'ok';
+            if (leadTime > 0) {
+                if (ruptureDate) {
+                   orderDate = addDays(ruptureDate, -leadTime);
+                   const daysToOrder = differenceInDays(orderDate, today);
+                    if (daysToOrder <= 7) orderStatus = 'urgent';
+                    else if (daysToOrder <= 15) orderStatus = 'soon';
+                } else if (dailyAvg > 0) {
+                    orderStatus = 'urgent'; // Have consumption but infinite coverage (implies rupture is "now")
+                }
+            } else {
+                orderStatus = 'sem_lead_time';
             }
+             
+            if (totalStockInBase < minimumStock && leadTime === 0) {
+                orderStatus = 'soon';
+            }
+            if(totalStockInBase < safetyStock){
+                orderStatus = 'urgent';
+            }
+
 
             return {
                 baseProductId: baseProduct.id,
                 baseProductName: baseProduct.name,
                 baseProductUnit: baseProduct.unit,
                 currentStock: totalStockInBase,
-                minimumStock: baseProduct.stockLevels?.[selectedKioskId]?.min || 0,
+                minimumStock: minimumStock,
                 dailyAvg,
                 daysOfCoverage,
                 ruptureDate,
-                orderDate: null, // Not used for kiosks
+                orderDate,
                 orderStatus
             };
-        }).filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').sort((a,b) => (a.ruptureDate?.getTime() || Infinity) - (b.ruptureDate?.getTime() || Infinity));
+        }).filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon')
+          .sort((a, b) => (a.orderDate?.getTime() || a.ruptureDate?.getTime() || Infinity) - (b.orderDate?.getTime() || b.ruptureDate?.getTime() || Infinity));
 
-    }, [loading, selectedKioskId, baseProducts, lots, productsById, toBaseUnits, consumptionHistory, kiosks]);
+    }, [loading, selectedKioskId, validatedBaseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
+
 
     const sortedKiosks = useMemo(() => {
         return [...kiosks].sort((a,b) => {
@@ -233,9 +184,9 @@ export function PurchaseAlertCard() {
         }
     };
     
-    const hasAlerts = projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length > 0;
+    const hasAlerts = projectionResults.length > 0;
     const titleText = selectedKioskId === 'matriz' ? "Alerta de Compras (Matriz)" : `Alerta de Reposição (${kiosks.find(k => k.id === selectedKioskId)?.name})`;
-    const linkTarget = selectedKioskId === 'matriz' ? '/dashboard/stock/analysis/projection' : '/dashboard/stock/analysis/restock';
+    const linkTarget = selectedKioskId === 'matriz' ? '/dashboard/stock/purchasing' : '/dashboard/stock/analysis/restock';
 
     return (
         <Card className="hover:bg-muted/50 transition-colors h-full col-span-full">
@@ -244,7 +195,7 @@ export function PurchaseAlertCard() {
                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
                         <ShoppingCart className="h-4 w-4" /> {titleText}
                          {hasAlerts && (
-                            <Badge variant="destructive" className="h-5">{projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length}</Badge>
+                            <Badge variant="destructive" className="h-5">{projectionResults.length}</Badge>
                          )}
                     </CardTitle>
                 </div>
@@ -261,7 +212,7 @@ export function PurchaseAlertCard() {
             </CardHeader>
             <CardContent>
                 <Link href={linkTarget}>
-                {projectionResults.length === 0 ? (
+                {!hasAlerts ? (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full py-4">
                         <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>
                         <p className="font-semibold">Nenhum alerta de reposição</p>
@@ -275,7 +226,7 @@ export function PurchaseAlertCard() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Insumo</TableHead>
-                                    <TableHead className="text-right">Estoque</TableHead>
+                                    <TableHead className="text-right">Estoque / Mínimo</TableHead>
                                     <TableHead className="text-right">Cobertura</TableHead>
                                     <TableHead className="text-center">{selectedKioskId === 'matriz' ? 'Data Pedido' : 'Data Ruptura'}</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
