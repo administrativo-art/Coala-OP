@@ -119,7 +119,6 @@ export function PurchaseAlertCard() {
             const kioskParams = baseProduct.stockLevels?.[selectedKioskId];
             const minimumStock = kioskParams?.min || 0;
             const safetyStock = kioskParams?.safetyStock || 0;
-            const leadTime = kioskParams?.leadTime || 0;
 
             const effectiveStock = Math.max(0, totalStockInBase - safetyStock);
             const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
@@ -128,26 +127,27 @@ export function PurchaseAlertCard() {
             let orderDate: Date | null = null;
             const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
-            if (leadTime > 0) {
-                if (ruptureDate) {
-                   orderDate = addDays(ruptureDate, -leadTime);
-                   const daysToOrder = differenceInDays(orderDate, today);
-                    if (daysToOrder <= 7) orderStatus = 'urgent';
-                    else if (daysToOrder <= 15) orderStatus = 'soon';
-                } else if (dailyAvg > 0) {
-                    orderStatus = 'urgent'; // Have consumption but infinite coverage (implies rupture is "now")
+            if (selectedKioskId === 'matriz') {
+                const leadTime = kioskParams?.leadTime;
+                if (leadTime && leadTime > 0) {
+                    if (ruptureDate) {
+                        orderDate = addDays(ruptureDate, -leadTime);
+                        const daysToOrder = differenceInDays(orderDate, today);
+                        if (daysToOrder <= 7) orderStatus = 'urgent';
+                        else if (daysToOrder <= 15) orderStatus = 'soon';
+                    }
+                } else {
+                    orderStatus = 'sem_lead_time';
                 }
-            } else {
-                orderStatus = 'sem_lead_time';
+            } else { // Kiosk Logic
+                 if (ruptureDate) {
+                    const daysToRupture = differenceInDays(ruptureDate, today);
+                    if (daysToRupture <= 4) orderStatus = 'urgent';
+                    else if (daysToRupture <= 9) orderStatus = 'soon';
+                } else if (dailyAvg > 0) {
+                    orderStatus = 'urgent';
+                }
             }
-             
-            if (totalStockInBase < minimumStock && leadTime === 0) {
-                orderStatus = 'soon';
-            }
-            if(totalStockInBase < safetyStock){
-                orderStatus = 'urgent';
-            }
-
 
             return {
                 baseProductId: baseProduct.id,
@@ -163,7 +163,7 @@ export function PurchaseAlertCard() {
             };
         }).filter(p => {
             if (selectedKioskId === 'matriz') {
-                 const leadTime = p.minimumStock = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.['matriz']?.leadTime || 0;
+                 const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.['matriz']?.leadTime || 0;
                  return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
             }
             return p.orderStatus === 'urgent' || p.orderStatus === 'soon';

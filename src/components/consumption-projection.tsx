@@ -6,7 +6,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
 import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -177,6 +177,7 @@ export function ConsumptionProjection() {
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading || !selectedKioskId) return [];
         
+        const today = new Date();
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
@@ -226,8 +227,7 @@ export function ConsumptionProjection() {
         }, {} as Record<string, LotEntry[]>);
 
         const allResults: GroupedProjectionResult[] = [];
-        const today = new Date();
-
+        
         Object.keys(lotsByBaseProduct).forEach(baseProductId => {
             let currentStockDate = today;
             
@@ -311,19 +311,30 @@ export function ConsumptionProjection() {
                 currentStockDate = addDays(projectedConsumptionDate, 1);
             }
 
-            let orderDate = null;
-            let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
+            let orderDate: Date | null = null;
+            let orderStatus: GroupedProjectionResult['orderStatus'] = 'ok';
             
-            if (kioskParams?.leadTime && kioskParams.leadTime > 0) {
-                if(ruptureDate) {
-                    orderDate = addDays(ruptureDate, -kioskParams.leadTime);
-                    const daysToOrder = differenceInDays(orderDate, today);
-                    if (daysToOrder <= 0) orderStatus = 'urgent';
-                    else if (daysToOrder <= 7) orderStatus = 'soon';
-                    else orderStatus = 'ok';
+            if (selectedKioskId === 'matriz') {
+                const leadTime = kioskParams?.leadTime;
+                if (leadTime && leadTime > 0) {
+                    if (ruptureDate) {
+                        orderDate = addDays(ruptureDate, -leadTime);
+                        const daysToOrder = differenceInDays(orderDate, today);
+                        if (daysToOrder <= 7) orderStatus = 'urgent';
+                        else if (daysToOrder <= 15) orderStatus = 'soon';
+                    }
+                } else {
+                    orderStatus = 'sem_lead_time';
                 }
-            } else {
-                orderStatus = 'sem_lead_time';
+            } else { // Kiosk Logic
+                if (ruptureDate) {
+                    const daysToRupture = differenceInDays(ruptureDate, today);
+                    if (daysToRupture <= 4) orderStatus = 'urgent';
+                    else if (daysToRupture <= 9) orderStatus = 'soon';
+                    else orderStatus = 'ok';
+                } else {
+                    orderStatus = dailyAvg > 0 ? 'urgent' : 'no_data';
+                }
             }
 
             let suggestedOrderQty = null;
