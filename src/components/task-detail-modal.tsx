@@ -44,12 +44,18 @@ const getStatusInfo = (status: Task['status']) => {
 function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
     const { baseProducts } = useBaseProducts();
     
+    // Check if origin is of type 'consumption-projection'
     if (origin.type !== 'consumption-projection') {
         return null;
     }
 
     const baseProduct = baseProducts.find(bp => bp.id === origin.id);
     const productName = baseProduct?.name || 'Insumo não encontrado';
+    
+    // Find the suggestion from the origin's details.
+    // The details field should contain the necessary info.
+    const purchaseSuggestion = (origin as any).details?.suggestedOrderQty;
+    const dueDate = (origin as any).details?.orderDate;
 
     return (
         <div className="p-3 border rounded-lg bg-blue-500/5">
@@ -59,18 +65,19 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
             <div className="space-y-1 text-sm">
                 <p><strong>Origem:</strong> Projeção de Consumo</p>
                 <p><strong>Insumo:</strong> {productName}</p>
+                {purchaseSuggestion !== undefined && <p><strong>Sugestão de Compra:</strong> {purchaseSuggestion}</p>}
+                {dueDate && <p><strong>Prazo do Pedido:</strong> {format(parseISO(dueDate), 'dd/MM/yyyy')}</p>}
             </div>
         </div>
     );
 }
-
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { user, users, profiles } = useAuth();
   const { updateTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const { toast } = useToast();
-  const { createOrGetDailyLog } = useAuthorBoardDiary();
+  const { todayLog, createOrGetDailyLog } = useAuthorBoardDiary();
 
   const handleClose = () => {
     setRejectionNotes('');
@@ -79,7 +86,6 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   
   const getAssigneeName = (type: 'user' | 'profile', id: string) => {
     if (type === 'user') return users.find(u => u.id === id)?.username || 'Usuário desconhecido';
-    if (!profiles) return 'Carregando...';
     return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
   };
 

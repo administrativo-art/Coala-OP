@@ -20,7 +20,7 @@ import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, Arr
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { type LotEntry, type BaseProduct, type Product } from '@/types';
+import { type LotEntry, type BaseProduct, type Product, type Task } from '@/types';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -80,20 +80,31 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
             toast({ variant: 'destructive', title: 'Perfil "Administrador" não encontrado.' });
             return;
         }
+        
+        const taskDetails = {
+            suggestedOrderQty: alert.suggestedOrderQty?.toFixed(0) ?? 'N/A',
+            orderDate: alert.orderDate ? format(alert.orderDate, 'dd/MM/yyyy') : 'imediatamente'
+        };
 
-        addTask({
+        const newTask: Omit<Task, 'id'> = {
             title: `Compra Urgente: ${alert.baseProductName}`,
-            description: `A reposição do estoque de ${alert.baseProductName} é necessária. Sugestão de compra: ${alert.suggestedOrderQty?.toFixed(0) ?? 'N/A'} unidades. Pedido deve ser feito até ${alert.orderDate ? format(alert.orderDate, 'dd/MM/yyyy') : 'imediatamente'}.`,
+            description: `A reposição do estoque de ${alert.baseProductName} é necessária. Sugestão de compra: ${taskDetails.suggestedOrderQty} unidades. Pedido deve ser feito até ${taskDetails.orderDate}.`,
             status: 'pending',
             assigneeType: 'profile',
             assigneeId: adminProfile.id,
             requiresApproval: false,
-            origin: { type: 'consumption-projection', id: alert.baseProductId },
+            origin: { 
+                type: 'consumption-projection', 
+                id: alert.baseProductId,
+                details: taskDetails // Storing context here
+            },
             history: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             dueDate: alert.orderDate?.toISOString(),
-        });
+        };
+
+        addTask(newTask);
 
         toast({ title: 'Tarefa criada!', description: `Uma tarefa de compra para ${alert.baseProductName} foi criada e atribuída.` });
     };
