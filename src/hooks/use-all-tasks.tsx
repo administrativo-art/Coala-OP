@@ -43,7 +43,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || countsLoading;
 
-  const allTasks = useMemo((): Task[] => {
+  const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
 
     const myTasks = tasks.filter(task => {
@@ -57,7 +57,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     return myTasks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [user, tasks, loading, permissions]);
 
-  const legacyTasks = useMemo((): LegacyTask[] => {
+  const legacyTasks: LegacyTask[] = useMemo(() => {
     if (loading || !user) return [];
     
     const allLegacyTasks: LegacyTask[] = [];
