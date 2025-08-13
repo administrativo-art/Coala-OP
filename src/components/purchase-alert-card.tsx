@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback, useState } from 'react';
@@ -6,18 +7,19 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validatedConsumption-data';
 import { convertValue } from '@/lib/conversion';
 import { format, addDays, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays, Warehouse } from 'lucide-react';
+import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays, Warehouse, TrendingUp } from 'lucide-react';
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { cn } from '@/lib/utils';
 
 
 interface GroupedProjectionResult {
@@ -25,7 +27,9 @@ interface GroupedProjectionResult {
     baseProductName: string;
     baseProductUnit: string;
     currentStock: number;
+    minimumStock: number;
     dailyAvg: number;
+    daysOfCoverage: number;
     ruptureDate: Date | null;
     orderDate: Date | null;
     orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data' | 'sem_lead_time';
@@ -123,7 +127,8 @@ export function PurchaseAlertCard() {
                     }, 0);
                     
                 const effectiveStock = Math.max(0, totalStockInBase - (matrizStockLevels?.safetyStock || 0));
-                const ruptureDate = dailyAvg > 0 ? addDays(today, Math.floor(effectiveStock / dailyAvg)) : null;
+                const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
+                const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
                 
                 let orderDate: Date | null = null;
                 let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
@@ -143,7 +148,9 @@ export function PurchaseAlertCard() {
                     baseProductName: baseProduct.name,
                     baseProductUnit: baseProduct.unit,
                     currentStock: totalStockInBase,
+                    minimumStock: matrizStockLevels?.min || 0,
                     dailyAvg,
+                    daysOfCoverage,
                     ruptureDate, 
                     orderDate, 
                     orderStatus 
@@ -182,12 +189,14 @@ export function PurchaseAlertCard() {
                 }, 0);
             
             const dailyAvg = dailyAverages.get(baseProduct.id) ?? 0;
-            const ruptureDate = dailyAvg > 0 ? addDays(today, Math.floor(totalStockInBase / dailyAvg)) : null;
+            const daysOfCoverage = dailyAvg > 0 ? Math.floor(totalStockInBase / dailyAvg) : Infinity;
+            const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
             let orderStatus: GroupedProjectionResult['orderStatus'] = 'no_data';
             if (ruptureDate) {
                  const daysToRupture = differenceInDays(ruptureDate, today);
-                 if (daysToRupture <= 15) orderStatus = 'urgent';
+                 if (daysToRupture <= 7) orderStatus = 'urgent';
+                 else if (daysToRupture <= 15) orderStatus = 'soon';
                  else orderStatus = 'ok';
             }
 
@@ -196,12 +205,14 @@ export function PurchaseAlertCard() {
                 baseProductName: baseProduct.name,
                 baseProductUnit: baseProduct.unit,
                 currentStock: totalStockInBase,
+                minimumStock: baseProduct.stockLevels?.[selectedKioskId]?.min || 0,
                 dailyAvg,
+                daysOfCoverage,
                 ruptureDate,
                 orderDate: null, // Not used for kiosks
                 orderStatus
             };
-        }).filter(p => p.orderStatus === 'urgent').sort((a,b) => (a.ruptureDate?.getTime() || Infinity) - (b.ruptureDate?.getTime() || Infinity));
+        }).filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').sort((a,b) => (a.ruptureDate?.getTime() || Infinity) - (b.ruptureDate?.getTime() || Infinity));
 
     }, [loading, selectedKioskId, baseProducts, lots, productsById, toBaseUnits, consumptionHistory, kiosks]);
 
@@ -213,23 +224,12 @@ export function PurchaseAlertCard() {
         });
     }, [kiosks]);
 
-    if (loading) {
-        return <Skeleton className="h-[250px] col-span-full" />
-    }
-
     const getStatusBadge = (item: GroupedProjectionResult) => {
-        if (selectedKioskId === 'matriz') {
-            if (!item.orderDate) return null;
-            const daysToOrder = differenceInDays(item.orderDate, new Date());
-            if (daysToOrder <= 0) return <Badge variant="destructive">Pedir agora</Badge>;
-            if (daysToOrder <= 7) return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Pedir em breve</Badge>;
-            return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
-        } else {
-            if (item.ruptureDate) {
-                 const daysToRupture = differenceInDays(item.ruptureDate, new Date());
-                 return <Badge variant="destructive">Ruptura em {daysToRupture} dias</Badge>;
-            }
-            return null;
+        switch (item.orderStatus) {
+            case 'ok': return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
+            case 'soon': return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Atenção</Badge>;
+            case 'urgent': return <Badge variant="destructive">Urgente</Badge>;
+            default: return null;
         }
     };
     
@@ -266,7 +266,7 @@ export function PurchaseAlertCard() {
                         <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>
                         <p className="font-semibold">Nenhum alerta de reposição</p>
                         <p className="text-xs">
-                             {selectedKioskId === 'matriz' ? 'Nenhum item com Lead Time requer compra.' : 'O estoque desta unidade está OK para os próximos 15 dias.'}
+                             {selectedKioskId === 'matriz' ? 'Nenhum item com Lead Time requer compra.' : 'O estoque desta unidade está OK.'}
                         </p>
                     </div>
                 ) : (
@@ -275,8 +275,8 @@ export function PurchaseAlertCard() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Insumo</TableHead>
-                                    <TableHead className="text-right">Estoque Atual</TableHead>
-                                    <TableHead className="text-right">Consumo/dia</TableHead>
+                                    <TableHead className="text-right">Estoque</TableHead>
+                                    <TableHead className="text-right">Cobertura</TableHead>
                                     <TableHead className="text-center">{selectedKioskId === 'matriz' ? 'Data Pedido' : 'Data Ruptura'}</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
@@ -285,8 +285,11 @@ export function PurchaseAlertCard() {
                              {projectionResults.map(item => (
                                 <TableRow key={item.baseProductId}>
                                     <TableCell className="font-semibold truncate">{item.baseProductName}</TableCell>
-                                    <TableCell className="text-right">{item.currentStock.toFixed(1)} {item.baseProductUnit}</TableCell>
-                                    <TableCell className="text-right">{item.dailyAvg.toFixed(1)} {item.baseProductUnit}</TableCell>
+                                    <TableCell className="text-right">
+                                        {item.currentStock.toFixed(1)}
+                                        <span className="text-muted-foreground">/{item.minimumStock} {item.baseProductUnit}</span>
+                                    </TableCell>
+                                    <TableCell className="text-right">{isFinite(item.daysOfCoverage) ? `${item.daysOfCoverage} dias` : 'N/A'}</TableCell>
                                     <TableCell className="text-center">
                                         {(selectedKioskId === 'matriz' ? item.orderDate : item.ruptureDate) 
                                             ? format((selectedKioskId === 'matriz' ? item.orderDate : item.ruptureDate)!, 'dd/MM/yy') 
@@ -305,3 +308,5 @@ export function PurchaseAlertCard() {
         </Card>
     );
 }
+
+    
