@@ -111,13 +111,10 @@ export function ConsumptionProjection() {
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading) return [];
         
-        const isMatriz = selectedKioskId === 'matriz';
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const relevantReports = isMatriz 
-            ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
-            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+        const relevantReports = consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
