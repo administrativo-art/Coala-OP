@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowDownUp, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -114,9 +114,7 @@ export function ConsumptionProjection() {
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const relevantReports = selectedKioskId === 'matriz'
-            ? consumptionHistory.filter(r => r.kioskId !== 'matriz') // Soma de todos, exceto matriz
-            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+        const relevantReports = consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
@@ -407,7 +405,7 @@ export function ConsumptionProjection() {
             <CardHeader>
                 <CardTitle>Projeção de Consumo vs. Vencimento</CardTitle>
                 <CardDescription>
-                   Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem. Para a Matriz, a projeção utiliza a soma do consumo dos outros quiosques.
+                   Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem.
                 </CardDescription>
                 <div className="pt-2 flex flex-wrap items-center gap-2">
                      <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
