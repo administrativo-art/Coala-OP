@@ -114,7 +114,11 @@ export function ConsumptionProjection() {
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const relevantReports = consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+        // Se a Matriz estiver selecionada, o consumo relevante é a SOMA dos outros quiosques.
+        // Se outro quiosque estiver selecionado, o consumo relevante é apenas o daquele quiosque.
+        const relevantReports = selectedKioskId === 'matriz'
+            ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
