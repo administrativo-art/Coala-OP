@@ -7,7 +7,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
 import { format, addDays, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -161,10 +161,16 @@ export function PurchaseAlertCard() {
                 orderDate,
                 orderStatus
             };
-        }).filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon')
+        }).filter(p => {
+            if (selectedKioskId === 'matriz') {
+                 const leadTime = p.minimumStock = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.['matriz']?.leadTime || 0;
+                 return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
+            }
+            return p.orderStatus === 'urgent' || p.orderStatus === 'soon';
+        })
           .sort((a, b) => (a.orderDate?.getTime() || a.ruptureDate?.getTime() || Infinity) - (b.orderDate?.getTime() || b.ruptureDate?.getTime() || Infinity));
 
-    }, [loading, selectedKioskId, validatedBaseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
+    }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
 
 
     const sortedKiosks = useMemo(() => {
