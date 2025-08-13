@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useCallback } from 'react';
@@ -80,9 +79,11 @@ export function PurchaseAlertCard() {
 
         if (baseProductsWithLeadTime.length === 0) return [];
 
-        const matrizReports = consumptionHistory.filter(r => r.kioskId === 'matriz');
+        const networkKioskIds = kiosks.filter(k => k.id !== 'matriz').map(k => k.id);
+        const networkConsumptionReports = consumptionHistory.filter(r => networkKioskIds.includes(r.kioskId));
+
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
-        matrizReports.forEach(report => {
+        networkConsumptionReports.forEach(report => {
             const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(res => {
                 if (res.baseProductId) {
@@ -153,7 +154,7 @@ export function PurchaseAlertCard() {
 
         return allResults.sort((a,b) => (a.orderDate?.getTime() || Infinity) - (b.orderDate?.getTime() || Infinity));
 
-    }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
+    }, [loading, baseProducts, lots, productsById, toBaseUnits, consumptionHistory, kiosks]);
 
     if (loading) {
         return <Skeleton className="h-[250px] col-span-full" />
