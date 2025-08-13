@@ -30,7 +30,6 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { useProducts } from "@/hooks/use-products"
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PurchaseAlertCard } from "@/components/purchase-alert-card"
 
 interface OnlineUser {
     id: string;
@@ -224,7 +223,6 @@ function OperationalDashboard() {
           </CardContent>
         </Card>
         </Link>
-        <PurchaseAlertCard />
       </div>
       
       <Card>
@@ -444,4 +442,5 @@ export default function DashboardPage() {
     
 
     
+
 
