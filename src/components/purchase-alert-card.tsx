@@ -165,7 +165,7 @@ export function PurchaseAlertCard() {
         }).filter(p => {
             if (selectedKioskId === 'matriz') {
                  const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.['matriz']?.leadTime || 0;
-                 return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
+                 return leadTime > 0;
             }
             return p.orderStatus === 'urgent' || p.orderStatus === 'soon';
         })
@@ -194,6 +194,9 @@ export function PurchaseAlertCard() {
     const hasAlerts = projectionResults.length > 0;
     const titleText = selectedKioskId === 'matriz' ? "Alerta de Compras (Matriz)" : `Alerta de Reposição (${kiosks.find(k => k.id === selectedKioskId)?.name})`;
     const linkTarget = selectedKioskId === 'matriz' ? '/dashboard/stock/purchasing' : '/dashboard/stock/analysis/restock';
+    const notificationCount = useMemo(() => {
+        return projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length;
+    }, [projectionResults]);
 
     return (
         <Card className="hover:bg-muted/50 transition-colors h-full col-span-full">
@@ -201,8 +204,8 @@ export function PurchaseAlertCard() {
                 <div>
                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
                         <ShoppingCart className="h-4 w-4" /> {titleText}
-                         {hasAlerts && (
-                            <Badge variant="destructive" className="h-5">{projectionResults.length}</Badge>
+                         {notificationCount > 0 && (
+                            <Badge variant="destructive" className="h-5">{notificationCount}</Badge>
                          )}
                     </CardTitle>
                 </div>
