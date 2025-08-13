@@ -7,7 +7,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
+import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
 import { format, addDays, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -144,6 +144,7 @@ export function PurchaseAlertCard() {
                     const daysToRupture = differenceInDays(ruptureDate, today);
                     if (daysToRupture <= 4) orderStatus = 'urgent';
                     else if (daysToRupture <= 9) orderStatus = 'soon';
+                    else orderStatus = 'ok';
                 } else if (dailyAvg > 0) {
                     orderStatus = 'urgent';
                 }
