@@ -40,78 +40,86 @@ export function useValidatedConsumptionData() {
   }, [rawReports, rawBaseProducts]);
   
   const calculateAndApplyAllMinimumStocks = useCallback(async (allReports: any[]) => {
-      if (!allReports.length || !baseProducts.length || !kiosks.length) return;
-  
-      const productsToUpdate: any[] = [];
-      const kioskList = kiosks.filter(k => k.id !== 'matriz');
+    if (!allReports.length || !baseProducts.length || !kiosks.length) return;
 
-      for (const bp of baseProducts) {
-        const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
-        
-        let totalNetworkConsumption = 0;
-        const networkMonths = new Set<string>();
-        
-        // 1. Kiosk calculation (12 days)
-        for (const k of kioskList) {
-            if (newStockLevels[k.id]?.override) continue;
+    const productsToUpdate: any[] = [];
+    const kioskList = kiosks.filter(k => k.id !== 'matriz');
 
-            const kioskReports = allReports.filter(r => r.kioskId === k.id);
-            if (kioskReports.length === 0) continue;
-            
-            const totalKioskConsumption = kioskReports.reduce((sum, r) => {
-                const item = r.results.find((res: any) => res.baseProductId === bp.id);
-                return sum + (item?.consumedQuantity || 0);
-            }, 0);
-            
-            if (totalKioskConsumption > 0) {
-              const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
-              const dailyAvg = avgMonthlyConsumption / 30;
-              // Rule: 7 days of consumption + 5 days of safety stock = 12 days
-              const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
-              
-              if (kioskMinStock > 0) {
-                  newStockLevels[k.id] = { 
-                      ...(newStockLevels[k.id] || {}), // preserve leadTime/safety if exists
-                      min: kioskMinStock, 
-                      override: false 
-                    };
+    for (const bp of baseProducts) {
+      const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
+      
+      let totalNetworkConsumption = 0;
+      const networkMonthsWithConsumption = new Set<string>();
+
+      // 1. Kiosk calculation (12 days)
+      for (const k of kioskList) {
+          if (newStockLevels[k.id]?.override) {
+              const kioskReports = allReports.filter(r => r.kioskId === k.id);
+              const kioskConsumption = kioskReports.reduce((sum, r) => {
+                  const item = r.results.find((res: any) => res.baseProductId === bp.id);
+                  return sum + (item?.consumedQuantity || 0);
+              }, 0);
+              totalNetworkConsumption += kioskConsumption;
+              if (kioskConsumption > 0) {
+                  kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
               }
+              continue;
+          };
 
-              // Sum up for Matriz calculation
-              totalNetworkConsumption += totalKioskConsumption;
-              kioskReports.forEach(r => networkMonths.add(`${r.year}-${r.month}`));
+          const kioskReports = allReports.filter(r => r.kioskId === k.id);
+          if (kioskReports.length === 0) continue;
+          
+          const totalKioskConsumption = kioskReports.reduce((sum, r) => {
+              const item = r.results.find((res: any) => res.baseProductId === bp.id);
+              return sum + (item?.consumedQuantity || 0);
+          }, 0);
+          
+          if (totalKioskConsumption > 0) {
+            const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
+            const dailyAvg = avgMonthlyConsumption / 30;
+            const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
+            
+            if (kioskMinStock > 0) {
+                newStockLevels[k.id] = { 
+                    ...(newStockLevels[k.id] || {}),
+                    min: kioskMinStock, 
+                    override: false 
+                  };
             }
-        }
-
-        // 2. Matriz calculation (30 days of network consumption)
-        if (!newStockLevels['matriz']?.override) {
-            if (totalNetworkConsumption > 0 && networkMonths.size > 0) {
-                const avgTotalMonthlyConsumption = totalNetworkConsumption / networkMonths.size;
-                const matrizMinStock = Math.ceil(avgTotalMonthlyConsumption);
-                 if (matrizMinStock > 0) {
-                    newStockLevels['matriz'] = { 
-                        ...(newStockLevels['matriz'] || {}), // preserve leadTime/safety if exists
-                        min: matrizMinStock, 
-                        override: false 
-                    };
-                }
-            }
-        }
-        
-        productsToUpdate.push({
-            ...bp,
-            stockLevels: newStockLevels,
-        });
+            
+            totalNetworkConsumption += totalKioskConsumption;
+            kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
+          }
       }
 
-      if (productsToUpdate.length > 0) {
-        await updateMultipleBaseProducts(productsToUpdate);
+      // 2. Matriz calculation (30 days of network consumption)
+      if (!newStockLevels['matriz']?.override) {
+          if (totalNetworkConsumption > 0 && networkMonthsWithConsumption.size > 0) {
+              const avgTotalMonthlyConsumption = totalNetworkConsumption / networkMonthsWithConsumption.size;
+              const matrizMinStock = Math.ceil(avgTotalMonthlyConsumption);
+               if (matrizMinStock > 0) {
+                  newStockLevels['matriz'] = { 
+                      ...(newStockLevels['matriz'] || {}),
+                      min: matrizMinStock, 
+                      override: false 
+                  };
+              }
+          }
       }
-  }, [kiosks, baseProducts, updateMultipleBaseProducts]);
+      
+      productsToUpdate.push({
+          ...bp,
+          stockLevels: newStockLevels,
+      });
+    }
+
+    if (productsToUpdate.length > 0) {
+      await updateMultipleBaseProducts(productsToUpdate);
+    }
+}, [kiosks, baseProducts, updateMultipleBaseProducts]);
   
   const addReport = useCallback(async (reportData: any) => {
     const reportId = await rawAddReport(reportData);
-    // This calculation is moved to be called only when a new report is added.
     if (reportId) {
         const newReportsList = [...reports, { ...reportData, id: reportId }];
         await calculateAndApplyAllMinimumStocks(newReportsList);
