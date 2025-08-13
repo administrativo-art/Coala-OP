@@ -53,6 +53,66 @@ interface GroupedProjectionResult {
     orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data' | 'sem_lead_time';
 }
 
+function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
+    const alerts = useMemo(() => {
+        return results
+            .filter(r => r.orderStatus === 'urgent' || r.orderStatus === 'soon')
+            .sort((a, b) => {
+                const dateA = a.orderDate || a.ruptureDate;
+                const dateB = b.orderDate || b.ruptureDate;
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+                return dateA.getTime() - dateB.getTime();
+            });
+    }, [results]);
+
+    if (alerts.length === 0) {
+        return null;
+    }
+
+    const isMatriz = kioskId === 'matriz';
+
+    return (
+        <Card className="border-amber-500/50 bg-amber-500/10 mb-6">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-amber-700">
+                    <AlertTriangle /> Alertas de Reposição e Compra
+                </CardTitle>
+                <CardDescription>
+                    {isMatriz
+                        ? "Itens que precisam ser comprados com base no lead time para evitar ruptura na rede."
+                        : "Itens que precisam de reposição da matriz para evitar ruptura no quiosque."
+                    }
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {alerts.map(alert => {
+                        const criticalDate = isMatriz ? alert.orderDate : alert.ruptureDate;
+                        return (
+                            <div key={alert.baseProductId} className="p-3 border rounded-lg bg-card shadow-sm">
+                                <p className="font-semibold">{alert.baseProductName}</p>
+                                <div className="text-sm mt-2 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">{isMatriz ? "Pedir até:" : "Ruptura em:"}</span>
+                                        <span className="font-bold">{criticalDate ? format(criticalDate, 'dd/MM/yyyy') : 'Imediata'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Status:</span>
+                                        <Badge variant={alert.orderStatus === 'urgent' ? 'destructive' : 'default'} className={alert.orderStatus === 'soon' ? 'bg-orange-500 hover:bg-orange-600' : ''}>
+                                            {alert.orderStatus === 'urgent' ? 'Urgente' : 'Pedir em breve'}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 export function ConsumptionProjection() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { lots, loading: lotsLoading } = useExpiryProducts();
@@ -353,7 +413,7 @@ export function ConsumptionProjection() {
         <TableHead className="cursor-pointer" onClick={() => handleSort(key)}>
             <div className="flex items-center gap-2">
                 {label}
-                {sortConfig.key === key && <ArrowDownUp className="h-3 w-3" />}
+                {sortConfig.key === key && <ArrowUpDown className="h-3 w-3" />}
             </div>
         </TableHead>
     );
@@ -483,6 +543,7 @@ export function ConsumptionProjection() {
                 </div>
             </CardHeader>
             <CardContent>
+                {selectedKioskId && <RuptureAlerts results={projectionResults} kioskId={selectedKioskId} />}
                 {loading ? (
                     <Skeleton className="h-64 w-full" />
                 ) : finalFilteredAndSortedResults.length === 0 ? (
@@ -594,4 +655,3 @@ export function ConsumptionProjection() {
     );
 }
 
-    
