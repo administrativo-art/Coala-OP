@@ -114,7 +114,15 @@ export function ConsumptionProjection() {
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const relevantReports = consumptionHistory.filter(r => r.kioskId === selectedKioskId);
+        const consumptionData = (kioskId: string) => {
+            if (kioskId === 'matriz') {
+                const networkKioskIds = kiosks.filter(k => k.id !== 'matriz').map(k => k.id);
+                return consumptionHistory.filter(r => networkKioskIds.includes(r.kioskId));
+            }
+            return consumptionHistory.filter(r => r.kioskId === kioskId);
+        }
+
+        const relevantReports = consumptionData(selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
@@ -158,10 +166,12 @@ export function ConsumptionProjection() {
             let currentStockDate = today;
             
             const groupLots = lotsByBaseProduct[baseProductId].sort((a, b) => {
-              const dateA = a.expiryDate ? parseISO(a.expiryDate) : new Date('9999-12-31');
-              const dateB = b.expiryDate ? parseISO(b.expiryDate) : new Date('9999-12-31');
-              return dateA.getTime() - dateB.getTime();
+                const dateA = a.expiryDate ? parseISO(a.expiryDate).getTime() : Infinity;
+                const dateB = b.expiryDate ? parseISO(b.expiryDate).getTime() : Infinity;
+                if (dateA === Infinity && dateB === Infinity) return 0;
+                return dateA - dateB;
             });
+            
 
             const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
             if (!baseProduct) return;
@@ -194,7 +204,13 @@ export function ConsumptionProjection() {
                 }
 
                 if (!lot.expiryDate) {
-                    projectedLots.push({ status: 'no_expiry', lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Infinity, projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: null, projectedConsumptionStartDate: null, expiryDate: null });
+                    let projConsumptionDate: Date | null = null;
+                    if(dailyAvg > 0) {
+                      const daysToConsumeLot = Math.ceil(lotQtyInBaseUnit / dailyAvg);
+                      projConsumptionDate = addDays(currentStockDate, daysToConsumeLot - 1);
+                    }
+                    projectedLots.push({ status: 'no_expiry', lot, productName: getProductFullName(product), lotQtyInBaseUnit, dailyAvg, daysRemaining: Infinity, projectedLoss: 0, projectedLossCost: 0, baseUnit: baseProduct.unit, projectedConsumptionDate: projConsumptionDate, projectedConsumptionStartDate: currentStockDate, expiryDate: null });
+                    if(projConsumptionDate) currentStockDate = addDays(projConsumptionDate, 1);
                     continue;
                 }
                 
@@ -257,7 +273,7 @@ export function ConsumptionProjection() {
 
         return allResults;
 
-    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage, selectedKioskId]);
+    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage, selectedKioskId, kiosks]);
     
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
@@ -577,3 +593,5 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
+    
