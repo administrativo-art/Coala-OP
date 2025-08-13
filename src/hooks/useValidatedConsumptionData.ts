@@ -54,14 +54,16 @@ export function useValidatedConsumptionData() {
       // 1. Kiosk calculation (12 days)
       for (const k of kioskList) {
           if (newStockLevels[k.id]?.override) {
-              const kioskReports = allReports.filter(r => r.kioskId === k.id);
-              const kioskConsumption = kioskReports.reduce((sum, r) => {
+              // If override is on, we still need to calculate its consumption for the network total
+              const kioskReportsForNetwork = allReports.filter(r => r.kioskId === k.id);
+              const kioskConsumptionForNetwork = kioskReportsForNetwork.reduce((sum, r) => {
                   const item = r.results.find((res: any) => res.baseProductId === bp.id);
                   return sum + (item?.consumedQuantity || 0);
               }, 0);
-              totalNetworkConsumption += kioskConsumption;
-              if (kioskConsumption > 0) {
-                  kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
+              
+              if (kioskConsumptionForNetwork > 0) {
+                  totalNetworkConsumption += kioskConsumptionForNetwork;
+                  kioskReportsForNetwork.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
               }
               continue; // Skip auto-calculation for this kiosk
           };
@@ -73,8 +75,12 @@ export function useValidatedConsumptionData() {
               const item = r.results.find((res: any) => res.baseProductId === bp.id);
               return sum + (item?.consumedQuantity || 0);
           }, 0);
+
+          totalNetworkConsumption += totalKioskConsumption;
           
           if (totalKioskConsumption > 0) {
+            kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
+            
             const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
             const dailyAvg = avgMonthlyConsumption / 30;
             const kioskMinStock = Math.ceil((dailyAvg * 12)); // 12 days coverage
@@ -86,9 +92,6 @@ export function useValidatedConsumptionData() {
                     override: false 
                 };
             }
-            
-            totalNetworkConsumption += totalKioskConsumption;
-            kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
           }
       }
 
