@@ -9,7 +9,7 @@ import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
 
 interface TaskListProps {
-  tasks: (Task | any)[]; // Using any to accommodate legacy tasks
+  tasks: Task[]; 
   onTaskSelect: (task: Task) => void;
 }
 
@@ -31,16 +31,6 @@ const getStatusInfo = (status: Task['status']) => {
     }
 }
 
-const getLegacyIcon = (type: string) => {
-    switch (type) {
-        case 'Cadastro de Insumo': return PackagePlus;
-        case 'Aprovação de contagem': return ClipboardCheck;
-        case 'Chamado de avaria': return ShieldAlert;
-        case 'Reposição de estoque': return Truck;
-        default: return AlertCircle;
-    }
-}
-
 
 export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   const router = useRouter();
@@ -57,53 +47,23 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   return (
     <div className="space-y-3">
       {tasks.map(task => {
-        // This is a type guard to check if it's a new Task object
-        const isNewTask = 'origin' in task;
-        
-        const handleClick = () => {
-            if (isNewTask) {
-                onTaskSelect(task);
-            } else {
-                router.push(task.link);
-            }
-        };
-
-        let StatusIcon, statusColor, statusLabel, createdAt;
-
-        if (isNewTask) {
-            const statusInfo = getStatusInfo(task.status);
-            StatusIcon = statusInfo.icon;
-            statusColor = statusInfo.color;
-            statusLabel = statusInfo.label;
-            createdAt = task.createdAt;
-        } else {
-            // Legacy task handling
-            StatusIcon = getLegacyIcon(task.type);
-            statusColor = 'text-orange-500';
-            statusLabel = 'Pendente';
-            createdAt = new Date().toISOString(); // Placeholder as legacy tasks don't have a consistent createdAt
-        }
+        const { icon: StatusIcon, color: statusColor, label: statusLabel } = getStatusInfo(task.status);
+        const createdAt = task.createdAt;
 
         return (
           <div
             key={task.id}
             className="border rounded-lg p-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50"
-            onClick={handleClick}
+            onClick={() => onTaskSelect(task)}
           >
             <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusColor}`} />
             <div className="flex-grow">
               <p className="font-semibold">{task.title}</p>
               <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                  {isNewTask ? (
-                      <>
-                        <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
-                      </>
-                  ) : (
-                    <span>{task.description}</span>
-                  )}
+                  <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
               </div>
             </div>
-            <Badge variant="outline">{isNewTask ? statusLabel : task.type}</Badge>
+            <Badge variant="outline">{statusLabel}</Badge>
           </div>
         )
       })}

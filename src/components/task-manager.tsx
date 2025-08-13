@@ -1,9 +1,7 @@
 
-
 "use client"
 
 import { useState, useMemo } from 'react';
-import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,29 +10,22 @@ import { TaskList } from './task-list';
 import { TaskDetailModal } from './task-detail-modal';
 import { type Task } from '@/types';
 import { useAllTasks } from '@/hooks/use-all-tasks';
-import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 
 export function TaskManager() {
-    const { allTasks, formTasks, legacyTasks, loading } = useAllTasks();
-    const { todayLog, createOrUpdateLog, loading: diaryLoading } = useAuthorBoardDiary();
-
+    const { allTasks, loading } = useAllTasks();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
     const taskLists = useMemo(() => {
-        const pendingLegacyIds = new Set(legacyTasks.map(t => t.id));
-        const safeFormTasks = formTasks || [];
-        const safeAllTasks = allTasks || [];
-        const pending = safeFormTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
+        const pending = allTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
+        const awaitingApproval = allTasks.filter(t => t.status === 'awaiting_approval');
+        const completed = allTasks.filter(t => t.status === 'completed');
         
         return {
-            pending: [...pending, ...legacyTasks].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()),
-            awaiting_approval: safeFormTasks.filter(t => t.status === 'awaiting_approval'),
-            completed: safeFormTasks.filter(t => t.status === 'completed'),
-            // Filter out legacy tasks from the main list to avoid duplicates if they were ever included
-            all: safeAllTasks.filter(t => !pendingLegacyIds.has(t.id)),
-        }
-    }, [allTasks, formTasks, legacyTasks]);
-    
+            pending,
+            awaiting_approval: awaitingApproval,
+            completed,
+        };
+    }, [allTasks]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -85,4 +76,3 @@ export function TaskManager() {
         </>
     );
 }
-
