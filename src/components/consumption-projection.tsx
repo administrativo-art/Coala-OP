@@ -569,7 +569,7 @@ export function ConsumptionProjection() {
                                         <div className="flex justify-between items-center">
                                           <div className="flex items-center gap-2">
                                               <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                              {group.hasLeadTime && (
+                                              {baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0) && (
                                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600" onClick={() => setQuickProjectionProduct(baseProduct)}>
                                                       <LineChart className="h-5 w-5" />
                                                   </Button>
