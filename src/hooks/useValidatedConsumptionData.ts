@@ -47,8 +47,9 @@ export function useValidatedConsumptionData() {
         const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
         
         let totalNetworkConsumption = 0;
-        let totalNetworkMonths = new Set<string>();
+        const totalNetworkMonths = new Set<string>();
         
+        // Kiosk calculation (12 days)
         for (const k of kioskList) {
             const kioskReports = allReports.filter(r => r.kioskId === k.id);
             if (kioskReports.length === 0) continue;
@@ -64,21 +65,30 @@ export function useValidatedConsumptionData() {
             if (totalKioskConsumption > 0) {
               const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
               const dailyAvg = avgMonthlyConsumption / 30;
+              // Rule: 7 days of consumption + 5 days of safety stock = 12 days
               const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
               
               if (kioskMinStock > 0) {
-                  newStockLevels[k.id] = { min: kioskMinStock, override: false };
+                  newStockLevels[k.id] = { min: kioskMinStock, safetyStock: (dailyAvg * 5), leadTime: 0, override: false };
+                  
+                  // Sum up for Matriz calculation
                   totalNetworkConsumption += totalKioskConsumption;
                   kioskReports.forEach(r => totalNetworkMonths.add(`${r.year}-${r.month}`));
               }
             }
         }
 
+        // Matriz calculation (30 days of network consumption)
         const isMatrizOverridden = newStockLevels['matriz']?.override === true;
         if (!isMatrizOverridden && totalNetworkConsumption > 0 && totalNetworkMonths.size > 0) {
             const avgTotalMonthlyConsumption = totalNetworkConsumption / totalNetworkMonths.size;
-             if (avgTotalMonthlyConsumption > 0) {
-                newStockLevels['matriz'] = { min: Math.ceil(avgTotalMonthlyConsumption), override: false };
+            if (avgTotalMonthlyConsumption > 0) {
+                const matrizMinStock = Math.ceil(avgTotalMonthlyConsumption);
+                newStockLevels['matriz'] = { 
+                    ...(newStockLevels['matriz'] || {}), // preserve safetyStock and leadTime if they exist
+                    min: matrizMinStock, 
+                    override: false 
+                };
             }
         }
         
