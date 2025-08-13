@@ -59,7 +59,7 @@ export function ConsumptionProjection() {
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { reports: consumptionHistory, isLoading: consumptionLoading } = useValidatedConsumptionData();
-    const [selectedKioskId, setSelectedKioskId] = useState<string>('matriz'); // Default to matriz
+    const [selectedKioskId, setSelectedKioskId] = useState<string>('');
     const [selectedBaseProductIds, setSelectedBaseProductIds] = useState<string[]>([]);
     const [initialSelectionMade, setInitialSelectionMade] = useState(false);
     const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
@@ -109,13 +109,11 @@ export function ConsumptionProjection() {
     }, []);
 
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
-        if (loading) return [];
+        if (loading || !selectedKioskId) return [];
         
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        // Se a Matriz estiver selecionada, o consumo relevante é a SOMA dos outros quiosques.
-        // Se outro quiosque estiver selecionado, o consumo relevante é apenas o daquele quiosque.
         const relevantReports = selectedKioskId === 'matriz'
             ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
             : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
@@ -414,7 +412,7 @@ export function ConsumptionProjection() {
                 <div className="pt-2 flex flex-wrap items-center gap-2">
                      <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
                         <SelectTrigger className="w-full sm:w-[250px]">
-                           <SelectValue />
+                           <SelectValue placeholder="Selecione um quiosque..."/>
                         </SelectTrigger>
                         <SelectContent>
                             {kiosks.map(k => (
@@ -476,7 +474,9 @@ export function ConsumptionProjection() {
                 ) : finalFilteredAndSortedResults.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Nenhum lote encontrado para este quiosque e filtros.</p>
+                        <p className="mt-4 font-semibold">
+                            {selectedKioskId ? "Nenhum lote encontrado para este quiosque e filtros." : "Selecione um quiosque para começar."}
+                        </p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -486,7 +486,15 @@ export function ConsumptionProjection() {
                                 <div key={group.baseProductId} className="rounded-md border">
                                     <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
                                         <div className="flex justify-between items-center">
-                                          <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
+                                          <div className="flex items-center gap-2">
+                                              <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
+                                              {group.ruptureDate && (
+                                                  <Badge variant="outline" className="text-sm">
+                                                      <CalendarDays className="mr-2 h-4 w-4" />
+                                                      Ruptura em: {format(group.ruptureDate, 'dd/MM/yyyy')}
+                                                  </Badge>
+                                              )}
+                                          </div>
                                           {selectedKioskId === 'matriz' && 
                                             <div className="flex items-center gap-2">
                                               {group.suggestedOrderQty !== null && (
@@ -507,12 +515,6 @@ export function ConsumptionProjection() {
                                             </div>
                                           }
                                         </div>
-                                        {selectedKioskId === 'matriz' && 
-                                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                              {group.ruptureDate && <div className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> <strong>Ruptura:</strong> {format(group.ruptureDate, 'dd/MM/yyyy')}</div>}
-                                              {group.orderDate && <div className="flex items-center gap-1.5"><BellRing className="h-4 w-4" /> <strong>Pedir até:</strong> {format(group.orderDate, 'dd/MM/yyyy')}</div>}
-                                          </div>
-                                        }
                                     </div>
                                     <div className="overflow-x-auto">
                                         <Table>
