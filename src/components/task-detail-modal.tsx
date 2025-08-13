@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -46,7 +45,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { updateTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const { toast } = useToast();
-  const { createOrUpdateLog } = useAuthorBoardDiary();
+  const { createOrGetDailyLog } = useAuthorBoardDiary();
 
   const handleClose = () => {
     setRejectionNotes('');
@@ -55,6 +54,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   
   const getAssigneeName = (type: 'user' | 'profile', id: string) => {
     if (type === 'user') return users.find(u => u.id === id)?.username || 'Usuário desconhecido';
+    if (!profiles) return 'Carregando...';
     return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
   };
 
@@ -72,7 +72,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     return false;
   }, [task, user, users, profiles]);
 
-  if (!task) return null;
+  if (!task || !profiles) return null;
 
   const { label: statusLabel, color: statusColor } = getStatusInfo(task.status);
   
@@ -102,7 +102,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const newHistory = [...task.history, addHistoryItem('approved')];
       
       if(task.origin.type === 'author_board_diary'){
-          await createOrUpdateLog({ status: 'validated' });
+          await createOrGetDailyLog({ status: 'validated' });
       }
       
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
@@ -118,7 +118,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
       
        if(task.origin.type === 'author_board_diary'){
-          await createOrUpdateLog({ status: 'draft' });
+          await createOrGetDailyLog({ status: 'draft' });
       }
       
       await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });
