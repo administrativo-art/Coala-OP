@@ -115,7 +115,7 @@ export function ConsumptionProjection() {
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
         const relevantReports = selectedKioskId === 'matriz'
-            ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+            ? consumptionHistory.filter(r => r.kioskId !== 'matriz') // Soma de todos, exceto matriz
             : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
@@ -495,25 +495,23 @@ export function ConsumptionProjection() {
                                                   </Badge>
                                               )}
                                           </div>
-                                          {selectedKioskId === 'matriz' && 
                                             <div className="flex items-center gap-2">
-                                              {group.suggestedOrderQty !== null && (
+                                              {group.orderDate && (
                                                   <TooltipProvider>
                                                       <Tooltip>
                                                           <TooltipTrigger asChild>
                                                               <div>
-                                                                  <Badge className="cursor-help"><ShoppingCart className="mr-2 h-4 w-4" />Sugerido: {group.suggestedOrderQty.toLocaleString(undefined, {maximumFractionDigits: 1})} {baseProduct?.unit}</Badge>
+                                                                  <Badge className="cursor-help"><BellRing className="mr-2 h-4 w-4" />Pedido até: {format(group.orderDate, 'dd/MM/yyyy')}</Badge>
                                                               </div>
                                                           </TooltipTrigger>
                                                           <TooltipContent>
-                                                              <p>Cálculo: (Média Mensal) x (Meses para Cobrir)</p>
+                                                              <p>Data limite para pedir reposição e evitar ruptura, com base no lead time.</p>
                                                           </TooltipContent>
                                                       </Tooltip>
                                                   </TooltipProvider>
                                               )}
                                               {getOrderStatusBadge(group.orderStatus)}
                                             </div>
-                                          }
                                         </div>
                                     </div>
                                     <div className="overflow-x-auto">
