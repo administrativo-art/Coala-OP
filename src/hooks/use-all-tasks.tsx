@@ -22,7 +22,7 @@ export interface LegacyTask {
 
 interface AllTasksContextType {
   allTasks: Task[];
-  legacyTasks: LegacyTask[]; // Still needed for sidebar notifications
+  legacyTasks: LegacyTask[]; 
   loading: boolean;
 }
 

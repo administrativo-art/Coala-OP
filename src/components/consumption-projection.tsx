@@ -27,10 +27,9 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { QuickProjectionModal } from './quick-projection-modal';
-import { useTasks } from '@/hooks/use-tasks';
-import { useProfiles } from '@/hooks/use-profiles';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useAllTasks } from '@/hooks/use-all-tasks';
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -58,9 +57,7 @@ interface GroupedProjectionResult {
 }
 
 function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
-    const { tasks, addTask } = useTasks();
-    const { profiles } = useProfiles();
-    const { toast } = useToast();
+    const { legacyTasks } = useAllTasks();
 
     const alerts = useMemo(() => {
         return results
@@ -70,54 +67,10 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                 const dateB = b.orderDate || b.ruptureDate;
                 if (!dateA) return 1;
                 if (!dateB) return -1;
-                return dateA.getTime() - dateB.getTime();
+                return dateA.getTime() - b.getTime();
             });
     }, [results]);
     
-    const handleCreateTask = (alert: GroupedProjectionResult) => {
-        const adminProfile = profiles.find(p => p.name === 'Administrador');
-        if (!adminProfile) {
-            toast({ variant: 'destructive', title: 'Perfil "Administrador" não encontrado.' });
-            return;
-        }
-        
-        const taskDetails = {
-            suggestedOrderQty: alert.suggestedOrderQty?.toFixed(0) ?? 'N/A',
-            orderDate: alert.orderDate ? format(alert.orderDate, 'dd/MM/yyyy') : 'imediatamente'
-        };
-
-        const newTask: Omit<Task, 'id'> = {
-            title: `Compra Urgente: ${alert.baseProductName}`,
-            description: `A reposição do estoque de ${alert.baseProductName} é necessária. Sugestão de compra: ${taskDetails.suggestedOrderQty} unidades. Pedido deve ser feito até ${taskDetails.orderDate}.`,
-            status: 'pending',
-            assigneeType: 'profile',
-            assigneeId: adminProfile.id,
-            requiresApproval: false,
-            origin: { 
-                type: 'consumption-projection', 
-                id: alert.baseProductId,
-                details: taskDetails // Storing context here
-            },
-            history: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            dueDate: alert.orderDate?.toISOString(),
-        };
-
-        addTask(newTask);
-
-        toast({ title: 'Tarefa criada!', description: `Uma tarefa de compra para ${alert.baseProductName} foi criada e atribuída.` });
-    };
-    
-    const taskExistsFor = (baseProductId: string) => {
-        return tasks.some(task => 
-            task.origin.type === 'consumption-projection' &&
-            task.origin.id === baseProductId &&
-            task.status !== 'completed' &&
-            task.status !== 'rejected'
-        );
-    };
-
     if (alerts.length === 0) {
         return null;
     }
@@ -141,7 +94,6 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {alerts.map(alert => {
                         const criticalDate = isMatriz ? alert.orderDate : alert.ruptureDate;
-                        const taskAlreadyExists = taskExistsFor(alert.baseProductId);
                         return (
                             <div key={alert.baseProductId} className="p-4 border rounded-lg bg-card shadow-sm flex flex-col gap-3">
                                 <p className="font-semibold">{alert.baseProductName}</p>
@@ -157,10 +109,6 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                                         </Badge>
                                     </div>
                                 </div>
-                                 <Button size="sm" variant="outline" onClick={() => handleCreateTask(alert)} disabled={taskAlreadyExists}>
-                                    {taskAlreadyExists ? <Check className="mr-2 h-4 w-4" /> : <ListTodo className="mr-2 h-4 w-4" />}
-                                    {taskAlreadyExists ? 'Tarefa Criada' : 'Criar Tarefa'}
-                                </Button>
                             </div>
                         )
                     })}
@@ -621,11 +569,10 @@ export function ConsumptionProjection() {
                                         <div className="flex justify-between items-center">
                                           <div className="flex items-center gap-2">
                                               <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                              {group.ruptureDate && (
-                                                  <Badge variant="outline" className="text-sm">
-                                                      <CalendarDays className="mr-2 h-4 w-4" />
-                                                      Ruptura em: {format(group.ruptureDate, 'dd/MM/yyyy')}
-                                                  </Badge>
+                                              {group.hasLeadTime && (
+                                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600" onClick={() => setQuickProjectionProduct(baseProduct)}>
+                                                      <LineChart className="h-5 w-5" />
+                                                  </Button>
                                               )}
                                           </div>
                                             <div className="flex items-center gap-2">
