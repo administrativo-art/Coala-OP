@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -27,6 +27,9 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { QuickProjectionModal } from './quick-projection-modal';
+import { useTasks } from '@/hooks/use-tasks';
+import { useProfiles } from '@/hooks/use-profiles';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -54,6 +57,10 @@ interface GroupedProjectionResult {
 }
 
 function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
+    const { addTask } = useTasks();
+    const { profiles } = useProfiles();
+    const { toast } = useToast();
+
     const alerts = useMemo(() => {
         return results
             .filter(r => r.orderStatus === 'urgent' || r.orderStatus === 'soon')
@@ -65,6 +72,30 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                 return dateA.getTime() - dateB.getTime();
             });
     }, [results]);
+    
+    const handleCreateTask = (alert: GroupedProjectionResult) => {
+        const adminProfile = profiles.find(p => p.name === 'Administrador');
+        if (!adminProfile) {
+            toast({ variant: 'destructive', title: 'Perfil "Administrador" não encontrado.' });
+            return;
+        }
+
+        addTask({
+            title: `Compra Urgente: ${alert.baseProductName}`,
+            description: `A reposição do estoque de ${alert.baseProductName} é necessária. Sugestão de compra: ${alert.suggestedOrderQty?.toFixed(0) ?? 'N/A'} unidades. Pedido deve ser feito até ${alert.orderDate ? format(alert.orderDate, 'dd/MM/yyyy') : 'imediatamente'}.`,
+            status: 'pending',
+            assigneeType: 'profile',
+            assigneeId: adminProfile.id,
+            requiresApproval: false,
+            origin: { type: 'form', id: 'consumption-projection' },
+            history: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            dueDate: alert.orderDate?.toISOString(),
+        });
+
+        toast({ title: 'Tarefa criada!', description: `Uma tarefa de compra para ${alert.baseProductName} foi criada e atribuída.` });
+    };
 
     if (alerts.length === 0) {
         return null;
@@ -90,9 +121,9 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                     {alerts.map(alert => {
                         const criticalDate = isMatriz ? alert.orderDate : alert.ruptureDate;
                         return (
-                            <div key={alert.baseProductId} className="p-3 border rounded-lg bg-card shadow-sm">
+                            <div key={alert.baseProductId} className="p-4 border rounded-lg bg-card shadow-sm flex flex-col gap-3">
                                 <p className="font-semibold">{alert.baseProductName}</p>
-                                <div className="text-sm mt-2 space-y-1">
+                                <div className="text-sm space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">{isMatriz ? "Pedir até:" : "Ruptura em:"}</span>
                                         <span className="font-bold">{criticalDate ? format(criticalDate, 'dd/MM/yyyy') : 'Imediata'}</span>
@@ -104,6 +135,10 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                                         </Badge>
                                     </div>
                                 </div>
+                                 <Button size="sm" variant="outline" onClick={() => handleCreateTask(alert)}>
+                                    <ListTodo className="mr-2 h-4 w-4" />
+                                    Criar Tarefa
+                                </Button>
                             </div>
                         )
                     })}
@@ -654,4 +689,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
