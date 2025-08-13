@@ -40,6 +40,8 @@ export function useValidatedConsumptionData() {
   }, [rawReports, rawBaseProducts]);
   
   const calculateAndApplyAllMinimumStocks = useCallback(async (allReports: any[]) => {
+      if (!allReports.length || !baseProducts.length || !kiosks.length) return;
+  
       const productsToUpdate: any[] = [];
       const kioskList = kiosks.filter(k => k.id !== 'matriz');
 
@@ -47,15 +49,14 @@ export function useValidatedConsumptionData() {
         const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
         
         let totalNetworkConsumption = 0;
-        const totalNetworkMonths = new Set<string>();
+        const networkMonths = new Set<string>();
         
-        // Kiosk calculation (12 days)
+        // 1. Kiosk calculation (12 days)
         for (const k of kioskList) {
+            if (newStockLevels[k.id]?.override) continue;
+
             const kioskReports = allReports.filter(r => r.kioskId === k.id);
             if (kioskReports.length === 0) continue;
-
-            const isOverridden = newStockLevels[k.id]?.override === true;
-            if (isOverridden) continue;
             
             const totalKioskConsumption = kioskReports.reduce((sum, r) => {
                 const item = r.results.find((res: any) => res.baseProductId === bp.id);
@@ -69,35 +70,38 @@ export function useValidatedConsumptionData() {
               const kioskMinStock = Math.ceil((dailyAvg * 7) + (dailyAvg * 5));
               
               if (kioskMinStock > 0) {
-                  newStockLevels[k.id] = { min: kioskMinStock, safetyStock: (dailyAvg * 5), leadTime: 0, override: false };
-                  
-                  // Sum up for Matriz calculation
-                  totalNetworkConsumption += totalKioskConsumption;
-                  kioskReports.forEach(r => totalNetworkMonths.add(`${r.year}-${r.month}`));
+                  newStockLevels[k.id] = { 
+                      ...(newStockLevels[k.id] || {}), // preserve leadTime/safety if exists
+                      min: kioskMinStock, 
+                      override: false 
+                    };
               }
+
+              // Sum up for Matriz calculation
+              totalNetworkConsumption += totalKioskConsumption;
+              kioskReports.forEach(r => networkMonths.add(`${r.year}-${r.month}`));
             }
         }
 
-        // Matriz calculation (30 days of network consumption)
-        const isMatrizOverridden = newStockLevels['matriz']?.override === true;
-        if (!isMatrizOverridden && totalNetworkConsumption > 0 && totalNetworkMonths.size > 0) {
-            const avgTotalMonthlyConsumption = totalNetworkConsumption / totalNetworkMonths.size;
-            if (avgTotalMonthlyConsumption > 0) {
+        // 2. Matriz calculation (30 days of network consumption)
+        if (!newStockLevels['matriz']?.override) {
+            if (totalNetworkConsumption > 0 && networkMonths.size > 0) {
+                const avgTotalMonthlyConsumption = totalNetworkConsumption / networkMonths.size;
                 const matrizMinStock = Math.ceil(avgTotalMonthlyConsumption);
-                newStockLevels['matriz'] = { 
-                    ...(newStockLevels['matriz'] || {}), // preserve safetyStock and leadTime if they exist
-                    min: matrizMinStock, 
-                    override: false 
-                };
+                 if (matrizMinStock > 0) {
+                    newStockLevels['matriz'] = { 
+                        ...(newStockLevels['matriz'] || {}), // preserve leadTime/safety if exists
+                        min: matrizMinStock, 
+                        override: false 
+                    };
+                }
             }
         }
         
-        if (Object.keys(newStockLevels).length > 0) {
-            productsToUpdate.push({
-                ...bp,
-                stockLevels: newStockLevels,
-            });
-        }
+        productsToUpdate.push({
+            ...bp,
+            stockLevels: newStockLevels,
+        });
       }
 
       if (productsToUpdate.length > 0) {
