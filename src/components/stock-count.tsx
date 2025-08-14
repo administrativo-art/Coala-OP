@@ -61,7 +61,7 @@ function PendingApprovals() {
     
     for (const item of count.items) {
         if (item.difference !== 0) {
-            await adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy);
+            await adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy, user);
         }
     }
 
@@ -183,7 +183,10 @@ export function StockCount() {
             return nameA.localeCompare(nameB);
           }
         }
-        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+        if (a.expiryDate && b.expiryDate) {
+            return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+        }
+        return 0;
       });
   }, [selectedKioskId, lots, products, getProductFullName]);
 
@@ -221,7 +224,7 @@ export function StockCount() {
         productName: lot.productName,
         lotId: lot.id,
         lotNumber: lot.lotNumber,
-        expiryDate: lot.expiryDate,
+        expiryDate: lot.expiryDate || '',
         systemQuantity: lot.quantity,
         countedQuantity: item.countedQuantity,
         difference,
@@ -325,7 +328,7 @@ export function StockCount() {
                                                 <div className="flex-1 space-y-3">
                                                     <div className="space-y-1">
                                                         <p className="font-semibold leading-tight">{lot.productName}</p>
-                                                        <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {format(parseISO(lot.expiryDate), 'dd/MM/yy')}</p>
+                                                        <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Val: {lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yy') : 'N/A'}</p>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <FormField
