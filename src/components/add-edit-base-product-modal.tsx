@@ -63,6 +63,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
+  const [comboboxSearch, setComboboxSearch] = useState('');
   
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
@@ -187,6 +188,16 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   
   const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
 
+  const filteredClassifications = useMemo(() => {
+    if (!comboboxSearch) return classifications;
+    return classifications.filter(c => c.name.toLowerCase().includes(comboboxSearch.toLowerCase()));
+  }, [classifications, comboboxSearch]);
+
+  const showCreateOption = useMemo(() => {
+      return comboboxSearch && !classifications.some(c => c.name.toLowerCase() === comboboxSearch.toLowerCase());
+  }, [comboboxSearch, classifications]);
+
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -227,40 +238,64 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         !field.value && "text-muted-foreground"
                                     )}
                                     >
-                                    {field.value
-                                        ? classifications.find(
-                                            (c) => c.name === field.value
-                                        )?.name
-                                        : "Selecione ou crie uma"}
+                                    {field.value || "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                                 <Command>
+                                    <CommandInput
+                                        placeholder="Buscar ou criar..."
+                                        value={comboboxSearch}
+                                        onValueChange={setComboboxSearch}
+                                     />
                                     <CommandList>
-                                        <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
+                                        <CommandEmpty>
+                                            Nenhuma classificação encontrada.
+                                        </CommandEmpty>
                                         <CommandGroup>
-                                        {classifications.map((c) => (
-                                            <CommandItem
-                                                value={c.name}
-                                                key={c.id}
-                                                onSelect={() => {
-                                                    form.setValue("classification", c.name === field.value ? "" : c.name);
-                                                    setIsComboboxOpen(false);
-                                                }}
-                                            >
-                                            <Check
-                                                className={cn(
-                                                "mr-2 h-4 w-4",
-                                                c.name === field.value
-                                                    ? "opacity-100"
-                                                    : "opacity-0"
-                                                )}
-                                            />
-                                            {c.name}
-                                            </CommandItem>
-                                        ))}
+                                            {filteredClassifications.map((c) => (
+                                                <CommandItem
+                                                    value={c.name}
+                                                    key={c.id}
+                                                    onSelect={(selected) => {
+                                                        const next = selected === field.value ? "" : selected;
+                                                        form.setValue("classification", next, {
+                                                          shouldDirty: true,
+                                                          shouldValidate: true,
+                                                        });
+                                                        setComboboxSearch("");
+                                                        setIsComboboxOpen(false);
+                                                      }}
+                                                >
+                                                <Check
+                                                    className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    c.name === field.value
+                                                        ? "opacity-100"
+                                                        : "opacity-0"
+                                                    )}
+                                                />
+                                                {c.name}
+                                                </CommandItem>
+                                            ))}
+                                            {showCreateOption && (
+                                                <CommandItem
+                                                    value={comboboxSearch}
+                                                    onSelect={(currentValue) => {
+                                                        form.setValue("classification", currentValue, {
+                                                            shouldDirty: true,
+                                                            shouldValidate: true,
+                                                        });
+                                                        setComboboxSearch('');
+                                                        setIsComboboxOpen(false);
+                                                    }}
+                                                    >
+                                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                                    Criar "{comboboxSearch}"
+                                                </CommandItem>
+                                            )}
                                         </CommandGroup>
                                     </CommandList>
                                 </Command>
@@ -290,7 +325,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                              <SelectContent>
-                                  {Object.keys(units[categoryWatch]).map(unit => (
+                                  {Object.keys(units[categoryWatch] || {}).map(unit => (
                                       <SelectItem key={unit} value={unit}>{unit}</SelectItem>))}
                               </SelectContent>
                           </Select>
@@ -409,5 +444,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
+
+    
 
     
