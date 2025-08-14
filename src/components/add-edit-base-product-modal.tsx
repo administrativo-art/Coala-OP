@@ -91,14 +91,20 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const isDirty = form.formState.isDirty;
 
   useEffect(() => {
+    // If the modal is closed, reset the ref to allow re-initialization on next open.
     if (!open) {
       lastInitKeyRef.current = null;
       return;
     }
 
-    const initKey = productToEdit?.id ? `edit:${productToEdit.id}` : "create";
-    if (lastInitKeyRef.current === initKey || isDirty) return;
+    const initKey = productToEdit ? `edit:${productToEdit.id}` : 'create';
 
+    // 1) If we have already initialized for this key, do not run again.
+    if (lastInitKeyRef.current === initKey) return;
+    
+    // 2) If the user has already dirtied the form, do not reset over their changes.
+    if (isDirty && initKey === lastInitKeyRef.current) return;
+    
     const kioskStockLevels = sortedKiosks.map(kiosk => {
       const level = productToEdit?.stockLevels?.[kiosk.id];
       return {
@@ -112,19 +118,18 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     form.reset({
       name: productToEdit?.name ?? '',
-      classification: productToEdit?.classification ? String(productToEdit.classification) : '',
+      classification: productToEdit?.classification ? String(productToEdit.classification) : 'none',
       category: productToEdit?.category ?? 'Massa',
       unit: productToEdit?.unit ?? 'g',
       initialCostPerUnit: productToEdit?.lastEffectivePrice?.pricePerUnit ?? productToEdit?.initialCostPerUnit ?? 0,
       stockLevels: kioskStockLevels,
       consumptionMonths: productToEdit?.consumptionMonths ?? 0,
-    }, {
-      keepDirtyValues: false,
     });
     
     lastInitKeyRef.current = initKey;
 
   }, [open, productToEdit, sortedKiosks, form, isDirty]);
+
 
   const categoryWatch = form.watch('category');
 
@@ -384,4 +389,5 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     
 
     
+
 
