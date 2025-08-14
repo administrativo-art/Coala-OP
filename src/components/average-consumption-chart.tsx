@@ -14,7 +14,7 @@ import Papa from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, Download } from 'lucide-react'
+import { TrendingUp, ListFilter, Download, ArrowUpDown } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -22,8 +22,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
 
 const formatNumberForDisplay = (value: number) => {
+    if (typeof value !== 'number' || isNaN(value)) return "0";
     return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 };
+
+type SortKey = 'name' | 'Consumo';
+type SortDirection = 'asc' | 'desc';
 
 export function AverageConsumptionChart() {
   const { user } = useAuth()
@@ -34,6 +38,7 @@ export function AverageConsumptionChart() {
   const [selectedKiosk, setSelectedKiosk] = useState<string>('');
   const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([])
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
   
   useEffect(() => {
     if (user && !selectedKiosk && !kiosksLoading && kiosks.length > 0) {
@@ -84,7 +89,7 @@ export function AverageConsumptionChart() {
     }
     const networkMonthsCount = allNetworkMonths.size;
 
-    return baseProducts
+    const dataToSort = baseProducts
         .filter(bp => selectedBaseProducts.includes(bp.id))
         .map(baseProduct => {
             const productMonthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
@@ -105,10 +110,21 @@ export function AverageConsumptionChart() {
                 name: `${baseProduct.name} (${baseProduct.unit})`,
                 "Consumo": parseFloat(average.toFixed(2)),
             };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        });
 
-  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts]);
+    return dataToSort.sort((a, b) => {
+        if (sortConfig.key === 'name') {
+            return sortConfig.direction === 'asc' 
+                ? a.name.localeCompare(b.name) 
+                : b.name.localeCompare(a.name);
+        } else {
+            return sortConfig.direction === 'asc' 
+                ? a.Consumo - b.Consumo 
+                : b.Consumo - a.Consumo;
+        }
+    });
+
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig]);
 
   const handleExportPdf = () => {
     if (chartData.length === 0) return;
@@ -202,6 +218,11 @@ export function AverageConsumptionChart() {
     });
   }
 
+  const handleSortChange = (value: string) => {
+    const [key, direction] = value.split('-') as [SortKey, SortDirection];
+    setSortConfig({ key, direction });
+  }
+
   const sortedKiosks = useMemo(() => {
     return [...kiosks].sort((a, b) => {
         if (a.id === 'matriz') return -1;
@@ -220,6 +241,15 @@ export function AverageConsumptionChart() {
   ];
   const chartHeight = Math.max(350, chartData.length * 40);
 
+  const cardTitle = useMemo(() => {
+    const kioskName = kiosks.find(k => k.id === selectedKiosk)?.name;
+    let title = "Consumo médio mensal";
+    if (kioskName) {
+        title += ` - ${kioskName}`;
+    }
+    return title;
+  }, [selectedKiosk, kiosks]);
+
   return (
     <Card>
       <Accordion type="single" collapsible className="w-full" defaultValue="consumption-chart">
@@ -228,7 +258,7 @@ export function AverageConsumptionChart() {
             <div className="flex flex-col gap-4 w-full">
                 <div>
                     <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6" /> Consumo médio mensal
+                        <TrendingUp className="h-6 w-6" /> {cardTitle}
                     </CardTitle>
                     <CardDescription>
                         {user?.username === 'Tiago Brasil' 
@@ -278,6 +308,18 @@ export function AverageConsumptionChart() {
                         </SelectContent>
                     </Select>
                 )}
+                 <Select value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={handleSortChange}>
+                    <SelectTrigger className="w-full sm:w-[220px]">
+                        <ArrowUpDown className="mr-2 h-4 w-4" />
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Consumo-desc">Consumo (Maior para menor)</SelectItem>
+                        <SelectItem value="Consumo-asc">Consumo (Menor para maior)</SelectItem>
+                        <SelectItem value="name-asc">Nome (A-Z)</SelectItem>
+                        <SelectItem value="name-desc">Nome (Z-A)</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
             <div className="pr-2 pl-0">
                 { (loadingData) ? (
