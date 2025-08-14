@@ -147,9 +147,6 @@ export function ItemManagement() {
                 </div>
             </div>
              <div className="flex gap-2">
-                 <Button variant="outline" onClick={() => setIsBaseProductModalOpen(true)}>
-                    <Box className="mr-2 h-4 w-4" /> Gerenciar produto base
-                </Button>
                 <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)}>
                     <Archive className="mr-2 h-4 w-4" /> Ver arquivados
                 </Button>
@@ -267,17 +264,6 @@ export function ItemManagement() {
       />
       
       <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
-
-      <Dialog open={isBaseProductModalOpen} onOpenChange={setIsBaseProductModalOpen}>
-        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-            <DialogHeader>
-                <DialogTitle>Gerenciar produto base</DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 overflow-auto p-1">
-                <BaseProductManagement />
-            </div>
-        </DialogContent>
-      </Dialog>
       
       {productsToDelete.length > 0 && 
         <DeleteConfirmationDialog 
