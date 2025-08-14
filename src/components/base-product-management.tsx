@@ -17,17 +17,70 @@ import { AddEditBaseProductModal } from './add-edit-base-product-modal';
 import { ClassificationManagementModal } from './classification-management-modal';
 import { Input } from './ui/input';
 import { useClassifications } from '@/hooks/use-classifications';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from './ui/label';
+
+function BulkEditClassificationModal({
+  open,
+  onOpenChange,
+  selectedCount,
+  onConfirm
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedCount: number;
+  onConfirm: (classificationId: string) => void;
+}) {
+  const { classifications, loading } = useClassifications();
+  const [selectedClassification, setSelectedClassification] = useState('');
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Alterar classificação em massa</DialogTitle>
+          <DialogDescription>
+            Selecione a nova classificação para os {selectedCount} produtos base selecionados.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Label htmlFor="bulk-classification">Nova classificação</Label>
+          <Select
+            value={selectedClassification}
+            onValueChange={setSelectedClassification}
+            disabled={loading}
+          >
+            <SelectTrigger id="bulk-classification">
+              <SelectValue placeholder="Selecione uma classificação..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Nenhuma</SelectItem>
+              {classifications.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={() => onConfirm(selectedClassification)} disabled={!selectedClassification}>Aplicar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export function BaseProductManagement() {
-  const { baseProducts, loading, deleteBaseProduct, deleteMultipleBaseProducts } = useBaseProducts();
+  const { baseProducts, loading, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
   const { products } = useProducts();
   const { classifications } = useClassifications();
 
-  const [productToDelete, setProductToDelete] = useState<BaseProduct | null>(null);
   const [productsToDelete, setProductsToDelete] = useState<BaseProduct[]>([]);
   const [productToEditId, setProductToEditId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -50,6 +103,16 @@ export function BaseProductManagement() {
       setProductsToDelete(toDelete);
   };
 
+  const handleBulkEditConfirm = async (classificationId: string) => {
+    const productsToUpdate = baseProducts
+      .filter(p => selectedProducts.has(p.id))
+      .map(p => ({ ...p, classification: classificationId === 'none' ? '' : classificationId }));
+
+    await updateMultipleBaseProducts(productsToUpdate);
+    setIsBulkEditModalOpen(false);
+    setSelectedProducts(new Set());
+  };
+
   const handleDeleteMultipleConfirm = async () => {
     if (productsToDelete.length > 0) {
       const idsToDelete = productsToDelete.map(p => p.id);
@@ -70,7 +133,6 @@ export function BaseProductManagement() {
       } finally { setIsDeleting(false); }
     }
   };
-
 
   const handleAddNew = () => {
     setProductToEditId(null);
@@ -199,7 +261,10 @@ export function BaseProductManagement() {
                 </Table>
             </div>
             {selectedProducts.size > 0 && (
-                 <div className="pt-2">
+                 <div className="pt-2 flex gap-2">
+                    <Button variant="outline" onClick={() => setIsBulkEditModalOpen(true)}>
+                        <Edit className="mr-2 h-4 w-4" /> Editar selecionados ({selectedProducts.size})
+                    </Button>
                     <Button variant="destructive" onClick={handleDeleteSelectedClick}>
                         <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
                     </Button>
@@ -215,6 +280,13 @@ export function BaseProductManagement() {
       />
 
       <ClassificationManagementModal open={isClassificationModalOpen} onOpenChange={setIsClassificationModalOpen} />
+
+      <BulkEditClassificationModal 
+        open={isBulkEditModalOpen}
+        onOpenChange={setIsBulkEditModalOpen}
+        selectedCount={selectedProducts.size}
+        onConfirm={handleBulkEditConfirm}
+      />
 
       {productsToDelete.length > 0 && (
         <DeleteConfirmationDialog
