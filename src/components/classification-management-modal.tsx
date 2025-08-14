@@ -71,14 +71,15 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
     };
 
     const handleAddClick = async () => {
-        if (!newClassificationName.trim() || classificationOptions.includes(newClassificationName.trim())) {
-             alert("Esta classificação já existe ou o nome é inválido.");
+        if (!newClassificationName.trim()) {
+            alert("O nome da classificação não pode ser vazio.");
             return;
         }
-        // This is a conceptual add. Since classifications only exist on products,
-        // we can't truly "add" one here. We'll add it to the list visually
-        // and it will be saved if/when a user assigns it to a product.
-        // For a better UX, we'll just inform the user how to use it.
+        if (classificationOptions.includes(newClassificationName.trim())) {
+             alert("Esta classificação já existe.");
+            return;
+        }
+        
         alert(`Para usar a nova classificação "${newClassificationName.trim()}", digite-a no campo de classificação ao editar ou criar um produto base.`);
         setNewClassificationName('');
     }
