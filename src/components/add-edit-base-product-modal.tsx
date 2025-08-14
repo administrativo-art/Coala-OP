@@ -245,7 +245,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
                             <FormLabel>Classificação (opcional)</FormLabel>
-                            <Popover open={isComboboxOpen} onOpenChange={setIsComboboxOpen}>
+                             <Popover open={isComboboxOpen} onOpenChange={(open) => {
+                                setIsComboboxOpen(open);
+                                if (!open) setComboboxSearch("");
+                             }}>
                                 <PopoverTrigger asChild>
                                 <FormControl>
                                     <Button
@@ -256,7 +259,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         !field.value && "text-muted-foreground"
                                     )}
                                     >
-                                    {field.value ? classificationMap.get(field.value) : "Selecione ou crie uma"}
+                                    {field.value ? classificationMap.get(String(field.value)) : "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
@@ -276,10 +279,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                             {filteredClassifications.map((c) => (
                                                 <CommandItem
                                                     key={c.id}
-                                                    value={c.id}
+                                                    value={String(c.id)}
                                                     keywords={[c.name]}
                                                     onSelect={(selected) => {
-                                                      const next = selected === field.value ? "" : selected;
+                                                      const next = String(selected) === String(field.value) ? "" : String(selected);
                                                       form.setValue("classification", next, {
                                                         shouldDirty: true,
                                                         shouldValidate: true,
@@ -291,7 +294,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                                 <Check
                                                     className={cn(
                                                     "mr-2 h-4 w-4",
-                                                    c.id === field.value
+                                                    String(c.id) === String(field.value)
                                                         ? "opacity-100"
                                                         : "opacity-0"
                                                     )}
@@ -456,6 +459,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
+
+    
 
     
 
