@@ -8,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO, addDays, isAfter, differenceInDays, getDaysInMonth } from 'date-fns';
+import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -211,25 +211,14 @@ export function ConsumptionProjection() {
         const monthlyAverages = new Map<string, number>();
         
         Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
-            const monthsWithConsumption = Object.entries(monthlyData).filter(([, val]) => val > 0);
-            
-            const numMonthsWithConsumption = monthsWithConsumption.length;
+            const months = Object.values(monthlyData);
+            const numMonthsWithConsumption = months.filter(val => val > 0).length;
 
             if (numMonthsWithConsumption > 0) {
-                const totalConsumption = monthsWithConsumption.reduce((sum, [, val]) => sum + val, 0);
+                const totalConsumption = months.reduce((sum, val) => sum + val, 0);
                 const avg = totalConsumption / numMonthsWithConsumption;
                 monthlyAverages.set(baseId, avg);
-
-                const totalDays = monthsWithConsumption.reduce((sum, [key]) => {
-                    const [year, month] = key.split('-').map(Number);
-                    return sum + getDaysInMonth(new Date(year, month - 1));
-                }, 0);
-                
-                if (totalDays > 0) {
-                    dailyAverages.set(baseId, totalConsumption / totalDays);
-                } else {
-                    dailyAverages.set(baseId, avg / 30);
-                }
+                dailyAverages.set(baseId, avg / 30);
             }
         });
         

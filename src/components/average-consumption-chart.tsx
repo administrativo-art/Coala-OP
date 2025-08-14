@@ -52,16 +52,15 @@ export function AverageConsumptionChart() {
   const chartData = useMemo(() => {
     if (!hasValidData || !user || !selectedKiosk) return [];
 
-    const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
     const isMatrixView = selectedKiosk === 'matriz';
     
     const relevantReports = isMatrixView
       ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
       : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
 
-    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
+    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number, monthlyValues: number[] } } = {};
     baseProducts.forEach(bp => {
-        consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0 };
+        consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0, monthlyValues: [] };
     });
     
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
@@ -92,10 +91,14 @@ export function AverageConsumptionChart() {
             const monthsWithConsumption = Object.values(productMonthlyData).filter(v => v > 0);
             const totalConsumption = monthsWithConsumption.reduce((sum, val) => sum + val, 0);
 
-            const productMonthsCount = monthsWithConsumption.length;
-            const denominator = isMatrixView ? networkMonthsCount : productMonthsCount;
+            let denominator;
+            if (isMatrixView) {
+                denominator = networkMonthsCount > 0 ? networkMonthsCount : 1;
+            } else {
+                denominator = monthsWithConsumption.length > 0 ? monthsWithConsumption.length : 1;
+            }
             
-            const average = denominator > 0 ? totalConsumption / denominator : 0;
+            const average = totalConsumption / denominator;
             
             return {
                 baseProductId: baseProduct.id,
