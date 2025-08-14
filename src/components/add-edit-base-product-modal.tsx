@@ -275,16 +275,18 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         <CommandGroup>
                                             {filteredClassifications.map((c) => (
                                                 <CommandItem
-                                                    value={c.name}
                                                     key={c.id}
-                                                    onSelect={() => {
-                                                        form.setValue("classification", c.id === field.value ? '' : c.id, {
-                                                          shouldDirty: true,
-                                                          shouldValidate: true,
-                                                        });
-                                                        setComboboxSearch("");
-                                                        setIsComboboxOpen(false);
-                                                      }}
+                                                    value={c.id}
+                                                    keywords={[c.name]}
+                                                    onSelect={(selected) => {
+                                                      const next = selected === field.value ? "" : selected;
+                                                      form.setValue("classification", next, {
+                                                        shouldDirty: true,
+                                                        shouldValidate: true,
+                                                      });
+                                                      setComboboxSearch("");
+                                                      setIsComboboxOpen(false);
+                                                    }}
                                                 >
                                                 <Check
                                                     className={cn(
