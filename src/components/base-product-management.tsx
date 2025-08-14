@@ -6,13 +6,14 @@ import { useProducts } from '@/hooks/use-products';
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, PackagePlus, Settings } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, PackagePlus, Settings, Search } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
 import { AddEditBaseProductModal } from './add-edit-base-product-modal';
 import { ClassificationManagementModal } from './classification-management-modal';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from './ui/input';
 
 export function BaseProductManagement() {
   const { baseProducts, loading, deleteBaseProduct } = useBaseProducts();
@@ -22,6 +23,7 @@ export function BaseProductManagement() {
   const [productToEditId, setProductToEditId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -50,10 +52,14 @@ export function BaseProductManagement() {
   };
 
   const baseProductsByClassification = useMemo(() => {
+    const filteredProducts = searchTerm
+      ? baseProducts.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      : baseProducts;
+
     const grouped: { [key: string]: BaseProduct[] } = {};
     const unclassified: BaseProduct[] = [];
 
-    baseProducts.forEach(product => {
+    filteredProducts.forEach(product => {
       const classification = product.classification || 'Sem Classificação';
       if(classification === 'Sem Classificação') {
         unclassified.push(product);
@@ -71,8 +77,15 @@ export function BaseProductManagement() {
     
     unclassified.sort((a, b) => a.name.localeCompare(b.name));
 
-    return { ...grouped, 'Sem Classificação': unclassified };
-  }, [baseProducts]);
+    const sortedGroupKeys = Object.keys(grouped).sort();
+    
+    const sortedGrouped: { [key: string]: BaseProduct[] } = {};
+    sortedGroupKeys.forEach(key => {
+        sortedGrouped[key] = grouped[key];
+    });
+
+    return { ...sortedGrouped, 'Sem Classificação': unclassified };
+  }, [baseProducts, searchTerm]);
 
 
   return (
@@ -83,16 +96,25 @@ export function BaseProductManagement() {
           <CardDescription>Produtos base agrupam insumos e definem metas de estoque por quiosque.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-           <div className="flex gap-2">
-             <Button onClick={handleAddNew} className="flex-grow">
+           <div className="flex flex-col sm:flex-row gap-2">
+             <Button onClick={handleAddNew} className="flex-grow sm:flex-grow-0">
                   <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto base
              </Button>
               <Button variant="outline" onClick={() => setIsClassificationModalOpen(true)}>
                 <Settings className="mr-2 h-4 w-4" /> Gerenciar Classificações
              </Button>
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar produto base..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
            </div>
            
-           <Accordion type="multiple" className="w-full space-y-2 pt-4 border-t">
+           <Accordion type="multiple" defaultValue={['Sem Classificação']} className="w-full space-y-2 pt-4 border-t">
             {loading ? (
               <div className="space-y-2">
                 <Skeleton className="h-12 w-full" />
@@ -148,8 +170,8 @@ export function BaseProductManagement() {
             ) : (
                 <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
                     <PackagePlus className="mx-auto h-10 w-10 mb-2" />
-                    <p className="font-semibold">Nenhum produto base cadastrado.</p>
-                    <p className="text-sm">Adicione um para começar a agrupar insumos.</p>
+                    <p className="font-semibold">Nenhum produto base encontrado.</p>
+                    <p className="text-sm">{searchTerm ? 'Tente refinar sua busca.' : 'Adicione um para começar a agrupar insumos.'}</p>
                 </div>
             )}
             </Accordion>
