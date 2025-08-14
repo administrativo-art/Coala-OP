@@ -237,20 +237,15 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                     if (value.toLowerCase().includes(search.toLowerCase())) return 1
                                     return 0
                                     }}>
-                                    <CommandInput
-                                        placeholder="Buscar ou criar..."
-                                        value={field.value || ''}
-                                        onValueChange={field.onChange}
-                                    />
-                                    <CommandEmpty
-                                        onSelect={() => {
-                                            form.setValue("classification", field.value);
-                                            setIsComboboxOpen(false);
-                                        }}
-                                    >
-                                       <div className="p-2">Criar nova: "{field.value}"</div>
-                                    </CommandEmpty>
                                     <CommandList>
+                                        <CommandEmpty
+                                            onSelect={() => {
+                                                form.setValue("classification", field.value);
+                                                setIsComboboxOpen(false);
+                                            }}
+                                        >
+                                           <div className="p-2">Criar nova: "{field.value}"</div>
+                                        </CommandEmpty>
                                         <CommandGroup>
                                         {classifications
                                             .map((c) => (
