@@ -21,7 +21,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, ChevronsUpDown, Check, Settings } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, ChevronsUpDown, Check, Settings, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -57,7 +57,7 @@ interface AddEditBaseProductModalProps {
 
 export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }: AddEditBaseProductModalProps) {
   const { baseProducts, updateBaseProduct, addBaseProduct } = useBaseProducts();
-  const { classifications } = useClassifications();
+  const { classifications, addClassification: addNewClassification, loading: loadingClassifications } = useClassifications();
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -188,11 +188,29 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   
   const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
 
+  const classificationMap = useMemo(() => {
+    return new Map(classifications.map(c => [c.id, c.name]));
+  }, [classifications]);
+
   const filteredClassifications = useMemo(() => {
     if (!comboboxSearch) return classifications;
     return classifications.filter(c => c.name.toLowerCase().includes(comboboxSearch.toLowerCase()));
   }, [classifications, comboboxSearch]);
 
+  const handleCreateNewClassification = async (name: string) => {
+    if (!name.trim()) return;
+    try {
+        const newClassification = await addNewClassification(name);
+        if (newClassification) {
+            form.setValue("classification", newClassification.id, { shouldDirty: true, shouldValidate: true });
+        }
+        setComboboxSearch('');
+        setIsComboboxOpen(false);
+    } catch(e) {
+        console.error("Failed to create new classification", e);
+    }
+  };
+  
   const showCreateOption = useMemo(() => {
       return comboboxSearch && !classifications.some(c => c.name.toLowerCase() === comboboxSearch.toLowerCase());
   }, [comboboxSearch, classifications]);
@@ -238,7 +256,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         !field.value && "text-muted-foreground"
                                     )}
                                     >
-                                    {field.value || "Selecione ou crie uma"}
+                                    {field.value ? classificationMap.get(field.value) : "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
@@ -259,9 +277,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                                 <CommandItem
                                                     value={c.name}
                                                     key={c.id}
-                                                    onSelect={(selected) => {
-                                                        const next = selected === field.value ? "" : selected;
-                                                        form.setValue("classification", next, {
+                                                    onSelect={() => {
+                                                        form.setValue("classification", c.id === field.value ? '' : c.id, {
                                                           shouldDirty: true,
                                                           shouldValidate: true,
                                                         });
@@ -272,7 +289,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                                 <Check
                                                     className={cn(
                                                     "mr-2 h-4 w-4",
-                                                    c.name === field.value
+                                                    c.id === field.value
                                                         ? "opacity-100"
                                                         : "opacity-0"
                                                     )}
@@ -280,17 +297,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                                 {c.name}
                                                 </CommandItem>
                                             ))}
-                                            {showCreateOption && (
+                                            {showCreateOption && !loadingClassifications && (
                                                 <CommandItem
                                                     value={comboboxSearch}
-                                                    onSelect={(currentValue) => {
-                                                        form.setValue("classification", currentValue, {
-                                                            shouldDirty: true,
-                                                            shouldValidate: true,
-                                                        });
-                                                        setComboboxSearch('');
-                                                        setIsComboboxOpen(false);
-                                                    }}
+                                                    onSelect={() => handleCreateNewClassification(comboboxSearch)}
                                                     >
                                                     <PlusCircle className="mr-2 h-4 w-4" />
                                                     Criar "{comboboxSearch}"
