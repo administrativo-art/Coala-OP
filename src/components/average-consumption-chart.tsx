@@ -53,39 +53,49 @@ export function AverageConsumptionChart() {
     if (!hasValidData || !user || !selectedKiosk) return [];
 
     const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
+    const isMatrixView = selectedKiosk === 'matriz';
+    
+    const relevantReports = isMatrixView
+      ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+      : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
 
     const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number } } = {};
     baseProducts.forEach(bp => {
         consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0 };
     });
-
-    const kioskIdForChart = selectedKiosk;
-    const relevantReports = kioskIdForChart === 'matriz'
-        ? consumptionHistory
-        : consumptionHistory.filter(report => report.kioskId === kioskIdForChart);
-
+    
+    const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     relevantReports.forEach(report => {
-        const monthlyConsumptionForReport = new Set<string>();
-        report.results.forEach(item => {
-            if(item.baseProductId) {
-                const baseProductId = item.baseProductId;
-                if (baseProductMap.has(baseProductId) && consumptionByBaseId[baseProductId]) {
-                    consumptionByBaseId[baseProductId].total += item.consumedQuantity;
-                    monthlyConsumptionForReport.add(baseProductId);
-                }
+        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+        report.results.forEach(res => {
+            if (res.baseProductId) {
+                if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
+                monthlyConsumptionByBaseId[res.baseProductId][key] = (monthlyConsumptionByBaseId[res.baseProductId][key] || 0) + res.consumedQuantity;
             }
         });
-
-        monthlyConsumptionForReport.forEach(baseProductId => {
-            consumptionByBaseId[baseProductId].monthsCount += 1;
-        });
     });
+
+    const allNetworkMonths = new Set<string>();
+    if (isMatrixView) {
+        for (const report of relevantReports) {
+            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+            const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
+            if (anyConsumption) allNetworkMonths.add(key);
+        }
+    }
+    const networkMonthsCount = allNetworkMonths.size;
 
     return baseProducts
         .filter(bp => selectedBaseProducts.includes(bp.id))
         .map(baseProduct => {
-            const consumption = consumptionByBaseId[baseProduct.id];
-            const average = consumption.monthsCount > 0 ? consumption.total / consumption.monthsCount : 0;
+            const productMonthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
+            const totalConsumption = Object.values(productMonthlyData).reduce((sum, val) => sum + val, 0);
+
+            const productMonthsCount = Object.keys(productMonthlyData).length;
+            const denominator = isMatrixView ? networkMonthsCount : productMonthsCount;
+            
+            const average = denominator > 0 ? totalConsumption / denominator : 0;
+            
             return {
                 baseProductId: baseProduct.id,
                 name: `${baseProduct.name} (${baseProduct.unit})`,
