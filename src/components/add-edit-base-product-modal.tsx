@@ -2,8 +2,8 @@
       
 "use client"
 
-import { useEffect, useMemo, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const [comboboxSearch, setComboboxSearch] = useState('');
   
+  const lastInitKeyRef = useRef<string | null>(null);
+
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
     return baseProducts.find(p => p.id === productToEditId) || null;
@@ -87,8 +89,47 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     control: form.control,
     name: 'stockLevels'
   });
+  
+  const isDirty = form.formState.isDirty;
+
+  useEffect(() => {
+    if (!open) {
+      lastInitKeyRef.current = null;
+      return;
+    }
+
+    const initKey = productToEdit?.id ? `edit:${productToEdit.id}` : "create";
+    if (lastInitKeyRef.current === initKey || isDirty) return;
+
+    const kioskStockLevels = sortedKiosks.map(kiosk => {
+      const level = productToEdit?.stockLevels?.[kiosk.id];
+      return {
+          kioskId: kiosk.id,
+          min: level?.min ?? 0,
+          safetyStock: level?.safetyStock ?? 0,
+          leadTime: level?.leadTime ?? 0,
+          override: level?.override ?? false,
+      };
+    });
+
+    form.reset({
+      name: productToEdit?.name ?? '',
+      classification: productToEdit?.classification ? String(productToEdit.classification) : '',
+      category: productToEdit?.category ?? 'Massa',
+      unit: productToEdit?.unit ?? 'g',
+      initialCostPerUnit: productToEdit?.lastEffectivePrice?.pricePerUnit ?? productToEdit?.initialCostPerUnit ?? 0,
+      stockLevels: kioskStockLevels,
+      consumptionMonths: productToEdit?.consumptionMonths ?? 0,
+    }, {
+      keepDirtyValues: false,
+    });
+    
+    lastInitKeyRef.current = initKey;
+
+  }, [open, productToEdit, sortedKiosks, form, isDirty]);
 
   const categoryWatch = form.watch('category');
+  const selectedClassificationId = useWatch({ control: form.control, name: 'classification' });
 
   useEffect(() => {
     if (form.formState.isDirty || !productToEdit) {
@@ -96,41 +137,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         form.setValue('unit', availableUnits[0] || '');
     }
   }, [categoryWatch, form, productToEdit]);
-
-  useEffect(() => {
-    if (open) {
-      if (productToEdit) {
-        form.reset({
-          name: productToEdit.name,
-          classification: productToEdit.classification || '',
-          category: productToEdit.category,
-          unit: productToEdit.unit,
-          initialCostPerUnit: productToEdit.lastEffectivePrice?.pricePerUnit ?? productToEdit.initialCostPerUnit ?? 0,
-          stockLevels: sortedKiosks.map(kiosk => {
-            const level = productToEdit.stockLevels?.[kiosk.id];
-            return {
-                kioskId: kiosk.id,
-                min: level?.min ?? 0,
-                safetyStock: level?.safetyStock ?? 0,
-                leadTime: level?.leadTime ?? 0,
-                override: level?.override ?? false,
-            };
-          }),
-          consumptionMonths: productToEdit.consumptionMonths,
-        });
-      } else {
-        form.reset({
-          name: '',
-          classification: '',
-          category: 'Massa',
-          unit: 'g',
-          initialCostPerUnit: 0,
-          stockLevels: sortedKiosks.map(kiosk => ({ kioskId: kiosk.id, min: 0, safetyStock: 0, leadTime: 0, override: false })),
-          consumptionMonths: 0,
-        });
-      }
-    }
-  }, [productToEdit, open, form, sortedKiosks]);
 
   const onSubmit = (values: BaseProductFormValues) => {
     const stockLevelsObject: { [kioskId: string]: { min: number, safetyStock: number, leadTime: number, override: boolean } } = {};
@@ -188,14 +194,19 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   
   const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
 
-  const classificationMap = useMemo(() => {
-    return new Map(classifications.map(c => [c.id, c.name]));
-  }, [classifications]);
-
   const filteredClassifications = useMemo(() => {
     if (!comboboxSearch) return classifications;
     return classifications.filter(c => c.name.toLowerCase().includes(comboboxSearch.toLowerCase()));
   }, [classifications, comboboxSearch]);
+  
+  const selectedClassificationName = useMemo(() => {
+    if (!selectedClassificationId || !Array.isArray(classifications)) return null;
+    const found = classifications.find(
+      (c) => String(c.id) === String(selectedClassificationId)
+    );
+    return found?.name ?? null;
+  }, [selectedClassificationId, classifications]);
+
 
   const handleCreateNewClassification = async (name: string) => {
     if (!name.trim()) return;
@@ -245,24 +256,18 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
                             <FormLabel>Classificação (opcional)</FormLabel>
-                             <Popover open={isComboboxOpen} onOpenChange={(open) => {
-                                setIsComboboxOpen(open);
-                                if (!open) setComboboxSearch("");
-                             }}>
+                             <Popover open={isComboboxOpen} onOpenChange={(open) => { setIsComboboxOpen(open); if (!open) setComboboxSearch(""); }}>
                                 <PopoverTrigger asChild>
-                                <FormControl>
-                                    <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    className={cn(
-                                        "w-full justify-between",
-                                        !field.value && "text-muted-foreground"
-                                    )}
-                                    >
-                                    {field.value ? classificationMap.get(String(field.value)) : "Selecione ou crie uma"}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </FormControl>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={isComboboxOpen}
+                                  className="w-full justify-between"
+                                >
+                                  {selectedClassificationName || "Selecione ou crie uma..."}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                                 <Command>
@@ -294,7 +299,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                                 <Check
                                                     className={cn(
                                                     "mr-2 h-4 w-4",
-                                                    String(c.id) === String(field.value)
+                                                    String(c.id) === String(selectedClassificationId)
                                                         ? "opacity-100"
                                                         : "opacity-0"
                                                     )}
