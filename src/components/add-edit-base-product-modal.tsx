@@ -1,5 +1,4 @@
 
-
       
 "use client"
 
@@ -234,17 +233,26 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                 </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput 
+                                <Command filter={(value, search) => {
+                                    if (value.toLowerCase().includes(search.toLowerCase())) return 1
+                                    return 0
+                                    }}>
+                                    <CommandInput
                                         placeholder="Buscar ou criar..."
                                         value={field.value || ''}
                                         onValueChange={field.onChange}
-                                     />
-                                    <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
+                                    />
+                                    <CommandEmpty
+                                        onSelect={() => {
+                                            form.setValue("classification", field.value);
+                                            setIsComboboxOpen(false);
+                                        }}
+                                    >
+                                       <div className="p-2">Criar nova: "{field.value}"</div>
+                                    </CommandEmpty>
                                     <CommandList>
                                         <CommandGroup>
                                         {classifications
-                                            .filter(c => c.name.toLowerCase().includes((field.value || '').toLowerCase()))
                                             .map((c) => (
                                             <CommandItem
                                                 value={c.name}
