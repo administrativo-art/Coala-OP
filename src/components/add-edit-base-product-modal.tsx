@@ -22,9 +22,11 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from './ui/command';
 
 
 const stockLevelSchema = z.object({
@@ -210,21 +212,71 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       </FormItem>
                       )}
                     />
-                    <FormField control={form.control} name="classification" render={({ field }) => (
-                      <FormItem>
-                          <FormLabel>Classificação (opcional)</FormLabel>
-                           <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione a classificação" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {classificationOptions.map(option => (
-                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                     <FormField
+                        control={form.control}
+                        name="classification"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                            <FormLabel>Classificação (opcional)</FormLabel>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between",
+                                        !field.value && "text-muted-foreground"
+                                    )}
+                                    >
+                                    {field.value
+                                        ? classificationOptions.find(
+                                            (option) => option === field.value
+                                        )
+                                        : "Selecione ou crie uma"}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                    <CommandInput 
+                                        placeholder="Buscar ou criar..."
+                                        onValueChange={(search) => {
+                                            if (!classificationOptions.includes(search)) {
+                                                field.onChange(search);
+                                            }
+                                        }}
+                                     />
+                                    <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
+                                    <CommandGroup>
+                                    {classificationOptions.map((option) => (
+                                        <CommandItem
+                                        value={option}
+                                        key={option}
+                                        onSelect={() => {
+                                            form.setValue("classification", option)
+                                        }}
+                                        >
+                                        <Check
+                                            className={cn(
+                                            "mr-2 h-4 w-4",
+                                            option === field.value
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                        />
+                                        {option}
+                                        </CommandItem>
                                     ))}
-                                </SelectContent>
-                            </Select>
-                          <FormMessage />
-                      </FormItem>
-                      )}
-                    />
+                                    </CommandGroup>
+                                </Command>
+                                </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
                    </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="category" render={({ field }) => (
