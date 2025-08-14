@@ -52,6 +52,32 @@ export function BaseProductManagement() {
 
   const getKioskName = (kioskId: string) => kiosks.find(k => k.id === kioskId)?.name || 'N/A';
 
+  const baseProductsByClassification = useMemo(() => {
+    const grouped: { [key: string]: BaseProduct[] } = {};
+    const unclassified: BaseProduct[] = [];
+
+    baseProducts.forEach(product => {
+      const classification = product.classification || 'Sem Classificação';
+      if(classification === 'Sem Classificação') {
+        unclassified.push(product);
+      } else {
+        if (!grouped[classification]) {
+          grouped[classification] = [];
+        }
+        grouped[classification].push(product);
+      }
+    });
+
+    Object.keys(grouped).forEach(key => {
+      grouped[key].sort((a, b) => a.name.localeCompare(b.name));
+    });
+    
+    unclassified.sort((a, b) => a.name.localeCompare(b.name));
+
+    return { ...grouped, 'Sem Classificação': unclassified };
+  }, [baseProducts]);
+
+
   return (
     <>
       <Card>
@@ -70,51 +96,36 @@ export function BaseProductManagement() {
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-12 w-full" />
               </div>
-            ) : baseProducts.length > 0 ? (
-              baseProducts.map(product => {
-                const linkedProductsCount = products.filter(p => p.baseProductId === product.id).length;
-                return (
-                 <AccordionItem value={product.id} key={product.id} className="border-none">
-                    <Card>
-                        <div className="flex items-center p-2">
-                          <AccordionTrigger className="p-2 hover:no-underline rounded-lg [&[data-state=open]]:rounded-b-none flex-grow">
-                              <div className="flex flex-col text-left">
-                                  <span className="font-semibold">{product.name}</span>
-                                  <span className="text-xs text-muted-foreground">{linkedProductsCount} insumo(s) vinculado(s)</span>
-                              </div>
-                          </AccordionTrigger>
-                          <div className="flex items-center shrink-0">
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
-                                  <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
-                                  <Trash2 className="h-4 w-4" />
-                              </Button>
-                          </div>
-                        </div>
-                        <AccordionContent className="p-4 pt-0">
-                           <div className="text-sm space-y-2">
-                                <p><strong>Unidade de medida para estoque:</strong> <span className="font-semibold">{product.unit || 'Não definida'}</span></p>
-                                <div>
-                                    <h4 className="font-semibold mb-1">Níveis de estoque mínimo:</h4>
-                                    {Object.keys(product.stockLevels || {}).length > 0 ? (
-                                        <ul className="list-disc pl-5">
-                                            {Object.entries(product.stockLevels).map(([kioskId, levels]) => (
-                                                <li key={kioskId}>
-                                                    {getKioskName(kioskId)}: {levels.min} {product.unit}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-muted-foreground">Nenhum nível de estoque mínimo definido.</p>
-                                    )}
-                                </div>
-                           </div>
-                        </AccordionContent>
-                    </Card>
-                 </AccordionItem>
-                )
-              })
+            ) : Object.keys(baseProductsByClassification).length > 0 ? (
+                Object.entries(baseProductsByClassification).map(([classification, products]) => (
+                    products.length > 0 && (
+                        <AccordionItem value={classification} key={classification}>
+                            <AccordionTrigger className="text-base font-semibold px-2">{classification} ({products.length})</AccordionTrigger>
+                            <AccordionContent className="space-y-2 pt-2">
+                                {products.map(product => {
+                                    const linkedProductsCount = products.filter(p => p.baseProductId === product.id).length;
+                                    return (
+                                        <Card key={product.id} className="ml-4">
+                                            <div className="flex items-center p-2">
+                                                <div className="flex-grow pl-2">
+                                                    <span className="font-semibold">{product.name}</span>
+                                                </div>
+                                                <div className="flex items-center shrink-0">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    )
+                                })}
+                            </AccordionContent>
+                        </AccordionItem>
+                    )
+                ))
             ) : (
                 <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
                     <PackagePlus className="mx-auto h-10 w-10 mb-2" />

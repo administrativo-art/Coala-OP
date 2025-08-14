@@ -22,11 +22,12 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { type BaseProduct } from '@/types';
-import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, ChevronsUpDown, Check } from 'lucide-react';
+import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, ChevronsUpDown, Check, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from './ui/command';
+import { ClassificationManagementModal } from './classification-management-modal';
 
 
 const stockLevelSchema = z.object({
@@ -60,6 +61,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
@@ -203,15 +205,15 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex-1 overflow-hidden flex flex-col">
               <ScrollArea className="flex-1 pr-6">
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem>
-                          <FormLabel>Nome do produto base</FormLabel>
-                          <FormControl><Input placeholder="ex: Ovomaltine (Pó)" {...field} /></FormControl>
-                          <FormMessage />
-                      </FormItem>
-                      )}
-                    />
+                  <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Nome do produto base</FormLabel>
+                        <FormControl><Input placeholder="ex: Ovomaltine (Pó)" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
                      <FormField
                         control={form.control}
                         name="classification"
@@ -277,6 +279,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                             </FormItem>
                         )}
                         />
+                        <Button type="button" variant="outline" size="icon" onClick={() => setIsClassificationModalOpen(true)}>
+                            <Settings className="h-4 w-4" />
+                        </Button>
                    </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="category" render={({ field }) => (
@@ -410,6 +415,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         confirmButtonText="Sim, resetar"
         confirmButtonVariant="destructive"
       />}
+       <ClassificationManagementModal open={isClassificationModalOpen} onOpenChange={setIsClassificationModalOpen} />
     </>
   );
 }

@@ -260,7 +260,10 @@ export function ItemManagement() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         productToEdit={productToEdit}
-        onManageBaseProducts={() => setIsBaseProductModalOpen(true)}
+        onManageBaseProducts={() => {
+            setIsModalOpen(false); // Fecha o modal de insumo
+            setIsBaseProductModalOpen(true); // Abre o modal de produto base
+        }}
       />
       
       <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
