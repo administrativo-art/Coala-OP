@@ -30,6 +30,8 @@ import { formatQuantity } from '@/lib/conversion';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useRouter } from 'next/navigation';
 import { QuickProjectionModal } from './quick-projection-modal';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -172,6 +174,8 @@ export function LotCard({
 }: LotCardProps) {
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const [lotToConsume, setLotToConsume] = useState<LotEntry | null>(null);
 
@@ -180,7 +184,11 @@ export function LotCard({
   };
 
   const handleConfirmConsumption = (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => {
-    consumeFromLot(params, null as any); // FIXME: Need to pass user
+    if (!user) {
+        toast({ variant: 'destructive', title: 'Erro de autenticação', description: 'Usuário não encontrado para registrar a baixa.' });
+        return;
+    }
+    consumeFromLot(params, user);
     setLotToConsume(null);
   };
   
