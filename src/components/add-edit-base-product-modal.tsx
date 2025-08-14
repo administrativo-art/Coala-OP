@@ -146,9 +146,11 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         };
     });
 
+    const finalClassification = values.classification === 'none' ? '' : values.classification;
+
     const dataPayload = {
       name: values.name,
-      classification: values.classification,
+      classification: finalClassification,
       category: values.category,
       unit: values.unit,
       stockLevels: stockLevelsObject,
@@ -227,7 +229,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">Nenhuma</SelectItem>
+                                        <SelectItem value="none">Nenhuma</SelectItem>
                                         {classifications.map(c => (
                                             <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                         ))}
@@ -382,3 +384,4 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     
 
     
+
