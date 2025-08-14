@@ -57,13 +57,11 @@ interface AddEditBaseProductModalProps {
 
 export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }: AddEditBaseProductModalProps) {
   const { baseProducts, updateBaseProduct, addBaseProduct } = useBaseProducts();
-  const { classifications, addClassification: addNewClassification, loading: loadingClassifications } = useClassifications();
+  const { classifications, loading: loadingClassifications } = useClassifications();
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
-  const [isComboboxOpen, setIsComboboxOpen] = useState(false);
-  const [comboboxSearch, setComboboxSearch] = useState('');
   
   const lastInitKeyRef = useRef<string | null>(null);
 
@@ -129,7 +127,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   }, [open, productToEdit, sortedKiosks, form, isDirty]);
 
   const categoryWatch = form.watch('category');
-  const selectedClassificationId = useWatch({ control: form.control, name: 'classification' });
 
   useEffect(() => {
     if (form.formState.isDirty || !productToEdit) {
@@ -194,39 +191,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   
   const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
 
-  const filteredClassifications = useMemo(() => {
-    if (!comboboxSearch) return classifications;
-    return classifications.filter(c => c.name.toLowerCase().includes(comboboxSearch.toLowerCase()));
-  }, [classifications, comboboxSearch]);
-  
-  const selectedClassificationName = useMemo(() => {
-    if (!selectedClassificationId || !Array.isArray(classifications)) return null;
-    const found = classifications.find(
-      (c) => String(c.id) === String(selectedClassificationId)
-    );
-    return found?.name ?? null;
-  }, [selectedClassificationId, classifications]);
-
-
-  const handleCreateNewClassification = async (name: string) => {
-    if (!name.trim()) return;
-    try {
-        const newClassification = await addNewClassification(name);
-        if (newClassification) {
-            form.setValue("classification", newClassification.id, { shouldDirty: true, shouldValidate: true });
-        }
-        setComboboxSearch('');
-        setIsComboboxOpen(false);
-    } catch(e) {
-        console.error("Failed to create new classification", e);
-    }
-  };
-  
-  const showCreateOption = useMemo(() => {
-      return comboboxSearch && !classifications.some(c => c.name.toLowerCase() === comboboxSearch.toLowerCase());
-  }, [comboboxSearch, classifications]);
-
-
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -254,74 +218,22 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                         control={form.control}
                         name="classification"
                         render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                            <FormLabel>Classificação (opcional)</FormLabel>
-                             <Popover open={isComboboxOpen} onOpenChange={(open) => { setIsComboboxOpen(open); if (!open) setComboboxSearch(""); }}>
-                                <PopoverTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  role="combobox"
-                                  aria-expanded={isComboboxOpen}
-                                  className="w-full justify-between"
-                                >
-                                  {selectedClassificationName || "Selecione ou crie uma..."}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput
-                                        placeholder="Buscar ou criar..."
-                                        value={comboboxSearch}
-                                        onValueChange={setComboboxSearch}
-                                     />
-                                    <CommandList>
-                                        <CommandEmpty>
-                                            Nenhuma classificação encontrada.
-                                        </CommandEmpty>
-                                        <CommandGroup>
-                                            {filteredClassifications.map((c) => (
-                                                <CommandItem
-                                                    key={c.id}
-                                                    value={String(c.id)}
-                                                    keywords={[c.name]}
-                                                    onSelect={(selected) => {
-                                                      const next = String(selected) === String(field.value) ? "" : String(selected);
-                                                      form.setValue("classification", next, {
-                                                        shouldDirty: true,
-                                                        shouldValidate: true,
-                                                      });
-                                                      setComboboxSearch("");
-                                                      setIsComboboxOpen(false);
-                                                    }}
-                                                >
-                                                <Check
-                                                    className={cn(
-                                                    "mr-2 h-4 w-4",
-                                                    String(c.id) === String(selectedClassificationId)
-                                                        ? "opacity-100"
-                                                        : "opacity-0"
-                                                    )}
-                                                />
-                                                {c.name}
-                                                </CommandItem>
-                                            ))}
-                                            {showCreateOption && !loadingClassifications && (
-                                                <CommandItem
-                                                    value={comboboxSearch}
-                                                    onSelect={() => handleCreateNewClassification(comboboxSearch)}
-                                                    >
-                                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                                    Criar "{comboboxSearch}"
-                                                </CommandItem>
-                                            )}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                                </PopoverContent>
-                            </Popover>
-                            <FormMessage />
+                            <FormItem>
+                                <FormLabel>Classificação (opcional)</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={loadingClassifications}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione uma classificação..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="">Nenhuma</SelectItem>
+                                        {classifications.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
                             </FormItem>
                         )}
                         />
