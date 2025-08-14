@@ -37,6 +37,7 @@ const stockLevelSchema = z.object({
 
 const baseProductSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
+  classification: z.string().optional(),
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
   initialCostPerUnit: z.coerce.number().optional(),
@@ -73,7 +74,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], consumptionMonths: 0 }
+    defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], consumptionMonths: 0 }
   });
 
   const { fields, update } = useFieldArray({
@@ -95,6 +96,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       if (productToEdit) {
         form.reset({
           name: productToEdit.name,
+          classification: productToEdit.classification || '',
           category: productToEdit.category,
           unit: productToEdit.unit,
           initialCostPerUnit: productToEdit.lastEffectivePrice?.pricePerUnit ?? productToEdit.initialCostPerUnit ?? 0,
@@ -113,6 +115,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       } else {
         form.reset({
           name: '',
+          classification: '',
           category: 'Massa',
           unit: 'g',
           initialCostPerUnit: 0,
@@ -136,6 +139,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     const dataPayload = {
       name: values.name,
+      classification: values.classification,
       category: values.category,
       unit: values.unit,
       stockLevels: stockLevelsObject,
@@ -192,14 +196,24 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex-1 overflow-hidden flex flex-col">
               <ScrollArea className="flex-1 pr-6">
                 <div className="space-y-4">
-                   <FormField control={form.control} name="name" render={({ field }) => (
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem>
                           <FormLabel>Nome do produto base</FormLabel>
                           <FormControl><Input placeholder="ex: Ovomaltine (Pó)" {...field} /></FormControl>
                           <FormMessage />
                       </FormItem>
                       )}
-                  />
+                    />
+                    <FormField control={form.control} name="classification" render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Classificação (opcional)</FormLabel>
+                          <FormControl><Input placeholder="ex: Secos, Frios, Descartáveis" {...field} value={field.value ?? ''} /></FormControl>
+                          <FormMessage />
+                      </FormItem>
+                      )}
+                    />
+                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="category" render={({ field }) => (
                           <FormItem><FormLabel>Categoria da unidade</FormLabel>

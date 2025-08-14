@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -38,6 +37,7 @@ export type BaseProduct = {
   unit: string;
   stockLevels: { [kioskId: string]: BaseProductStockLevel };
   category: UnitCategory;
+  classification?: string;
   lastEffectivePrice?: LastEffectivePrice | null;
   initialCostPerUnit?: number;
   consumptionMonths?: number;

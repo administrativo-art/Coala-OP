@@ -1,11 +1,12 @@
 
+
       "use client"
 
 import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useKiosks } from "@/hooks/use-kiosks"
-import { format, parseISO } from "date-fns"
+import { format, parseISO, getDaysInMonth } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -48,7 +49,7 @@ export function AverageConsumptionChart() {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState<UnitCategory | 'all'>('all');
+  const [classificationFilter, setClassificationFilter] = useState<string>('all');
   
   useEffect(() => {
     if (user && !selectedKiosk && !kiosksLoading && kiosks.length > 0) {
@@ -63,6 +64,11 @@ export function AverageConsumptionChart() {
       setInitialSelectionMade(true);
     }
   }, [baseProducts, initialSelectionMade]);
+
+  const classificationOptions = useMemo(() => {
+    const classifications = new Set(baseProducts.map(p => p.classification).filter(Boolean));
+    return ['all', ...Array.from(classifications)];
+  }, [baseProducts]);
 
   const chartData = useMemo(() => {
     if (!hasValidData || !user || !selectedKiosk) return [];
@@ -86,7 +92,6 @@ export function AverageConsumptionChart() {
         });
     }
 
-    const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number, monthlyValues: number[] } } = {};
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
     relevantReports.forEach(report => {
@@ -108,7 +113,10 @@ export function AverageConsumptionChart() {
     const networkMonthsCount = allNetworkMonths.size;
 
     let dataToSort = baseProducts
-        .filter(bp => selectedBaseProducts.includes(bp.id) && (categoryFilter === 'all' || bp.category === categoryFilter))
+        .filter(bp => 
+            selectedBaseProducts.includes(bp.id) && 
+            (classificationFilter === 'all' || bp.classification === classificationFilter)
+        )
         .map(baseProduct => {
             const monthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
             const monthsWithConsumption = Object.values(monthlyData).filter(v => v > 0);
@@ -146,7 +154,7 @@ export function AverageConsumptionChart() {
         }
     });
 
-  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, dateRange, hideZeroConsumption, categoryFilter]);
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, dateRange, hideZeroConsumption, classificationFilter]);
 
   const handleExportPdf = () => {
     if (chartData.length === 0) return;
@@ -317,15 +325,14 @@ export function AverageConsumptionChart() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as any)}>
+                <Select value={classificationFilter} onValueChange={(value) => setClassificationFilter(value as any)}>
                     <SelectTrigger className="w-full sm:w-[180px]">
                         <Folder className="mr-2 h-4 w-4" />
-                        <SelectValue placeholder="Categoria" />
+                        <SelectValue placeholder="Classificação" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">Todas as categorias</SelectItem>
-                        {unitCategories.map(cat => (
-                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        {classificationOptions.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat === 'all' ? 'Todas as Classificações' : cat}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
