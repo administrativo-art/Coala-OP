@@ -227,33 +227,26 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         !field.value && "text-muted-foreground"
                                     )}
                                     >
-                                    {field.value || "Selecione ou crie uma"}
+                                    {field.value
+                                        ? classifications.find(
+                                            (c) => c.name === field.value
+                                        )?.name
+                                        : "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command filter={(value, search) => {
-                                    if (value.toLowerCase().includes(search.toLowerCase())) return 1
-                                    return 0
-                                    }}>
+                                <Command>
                                     <CommandList>
-                                        <CommandEmpty
-                                            onSelect={() => {
-                                                form.setValue("classification", field.value);
-                                                setIsComboboxOpen(false);
-                                            }}
-                                        >
-                                           <div className="p-2">Criar nova: "{field.value}"</div>
-                                        </CommandEmpty>
+                                        <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
                                         <CommandGroup>
-                                        {classifications
-                                            .map((c) => (
+                                        {classifications.map((c) => (
                                             <CommandItem
                                                 value={c.name}
                                                 key={c.id}
-                                                onSelect={(currentValue) => {
-                                                    form.setValue("classification", currentValue === field.value ? "" : c.name);
+                                                onSelect={() => {
+                                                    form.setValue("classification", c.name === field.value ? "" : c.name);
                                                     setIsComboboxOpen(false);
                                                 }}
                                             >
