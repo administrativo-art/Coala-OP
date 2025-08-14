@@ -89,9 +89,10 @@ export function AverageConsumptionChart() {
         .filter(bp => selectedBaseProducts.includes(bp.id))
         .map(baseProduct => {
             const productMonthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
-            const totalConsumption = Object.values(productMonthlyData).reduce((sum, val) => sum + val, 0);
+            const monthsWithConsumption = Object.values(productMonthlyData).filter(v => v > 0);
+            const totalConsumption = monthsWithConsumption.reduce((sum, val) => sum + val, 0);
 
-            const productMonthsCount = Object.keys(productMonthlyData).length;
+            const productMonthsCount = monthsWithConsumption.length;
             const denominator = isMatrixView ? networkMonthsCount : productMonthsCount;
             
             const average = denominator > 0 ? totalConsumption / denominator : 0;
