@@ -208,9 +208,11 @@ export function ConsumptionProjection() {
         
         Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
             const months = Object.values(monthlyData);
-            if (months.length > 0) {
+            const numMonthsWithConsumption = Object.keys(monthlyData).length;
+
+            if (numMonthsWithConsumption > 0) {
                 const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-                const avg = totalConsumption / months.length;
+                const avg = totalConsumption / numMonthsWithConsumption;
                 monthlyAverages.set(baseId, avg);
                 dailyAverages.set(baseId, avg / 30);
             }
