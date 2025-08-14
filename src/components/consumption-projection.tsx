@@ -54,6 +54,7 @@ interface GroupedProjectionResult {
     suggestedOrderQty: number | null;
     orderDate: Date | null;
     orderStatus: 'ok' | 'soon' | 'urgent' | 'no_data' | 'sem_lead_time';
+    monthlyAvg: number;
 }
 
 function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
@@ -244,6 +245,7 @@ export function ConsumptionProjection() {
 
             const kioskParams = kioskStockLevels(baseProduct);
             const dailyAvg = (dailyAverages.get(baseProductId) ?? 0) * adjustmentFactor;
+            const monthlyAvg = (monthlyAverages.get(baseProductId) ?? 0) * adjustmentFactor;
             const projectedLots: ProjectionResult[] = [];
 
             let totalStockInBase = groupLots.reduce((sum, lot) => {
@@ -339,12 +341,12 @@ export function ConsumptionProjection() {
 
             let suggestedOrderQty = null;
             if (baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {
-                const monthlyAvg = monthlyAverages.get(baseProductId) || 0;
-                suggestedOrderQty = monthlyAvg * baseProduct.consumptionMonths;
+                const monthlyAvgForSuggestion = monthlyAverages.get(baseProductId) || 0;
+                suggestedOrderQty = monthlyAvgForSuggestion * baseProduct.consumptionMonths;
             }
             
             if (projectedLots.length > 0) {
-                allResults.push({ baseProductId, baseProductName: baseProduct.name, lots: projectedLots, ruptureDate, orderDate, orderStatus, suggestedOrderQty });
+                allResults.push({ baseProductId, baseProductName: baseProduct.name, lots: projectedLots, ruptureDate, orderDate, orderStatus, suggestedOrderQty, monthlyAvg });
             }
         });
 
@@ -612,6 +614,7 @@ export function ConsumptionProjection() {
                                                     {renderSortableHeader('Insumo', 'productName')}
                                                     <TableHead>Lote</TableHead>
                                                     <TableHead className="text-center">Qtd. (Base)</TableHead>
+                                                    <TableHead className="text-center">Média/mês</TableHead>
                                                     <TableHead className="text-center">Taxa/dia</TableHead>
                                                     {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
                                                     {renderSortableHeader('Vencimento', 'expiryDate')}
@@ -625,6 +628,7 @@ export function ConsumptionProjection() {
                                                         <TableCell className="font-medium">{result.productName}</TableCell>
                                                         <TableCell>{result.lot.lotNumber}</TableCell>
                                                         <TableCell className="text-center">{result.lotQtyInBaseUnit.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
+                                                        <TableCell className="text-center font-semibold">{group.monthlyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
                                                         <TableCell className="text-center">{result.dailyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
                                                         <TableCell className="text-center">
                                                             {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
@@ -676,5 +680,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
-    
