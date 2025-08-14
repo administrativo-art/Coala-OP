@@ -1,27 +1,27 @@
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useKiosks } from '@/hooks/use-kiosks';
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, PackagePlus } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, PackagePlus, Settings } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
 import { AddEditBaseProductModal } from './add-edit-base-product-modal';
+import { ClassificationManagementModal } from './classification-management-modal';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function BaseProductManagement() {
   const { baseProducts, loading, deleteBaseProduct } = useBaseProducts();
   const { products } = useProducts();
-  const { kiosks } = useKiosks();
 
   const [productToDelete, setProductToDelete] = useState<BaseProduct | null>(null);
   const [productToEditId, setProductToEditId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -48,8 +48,6 @@ export function BaseProductManagement() {
     setProductToEditId(product.id);
     setIsModalOpen(true);
   };
-
-  const getKioskName = (kioskId: string) => kiosks.find(k => k.id === kioskId)?.name || 'N/A';
 
   const baseProductsByClassification = useMemo(() => {
     const grouped: { [key: string]: BaseProduct[] } = {};
@@ -85,9 +83,14 @@ export function BaseProductManagement() {
           <CardDescription>Produtos base agrupam insumos e definem metas de estoque por quiosque.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-           <Button onClick={handleAddNew} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto base
-           </Button>
+           <div className="flex gap-2">
+             <Button onClick={handleAddNew} className="flex-grow">
+                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto base
+             </Button>
+              <Button variant="outline" onClick={() => setIsClassificationModalOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" /> Gerenciar Classificações
+             </Button>
+           </div>
            
            <Accordion type="multiple" className="w-full space-y-2 pt-4 border-t">
             {loading ? (
@@ -102,7 +105,6 @@ export function BaseProductManagement() {
                             <AccordionTrigger className="text-base font-semibold px-2">{classification} ({products.length})</AccordionTrigger>
                             <AccordionContent className="space-y-2 pt-2">
                                 {products.map(product => {
-                                    const linkedProductsCount = products.filter(p => p.baseProductId === product.id).length;
                                     return (
                                         <Card key={product.id} className="ml-4">
                                             <div className="flex items-center p-2">
@@ -110,12 +112,30 @@ export function BaseProductManagement() {
                                                     <span className="font-semibold">{product.name}</span>
                                                 </div>
                                                 <div className="flex items-center shrink-0">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                    <TooltipProvider>
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
+                                                            <Edit className="h-4 w-4" />
+                                                          </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          <p>Editar produto base</p>
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </TooltipProvider>
+                                                    <TooltipProvider>
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                          </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          <p>Excluir produto base</p>
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </TooltipProvider>
                                                 </div>
                                             </div>
                                         </Card>
@@ -141,6 +161,8 @@ export function BaseProductManagement() {
         onOpenChange={setIsModalOpen}
         productToEditId={productToEditId}
       />
+
+      <ClassificationManagementModal open={isClassificationModalOpen} onOpenChange={setIsClassificationModalOpen} />
 
       {productToDelete && (
         <DeleteConfirmationDialog
