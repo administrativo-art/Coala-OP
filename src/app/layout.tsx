@@ -29,6 +29,7 @@ import { AllTasksProvider } from '@/hooks/use-all-tasks';
 import { StockAuditProvider } from '@/components/stock-audit-provider';
 import { TaskProvider } from '@/components/task-provider';
 import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provider';
+import { ClassificationsProvider } from '@/components/classifications-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -64,43 +65,45 @@ export default function RootLayout({
                 <CompanySettingsProvider>
                   <EntitiesProvider>
                     <BaseProductsProvider>
-                      <ProductsProvider>
-                        <PurchaseProvider>
-                          <ProductSimulationCategoryProvider>
-                            <ProductSimulationProvider>
-                              <ExpiryProductsProvider>
-                                <PredefinedListsProvider>
-                                  <ReturnsProvider>
-                                    <ItemAdditionProvider>
-                                      <StockCountProvider>
-                                        <ScheduleProvider>
-                                          <MonthlyScheduleProvider>
-                                            <RepositionProvider>
-                                              <StockAuditProvider>
-                                                <TaskProvider>
-                                                  <AuthorBoardDiaryProvider>
-                                                    <AllTasksProvider>
-                                                      <ConsumptionAnalysisProvider>
-                                                        <MovementHistoryProvider>
-                                                          {children}
-                                                        </MovementHistoryProvider>
-                                                      </ConsumptionAnalysisProvider>
-                                                    </AllTasksProvider>
-                                                  </AuthorBoardDiaryProvider>
-                                                </TaskProvider>
-                                              </StockAuditProvider>
-                                            </RepositionProvider>
-                                          </MonthlyScheduleProvider>
-                                        </ScheduleProvider>
-                                      </StockCountProvider>
-                                    </ItemAdditionProvider>
-                                  </ReturnsProvider>
-                                </PredefinedListsProvider>
-                              </ExpiryProductsProvider>
-                            </ProductSimulationProvider>
-                          </ProductSimulationCategoryProvider>
-                        </PurchaseProvider>
-                      </ProductsProvider>
+                      <ClassificationsProvider>
+                        <ProductsProvider>
+                          <PurchaseProvider>
+                            <ProductSimulationCategoryProvider>
+                              <ProductSimulationProvider>
+                                <ExpiryProductsProvider>
+                                  <PredefinedListsProvider>
+                                    <ReturnsProvider>
+                                      <ItemAdditionProvider>
+                                        <StockCountProvider>
+                                          <ScheduleProvider>
+                                            <MonthlyScheduleProvider>
+                                              <RepositionProvider>
+                                                <StockAuditProvider>
+                                                  <TaskProvider>
+                                                    <AuthorBoardDiaryProvider>
+                                                      <AllTasksProvider>
+                                                        <ConsumptionAnalysisProvider>
+                                                          <MovementHistoryProvider>
+                                                            {children}
+                                                          </MovementHistoryProvider>
+                                                        </ConsumptionAnalysisProvider>
+                                                      </AllTasksProvider>
+                                                    </AuthorBoardDiaryProvider>
+                                                  </TaskProvider>
+                                                </StockAuditProvider>
+                                              </RepositionProvider>
+                                            </MonthlyScheduleProvider>
+                                          </ScheduleProvider>
+                                        </StockCountProvider>
+                                      </ItemAdditionProvider>
+                                    </ReturnsProvider>
+                                  </PredefinedListsProvider>
+                                </ExpiryProductsProvider>
+                              </ProductSimulationProvider>
+                            </ProductSimulationCategoryProvider>
+                          </PurchaseProvider>
+                        </ProductsProvider>
+                      </ClassificationsProvider>
                     </BaseProductsProvider>
                   </EntitiesProvider>
                 </CompanySettingsProvider>

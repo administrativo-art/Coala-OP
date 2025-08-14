@@ -31,6 +31,15 @@ export type BaseProductStockLevel = {
     override: boolean;
 };
 
+export type Classification = {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt?: number;
+  updatedAt?: number;
+  usageCount?: number;
+};
+
 export type BaseProduct = {
   id: string;
   name: string;
@@ -549,7 +558,7 @@ export type PricingParameters = {
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    lots: { add: false, edit: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
@@ -648,3 +657,6 @@ export type Task = {
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
 };
+
+
+    

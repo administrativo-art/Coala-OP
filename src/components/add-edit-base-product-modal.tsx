@@ -26,9 +26,9 @@ import { DollarSign, RefreshCw, Info, Lock, Unlock, Clock, Calendar, Shield, Che
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from './ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { ClassificationManagementModal } from './classification-management-modal';
-
+import { useClassifications } from '@/hooks/use-classifications';
 
 const stockLevelSchema = z.object({
     kioskId: z.string(),
@@ -58,6 +58,7 @@ interface AddEditBaseProductModalProps {
 
 export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }: AddEditBaseProductModalProps) {
   const { baseProducts, updateBaseProduct, addBaseProduct } = useBaseProducts();
+  const { classifications } = useClassifications();
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -75,11 +76,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         return a.name.localeCompare(b.name);
     });
   }, [kiosks]);
-
-  const classificationOptions = useMemo(() => {
-    const classifications = new Set(baseProducts.map(p => p.classification).filter(Boolean));
-    return Array.from(classifications).sort();
-  }, [baseProducts]);
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
@@ -232,46 +228,46 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                     )}
                                     >
                                     {field.value
-                                        ? classificationOptions.find(
-                                            (option) => option === field.value
-                                        )
+                                        ? classifications.find(
+                                            (c) => c.name === field.value
+                                        )?.name
                                         : "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
+                                <Command shouldFilter={false}>
                                     <CommandInput 
                                         placeholder="Buscar ou criar..."
-                                        onValueChange={(search) => {
-                                            if (!classificationOptions.includes(search)) {
-                                                field.onChange(search);
-                                            }
-                                        }}
+                                        onValueChange={(search) => field.onChange(search)}
                                      />
                                     <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
-                                    <CommandGroup>
-                                    {classificationOptions.map((option) => (
-                                        <CommandItem
-                                        value={option}
-                                        key={option}
-                                        onSelect={() => {
-                                            form.setValue("classification", option)
-                                        }}
-                                        >
-                                        <Check
-                                            className={cn(
-                                            "mr-2 h-4 w-4",
-                                            option === field.value
-                                                ? "opacity-100"
-                                                : "opacity-0"
-                                            )}
-                                        />
-                                        {option}
-                                        </CommandItem>
-                                    ))}
-                                    </CommandGroup>
+                                    <CommandList>
+                                        <CommandGroup>
+                                        {classifications
+                                            .filter(c => c.name.toLowerCase().includes(field.value?.toLowerCase() || ''))
+                                            .map((c) => (
+                                            <CommandItem
+                                            value={c.name}
+                                            key={c.id}
+                                            onSelect={() => {
+                                                form.setValue("classification", c.name)
+                                            }}
+                                            >
+                                            <Check
+                                                className={cn(
+                                                "mr-2 h-4 w-4",
+                                                c.name === field.value
+                                                    ? "opacity-100"
+                                                    : "opacity-0"
+                                                )}
+                                            />
+                                            {c.name}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                    </CommandList>
                                 </Command>
                                 </PopoverContent>
                             </Popover>
@@ -300,8 +296,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                              <SelectContent>
                                   {Object.keys(units[categoryWatch]).map(unit => (
-                                      <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                                  ))}
+                                      <SelectItem key={unit} value={unit}>{unit}</SelectItem>))}
                               </SelectContent>
                           </Select>
                           <FormMessage />
@@ -419,3 +414,5 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
+
+    
