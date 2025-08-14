@@ -8,7 +8,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
+import { format, parseISO, addDays, isAfter, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -199,26 +199,37 @@ export function ConsumptionProjection() {
         });
         
         const allNetworkMonths = new Set<string>();
-        for (const report of relevantReports) {
-          const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-          const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
-          if (anyConsumption) allNetworkMonths.add(key);
+        if (isMatrixView) {
+            for (const report of relevantReports) {
+                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+                const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
+                if (anyConsumption) allNetworkMonths.add(key);
+            }
         }
-        const networkMonthsCount = allNetworkMonths.size;
-
+        
         const dailyAverages = new Map<string, number>();
         const monthlyAverages = new Map<string, number>();
         
         Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
-            const months = Object.values(monthlyData);
+            const monthsWithConsumption = Object.entries(monthlyData).filter(([, val]) => val > 0);
             
-            const numMonthsWithConsumption = months.filter(val => val > 0).length;
+            const numMonthsWithConsumption = monthsWithConsumption.length;
 
             if (numMonthsWithConsumption > 0) {
-                const totalConsumption = months.reduce((sum, val) => sum + val, 0);
+                const totalConsumption = monthsWithConsumption.reduce((sum, [, val]) => sum + val, 0);
                 const avg = totalConsumption / numMonthsWithConsumption;
                 monthlyAverages.set(baseId, avg);
-                dailyAverages.set(baseId, avg / 30);
+
+                const totalDays = monthsWithConsumption.reduce((sum, [key]) => {
+                    const [year, month] = key.split('-').map(Number);
+                    return sum + getDaysInMonth(new Date(year, month - 1));
+                }, 0);
+                
+                if (totalDays > 0) {
+                    dailyAverages.set(baseId, totalConsumption / totalDays);
+                } else {
+                    dailyAverages.set(baseId, avg / 30);
+                }
             }
         });
         
@@ -322,19 +333,17 @@ export function ConsumptionProjection() {
             let orderDate: Date | null = null;
             let orderStatus: GroupedProjectionResult['orderStatus'] = 'ok';
             
-            if (isMatrixView) {
-                const leadTime = kioskParams?.leadTime;
-                if (leadTime && leadTime > 0) {
-                    if (ruptureDate) {
-                        orderDate = addDays(ruptureDate, -leadTime);
-                        const daysToOrder = differenceInDays(orderDate, today);
-                        if (daysToOrder <= 7) orderStatus = 'urgent';
-                        else if (daysToOrder <= 15) orderStatus = 'soon';
-                    }
-                } else {
-                    orderStatus = 'sem_lead_time';
-                }
-            } else { // Kiosk Logic
+            const leadTime = kioskParams?.leadTime;
+            if (ruptureDate && leadTime && leadTime > 0) {
+                orderDate = addDays(ruptureDate, -leadTime);
+                const daysToOrder = differenceInDays(orderDate, today);
+                if (daysToOrder <= 7) orderStatus = 'urgent';
+                else if (daysToOrder <= 15) orderStatus = 'soon';
+            } else if (!leadTime || leadTime <= 0) {
+                 orderStatus = 'sem_lead_time';
+            }
+            
+            if (!isMatrixView) {
                 if (ruptureDate) {
                     const daysToRupture = differenceInDays(ruptureDate, today);
                     if (daysToRupture <= 4) orderStatus = 'urgent';
@@ -344,6 +353,7 @@ export function ConsumptionProjection() {
                     orderStatus = dailyAvg > 0 ? 'urgent' : 'no_data';
                 }
             }
+
 
             let suggestedOrderQty = null;
             if (baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {

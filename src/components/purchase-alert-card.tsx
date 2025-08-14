@@ -9,7 +9,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, addDays, differenceInDays, parseISO } from 'date-fns';
+import { format, addDays, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
@@ -99,11 +99,17 @@ export function PurchaseAlertCard() {
                 }
             });
 
-            const months = Object.values(monthlyConsumption);
-            if (months.length === 0) return 0;
+            const monthsWithConsumption = Object.entries(monthlyConsumption).filter(([, val]) => val > 0);
+            const numMonthsWithConsumption = monthsWithConsumption.length;
+            if(numMonthsWithConsumption === 0) return 0;
+            
+            const totalConsumption = monthsWithConsumption.reduce((sum, [, val]) => sum + val, 0);
+            const totalDays = monthsWithConsumption.reduce((sum, [key]) => {
+                const [year, month] = key.split('-').map(Number);
+                return sum + getDaysInMonth(new Date(year, month - 1));
+            }, 0);
 
-            const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-            return (totalConsumption / months.length) / 30;
+            return totalDays > 0 ? totalConsumption / totalDays : 0;
         };
 
         return validatedBaseProducts.map(baseProduct => {
