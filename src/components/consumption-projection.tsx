@@ -7,7 +7,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, units } from '@/lib/conversion';
 import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, Arr
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { type LotEntry, type BaseProduct, type Product, type Task } from '@/types';
+import { type LotEntry, type BaseProduct, type Product, type Task, type UnitCategory } from '@/types';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -151,28 +151,38 @@ export function ConsumptionProjection() {
     }, [products]);
 
     const toBaseUnits = useCallback((
-      product: typeof products[number],
-      packagesQty: number,
-      baseProduct: typeof baseProducts[number]
+        product: typeof products[number],
+        packagesQty: number,
+        baseProduct: typeof baseProducts[number]
     ): number => {
-      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+            let secondaryUnitCategory: UnitCategory | undefined;
+            for (const category in units) {
+                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                    secondaryUnitCategory = category as UnitCategory;
+                    break;
+                }
+            }
+            if (!secondaryUnitCategory) {
+                throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
+            }
+    
+            const perPackageInBase = convertValue(
+                product.secondaryUnitValue,
+                product.secondaryUnit,
+                baseProduct.unit,
+                secondaryUnitCategory
+            );
+            return packagesQty * perPackageInBase;
+        }
+        
         const perPackageInBase = convertValue(
-          product.secondaryUnitValue,
-          product.secondaryUnit,
-          baseProduct.unit,
-          secondaryUnitCategory
+            product.packageSize ?? 1,
+            product.unit,
+            baseProduct.unit,
+            product.category
         );
         return packagesQty * perPackageInBase;
-      }
-      
-      const perPackageInBase = convertValue(
-        product.packageSize ?? 1,
-        product.unit,
-        baseProduct.unit,
-        product.category
-      );
-      return packagesQty * perPackageInBase;
     }, []);
 
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
