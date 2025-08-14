@@ -211,12 +211,12 @@ export function ConsumptionProjection() {
         
         Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
             const months = Object.values(monthlyData);
-            const productMonthsCount = Object.keys(monthlyData).length;
-            const denominator = isMatrixView ? networkMonthsCount : productMonthsCount;
+            
+            const numMonthsWithConsumption = months.filter(val => val > 0).length;
 
-            if (denominator > 0) {
+            if (numMonthsWithConsumption > 0) {
                 const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-                const avg = totalConsumption / denominator;
+                const avg = totalConsumption / numMonthsWithConsumption;
                 monthlyAverages.set(baseId, avg);
                 dailyAverages.set(baseId, avg / 30);
             }
