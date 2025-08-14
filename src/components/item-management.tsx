@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -147,6 +148,11 @@ export function ItemManagement() {
                 </div>
             </div>
              <div className="flex gap-2">
+                <Link href="/dashboard/registration/base-products">
+                    <Button variant="outline">
+                        <Box className="mr-2 h-4 w-4" /> Gerenciar produtos base
+                    </Button>
+                </Link>
                 <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)}>
                     <Archive className="mr-2 h-4 w-4" /> Ver arquivados
                 </Button>
@@ -258,8 +264,8 @@ export function ItemManagement() {
         onOpenChange={setIsModalOpen}
         productToEdit={productToEdit}
         onManageBaseProducts={() => {
-            setIsModalOpen(false); // Fecha o modal de insumo
-            setIsBaseProductModalOpen(true); // Abre o modal de produto base
+            setIsModalOpen(false);
+            setIsBaseProductModalOpen(true);
         }}
       />
       
