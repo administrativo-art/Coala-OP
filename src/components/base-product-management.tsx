@@ -16,10 +16,12 @@ import { Skeleton } from './ui/skeleton';
 import { AddEditBaseProductModal } from './add-edit-base-product-modal';
 import { ClassificationManagementModal } from './classification-management-modal';
 import { Input } from './ui/input';
+import { useClassifications } from '@/hooks/use-classifications';
 
 export function BaseProductManagement() {
   const { baseProducts, loading, deleteBaseProduct, deleteMultipleBaseProducts } = useBaseProducts();
   const { products } = useProducts();
+  const { classifications } = useClassifications();
 
   const [productToDelete, setProductToDelete] = useState<BaseProduct | null>(null);
   const [productsToDelete, setProductsToDelete] = useState<BaseProduct[]>([]);
@@ -29,6 +31,10 @@ export function BaseProductManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  const classificationMap = useMemo(() => {
+    return new Map(classifications.map(c => [c.id, c.name]));
+  }, [classifications]);
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -80,9 +86,9 @@ export function BaseProductManagement() {
     const searchLower = searchTerm.toLowerCase();
     return baseProducts.filter(p => 
         p.name.toLowerCase().includes(searchLower) ||
-        (p.classification && p.classification.toLowerCase().includes(searchLower))
+        (classificationMap.get(p.classification || '') || '').toLowerCase().includes(searchLower)
     );
-  }, [baseProducts, searchTerm]);
+  }, [baseProducts, searchTerm, classificationMap]);
   
   const handleProductSelectionChange = (id: string, isSelected: boolean) => {
     setSelectedProducts(prev => {
@@ -159,7 +165,7 @@ export function BaseProductManagement() {
                                         />
                                     </TableCell>
                                     <TableCell className="font-semibold">{product.name}</TableCell>
-                                    <TableCell>{product.classification || '-'}</TableCell>
+                                    <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
                                     <TableCell>{product.unit}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
