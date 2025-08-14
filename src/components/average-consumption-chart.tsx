@@ -5,21 +5,28 @@ import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useKiosks } from "@/hooks/use-kiosks"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import Papa from 'papaparse';
+import { DateRange } from "react-day-picker"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, Download, ArrowUpDown } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
+import { TrendingUp, ListFilter, Download, ArrowUpDown, Calendar as CalendarIcon, Package, Folder, Palette } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, Legend } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
+import { cn } from "@/lib/utils"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
+import { Calendar } from "./ui/calendar"
+import { Switch } from "./ui/switch"
+import { Label } from "./ui/label"
+import { unitCategories, type UnitCategory } from "@/types"
 
 const formatNumberForDisplay = (value: number) => {
     if (typeof value !== 'number' || isNaN(value)) return "0";
@@ -39,6 +46,9 @@ export function AverageConsumptionChart() {
   const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([])
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<UnitCategory | 'all'>('all');
   
   useEffect(() => {
     if (user && !selectedKiosk && !kiosksLoading && kiosks.length > 0) {
@@ -59,16 +69,26 @@ export function AverageConsumptionChart() {
 
     const isMatrixView = selectedKiosk === 'matriz';
     
-    const relevantReports = isMatrixView
+    let relevantReports = isMatrixView
       ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
       : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
 
+    if (dateRange?.from) {
+        relevantReports = relevantReports.filter(report => {
+            const reportDate = new Date(report.year, report.month - 1, 15);
+            return reportDate >= dateRange.from!;
+        });
+    }
+    if (dateRange?.to) {
+        relevantReports = relevantReports.filter(report => {
+            const reportDate = new Date(report.year, report.month - 1, 15);
+            return reportDate <= dateRange.to!;
+        });
+    }
+
     const consumptionByBaseId: { [baseProductId: string]: { total: number; monthsCount: number, monthlyValues: number[] } } = {};
-    baseProducts.forEach(bp => {
-        consumptionByBaseId[bp.id] = { total: 0, monthsCount: 0, monthlyValues: [] };
-    });
-    
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
+    
     relevantReports.forEach(report => {
         const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
         report.results.forEach(res => {
@@ -80,20 +100,18 @@ export function AverageConsumptionChart() {
     });
 
     const allNetworkMonths = new Set<string>();
-    if (isMatrixView) {
-        for (const report of relevantReports) {
-            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-            const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
-            if (anyConsumption) allNetworkMonths.add(key);
-        }
+    for (const report of relevantReports) {
+      const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+      const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
+      if (anyConsumption) allNetworkMonths.add(key);
     }
     const networkMonthsCount = allNetworkMonths.size;
 
-    const dataToSort = baseProducts
-        .filter(bp => selectedBaseProducts.includes(bp.id))
+    let dataToSort = baseProducts
+        .filter(bp => selectedBaseProducts.includes(bp.id) && (categoryFilter === 'all' || bp.category === categoryFilter))
         .map(baseProduct => {
-            const productMonthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
-            const monthsWithConsumption = Object.values(productMonthlyData).filter(v => v > 0);
+            const monthlyData = monthlyConsumptionByBaseId[baseProduct.id] || {};
+            const monthsWithConsumption = Object.values(monthlyData).filter(v => v > 0);
             const totalConsumption = monthsWithConsumption.reduce((sum, val) => sum + val, 0);
 
             let denominator;
@@ -103,7 +121,7 @@ export function AverageConsumptionChart() {
                 denominator = monthsWithConsumption.length > 0 ? monthsWithConsumption.length : 1;
             }
             
-            const average = totalConsumption / denominator;
+            const average = totalConsumption / (denominator || 1);
             
             return {
                 baseProductId: baseProduct.id,
@@ -111,6 +129,10 @@ export function AverageConsumptionChart() {
                 "Consumo": parseFloat(average.toFixed(2)),
             };
         });
+
+    if (hideZeroConsumption) {
+        dataToSort = dataToSort.filter(item => item.Consumo > 0);
+    }
 
     return dataToSort.sort((a, b) => {
         if (sortConfig.key === 'name') {
@@ -124,21 +146,20 @@ export function AverageConsumptionChart() {
         }
     });
 
-  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig]);
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, dateRange, hideZeroConsumption, categoryFilter]);
 
   const handleExportPdf = () => {
     if (chartData.length === 0) return;
     
     const doc = new jsPDF();
     const kioskName = selectedKiosk === 'matriz' ? 'Todos os quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque desconhecido';
-    const monthYear = format(new Date(), 'MMMM yyyy', { locale: ptBR });
     
     doc.setFontSize(18);
     doc.text(`Relatório de consumo médio mensal`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
-    doc.text(`Gerado em: ${monthYear}`, 14, 35);
+    doc.text(`Período: ${dateRange?.from ? format(dateRange.from, 'dd/MM/yy') : 'Início'} a ${dateRange?.to ? format(dateRange.to, 'dd/MM/yy') : 'Fim'}`, 14, 35);
 
     const tableHead = [['Produto base (unidade)', 'Consumo médio']];
     const tableBody = chartData.map(item => [
@@ -161,7 +182,6 @@ export function AverageConsumptionChart() {
     if (chartData.length === 0) return;
 
     const kioskName = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
-    const monthYear = format(new Date(), 'MM-yyyy');
     
     const csvData = chartData.map(item => ({
         "Produto Base (unidade)": item.name,
@@ -173,7 +193,7 @@ export function AverageConsumptionChart() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `consumo_medio_base_${kioskName}_${monthYear}.csv`);
+    link.setAttribute("download", `consumo_medio_base_${kioskName}_${format(new Date(), 'MM-yyyy')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -183,11 +203,10 @@ export function AverageConsumptionChart() {
     if (chartData.length === 0) return;
 
     const kioskName = selectedKiosk === 'matriz' ? 'Todos os Quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque Desconhecido';
-    const monthYear = format(new Date(), 'MM-yyyy');
     
     const exportData = {
       kiosk: kioskName,
-      month: monthYear,
+      period: `De: ${dateRange?.from ? format(dateRange.from, 'dd/MM/yy') : 'Início'} a ${dateRange?.to ? format(dateRange.to, 'dd/MM/yy') : 'Fim'}`,
       generated_at: new Date().toISOString(),
       data: chartData.map(item => ({
         base_product_name: item.name,
@@ -202,7 +221,7 @@ export function AverageConsumptionChart() {
     const filenameKiosk = selectedKiosk === 'matriz' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKiosk)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `consumo_medio_base_${filenameKiosk}_${monthYear}.json`);
+    link.setAttribute("download", `consumo_medio_base_${filenameKiosk}_${format(new Date(), 'MM-yyyy')}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -269,16 +288,16 @@ export function AverageConsumptionChart() {
             </div>
           </AccordionTrigger>
           <AccordionContent className="p-4 pt-0">
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:justify-end mb-4">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full mb-4">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto">
-                            <ListFilter className="mr-2 h-4 w-4" />
-                            Filtrar produtos ({selectedBaseProducts.length})
+                        <Button variant="outline">
+                            <Package className="mr-2 h-4 w-4" />
+                            Insumos ({selectedBaseProducts.length})
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-64">
-                        <DropdownMenuLabel>Exibir produtos base</DropdownMenuLabel>
+                        <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                             <DropdownMenuItem onSelect={() => setSelectedBaseProducts(baseProducts.map(p => p.id))}>Selecionar todos</DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setSelectedBaseProducts([])}>Limpar seleção</DropdownMenuItem>
@@ -297,6 +316,19 @@ export function AverageConsumptionChart() {
                         </ScrollArea>
                     </DropdownMenuContent>
                 </DropdownMenu>
+
+                <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as any)}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                        <Folder className="mr-2 h-4 w-4" />
+                        <SelectValue placeholder="Categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas as categorias</SelectItem>
+                        {unitCategories.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
 
                 {user?.username === 'Tiago Brasil' && (
                     <Select value={selectedKiosk} onValueChange={setSelectedKiosk} disabled={kiosksLoading}>
@@ -320,6 +352,21 @@ export function AverageConsumptionChart() {
                         <SelectItem value="name-desc">Nome (Z-A)</SelectItem>
                     </SelectContent>
                 </Select>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                        <Button id="date" variant="outline" className={cn("w-full sm:w-auto justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Período</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+                    </PopoverContent>
+                </Popover>
+            </div>
+             <div className="flex items-center space-x-2 mb-4">
+                <Switch id="hide-zero" checked={hideZeroConsumption} onCheckedChange={setHideZeroConsumption} />
+                <Label htmlFor="hide-zero">Ocultar itens sem consumo</Label>
             </div>
             <div className="pr-2 pl-0">
                 { (loadingData) ? (
@@ -354,11 +401,17 @@ export function AverageConsumptionChart() {
                                     borderRadius: "var(--radius)"
                                 }}
                             />
+                             <Legend content={() => (
+                                <div className="flex justify-center items-center gap-4 text-xs mt-2">
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{backgroundColor: 'hsl(var(--chart-1))'}}></div>Consumo > 0</div>
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-muted-foreground/30"></div>Consumo = 0</div>
+                                </div>
+                            )} />
                             <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                                <LabelList dataKey="Consumo" position="right" offset={10} formatter={(value: number) => value > 0 ? formatNumberForDisplay(value) : ''} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
                                 {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                    <Cell key={`cell-${index}`} fill={entry.Consumo > 0 ? CHART_COLORS[index % CHART_COLORS.length] : 'hsl(var(--muted-foreground)/0.3)'} />
                                 ))}
-                                <LabelList dataKey="Consumo" position="right" offset={10} formatter={formatNumberForDisplay} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
                             </Bar>
                         </BarChart>
                     </ResponsiveContainer>
@@ -372,7 +425,7 @@ export function AverageConsumptionChart() {
                                 {selectedBaseProducts.length === 0
                                 ? "Selecione produtos base no filtro para exibi-los no gráfico."
                                 : user?.username === 'Tiago Brasil' && selectedKiosk !== 'matriz' 
-                                    ? "Nenhum relatório de consumo encontrado para o quiosque selecionado."
+                                    ? "Nenhum relatório de consumo encontrado para os filtros selecionados."
                                     : "Faça o upload de relatórios de consumo para gerar o gráfico."
                                 }
                             </p>
