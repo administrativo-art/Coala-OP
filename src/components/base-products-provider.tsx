@@ -14,6 +14,7 @@ export interface BaseProductsContextType {
   updateBaseProduct: (product: BaseProduct) => Promise<void>;
   updateMultipleBaseProducts: (products: BaseProduct[]) => Promise<void>;
   deleteBaseProduct: (productId: string) => Promise<void>;
+  deleteMultipleBaseProducts: (productIds: string[]) => Promise<void>;
 }
 
 export const BaseProductsContext = createContext<BaseProductsContextType | undefined>(undefined);
@@ -26,21 +27,9 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
     const q = query(collection(db, "baseProducts"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const productsData = querySnapshot.docs.map(doc => {
-             const data = doc.data();
-             const originalCategory = data.category as string | undefined;
-            let category: UnitCategory = 'Unidade'; 
-
-            if (originalCategory) {
-                const formatted = originalCategory.charAt(0).toUpperCase() + originalCategory.slice(1).toLowerCase();
-                if (unitCategories.includes(formatted as UnitCategory)) {
-                    category = formatted as UnitCategory;
-                }
-            }
-
-            return { 
+             return { 
                 id: doc.id, 
-                ...data,
-                category,
+                ...doc.data(),
              } as BaseProduct
         });
         setBaseProducts(productsData.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
@@ -86,7 +75,7 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
       if(product.id) {
         const productRef = doc(db, "baseProducts", product.id);
         const { id, ...dataToUpdate } = product;
-        batch.update(productRef, dataToUpdate);
+        batch.update(productRef, dataToUpdate as any);
       }
     });
     try {
@@ -105,6 +94,19 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
         throw error;
     }
   }, []);
+
+  const deleteMultipleBaseProducts = useCallback(async (productIds: string[]) => {
+    const batch = writeBatch(db);
+    productIds.forEach(id => {
+        batch.delete(doc(db, "baseProducts", id));
+    });
+    try {
+        await batch.commit();
+    } catch (error) {
+        console.error("Error deleting multiple base products:", error);
+        throw error;
+    }
+  }, []);
   
   const value: BaseProductsContextType = useMemo(() => ({
     baseProducts,
@@ -113,7 +115,8 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
     updateBaseProduct,
     updateMultipleBaseProducts,
     deleteBaseProduct,
-  }), [baseProducts, loading, addBaseProduct, updateBaseProduct, updateMultipleBaseProducts, deleteBaseProduct]);
+    deleteMultipleBaseProducts,
+  }), [baseProducts, loading, addBaseProduct, updateBaseProduct, updateMultipleBaseProducts, deleteBaseProduct, deleteMultipleBaseProducts]);
 
   return <BaseProductsContext.Provider value={value}>{children}</BaseProductsContext.Provider>;
 }
