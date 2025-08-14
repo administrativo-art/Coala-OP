@@ -50,6 +50,7 @@ export function AverageConsumptionChart() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
+  const [hoveredBar, setHoveredBar] = useState<string | null>(null);
   
   useEffect(() => {
     if (user && !selectedKiosk && !kiosksLoading && kiosks.length > 0) {
@@ -414,10 +415,19 @@ export function AverageConsumptionChart() {
                                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-muted-foreground/30"></div>Consumo = 0</div>
                                 </div>
                             )} />
-                            <Bar dataKey="Consumo" radius={[0, 4, 4, 0]}>
+                            <Bar 
+                                dataKey="Consumo" 
+                                radius={[0, 4, 4, 0]}
+                                onMouseEnter={(data) => setHoveredBar(data.name)}
+                                onMouseLeave={() => setHoveredBar(null)}
+                            >
                                 <LabelList dataKey="Consumo" position="right" offset={10} formatter={(value: number) => value > 0 ? formatNumberForDisplay(value) : ''} style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} />
                                 {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.Consumo > 0 ? CHART_COLORS[index % CHART_COLORS.length] : 'hsl(var(--muted-foreground)/0.3)'} />
+                                    <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={entry.Consumo > 0 ? CHART_COLORS[index % CHART_COLORS.length] : 'hsl(var(--muted-foreground)/0.3)'} 
+                                        opacity={hoveredBar && hoveredBar !== entry.name ? 0.3 : 1}
+                                    />
                                 ))}
                             </Bar>
                         </BarChart>
