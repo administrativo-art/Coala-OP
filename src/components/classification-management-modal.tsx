@@ -2,23 +2,13 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2 } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-
-const classificationSchema = z.object({
-  newClassification: z.string().min(1, 'O nome da classificação não pode ser vazio.'),
-});
-type ClassificationFormValues = z.infer<typeof classificationSchema>;
 
 interface ClassificationManagementModalProps {
   open: boolean;
@@ -30,24 +20,11 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
     const [classificationToDelete, setClassificationToDelete] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const form = useForm<ClassificationFormValues>({
-        resolver: zodResolver(classificationSchema),
-        defaultValues: { newClassification: '' },
-    });
-
     const classificationOptions = useMemo(() => {
         const classifications = new Set(baseProducts.map(p => p.classification).filter(Boolean));
         return Array.from(classifications).sort();
     }, [baseProducts]);
 
-    const handleAddClassification = (values: ClassificationFormValues) => {
-        if (!classificationOptions.includes(values.newClassification)) {
-            // This doesn't actually "add" it to a list, it's just conceptual.
-            // The classification is saved when a product uses it.
-            // We can just clear the form for good UX.
-            form.reset();
-        }
-    };
 
     const handleDeleteClick = (classification: string) => {
         setClassificationToDelete(classification);
@@ -76,7 +53,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
                     <DialogHeader>
                         <DialogTitle>Gerenciar Classificações</DialogTitle>
                         <DialogDescription>
-                            Adicione, renomeie ou exclua classificações de produtos base.
+                            Exclua classificações de produtos base. Para adicionar ou renomear, basta digitar o novo nome no campo de classificação ao editar um produto base.
                         </DialogDescription>
                     </DialogHeader>
                      <ScrollArea className="h-72">
