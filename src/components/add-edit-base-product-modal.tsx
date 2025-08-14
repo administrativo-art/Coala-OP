@@ -63,6 +63,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const { permissions } = useAuth();
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
+  const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
@@ -216,7 +217,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
                             <FormLabel>Classificação (opcional)</FormLabel>
-                            <Popover>
+                            <Popover open={isComboboxOpen} onOpenChange={setIsComboboxOpen}>
                                 <PopoverTrigger asChild>
                                 <FormControl>
                                     <Button
@@ -227,33 +228,31 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                         !field.value && "text-muted-foreground"
                                     )}
                                     >
-                                    {field.value
-                                        ? classifications.find(
-                                            (c) => c.name === field.value
-                                        )?.name
-                                        : "Selecione ou crie uma"}
+                                    {field.value || "Selecione ou crie uma"}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command shouldFilter={false}>
+                                <Command>
                                     <CommandInput 
                                         placeholder="Buscar ou criar..."
-                                        onValueChange={(search) => field.onChange(search)}
+                                        value={field.value || ''}
+                                        onValueChange={field.onChange}
                                      />
                                     <CommandEmpty>Nenhuma classificação encontrada.</CommandEmpty>
                                     <CommandList>
                                         <CommandGroup>
                                         {classifications
-                                            .filter(c => c.name.toLowerCase().includes(field.value?.toLowerCase() || ''))
+                                            .filter(c => c.name.toLowerCase().includes((field.value || '').toLowerCase()))
                                             .map((c) => (
                                             <CommandItem
-                                            value={c.name}
-                                            key={c.id}
-                                            onSelect={() => {
-                                                form.setValue("classification", c.name)
-                                            }}
+                                                value={c.name}
+                                                key={c.id}
+                                                onSelect={(currentValue) => {
+                                                    form.setValue("classification", currentValue === field.value ? "" : c.name);
+                                                    setIsComboboxOpen(false);
+                                                }}
                                             >
                                             <Check
                                                 className={cn(
