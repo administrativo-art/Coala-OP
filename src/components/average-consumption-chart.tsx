@@ -1,5 +1,4 @@
 
-
       "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -17,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrendingUp, ListFilter, Download, ArrowUpDown, Calendar as CalendarIcon, Package, Folder, Palette } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -382,12 +381,6 @@ export function AverageConsumptionChart() {
                                     borderRadius: "var(--radius)"
                                 }}
                             />
-                             <Legend content={() => (
-                                <div className="flex justify-center items-center gap-4 text-xs mt-2">
-                                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{backgroundColor: 'hsl(var(--chart-1))'}}></div>Consumo > 0</div>
-                                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-muted-foreground/30"></div>Consumo = 0</div>
-                                </div>
-                            )} />
                             <Bar 
                                 dataKey="Consumo" 
                                 radius={[0, 4, 4, 0]}
