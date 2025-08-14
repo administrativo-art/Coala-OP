@@ -47,7 +47,6 @@ export function AverageConsumptionChart() {
   const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([])
   const [initialSelectionMade, setInitialSelectionMade] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [hoveredBar, setHoveredBar] = useState<string | null>(null);
@@ -79,19 +78,6 @@ export function AverageConsumptionChart() {
     let relevantReports = isMatrixView
       ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
       : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
-
-    if (dateRange?.from) {
-        relevantReports = relevantReports.filter(report => {
-            const reportDate = new Date(report.year, report.month - 1, 15);
-            return reportDate >= dateRange.from!;
-        });
-    }
-    if (dateRange?.to) {
-        relevantReports = relevantReports.filter(report => {
-            const reportDate = new Date(report.year, report.month - 1, 15);
-            return reportDate <= dateRange.to!;
-        });
-    }
 
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
@@ -155,7 +141,7 @@ export function AverageConsumptionChart() {
         }
     });
 
-  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, dateRange, hideZeroConsumption, classificationFilter]);
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, hideZeroConsumption, classificationFilter]);
 
   const handleExportPdf = () => {
     if (chartData.length === 0) return;
@@ -168,7 +154,6 @@ export function AverageConsumptionChart() {
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Quiosque: ${kioskName}`, 14, 29);
-    doc.text(`Período: ${dateRange?.from ? format(dateRange.from, 'dd/MM/yy') : 'Início'} a ${dateRange?.to ? format(dateRange.to, 'dd/MM/yy') : 'Fim'}`, 14, 35);
 
     const tableHead = [['Produto base (unidade)', 'Consumo médio']];
     const tableBody = chartData.map(item => [
@@ -215,7 +200,6 @@ export function AverageConsumptionChart() {
     
     const exportData = {
       kiosk: kioskName,
-      period: `De: ${dateRange?.from ? format(dateRange.from, 'dd/MM/yy') : 'Início'} a ${dateRange?.to ? format(dateRange.to, 'dd/MM/yy') : 'Fim'}`,
       generated_at: new Date().toISOString(),
       data: chartData.map(item => ({
         base_product_name: item.name,
@@ -360,17 +344,6 @@ export function AverageConsumptionChart() {
                         <SelectItem value="name-desc">Nome (Z-A)</SelectItem>
                     </SelectContent>
                 </Select>
-                 <Popover>
-                    <PopoverTrigger asChild>
-                        <Button id="date" variant="outline" className={cn("w-full sm:w-auto justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Período</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
-                    </PopoverContent>
-                </Popover>
             </div>
              <div className="flex items-center space-x-2 mb-4">
                 <Switch id="hide-zero" checked={hideZeroConsumption} onCheckedChange={setHideZeroConsumption} />
