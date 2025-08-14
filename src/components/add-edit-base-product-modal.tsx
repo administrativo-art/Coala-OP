@@ -72,6 +72,11 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     });
   }, [kiosks]);
 
+  const classificationOptions = useMemo(() => {
+    const classifications = new Set(baseProducts.map(p => p.classification).filter(Boolean));
+    return Array.from(classifications).sort();
+  }, [baseProducts]);
+
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
     defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], consumptionMonths: 0 }
@@ -208,7 +213,14 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                     <FormField control={form.control} name="classification" render={({ field }) => (
                       <FormItem>
                           <FormLabel>Classificação (opcional)</FormLabel>
-                          <FormControl><Input placeholder="ex: Secos, Frios, Descartáveis" {...field} value={field.value ?? ''} /></FormControl>
+                           <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione a classificação" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {classificationOptions.map(option => (
+                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                           <FormMessage />
                       </FormItem>
                       )}
