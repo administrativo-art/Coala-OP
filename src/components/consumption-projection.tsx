@@ -182,15 +182,10 @@ export function ConsumptionProjection() {
         const adjustmentFactor = 1 + (simulationPercentage / 100);
         const kioskStockLevels = (bp: BaseProduct) => bp.stockLevels?.[selectedKioskId];
 
-        const consumptionData = (kioskId: string) => {
-            if (kioskId === 'matriz') {
-                const networkKioskIds = kiosks.filter(k => k.id !== 'matriz').map(k => k.id);
-                return consumptionHistory.filter(r => networkKioskIds.includes(r.kioskId));
-            }
-            return consumptionHistory.filter(r => r.kioskId === kioskId);
-        }
-
-        const relevantReports = consumptionData(selectedKioskId);
+        const isMatrixView = selectedKioskId === 'matriz';
+        const relevantReports = isMatrixView
+            ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+            : consumptionHistory.filter(r => r.kioskId === selectedKioskId);
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
@@ -202,17 +197,26 @@ export function ConsumptionProjection() {
                 }
             });
         });
+        
+        const allNetworkMonths = new Set<string>();
+        for (const report of relevantReports) {
+          const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+          const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
+          if (anyConsumption) allNetworkMonths.add(key);
+        }
+        const networkMonthsCount = allNetworkMonths.size;
 
         const dailyAverages = new Map<string, number>();
         const monthlyAverages = new Map<string, number>();
         
         Object.entries(monthlyConsumptionByBaseId).forEach(([baseId, monthlyData]) => {
             const months = Object.values(monthlyData);
-            const numMonthsWithConsumption = Object.keys(monthlyData).length;
+            const productMonthsCount = Object.keys(monthlyData).length;
+            const denominator = isMatrixView ? networkMonthsCount : productMonthsCount;
 
-            if (numMonthsWithConsumption > 0) {
+            if (denominator > 0) {
                 const totalConsumption = months.reduce((sum, val) => sum + val, 0);
-                const avg = totalConsumption / numMonthsWithConsumption;
+                const avg = totalConsumption / denominator;
                 monthlyAverages.set(baseId, avg);
                 dailyAverages.set(baseId, avg / 30);
             }
@@ -318,7 +322,7 @@ export function ConsumptionProjection() {
             let orderDate: Date | null = null;
             let orderStatus: GroupedProjectionResult['orderStatus'] = 'ok';
             
-            if (selectedKioskId === 'matriz') {
+            if (isMatrixView) {
                 const leadTime = kioskParams?.leadTime;
                 if (leadTime && leadTime > 0) {
                     if (ruptureDate) {
