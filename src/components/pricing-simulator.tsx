@@ -22,10 +22,11 @@ import { PricingParametersModal } from "./pricing-parameters-modal";
 import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import Papa from 'papaparse';
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -202,6 +203,82 @@ export function PricingSimulator() {
         });
 
         doc.save(`analise_custo_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+    const handleExportFichaTecnicaPdf = () => {
+        const doc = new jsPDF();
+        let yPos = 15;
+
+        simulationsByCategory.forEach((sim, index) => {
+            if (index > 0) {
+                doc.addPage();
+                yPos = 15;
+            }
+
+            doc.setFontSize(16);
+            doc.text(`Ficha Técnica: ${sim.name}`, 14, yPos);
+            yPos += 10;
+
+            const items = simulationItems.filter(item => item.simulationId === sim.id);
+            const bodyData = items.map(item => {
+                const baseProductInfo = baseProductMap.get(item.baseProductId);
+                return [
+                    baseProductInfo?.name || 'Insumo não encontrado',
+                    `${item.quantity} ${item.overrideUnit || baseProductInfo?.unit}`
+                ];
+            });
+
+            autoTable(doc, {
+                startY: yPos,
+                head: [['Insumo Base', 'Quantidade']],
+                body: bodyData,
+                theme: 'striped',
+                headStyles: { fillColor: '#273344' }
+            });
+            yPos = (doc as any).lastAutoTable.finalY + 10;
+        });
+
+        doc.save(`fichas_tecnicas_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+    const handleExportCsv = () => {
+        const dataForCsv: any[] = [];
+        simulationsByCategory.forEach(sim => {
+            const simItems = simulationItems.filter(item => item.simulationId === sim.id);
+            simItems.forEach(item => {
+                const baseProductInfo = baseProductMap.get(item.baseProductId);
+                dataForCsv.push({
+                    "Mercadoria": sim.name,
+                    "Categorias": sim.categoryIds.map(id => categoryMap.get(id)?.name).join(', '),
+                    "Linha": sim.lineId ? categoryMap.get(sim.lineId)?.name : '',
+                    "Preço de Venda": sim.salePrice,
+                    "Custo Bruto": sim.grossCost,
+                    "Lucro %": sim.profitPercentage,
+                    "Meta Lucro %": sim.profitGoal,
+                    "Markup": sim.markup,
+                    "Insumo": baseProductInfo?.name || 'N/A',
+                    "Qtd na Receita": item.quantity,
+                    "Unidade na Receita": item.overrideUnit || baseProductInfo?.unit,
+                    "Custo do Insumo (p/ unid.)": item.overrideCostPerUnit || 0,
+                    "Custo Total do Insumo": (item.overrideCostPerUnit || 0) * item.quantity
+                });
+            });
+        });
+
+        const csv = Papa.unparse(dataForCsv, {
+            quotes: true,
+            delimiter: ",",
+            header: true
+        });
+
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `analise_de_custo_dados_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
@@ -407,10 +484,19 @@ export function PricingSimulator() {
                                     Parâmetros
                                 </Button>
                             )}
-                            <Button variant="outline" onClick={handleExportPdf} disabled={simulationsByCategory.length === 0}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Exportar
-                            </Button>
+                             <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" disabled={simulationsByCategory.length === 0}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Exportar
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuItem onSelect={handleExportPdf}>Relatório Completo (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaPdf}>Ficha Técnica (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportCsv}>Dados (CSV)</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                     <div className="flex flex-col md:flex-row items-center justify-between gap-2">
