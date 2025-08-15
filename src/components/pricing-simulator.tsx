@@ -281,6 +281,37 @@ export function PricingSimulator() {
         document.body.removeChild(link);
     };
 
+    const handleExportFichaTecnicaCsv = () => {
+        const dataForCsv: any[] = [];
+        simulationsByCategory.forEach(sim => {
+            const simItems = simulationItems.filter(item => item.simulationId === sim.id);
+            simItems.forEach(item => {
+                const baseProductInfo = baseProductMap.get(item.baseProductId);
+                dataForCsv.push({
+                    "Mercadoria": sim.name,
+                    "Insumo": baseProductInfo?.name || 'N/A',
+                    "Quantidade": item.quantity,
+                    "Unidade": item.overrideUnit || baseProductInfo?.unit,
+                });
+            });
+        });
+
+        const csv = Papa.unparse(dataForCsv, {
+            quotes: true,
+            delimiter: ",",
+            header: true
+        });
+
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `fichas_tecnicas_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
     
     const activeFilters = useMemo(() => {
@@ -494,7 +525,9 @@ export function PricingSimulator() {
                                 <DropdownMenuContent>
                                     <DropdownMenuItem onSelect={handleExportPdf}>Relatório Completo (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaPdf}>Ficha Técnica (PDF)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportCsv}>Dados (CSV)</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={handleExportCsv}>Dados Completos (CSV)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCsv}>Ficha Técnica (CSV)</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
