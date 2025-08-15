@@ -283,7 +283,7 @@ export function PricingSimulator() {
 
     const handleExportFichaTecnicaCsv = () => {
         const dataForCsv: any[] = [];
-        simulationsByCategory.forEach(sim => {
+        simulationsByCategory.forEach((sim, simIndex) => {
             const simItems = simulationItems.filter(item => item.simulationId === sim.id);
             simItems.forEach(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -294,6 +294,13 @@ export function PricingSimulator() {
                     "Unidade": item.overrideUnit || baseProductInfo?.unit,
                 });
             });
+
+            // Add 4 blank lines after each simulation group, except for the last one
+            if (simIndex < simulationsByCategory.length - 1) {
+                for (let i = 0; i < 4; i++) {
+                    dataForCsv.push({ "Mercadoria": '', "Insumo": '', "Quantidade": '', "Unidade": '' });
+                }
+            }
         });
 
         const csv = Papa.unparse(dataForCsv, {
