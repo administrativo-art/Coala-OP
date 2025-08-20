@@ -11,8 +11,8 @@ import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
-import { getUnitsForCategory } from '@/lib/conversion';
-import { type Product, type UnitCategory, unitCategories } from '@/types';
+import { getUnitsForCategory, units, type UnitCategory, unitCategories } from '@/lib/conversion';
+import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { resizeImage } from '@/lib/image-utils';
 import { fetchProductInfo } from '@/ai/flows/fetch-product-info-flow';
@@ -294,12 +294,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         onOpenChange(false);
     };
 
-    const secondaryUnitCategory = useMemo(() => {
-        switch(categoryWatch) {
-            case 'Unidade': return 'Massa';
-            default: return categoryWatch;
-        }
-    }, [categoryWatch]);
+    const allUnits = useMemo(() => {
+        return (Object.keys(units) as UnitCategory[]).flatMap(cat => 
+            Object.keys(units[cat])
+        );
+    }, []);
     
     const showCategoryMismatchWarning = useMemo(() => {
         if (!baseProductIdWatch) return false;
@@ -405,7 +404,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <div className="p-4 border rounded-lg bg-green-100/20 dark:bg-green-900/10 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                            <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(secondaryUnitCategory).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                            <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                         </div>
                                     </div>
                                 )}
