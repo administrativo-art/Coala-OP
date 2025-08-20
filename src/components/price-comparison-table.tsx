@@ -86,9 +86,29 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
             let pricePerUnit: number | null = null;
             if (product && item.price > 0) {
                 try {
-                    const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                    if (convertedQty > 0) {
-                        pricePerUnit = item.price / convertedQty;
+                    // This is the corrected logic
+                    let quantityInBaseUnit = 0;
+                    if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        // Scenario: A package contains a number of smaller units (e.g., 1 pacote has 300 un)
+                        // The base product unit MUST match the secondary unit's category.
+                         const valueOfOnePackageInSecondary = convertValue(1, product.unit, product.secondaryUnit, product.category);
+                         const finalQuantity = product.secondaryUnitValue * valueOfOnePackageInSecondary;
+
+                         if(baseProduct.unit.toLowerCase() === product.secondaryUnit.toLowerCase()) {
+                             quantityInBaseUnit = finalQuantity;
+                         } else {
+                            // This should not happen if categories match, but it's a fallback.
+                            const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+                            quantityInBaseUnit = convertValue(finalQuantity, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                         }
+
+                    } else {
+                        // Scenario: Direct conversion (e.g., 1 kg to 1000 g)
+                        quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    }
+                    
+                    if (quantityInBaseUnit > 0) {
+                        pricePerUnit = item.price / quantityInBaseUnit;
                     }
                 } catch (e) {
                     console.error("Error converting value for price comparison:", e);
@@ -171,7 +191,7 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                                     />
                                 </TableCell>
                                 <TableCell className={cn(row.isBestPrice && "text-amber-500 font-bold")}>
-                                    {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '-'}
+                                    {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 4 })}` : '-'}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {row.purchaseItem.isConfirmed ? (
