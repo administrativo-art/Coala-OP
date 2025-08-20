@@ -86,25 +86,21 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
             let pricePerUnit: number | null = null;
             if (product && item.price > 0) {
                 try {
-                    // This is the corrected logic
                     let quantityInBaseUnit = 0;
-                    if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        // Scenario: A package contains a number of smaller units (e.g., 1 pacote has 300 un)
-                        // The base product unit MUST match the secondary unit's category.
-                         const valueOfOnePackageInSecondary = convertValue(1, product.unit, product.secondaryUnit, product.category);
-                         const finalQuantity = product.secondaryUnitValue * valueOfOnePackageInSecondary;
-
-                         if(baseProduct.unit.toLowerCase() === product.secondaryUnit.toLowerCase()) {
-                             quantityInBaseUnit = finalQuantity;
-                         } else {
-                            // This should not happen if categories match, but it's a fallback.
-                            const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
-                            quantityInBaseUnit = convertValue(finalQuantity, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                         }
-
-                    } else {
-                        // Scenario: Direct conversion (e.g., 1 kg to 1000 g)
+                     if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                        if (secondaryUnitCategory !== baseProduct.category) {
+                             throw new Error(`Incompatible categories for secondary unit conversion: ${secondaryUnitCategory} vs ${baseProduct.category}`);
+                        }
+                        quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    } else if (product.unit.toLowerCase() === 'un' || product.unit.toLowerCase() === 'unidade') {
+                        // This handles the "BIJU" case where packageSize is 300 and unit is "un".
+                        quantityInBaseUnit = product.packageSize;
+                    }
+                    else if(product.category === baseProduct.category) {
                         quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                    } else {
+                        throw new Error(`Incompatible categories for conversion: ${product.category} vs ${baseProduct.category}`);
                     }
                     
                     if (quantityInBaseUnit > 0) {
@@ -139,6 +135,17 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
     if (!baseProduct) {
         return <p className="text-destructive">Erro: Produto base não encontrado.</p>;
     }
+    
+    const formatPricePerUnit = (price: number | null) => {
+        if (price === null) return '-';
+        const options: Intl.NumberFormatOptions = {
+            style: 'currency',
+            currency: 'BRL',
+            maximumFractionDigits: price < 1 ? 3 : 2,
+            minimumFractionDigits: 2
+        };
+        return price.toLocaleString('pt-BR', options);
+    };
 
     return (
         <div className="space-y-2">
@@ -191,7 +198,7 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                                     />
                                 </TableCell>
                                 <TableCell className={cn(row.isBestPrice && "text-amber-500 font-bold")}>
-                                    {row.pricePerUnit !== null ? `${row.pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 4 })}` : '-'}
+                                     {formatPricePerUnit(row.pricePerUnit)}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {row.purchaseItem.isConfirmed ? (
