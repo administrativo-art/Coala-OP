@@ -88,13 +88,8 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                 try {
                     let quantityInBaseUnit = 0;
                      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
-                        if (secondaryUnitCategory !== baseProduct.category) {
-                             throw new Error(`Incompatible categories for secondary unit conversion: ${secondaryUnitCategory} vs ${baseProduct.category}`);
-                        }
-                        quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                        quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, product.category === 'Unidade' ? 'Massa' : baseProduct.category);
                     } else if (product.unit.toLowerCase() === 'un' || product.unit.toLowerCase() === 'unidade') {
-                        // This handles the "BIJU" case where packageSize is 300 and unit is "un".
                         quantityInBaseUnit = product.packageSize;
                     }
                     else if(product.category === baseProduct.category) {
