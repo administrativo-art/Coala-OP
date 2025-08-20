@@ -53,9 +53,15 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
     useEffect(() => {
         const initialPrices: Record<string, string> = {};
         items.forEach(item => {
-            initialPrices[item.id] = item.price > 0 ? item.price.toString() : "";
+             // Only set initial price if it's not already being tracked locally
+            if (localPrices[item.id] === undefined) {
+              initialPrices[item.id] = item.price > 0 ? item.price.toString() : "";
+            }
         });
-        setLocalPrices(initialPrices);
+        if (Object.keys(initialPrices).length > 0) {
+            setLocalPrices(prev => ({ ...prev, ...initialPrices }));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items]);
 
     useEffect(() => {
@@ -88,14 +94,9 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
                 try {
                     let quantityInBaseUnit = 0;
                      if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, product.category === 'Unidade' ? 'Massa' : baseProduct.category);
-                    } else if (product.unit.toLowerCase() === 'un' || product.unit.toLowerCase() === 'unidade') {
-                        quantityInBaseUnit = product.packageSize;
-                    }
-                    else if(product.category === baseProduct.category) {
-                        quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                        quantityInBaseUnit = product.secondaryUnitValue;
                     } else {
-                        throw new Error(`Incompatible categories for conversion: ${product.category} vs ${baseProduct.category}`);
+                        quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     }
                     
                     if (quantityInBaseUnit > 0) {
@@ -136,7 +137,7 @@ export function PriceComparisonTable({ baseProduct, items, sessionId, isSessionC
         const options: Intl.NumberFormatOptions = {
             style: 'currency',
             currency: 'BRL',
-            maximumFractionDigits: price < 1 ? 3 : 2,
+            maximumFractionDigits: 3,
             minimumFractionDigits: 2
         };
         return price.toLocaleString('pt-BR', options);
