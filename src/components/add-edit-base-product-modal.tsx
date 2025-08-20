@@ -60,7 +60,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const { classifications, loading: loadingClassifications } = useClassifications();
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   
   const lastInitKeyRef = useRef<string | null>(null);
@@ -121,7 +120,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       classification: productToEdit?.classification ? String(productToEdit.classification) : 'none',
       category: productToEdit?.category ?? 'Massa',
       unit: productToEdit?.unit ?? 'g',
-      initialCostPerUnit: productToEdit?.lastEffectivePrice?.pricePerUnit ?? productToEdit?.initialCostPerUnit ?? 0,
+      initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
       stockLevels: kioskStockLevels,
       consumptionMonths: productToEdit?.consumptionMonths ?? 0,
     });
@@ -160,43 +159,16 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       unit: values.unit,
       stockLevels: stockLevelsObject,
       consumptionMonths: values.consumptionMonths,
+      initialCostPerUnit: values.initialCostPerUnit,
     };
 
     if (productToEdit) {
-      const updatedProduct: any = { 
-        ...productToEdit,
-        ...dataPayload
-      };
-      
-      if (!productToEdit.lastEffectivePrice) {
-          updatedProduct.initialCostPerUnit = values.initialCostPerUnit;
-      }
-      
-      updateBaseProduct(updatedProduct);
-
+      updateBaseProduct({ ...productToEdit, ...dataPayload });
     } else {
-       const newProduct = {
-        ...dataPayload,
-        initialCostPerUnit: values.initialCostPerUnit,
-      };
-      addBaseProduct(newProduct);
+      addBaseProduct(dataPayload);
     }
     onOpenChange(false);
   };
-  
-  const handleResetPrice = () => {
-    if (!productToEdit) return;
-    
-    const updatedProduct = {
-      ...productToEdit,
-      lastEffectivePrice: null
-    };
-
-    updateBaseProduct(updatedProduct);
-    setIsResetConfirmOpen(false);
-  };
-  
-  const hasEffectivePrice = !!productToEdit?.lastEffectivePrice;
 
   return (
     <>
@@ -279,31 +251,20 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       render={({ field }) => (
                           <FormItem>
                               <FormLabel>Custo por Unidade (R$)</FormLabel>
-                              <div className="flex items-center gap-2">
-                                <div className="relative flex-grow">
-                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0,00"
-                                        className="pl-8"
-                                        {...field}
-                                        value={field.value ?? ''}
-                                        disabled={hasEffectivePrice}
-                                    />
-                                </div>
-                                {hasEffectivePrice && permissions.pricing.manageParameters && (
-                                  <Button type="button" variant="outline" size="icon" onClick={() => setIsResetConfirmOpen(true)}>
-                                    <RefreshCw className="h-4 w-4" />
-                                  </Button>
-                                )}
+                              <div className="relative">
+                                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                  <Input
+                                      type="number"
+                                      step="0.001"
+                                      placeholder="0,000"
+                                      className="pl-8"
+                                      {...field}
+                                      value={field.value ?? ''}
+                                  />
                               </div>
                               <FormMessage />
                               <p className="text-xs text-muted-foreground pt-1">
-                                  {hasEffectivePrice 
-                                      ? "Custo efetivado por uma compra. Para editar, um admin deve resetar o preço."
-                                      : "Este custo é usado como fallback até que uma compra seja efetivada."
-                                  }
+                                Este custo é usado como fallback até que uma compra seja efetivada para um insumo deste produto base.
                               </p>
                           </FormItem>
                       )}
@@ -370,24 +331,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           </Form>
         </DialogContent>
       </Dialog>
-      {productToEdit && <DeleteConfirmationDialog 
-        open={isResetConfirmOpen}
-        onOpenChange={setIsResetConfirmOpen}
-        onConfirm={handleResetPrice}
-        title="Resetar Preço Efetivado?"
-        description={`Esta ação fará com que o sistema volte a usar o custo inicial para "${productToEdit.name}". O campo de custo voltará a ser editável até a próxima compra efetivada. Deseja continuar?`}
-        confirmButtonText="Sim, resetar"
-        confirmButtonVariant="destructive"
-      />}
        <ClassificationManagementModal open={isClassificationModalOpen} onOpenChange={setIsClassificationModalOpen} />
     </>
   );
 }
-
-    
-
-    
-
-    
-
-

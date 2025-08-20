@@ -54,15 +54,8 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
     const productRef = doc(db, "baseProducts", product.id);
     const { id, ...dataToUpdate } = product;
 
-    const finalData: Record<string, any> = { ...dataToUpdate };
-
-    // If lastEffectivePrice is explicitly set to null, prepare to delete the field.
-    if (dataToUpdate.lastEffectivePrice === null) {
-        finalData.lastEffectivePrice = deleteField();
-    }
-
     try {
-        await updateDoc(productRef, finalData);
+        await updateDoc(productRef, dataToUpdate as any);
     } catch (error) {
         console.error("Error updating base product:", error);
         throw error;

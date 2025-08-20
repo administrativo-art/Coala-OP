@@ -18,6 +18,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue } from '@/lib/conversion';
 import { FinancialPeriodAnalysisModal } from './financial-period-analysis-modal';
+import { usePurchase } from '@/hooks/use-purchase';
 
 const CHART_COLORS = [
     'hsl(var(--chart-1))',
@@ -45,12 +46,25 @@ export function StockValuation() {
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
+    const { priceHistory, loading: historyLoading } = usePurchase();
     
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    
+    const latestPricesMap = useMemo(() => {
+        const map = new Map<string, number>();
+        // Price history is already sorted by date descending
+        priceHistory.forEach(entry => {
+            if (!map.has(entry.productId)) {
+                map.set(entry.productId, entry.pricePerUnit);
+            }
+        });
+        return map;
+    }, [priceHistory]);
+
 
     const valuedLots = useMemo((): LotWithValue[] => {
-        if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading) return [];
+        if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading || historyLoading) return [];
         
         const productMap = new Map(products.map(p => [p.id, p]));
         const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
@@ -62,9 +76,11 @@ export function StockValuation() {
                 if (!product || !product.baseProductId) return null;
 
                 const baseProduct = baseProductMap.get(product.baseProductId);
-                if (!baseProduct || !baseProduct.lastEffectivePrice?.pricePerUnit) return null;
+                if (!baseProduct) return null;
+                
+                const pricePerBaseUnit = latestPricesMap.get(product.id) ?? baseProduct.initialCostPerUnit ?? 0;
+                if(pricePerBaseUnit === 0) return null;
 
-                const pricePerBaseUnit = baseProduct.lastEffectivePrice.pricePerUnit;
                 const packageSizeInBaseUnits = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                 
                 if(packageSizeInBaseUnits === 0) return null;
@@ -86,7 +102,7 @@ export function StockValuation() {
             .filter((item): item is LotWithValue => item !== null)
             .sort((a, b) => a.productName.localeCompare(b.productName));
 
-    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, getProductFullName]);
+    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, getProductFullName, historyLoading, latestPricesMap]);
     
     const summaryByBaseProduct = useMemo(() => {
         const summary: { [key: string]: { name: string; quantity: number; value: number; unit: string; } } = {};
@@ -166,7 +182,7 @@ export function StockValuation() {
         });
     }, [kiosks]);
     
-    const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
+    const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || historyLoading;
 
     if (loading) {
         return (
@@ -326,4 +342,3 @@ export function StockValuation() {
         </div>
     );
 }
-

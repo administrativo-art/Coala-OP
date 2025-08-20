@@ -7,13 +7,6 @@ export type UnitCategory = (typeof unitCategories)[number];
 export const absenceReasons = ["Atestado Médico", "Falta Injustificada", "Atraso", "Outros"] as const;
 export type AbsenceReason = (typeof absenceReasons)[number];
 
-export type LastEffectivePrice = {
-  pricePerUnit: number;
-  productId: string;
-  entityId: string;
-  updatedAt: string;
-};
-
 export type PriceHistoryEntry = {
   id: string;
   baseProductId: string;
@@ -47,7 +40,6 @@ export type BaseProduct = {
   stockLevels: { [kioskId: string]: BaseProductStockLevel };
   category: UnitCategory;
   classification?: string;
-  lastEffectivePrice?: LastEffectivePrice | null;
   initialCostPerUnit?: number;
   consumptionMonths?: number;
 }
@@ -658,6 +650,3 @@ export type Task = {
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
 };
-
-
-    

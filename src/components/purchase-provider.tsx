@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseItem, type LastEffectivePrice, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
+import { type PurchaseItem, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -17,7 +17,7 @@ export interface PurchaseContextType {
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
   deletePurchaseItem: (itemId: string) => Promise<void>;
-  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number, baseProducts: BaseProduct[]) => Promise<void>;
+  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
 
@@ -136,14 +136,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
 
-    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number, baseProducts: BaseProduct[]) => {
+    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number) => {
         if (!user) return;
         const itemToConfirm = items.find(i => i.id === itemId);
         if (!itemToConfirm) return;
         
-        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
-        if(!baseProduct) return;
-
         const session = sessions.find(s => s.id === itemToConfirm.sessionId);
 
         try {
@@ -155,14 +152,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 isConfirmed: true,
                 confirmedBy: user.id,
                 confirmedAt: now,
-            });
-
-            const baseProductRef = doc(db, "baseProducts", baseProductId);
-            batch.update(baseProductRef, {
-                'lastEffectivePrice.pricePerUnit': pricePerUnit,
-                'lastEffectivePrice.productId': itemToConfirm.productId,
-                'lastEffectivePrice.entityId': itemToConfirm.entityId || session?.entityId || 'automatic',
-                'lastEffectivePrice.updatedAt': now
             });
             
             const historyRef = doc(collection(db, "priceHistory"));

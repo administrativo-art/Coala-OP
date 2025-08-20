@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { type ProductSimulation, type SimulationCategory } from '@/types';
+import { type ProductSimulation, type SimulationCategory, type PriceHistoryEntry } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 
@@ -32,6 +32,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { usePurchase } from '@/hooks/use-purchase';
 
 
 const simulationItemSchema = z.object({
@@ -103,6 +104,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const { simulations, addSimulation, updateSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
   const { products } = useProducts();
+  const { priceHistory } = usePurchase();
   const { categories } = useProductSimulationCategories();
   const { pricingParameters } = useCompanySettings();
   
@@ -120,6 +122,19 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
+  
+  const latestPricesMap = useMemo(() => {
+    const map = new Map<string, PriceHistoryEntry>();
+    // priceHistory is already sorted descending by date
+    priceHistory.forEach(entry => {
+        // Only set the price if it's the most recent one for that specific product (insumo)
+        if (!map.has(entry.productId)) {
+            map.set(entry.productId, entry);
+        }
+    });
+    return map;
+  }, [priceHistory]);
+
 
   useEffect(() => {
     if (open) {
@@ -194,7 +209,23 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
         try {
             let partialCost = 0;
-            const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+            
+            // Find all "insumos" linked to this "produto base"
+            const linkedProducts = products.filter(p => p.baseProductId === baseProduct.id);
+            let costSource: number | undefined = undefined;
+
+            // Find the latest price among all linked products
+            let latestPriceEntry: PriceHistoryEntry | undefined = undefined;
+            for (const p of linkedProducts) {
+                const priceEntry = latestPricesMap.get(p.id);
+                if (priceEntry) {
+                    if (!latestPriceEntry || new Date(priceEntry.confirmedAt) > new Date(latestPriceEntry.confirmedAt)) {
+                        latestPriceEntry = priceEntry;
+                    }
+                }
+            }
+
+            costSource = latestPriceEntry?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
             
             if (item.useDefault) {
                 if(costSource > 0) {
@@ -218,7 +249,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     });
 
     return { cmv: totalCmv, partialCosts: partials };
-  }, [watchedItems, baseProducts]);
+  }, [watchedItems, baseProducts, products, latestPricesMap]);
 
 
   const grossCost = useMemo(() => {
@@ -245,7 +276,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const handleAddItem = (baseProductId: string) => {
     const product = baseProducts.find(bp => bp.id === baseProductId);
     if (product) {
-        const costSource = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
+        const costSource = product.initialCostPerUnit ?? 0;
         append({ 
             baseProductId: product.id,
             quantity: 1,
@@ -412,7 +443,19 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             if (!watchedItems || !watchedItems[index]) return null;
                             const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                             const useDefault = watchedItems[index].useDefault;
-                            const hasDefaultCost = !!(baseProduct?.lastEffectivePrice || baseProduct?.initialCostPerUnit);
+                            
+                            const linkedProducts = products.filter(p => p.baseProductId === baseProduct?.id);
+                            let latestPriceEntry: PriceHistoryEntry | undefined = undefined;
+                            for (const p of linkedProducts) {
+                                const priceEntry = latestPricesMap.get(p.id);
+                                if (priceEntry) {
+                                    if (!latestPriceEntry || new Date(priceEntry.confirmedAt) > new Date(latestPriceEntry.confirmedAt)) {
+                                        latestPriceEntry = priceEntry;
+                                    }
+                                }
+                            }
+                            const effectiveCost = latestPriceEntry?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
+                            const hasDefaultCost = effectiveCost > 0;
 
                             return (
                                 <div key={item.id} className="grid grid-cols-[1fr_auto] items-start gap-x-2 rounded bg-muted/50 p-2">
@@ -479,7 +522,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                                     <Input
                                                         type="number"
                                                         step="any"
-                                                        value={useDefault ? (baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit)?.toFixed(4) ?? '' : costField.value ?? ''}
+                                                        value={useDefault ? effectiveCost.toFixed(4) : costField.value ?? ''}
                                                         onChange={costField.onChange}
                                                         disabled={useDefault}
                                                         className={cn("text-right bg-background/0", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
