@@ -558,7 +558,7 @@ export type PricingParameters = {
 
 export const defaultGuestPermissions: PermissionSet = {
     products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, delete: false, viewMovementHistory: false },
+    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
@@ -625,9 +625,10 @@ export type StockAuditContextType = {
 }
 
 export type TaskOrigin = {
-    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary';
+    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary' | 'consumption-projection';
     id: string; // ID of the originating document (e.g., submissionId, returnRequestId)
     questionId?: string; // Optional: for tasks generated from specific form questions
+    details?: any;
 };
 
 export type TaskHistoryItem = {
