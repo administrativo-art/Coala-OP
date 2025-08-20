@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, subDays, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -112,98 +112,87 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
     }
     
-    const initialCounts = new Map<string, number>();
-    const lastDayOfPrevMonth = endOfMonth(subMonths(new Date(getYear(currentDate), getMonth(currentDate)), 1));
-    const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
-    const lastDaySchedule = previousScheduleMap.get(lastDayISO);
-
-    users.forEach(user => {
-      let workedLastDay = false;
-      let onFolgaLastDay = false;
-
-      if (lastDaySchedule) {
-        kiosksToDisplay.forEach(kiosk => {
-          ['T1', 'T2', 'T3'].forEach(turn => {
-            const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-            if (shiftWorkers.includes(user.username)) {
-              workedLastDay = true;
-            }
-          });
-          const folgaNames = (lookupShift(lastDaySchedule, kiosk, 'Folga') as string || '').split(' + ').map(s => s.trim());
-          if (folgaNames.includes(user.username)) {
-            onFolgaLastDay = true;
-          }
-        });
-      }
-      initialCounts.set(user.id, (workedLastDay && !onFolgaLastDay) ? 1 : 0);
-    });
-    
     daysInMonth.forEach(day => {
-      const dayISO = format(day, 'yyyy-MM-dd');
-      const daySchedule = scheduleMap.get(dayISO);
-      const todaysAssignments = new Map<string, string>();
-      
-      const workersToday = new Set<string>();
-      if (daySchedule) {
-          kiosksToDisplay.forEach(kiosk => {
-            ['T1', 'T2', 'T3'].forEach(turn => {
-                const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                shiftWorkers.forEach(name => workersToday.add(name));
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = scheduleMap.get(dayISO);
+        const todaysAssignments = new Map<string, string>();
+        const workersToday = new Set<string>();
+        let workedYesterdayMap = new Map<string, boolean>();
+
+        if (day.getDate() === 1) {
+            const lastDayOfPrevMonth = endOfMonth(subMonths(day, 1));
+            const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
+            const lastDaySchedule = previousScheduleMap.get(lastDayISO);
+
+            users.forEach(user => {
+                let workedLastDay = false;
+                if(lastDaySchedule) {
+                    kiosksToDisplay.forEach(kiosk => {
+                        ['T1', 'T2', 'T3'].forEach(turn => {
+                            const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                            if (shiftWorkers.includes(user.username)) workedLastDay = true;
+                        });
+                    });
+                }
+                workedYesterdayMap.set(user.id, workedLastDay);
             });
-        });
-      }
-      dailyWorkers.set(dayISO, workersToday);
-
-      users.forEach(user => {
-          let workedToday = false;
-          let isAusente = false;
-
-          if (daySchedule) {
+        }
+      
+        if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
                 ['T1', 'T2', 'T3'].forEach(turn => {
-                  const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                  if (shiftWorkers.includes(user.username)) {
-                    workedToday = true;
-                    const key = `${dayISO}-${user.username}`;
-                    if (todaysAssignments.has(key)) {
-                        warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
-                    } else {
-                        todaysAssignments.set(key, kiosk.name);
-                    }
-                  }
+                    const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                    shiftWorkers.forEach(name => workersToday.add(name));
                 });
-                 const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-                 if (ausencias.some(a => a.userId === user.id)) {
-                    isAusente = true;
-                 }
             });
-          }
+        }
+        dailyWorkers.set(dayISO, workersToday);
 
-          if (workedToday && !isAusente) {
-            const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
-            let workedYesterday = false;
-            if(day.getDate() === 1){
-                workedYesterday = (initialCounts.get(user.id) || 0) > 0;
-            } else {
-                const prevDaySchedule = scheduleMap.get(prevDayISO);
+        users.forEach(user => {
+            let workedToday = false;
+            let isAusente = false;
+
+            if (daySchedule) {
                 kiosksToDisplay.forEach(kiosk => {
                     ['T1', 'T2', 'T3'].forEach(turn => {
-                        const shiftWorkers = (lookupShift(prevDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                        if(shiftWorkers.includes(user.username)) workedYesterday = true;
+                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if (shiftWorkers.includes(user.username)) {
+                            workedToday = true;
+                            const key = `${dayISO}-${user.username}`;
+                            if (todaysAssignments.has(key)) {
+                                warningsMap.set(`${key}-${kiosk.id}`, { type: 'conflict', message: `Dupla alocação: também em ${todaysAssignments.get(key)}.` });
+                            } else {
+                                todaysAssignments.set(key, kiosk.name);
+                            }
+                        }
                     });
+                    const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+                    if (ausencias.some(a => a.userId === user.id)) {
+                        isAusente = true;
+                    }
                 });
             }
 
-            const yesterdayCount = workedYesterday ? (counts.get(`${prevDayISO}-${user.id}`) || initialCounts.get(user.id) || 0) : 0;
-            const newCount = yesterdayCount + 1;
-            counts.set(`${dayISO}-${user.id}`, newCount);
-            if (newCount > 6) {
-                warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+            if (workedToday && !isAusente) {
+                let yesterdayCount = 0;
+                if (day.getDate() === 1) {
+                    const prevDayISO = format(endOfMonth(subMonths(day, 1)), 'yyyy-MM-dd');
+                    yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || (workedYesterdayMap.get(user.id) ? 1 : 0);
+                } else {
+                    const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+                    yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || 0;
+                }
+
+                const newCount = yesterdayCount + 1;
+                counts.set(`${dayISO}-${user.id}`, newCount);
+
+                if (newCount > 6) {
+                    warningsMap.set(`${dayISO}-${user.id}`, { type: 'overwork', message: `Trabalhando há ${newCount} dias seguidos.` });
+                }
+            } else {
+                counts.set(`${dayISO}-${user.id}`, 0);
             }
-          } else {
-            counts.set(`${dayISO}-${user.id}`, 0);
-          }
-      });
+        });
     });
 
     return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
