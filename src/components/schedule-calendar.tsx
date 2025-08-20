@@ -112,31 +112,43 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
     }
     
+    const prevMonthStartDate = startOfMonth(subMonths(currentDate, 1));
+    const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
+    const prevMonthDays = eachDayOfInterval({ start: prevMonthStartDate, end: prevMonthEndDate });
+
+    const initialCounts = new Map<string, number>();
+
+    users.forEach(user => {
+      let consecutiveDays = 0;
+      for (let i = prevMonthDays.length - 1; i >= 0; i--) {
+        const day = prevMonthDays[i];
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const daySchedule = previousScheduleMap.get(dayISO);
+        let workedThisDay = false;
+        if (daySchedule) {
+          kiosksToDisplay.forEach(kiosk => {
+            ['T1', 'T2', 'T3'].forEach(turn => {
+              const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+              if (shiftWorkers.includes(user.username)) {
+                workedThisDay = true;
+              }
+            });
+          });
+        }
+        if (workedThisDay) {
+          consecutiveDays++;
+        } else {
+          break; // Streak broken
+        }
+      }
+      initialCounts.set(user.id, consecutiveDays);
+    });
+
     daysInMonth.forEach(day => {
         const dayISO = format(day, 'yyyy-MM-dd');
         const daySchedule = scheduleMap.get(dayISO);
         const todaysAssignments = new Map<string, string>();
         const workersToday = new Set<string>();
-        let workedYesterdayMap = new Map<string, boolean>();
-
-        if (day.getDate() === 1) {
-            const lastDayOfPrevMonth = endOfMonth(subMonths(day, 1));
-            const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
-            const lastDaySchedule = previousScheduleMap.get(lastDayISO);
-
-            users.forEach(user => {
-                let workedLastDay = false;
-                if(lastDaySchedule) {
-                    kiosksToDisplay.forEach(kiosk => {
-                        ['T1', 'T2', 'T3'].forEach(turn => {
-                            const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                            if (shiftWorkers.includes(user.username)) workedLastDay = true;
-                        });
-                    });
-                }
-                workedYesterdayMap.set(user.id, workedLastDay);
-            });
-        }
       
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
@@ -173,16 +185,15 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 });
             }
 
-            if (workedToday && !isAusente) {
-                let yesterdayCount = 0;
-                if (day.getDate() === 1) {
-                    const prevDayISO = format(endOfMonth(subMonths(day, 1)), 'yyyy-MM-dd');
-                    yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || (workedYesterdayMap.get(user.id) ? 1 : 0);
-                } else {
-                    const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
-                    yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || 0;
-                }
+            let yesterdayCount = 0;
+            if (day.getDate() === 1) {
+                yesterdayCount = initialCounts.get(user.id) || 0;
+            } else {
+                const prevDayISO = format(subDays(day, 1), 'yyyy-MM-dd');
+                yesterdayCount = counts.get(`${prevDayISO}-${user.id}`) || 0;
+            }
 
+            if (workedToday && !isAusente) {
                 const newCount = yesterdayCount + 1;
                 counts.set(`${dayISO}-${user.id}`, newCount);
 
@@ -251,25 +262,38 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const newScheduleData: Record<string, DailySchedule> = {};
     const userWorkdayCounts = new Map<string, number>();
 
-    const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
-    const lastDayISO = format(lastDayOfPrevMonth, 'yyyy-MM-dd');
-    const lastDaySchedule = previousScheduleMap.get(lastDayISO);
-    
-    users.forEach(user => {
-        let workedLastDay = false;
-        if(lastDaySchedule) {
-            kiosksToDisplay.forEach(kiosk => {
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                    if (shiftWorkers.includes(user.username)) {
-                        workedLastDay = true;
-                    }
-                });
-            });
-        }
-        userWorkdayCounts.set(user.id, workedLastDay ? 1 : 0);
-    });
+    const prevMonthStartDate = startOfMonth(subMonths(currentDate, 1));
+    const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
+    const prevMonthDays = eachDayOfInterval({ start: prevMonthStartDate, end: prevMonthEndDate });
 
+    // Calculate the exact ending streak for each user from the previous month
+    users.forEach(user => {
+        let consecutiveDays = 0;
+        for (let i = prevMonthDays.length - 1; i >= 0; i--) {
+            const day = prevMonthDays[i];
+            const dayISO = format(day, 'yyyy-MM-dd');
+            const daySchedule = previousScheduleMap.get(dayISO);
+            let workedThisDay = false;
+            if (daySchedule) {
+                for (const kiosk of kiosksToDisplay) {
+                    for (const turn of ['T1', 'T2', 'T3']) {
+                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if (shiftWorkers.includes(user.username)) {
+                            workedThisDay = true;
+                            break;
+                        }
+                    }
+                    if (workedThisDay) break;
+                }
+            }
+            if (workedThisDay) {
+                consecutiveDays++;
+            } else {
+                break; // Streak is broken
+            }
+        }
+        userWorkdayCounts.set(user.id, consecutiveDays);
+    });
 
     daysInMonth.forEach(day => {
       const dayISO = format(day, 'yyyy-MM-dd');
@@ -295,13 +319,13 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             const kioskId = user.assignedKioskIds[0] || kiosksToDisplay[0].id;
             const folgaKey = `${kioskId} Folga`;
             newDaySchedule[folgaKey] = newDaySchedule[folgaKey] ? `${newDaySchedule[folgaKey]} + ${user.username}` : user.username;
-            userWorkdayCounts.set(user.id, 0);
+            userWorkdayCounts.set(user.id, 0); // Reset count after a day off
         } else if (user.turno) {
             const kioskId = user.assignedKioskIds[0];
             if (kioskId) {
                 const shiftKey = `${kioskId} ${user.turno}`;
                 newDaySchedule[shiftKey] = newDaySchedule[shiftKey] ? `${newDaySchedule[shiftKey]} + ${user.username}` : user.username;
-                userWorkdayCounts.set(user.id, consecutiveDays + 1);
+                userWorkdayCounts.set(user.id, consecutiveDays + 1); // Increment count
             }
         }
       });
