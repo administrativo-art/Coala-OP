@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -125,10 +124,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   const latestPricesMap = useMemo(() => {
     const map = new Map<string, PriceHistoryEntry>();
-    // priceHistory is already sorted descending by date
     priceHistory.forEach(entry => {
-        // Only set the price if it's the most recent one for that specific product (insumo)
-        if (!map.has(entry.productId)) {
+        if (!map.has(entry.productId) || new Date(entry.confirmedAt) > new Date(map.get(entry.productId)!.confirmedAt)) {
             map.set(entry.productId, entry);
         }
     });
@@ -224,7 +221,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     }
                 }
             }
-
+            
             costSource = latestPriceEntry?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
             
             if (item.useDefault) {
@@ -660,3 +657,5 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
+    
