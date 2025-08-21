@@ -4,12 +4,13 @@
 import React, { useState, useMemo } from 'react';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
+import { usePurchase } from '@/hooks/use-purchase';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, Settings, Search, MoreHorizontal, Inbox, Box } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, Settings, Search, MoreHorizontal, Inbox, Box, DollarSign } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
@@ -71,10 +72,17 @@ function BulkEditClassificationModal({
   )
 }
 
+const formatCurrency = (value: number) => {
+    if (!value || isNaN(value)) return 'R$ 0,000';
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 3 });
+}
+
 export function BaseProductManagement() {
-  const { baseProducts, loading, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
+  const { baseProducts, loading: loadingBase, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
   const { products } = useProducts();
   const { classifications } = useClassifications();
+  const { priceHistory, loading: loadingHistory } = usePurchase();
+  const loading = loadingBase || loadingHistory;
 
   const [productsToDelete, setProductsToDelete] = useState<BaseProduct[]>([]);
   const [productToEditId, setProductToEditId] = useState<string | null>(null);
@@ -88,6 +96,19 @@ export function BaseProductManagement() {
   const classificationMap = useMemo(() => {
     return new Map(classifications.map(c => [c.id, c.name]));
   }, [classifications]);
+
+  const latestPricesMap = useMemo(() => {
+    const map = new Map<string, number>(); // baseProductId -> pricePerUnit
+    const productToBaseMap = new Map(products.map(p => [p.id, p.baseProductId]));
+
+    priceHistory.forEach(entry => {
+        const baseId = productToBaseMap.get(entry.productId);
+        if (baseId && !map.has(baseId)) { // Since history is sorted desc, first one is the latest
+            map.set(baseId, entry.pricePerUnit);
+        }
+    });
+    return map;
+  }, [priceHistory, products]);
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -207,6 +228,7 @@ export function BaseProductManagement() {
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Classificação</TableHead>
                             <TableHead>Unidade Padrão</TableHead>
+                            <TableHead>Valor</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -214,42 +236,46 @@ export function BaseProductManagement() {
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
+                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
                         ) : filteredProducts.length > 0 ? (
-                            filteredProducts.map(product => (
-                                <TableRow key={product.id}>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedProducts.has(product.id)}
-                                            onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="font-semibold">{product.name}</TableCell>
-                                    <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
-                                    <TableCell>{product.unit}</TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                            filteredProducts.map(product => {
+                                const effectivePrice = latestPricesMap.get(product.id) ?? product.initialCostPerUnit ?? 0;
+                                return (
+                                    <TableRow key={product.id}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedProducts.has(product.id)}
+                                                onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="font-semibold">{product.name}</TableCell>
+                                        <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
+                                        <TableCell>{product.unit}</TableCell>
+                                        <TableCell className="font-mono text-sm">{formatCurrency(effectivePrice)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Inbox className="h-10 w-10" />
                                         <span>Nenhum produto base encontrado.</span>
