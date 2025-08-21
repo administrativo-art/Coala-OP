@@ -72,9 +72,15 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
 
         if (product && baseProduct && item.price > 0) {
             try {
-                const convertedQty = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                if (convertedQty > 0) {
-                    return item.price / convertedQty;
+                let quantityInBaseUnit: number;
+                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                    quantityInBaseUnit = product.secondaryUnitValue;
+                } else {
+                    quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                }
+
+                if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
                 }
             } catch (e) { console.error("Conversion error", e); }
         }
@@ -129,7 +135,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 
                 const pricePerUnit = findPricePerUnit(item);
                 if (pricePerUnit !== null) {
-                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit, baseProducts);
+                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
                     confirmedCount++;
                 }
             }
