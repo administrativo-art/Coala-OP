@@ -69,23 +69,39 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const findPricePerUnit = (item: PurchaseItem): number | null => {
         const product = products.find(p => p.id === item.productId);
         const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-
-        if (product && baseProduct && item.price > 0) {
-            try {
-                let quantityInBaseUnit: number;
-                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                    quantityInBaseUnit = product.secondaryUnitValue;
-                } else {
-                    quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                }
-
-                if (quantityInBaseUnit > 0) {
-                    return item.price / quantityInBaseUnit;
-                }
-            } catch (e) { console.error("Conversion error", e); }
+    
+        if (!product || !baseProduct || !item.price || item.price <= 0) {
+            return null;
         }
+    
+        try {
+            // Prioritize secondary unit for direct quantity info
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                 if (product.secondaryUnit === baseProduct.unit) {
+                    return item.price / product.secondaryUnitValue;
+                 }
+                 // If units are not the same, it implies a conversion is needed, but secondaryUnit should be a direct mapping.
+                 // This logic might need refinement if complex secondary conversions are needed.
+                 // For now, assume if secondaryUnit is set, secondaryUnitValue is the quantity in `secondaryUnit`.
+                 const quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, baseProduct.category);
+                 if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
+                 }
+            }
+    
+            // Fallback to package size conversion
+            const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, baseProduct.category);
+            if (quantityInBaseUnit > 0) {
+                return item.price / quantityInBaseUnit;
+            }
+    
+        } catch (e) {
+            console.error(`Error calculating price per unit for item ${item.id}:`, e);
+            return null;
+        }
+    
         return null;
-    }
+    };
     
     const handleExportPdf = () => {
         const doc = new jsPDF();
