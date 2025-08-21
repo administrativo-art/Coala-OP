@@ -143,9 +143,6 @@ function AnalysisTab() {
                 if (!secondaryUnitCategory) {
                     throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
                 }
-                 if (secondaryUnitCategory !== baseProduct.category) {
-                     throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
-                 }
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else if (baseProduct.category === 'Unidade') {
@@ -197,18 +194,24 @@ function AnalysisTab() {
             for (const lot of availableMatrizLots) {
                 if (needed <= 0) break;
                 const product = productMap.get(lot.productId)!;
-                let lotPackageSizeInBase = 0;
-                const availableQty = lot.quantity - (lot.reservedQuantity || 0);
+                let unitsPerPackage = 0;
+                const availableQtyInPackages = lot.quantity - (lot.reservedQuantity || 0);
 
                 try {
-                     if (baseProduct.category === 'Unidade') {
-                        lotPackageSizeInBase = product.packageSize;
-                     } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
-                         if (secondaryUnitCategory !== baseProduct.category) continue;
-                        lotPackageSizeInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                     if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                        let secondaryUnitCategory: UnitCategory | undefined;
+                        for (const category in units) {
+                           if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                               secondaryUnitCategory = category as UnitCategory;
+                               break;
+                           }
+                        }
+                       if (!secondaryUnitCategory) continue;
+                       unitsPerPackage = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                    } else if (baseProduct.category === 'Unidade') {
+                       unitsPerPackage = product.packageSize;
                     } else if (product.category === baseProduct.category) {
-                        lotPackageSizeInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                       unitsPerPackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     } else {
                         continue;
                     }
@@ -216,16 +219,16 @@ function AnalysisTab() {
                     continue;
                 }
                 
-                if (lotPackageSizeInBase > 0) {
-                    const packagesToMeetNeed = Math.ceil(needed / lotPackageSizeInBase);
-                    const packagesToMove = Math.min(availableQty, packagesToMeetNeed);
+                if (unitsPerPackage > 0) {
+                    const packagesToMeetNeed = Math.ceil(needed / unitsPerPackage);
+                    const packagesToMove = Math.min(availableQtyInPackages, packagesToMeetNeed);
                     
                     if (packagesToMove > 0) {
                         suggestionList.push({
                             lot,
                             quantityToMove: packagesToMove
                         });
-                        needed -= packagesToMove * lotPackageSizeInBase;
+                        needed -= packagesToMove * unitsPerPackage;
                     }
                 }
             }
