@@ -132,8 +132,9 @@ function AnalysisTab() {
             let valueInBaseUnit = 0;
             const quantityInPackages = lot.quantity;
 
+            // Defines the hierarchy for stock calculation
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                 const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
+                 const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
                  if (secondaryUnitCategory !== baseProduct.category) {
                      throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
                  }
