@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, UnitCategory } from '@/types';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -92,23 +92,31 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         const quantityToMove = currentItem.quantity || 0;
         
         try {
-            if (suggestionResult.baseProduct.category === 'Unidade') {
-                return total + (quantityToMove * product.packageSize);
-            } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
-                if (secondaryUnitCategory !== suggestionResult.baseProduct.category) return total;
-                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
-                return total + (quantityToMove * valueOfOnePackageInBase);
-            } 
-            else if (product.category === suggestionResult.baseProduct.category) {
-                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, suggestionResult.baseProduct.unit, product.category);
-                 return total + (quantityToMove * valueOfOnePackageInBase);
+            let valueOfOnePackageInBase = 0;
+            // A lógica de conversão deve ser consistente com a da Análise de Reposição
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                 let secondaryUnitCategory: UnitCategory | undefined;
+                 for (const category in convertValue) {
+                    if (Object.keys(convertValue[category as UnitCategory]).includes(product.secondaryUnit)) {
+                        secondaryUnitCategory = category as UnitCategory;
+                        break;
+                    }
+                 }
+                if (!secondaryUnitCategory) return total;
+                valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
+
+            } else if (suggestionResult.baseProduct.category === 'Unidade') {
+                valueOfOnePackageInBase = product.packageSize;
             }
+            else {
+                valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, suggestionResult.baseProduct.unit, product.category);
+            }
+            
+            return total + (quantityToMove * valueOfOnePackageInBase);
+
         } catch {
             return total; // Ignore if conversion fails
         }
-
-        return total;
     }, 0);
   }, [watchedItems, lots, products, suggestionResult.baseProduct]);
 
