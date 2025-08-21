@@ -15,12 +15,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, ArrowRight } from 'lucide-react';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, units } from '@/lib/conversion';
 import { Label } from '@/components/ui/label';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, UnitCategory } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type UnitCategory } from '@/types';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -93,18 +93,16 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         
         try {
             let valueOfOnePackageInBase = 0;
-            // A lógica de conversão deve ser consistente com a da Análise de Reposição
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                  let secondaryUnitCategory: UnitCategory | undefined;
-                 for (const category in convertValue) {
-                    if (Object.keys(convertValue[category as UnitCategory]).includes(product.secondaryUnit)) {
+                 for (const category in units) {
+                    if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
                         secondaryUnitCategory = category as UnitCategory;
                         break;
                     }
                  }
                 if (!secondaryUnitCategory) return total;
                 valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
-
             } else if (suggestionResult.baseProduct.category === 'Unidade') {
                 valueOfOnePackageInBase = product.packageSize;
             }
