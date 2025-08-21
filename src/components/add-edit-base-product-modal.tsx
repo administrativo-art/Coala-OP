@@ -1,4 +1,5 @@
 
+
       
 "use client"
 
@@ -250,7 +251,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       name="initialCostPerUnit"
                       render={({ field }) => (
                           <FormItem>
-                              <FormLabel>Custo por Unidade (R$)</FormLabel>
+                              <FormLabel>Custo por Unidade (Fallback)</FormLabel>
                               <div className="relative">
                                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                   <Input

@@ -41,6 +41,7 @@ export type BaseProduct = {
   category: UnitCategory;
   classification?: string;
   initialCostPerUnit?: number;
+  lastEffectivePrice?: PriceHistoryEntry;
   consumptionMonths?: number;
 }
 

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -121,17 +122,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
-  
-  const latestPricesMap = useMemo(() => {
-    const map = new Map<string, PriceHistoryEntry>();
-    priceHistory.forEach(entry => {
-        if (!map.has(entry.productId) || new Date(entry.confirmedAt) > new Date(map.get(entry.productId)!.confirmedAt)) {
-            map.set(entry.productId, entry);
-        }
-    });
-    return map;
-  }, [priceHistory]);
-
 
   useEffect(() => {
     if (open) {
@@ -207,22 +197,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         try {
             let partialCost = 0;
             
-            // Find all "insumos" linked to this "produto base"
-            const linkedProducts = products.filter(p => p.baseProductId === baseProduct.id);
-            let costSource: number | undefined = undefined;
-
-            // Find the latest price among all linked products
-            let latestPriceEntry: PriceHistoryEntry | undefined = undefined;
-            for (const p of linkedProducts) {
-                const priceEntry = latestPricesMap.get(p.id);
-                if (priceEntry) {
-                    if (!latestPriceEntry || new Date(priceEntry.confirmedAt) > new Date(latestPriceEntry.confirmedAt)) {
-                        latestPriceEntry = priceEntry;
-                    }
-                }
-            }
-            
-            costSource = latestPriceEntry?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+            const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
             
             if (item.useDefault) {
                 if(costSource > 0) {
@@ -246,7 +221,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     });
 
     return { cmv: totalCmv, partialCosts: partials };
-  }, [watchedItems, baseProducts, products, latestPricesMap]);
+  }, [watchedItems, baseProducts]);
 
 
   const grossCost = useMemo(() => {
@@ -273,7 +248,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const handleAddItem = (baseProductId: string) => {
     const product = baseProducts.find(bp => bp.id === baseProductId);
     if (product) {
-        const costSource = product.initialCostPerUnit ?? 0;
+        const costSource = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
         append({ 
             baseProductId: product.id,
             quantity: 1,
@@ -441,17 +416,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
                             const useDefault = watchedItems[index].useDefault;
                             
-                            const linkedProducts = products.filter(p => p.baseProductId === baseProduct?.id);
-                            let latestPriceEntry: PriceHistoryEntry | undefined = undefined;
-                            for (const p of linkedProducts) {
-                                const priceEntry = latestPricesMap.get(p.id);
-                                if (priceEntry) {
-                                    if (!latestPriceEntry || new Date(priceEntry.confirmedAt) > new Date(latestPriceEntry.confirmedAt)) {
-                                        latestPriceEntry = priceEntry;
-                                    }
-                                }
-                            }
-                            const effectiveCost = latestPriceEntry?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
+                            const effectiveCost = baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
                             const hasDefaultCost = effectiveCost > 0;
 
                             return (

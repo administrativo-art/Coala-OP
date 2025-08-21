@@ -165,6 +165,9 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 confirmedAt: now,
             };
             batch.set(historyRef, historyEntry);
+
+            const baseProductRef = doc(db, "baseProducts", baseProductId);
+            batch.update(baseProductRef, { lastEffectivePrice: historyEntry });
             
             await batch.commit();
 

@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -96,19 +97,6 @@ export function BaseProductManagement() {
   const classificationMap = useMemo(() => {
     return new Map(classifications.map(c => [c.id, c.name]));
   }, [classifications]);
-
-  const latestPricesMap = useMemo(() => {
-    const map = new Map<string, number>(); // baseProductId -> pricePerUnit
-    const productToBaseMap = new Map(products.map(p => [p.id, p.baseProductId]));
-
-    priceHistory.forEach(entry => {
-        const baseId = productToBaseMap.get(entry.productId);
-        if (baseId && !map.has(baseId)) { // Since history is sorted desc, first one is the latest
-            map.set(baseId, entry.pricePerUnit);
-        }
-    });
-    return map;
-  }, [priceHistory, products]);
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -241,7 +229,7 @@ export function BaseProductManagement() {
                             ))
                         ) : filteredProducts.length > 0 ? (
                             filteredProducts.map(product => {
-                                const effectivePrice = latestPricesMap.get(product.id) ?? product.initialCostPerUnit ?? 0;
+                                const effectivePrice = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
                                 return (
                                     <TableRow key={product.id}>
                                         <TableCell>
