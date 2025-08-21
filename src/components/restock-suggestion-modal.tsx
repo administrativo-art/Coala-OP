@@ -92,8 +92,10 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
         const quantityToMove = currentItem.quantity || 0;
         
         try {
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category;
+            if (suggestionResult.baseProduct.category === 'Unidade') {
+                return total + (quantityToMove * product.packageSize);
+            } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
                 if (secondaryUnitCategory !== suggestionResult.baseProduct.category) return total;
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
                 return total + (quantityToMove * valueOfOnePackageInBase);
