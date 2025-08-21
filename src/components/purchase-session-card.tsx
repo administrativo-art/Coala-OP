@@ -75,20 +75,19 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         }
     
         try {
-            // Prioritize secondary unit for direct quantity info if it exists
+            // Case 1: Secondary unit is the most direct source of truth for quantity.
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, baseProduct.category);
-                return quantityInBaseUnit > 0 ? item.price / quantityInBaseUnit : null;
+                return item.price / product.secondaryUnitValue;
             }
-
-            // Handle cases where the base unit is 'Unidade'
+            
+            // Case 2: Base product is measured in 'Unidade'. The package size is the quantity.
             if (baseProduct.category === 'Unidade') {
-                 if (product.packageSize > 0) {
+                if (product.packageSize > 0) {
                     return item.price / product.packageSize;
                 }
             }
-    
-            // Fallback to standard conversion for other categories
+
+            // Case 3: Standard conversion for other matching categories (Volume, Massa).
             if (product.category === baseProduct.category) {
                 const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  if (quantityInBaseUnit > 0) {
