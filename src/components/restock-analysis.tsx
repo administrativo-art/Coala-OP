@@ -8,7 +8,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, units } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,7 +16,7 @@ import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
@@ -132,9 +132,17 @@ function AnalysisTab() {
             let valueInBaseUnit = 0;
             const quantityInPackages = lot.quantity;
 
-            // Defines the hierarchy for stock calculation
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                 const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
+                 let secondaryUnitCategory: UnitCategory | undefined;
+                 for (const category in units) {
+                    if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                        secondaryUnitCategory = category as UnitCategory;
+                        break;
+                    }
+                 }
+                if (!secondaryUnitCategory) {
+                    throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
+                }
                  if (secondaryUnitCategory !== baseProduct.category) {
                      throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
                  }
