@@ -69,35 +69,34 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const findPricePerUnit = (item: PurchaseItem): number | null => {
         const product = products.find(p => p.id === item.productId);
         const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-
+    
         if (!product || !baseProduct || !item.price || item.price <= 0) {
             return null;
         }
-
+    
         try {
-            // Prioritize secondary unit for direct quantity info
+            // Prioritize secondary unit for direct quantity info if it exists
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                // If the secondary unit is the same as the base product unit, the conversion is direct.
-                 if (product.secondaryUnit === baseProduct.unit) {
-                    return item.price / product.secondaryUnitValue;
-                 }
-                 // If units are different, attempt conversion. This relies on them being in the same category.
-                 const quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, baseProduct.category);
-                 if (quantityInBaseUnit > 0) {
-                    return item.price / quantityInBaseUnit;
-                 }
+                const quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, baseProduct.category);
+                return quantityInBaseUnit > 0 ? item.price / quantityInBaseUnit : null;
             }
 
-            // Fallback to package size conversion if categories match
-            if (product.category === baseProduct.category) {
-                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                if (quantityInBaseUnit > 0) {
-                    return item.price / quantityInBaseUnit;
+            // Handle cases where the base unit is 'Unidade'
+            if (baseProduct.category === 'Unidade') {
+                 if (product.packageSize > 0) {
+                    return item.price / product.packageSize;
                 }
             }
     
+            // Fallback to standard conversion for other categories
+            if (product.category === baseProduct.category) {
+                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
+                }
+            }
         } catch (e) {
-            console.error(`Error calculating price per unit for item ${item.id}:`, e);
+            console.error(`Error calculating price per unit for item ${item.id} (${product.baseName}):`, e);
             return null;
         }
     
