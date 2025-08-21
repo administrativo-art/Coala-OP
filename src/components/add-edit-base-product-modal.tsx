@@ -153,7 +153,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     const finalClassification = values.classification === 'none' ? '' : values.classification;
 
-    const dataPayload = {
+    const dataPayload: Partial<BaseProduct> = {
       name: values.name,
       classification: finalClassification,
       category: values.category,
@@ -166,7 +166,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     if (productToEdit) {
       updateBaseProduct({ ...productToEdit, ...dataPayload });
     } else {
-      addBaseProduct(dataPayload);
+      addBaseProduct(dataPayload as Omit<BaseProduct, 'id'>);
     }
     onOpenChange(false);
   };

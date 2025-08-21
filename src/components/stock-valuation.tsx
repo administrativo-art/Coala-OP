@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -50,18 +51,6 @@ export function StockValuation() {
     
     const [selectedKioskId, setSelectedKioskId] = useState<string>('');
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
-    
-    const latestPricesMap = useMemo(() => {
-        const map = new Map<string, number>();
-        // Price history is already sorted by date descending
-        priceHistory.forEach(entry => {
-            if (!map.has(entry.productId)) {
-                map.set(entry.productId, entry.pricePerUnit);
-            }
-        });
-        return map;
-    }, [priceHistory]);
-
 
     const valuedLots = useMemo((): LotWithValue[] => {
         if (!selectedKioskId || lotsLoading || baseProductsLoading || productsLoading || historyLoading) return [];
@@ -78,7 +67,7 @@ export function StockValuation() {
                 const baseProduct = baseProductMap.get(product.baseProductId);
                 if (!baseProduct) return null;
                 
-                const pricePerBaseUnit = latestPricesMap.get(product.id) ?? baseProduct.initialCostPerUnit ?? 0;
+                const pricePerBaseUnit = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
                 if(pricePerBaseUnit === 0) return null;
 
                 const packageSizeInBaseUnits = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
@@ -102,7 +91,7 @@ export function StockValuation() {
             .filter((item): item is LotWithValue => item !== null)
             .sort((a, b) => a.productName.localeCompare(b.productName));
 
-    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, getProductFullName, historyLoading, latestPricesMap]);
+    }, [selectedKioskId, lots, lotsLoading, baseProducts, baseProductsLoading, products, productsLoading, getProductFullName, historyLoading]);
     
     const summaryByBaseProduct = useMemo(() => {
         const summary: { [key: string]: { name: string; quantity: number; value: number; unit: string; } } = {};
