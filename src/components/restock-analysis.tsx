@@ -132,15 +132,15 @@ function AnalysisTab() {
             let valueInBaseUnit = 0;
             const quantityInPackages = lot.quantity;
 
-            if (baseProduct.category === 'Unidade') {
-                valueInBaseUnit = quantityInPackages * product.packageSize;
-            } else if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                 const secondaryUnitCategory = product.category === 'Embalagem' ? 'Unidade' : product.category;
                  if (secondaryUnitCategory !== baseProduct.category) {
                      throw new Error(`Cannot convert from secondary unit category ${secondaryUnitCategory} to ${baseProduct.category}.`);
                  }
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+            } else if (baseProduct.category === 'Unidade') {
+                valueInBaseUnit = quantityInPackages * product.packageSize;
             } else if (product.category === baseProduct.category) {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
