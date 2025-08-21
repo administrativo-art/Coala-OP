@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type RepositionActivity, type RepositionItem } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
@@ -62,6 +62,9 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       
       // Reserve stock in a transaction
       await runTransaction(db, async (transaction) => {
+        const lotRefsAndData: { lotRef: any, lotToMove: any, lotDoc: DocumentSnapshot }[] = [];
+
+        // 1. Read all documents first
         for (const item of data.items) {
           for (const lotToMove of item.suggestedLots) {
             const lotRef = doc(db, 'lots', lotToMove.lotId);
@@ -69,11 +72,16 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
             if (!lotDoc.exists()) {
               throw new Error(`Lot ${lotToMove.lotId} not found`);
             }
+            lotRefsAndData.push({ lotRef, lotToMove, lotDoc });
+          }
+        }
+
+        // 2. Perform all writes
+        for (const { lotRef, lotToMove, lotDoc } of lotRefsAndData) {
             const currentData = lotDoc.data();
             const currentReserved = currentData.reservedQuantity || 0;
             const newReserved = currentReserved + lotToMove.quantityToMove;
             transaction.update(lotRef, { reservedQuantity: newReserved });
-          }
         }
       });
 
