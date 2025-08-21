@@ -62,27 +62,32 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       
       // Reserve stock in a transaction
       await runTransaction(db, async (transaction) => {
-        const lotRefsAndData: { lotRef: any, lotToMove: any, lotDoc: DocumentSnapshot }[] = [];
+        const lotRefsAndData: { lotRef: any, lotToMove: any }[] = [];
 
-        // 1. Read all documents first
+        // 1. Prepare all document references
         for (const item of data.items) {
           for (const lotToMove of item.suggestedLots) {
             const lotRef = doc(db, 'lots', lotToMove.lotId);
-            const lotDoc = await transaction.get(lotRef);
-            if (!lotDoc.exists()) {
-              throw new Error(`Lot ${lotToMove.lotId} not found`);
-            }
-            lotRefsAndData.push({ lotRef, lotToMove, lotDoc });
+            lotRefsAndData.push({ lotRef, lotToMove });
           }
         }
 
-        // 2. Perform all writes
-        for (const { lotRef, lotToMove, lotDoc } of lotRefsAndData) {
-            const currentData = lotDoc.data();
-            const currentReserved = currentData.reservedQuantity || 0;
-            const newReserved = currentReserved + lotToMove.quantityToMove;
-            transaction.update(lotRef, { reservedQuantity: newReserved });
-        }
+        // 2. Read all documents first
+        const lotDocs = await Promise.all(
+          lotRefsAndData.map(item => transaction.get(item.lotRef))
+        );
+
+        // 3. Perform all writes
+        lotDocs.forEach((lotDoc, index) => {
+          if (!lotDoc.exists()) {
+            throw new Error(`Lot ${lotRefsAndData[index].lotToMove.lotId} not found`);
+          }
+          const currentData = lotDoc.data();
+          const currentReserved = currentData.reservedQuantity || 0;
+          const { lotRef, lotToMove } = lotRefsAndData[index];
+          const newReserved = currentReserved + lotToMove.quantityToMove;
+          transaction.update(lotRef, { reservedQuantity: newReserved });
+        });
       });
 
       return activityRef.id;
@@ -115,20 +120,35 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     
     try {
       // Un-reserve stock in a transaction
-       await runTransaction(db, async (transaction) => {
+      await runTransaction(db, async (transaction) => {
+        const lotRefsAndData: { lotRef: any, lotToMove: any }[] = [];
+        
+        // 1. Prepare all document references
         for (const item of activityToDelete.items) {
-          for (const lotToMove of item.suggestedLots) {
-            const lotRef = doc(db, 'lots', lotToMove.lotId);
-            const lotDoc = await transaction.get(lotRef);
+            for (const lotToMove of item.suggestedLots) {
+                const lotRef = doc(db, 'lots', lotToMove.lotId);
+                lotRefsAndData.push({ lotRef, lotToMove });
+            }
+        }
+        
+        // 2. Read all documents first
+        const lotDocs = await Promise.all(
+          lotRefsAndData.map(item => transaction.get(item.lotRef))
+        );
+
+        // 3. Perform all writes
+        lotDocs.forEach((lotDoc, index) => {
             if (lotDoc.exists()) {
                 const currentData = lotDoc.data();
                 const currentReserved = currentData.reservedQuantity || 0;
+                const { lotRef, lotToMove } = lotRefsAndData[index];
                 const newReserved = Math.max(0, currentReserved - lotToMove.quantityToMove);
                 transaction.update(lotRef, { reservedQuantity: newReserved });
             }
-          }
-        }
+        });
       });
+
+      // After transaction succeeds, delete the activity document
       await deleteDoc(doc(db, 'repositionActivities', activityId));
     } catch (error) {
       console.error("Error deleting reposition activity:", error);
@@ -144,19 +164,17 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         lotId: lot.lotId,
         productId: lot.productId,
         productName: lot.productName,
-        lotNumber: lot.lotId,
+        lotNumber: lot.lotId, // Assuming lotId is the unique identifier for the lot document
         quantityToMove: lot.receivedQuantity,
         fromKioskId: activity.kioskOriginId,
         fromKioskName: activity.kioskOriginName,
         toKioskId: activity.kioskDestinationId,
         toKioskName: activity.kioskDestinationName,
-        movedByUserId: user.id,
-        movedByUsername: user.username,
       }))
     ).filter(lot => lot.quantityToMove > 0);
     
     if (lotsToMove.length > 0) {
-      await moveMultipleLots(lotsToMove);
+      await moveMultipleLots(lotsToMove, user);
     }
     
     await updateRepositionActivity(activity.id, { status: 'Concluído' });
