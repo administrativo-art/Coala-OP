@@ -69,30 +69,31 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const findPricePerUnit = (item: PurchaseItem): number | null => {
         const product = products.find(p => p.id === item.productId);
         const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-    
+
         if (!product || !baseProduct || !item.price || item.price <= 0) {
             return null;
         }
-    
+
         try {
             // Prioritize secondary unit for direct quantity info
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                // If the secondary unit is the same as the base product unit, the conversion is direct.
                  if (product.secondaryUnit === baseProduct.unit) {
                     return item.price / product.secondaryUnitValue;
                  }
-                 // If units are not the same, it implies a conversion is needed, but secondaryUnit should be a direct mapping.
-                 // This logic might need refinement if complex secondary conversions are needed.
-                 // For now, assume if secondaryUnit is set, secondaryUnitValue is the quantity in `secondaryUnit`.
+                 // If units are different, attempt conversion. This relies on them being in the same category.
                  const quantityInBaseUnit = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, baseProduct.category);
                  if (quantityInBaseUnit > 0) {
                     return item.price / quantityInBaseUnit;
                  }
             }
-    
-            // Fallback to package size conversion
-            const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, baseProduct.category);
-            if (quantityInBaseUnit > 0) {
-                return item.price / quantityInBaseUnit;
+
+            // Fallback to package size conversion if categories match
+            if (product.category === baseProduct.category) {
+                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
+                }
             }
     
         } catch (e) {
@@ -147,11 +148,12 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 if (!item) continue;
                 
                 const product = products.find(p => p.id === item.productId);
-                if (!product?.baseProductId) continue;
+                const baseProductId = product?.baseProductId;
+                if (!baseProductId) continue;
                 
                 const pricePerUnit = findPricePerUnit(item);
                 if (pricePerUnit !== null) {
-                    await confirmPurchase(itemId, product.baseProductId, pricePerUnit);
+                    await confirmPurchase(itemId, baseProductId, pricePerUnit);
                     confirmedCount++;
                 }
             }
