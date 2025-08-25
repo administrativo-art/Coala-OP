@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
@@ -32,6 +32,7 @@ const auditLotSchema = z.object({
   lotId: z.string(),
   productId: z.string(),
   productName: z.string(),
+  lotNumber: z.string(),
   quantityToMove: z.number(),
   receivedQuantity: z.coerce.number().min(0, "A quantidade deve ser positiva."),
   receiptNotes: z.string().optional(),
@@ -77,7 +78,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
         productName: item.productName,
         suggestedLots: item.suggestedLots.map(lot => ({
           ...lot,
-          receivedQuantity: '' as any, // Start with an empty field
+          receivedQuantity: lot.quantityToMove,
           receiptNotes: '',
         })),
       })),
@@ -150,57 +151,50 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   };
   
   const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
-    const item = form.getValues().items[itemIndex];
-    const lot = item.suggestedLots[lotIndex];
-    const watchedReceivedQuantity = useWatch({
-      control: form.control,
-      name: `items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`
-    });
-
-    const hasDivergence = watchedReceivedQuantity !== '' && watchedReceivedQuantity !== undefined && parseFloat(watchedReceivedQuantity) !== lot.quantityToMove;
-
+    const lot = useWatch({ control: form.control, name: `items.${itemIndex}.suggestedLots.${lotIndex}` });
+  
     return (
-        <>
-            <TableRow>
-                <TableCell>
-                <p className="font-medium">{lot.productName}</p>
-                <p className="text-xs text-muted-foreground">Lote: {lot.lotId.slice(-8)}</p>
-                </TableCell>
-                <TableCell className="text-center">{lot.quantityToMove}</TableCell>
-                <TableCell>
+      <TableRow>
+        <TableCell colSpan={3}>
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2">
+            <div>
+              <p className="font-medium">{lot.productName}</p>
+              <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
+            </div>
+            <div className="text-center">
+              <Label className="text-xs text-muted-foreground">Enviado</Label>
+              <p className="font-bold text-lg">{lot.quantityToMove}</p>
+            </div>
+             <FormField
+                control={form.control}
+                name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
+                render={({ field }) => (
+                <FormItem className="w-24">
+                    <FormLabel className="text-xs">Recebido</FormLabel>
+                    <FormControl>
+                    <Input type="number" {...field} className="text-center" placeholder="0" />
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
+                )}
+            />
+          </div>
+           <div className="mt-2">
                 <FormField
                     control={form.control}
-                    name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
+                    name={`items.${itemIndex}.suggestedLots.${lotIndex}.receiptNotes`}
                     render={({ field }) => (
                     <FormItem>
                         <FormControl>
-                        <Input type="number" {...field} className="text-center" placeholder="0" />
+                        <Textarea placeholder="Observações de recebimento (opcional)" {...field} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
                 />
-                </TableCell>
-            </TableRow>
-            {hasDivergence && (
-                <TableRow>
-                    <TableCell colSpan={3}>
-                         <FormField
-                            control={form.control}
-                            name={`items.${itemIndex}.suggestedLots.${lotIndex}.receiptNotes`}
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                <Textarea placeholder="Descreva a divergência aqui (ex: 1 item quebrado, 1 faltando...)" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                    </TableCell>
-                </TableRow>
-            )}
-        </>
+            </div>
+        </TableCell>
+      </TableRow>
     )
   }
 
@@ -223,18 +217,11 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                     <div key={item.id} className="p-4 border rounded-lg">
                         <h3 className="font-semibold text-lg mb-2">{item.productName}</h3>
                         <Table>
-                        <TableHeader>
-                            <TableRow>
-                            <TableHead>Lote</TableHead>
-                            <TableHead className="text-center w-[120px]">Qtd. enviada</TableHead>
-                            <TableHead className="text-center w-[120px]">Qtd. recebida</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                          <TableBody>
                             {item.suggestedLots.map((lot, lotIndex) => (
-                            <LotRow key={lot.lotId} itemIndex={itemIndex} lotIndex={lotIndex} />
+                              <LotRow key={lot.lotId} itemIndex={itemIndex} lotIndex={lotIndex} />
                             ))}
-                        </TableBody>
+                          </TableBody>
                         </Table>
                     </div>
                     ))}
@@ -247,7 +234,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                             canvasProps={{ className: "w-full h-[150px]" }}
                             />
                         </div>
-                        <Button variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
+                        <Button type="button" variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
                             <Eraser className="mr-1 h-3 w-3" /> Limpar
                         </Button>
                     </div>
