@@ -47,45 +47,47 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
 
     const today = format(new Date(), 'yyyy-MM-dd');
     const counterRef = doc(db, 'counters', `returnRequests_${today}`);
+    const newRequestRef = doc(collection(db, 'returnRequests'));
 
     try {
-        const newNumero = await runTransaction(db, async (transaction) => {
+        await runTransaction(db, async (transaction) => {
             const counterDoc = await transaction.get(counterRef);
             const newCount = (counterDoc.data()?.count || 0) + 1;
-            transaction.set(counterRef, { count: newCount }, { merge: true });
             
             const prefix = data.tipo === 'devolucao' ? 'DEV' : 'BON';
             const dateStr = today.replace(/-/g, '');
             const sequence = newCount.toString().padStart(4, '0');
-            return `${prefix}-${dateStr}-${sequence}`;
+            const newNumero = `${prefix}-${dateStr}-${sequence}`;
+
+            const now = new Date();
+            const dataPrevisaoRetorno = addDays(now, 45);
+
+            const newRequest: Omit<ReturnRequest, 'id'> = {
+                ...data,
+                numero: newNumero,
+                insumoNome: getProductFullName(product),
+                status: 'em_andamento',
+                dataPrevisaoRetorno: dataPrevisaoRetorno.toISOString(),
+                historico: [{
+                    statusAnterior: 'em_andamento',
+                    statusNovo: 'em_andamento',
+                    changedBy: { userId: user.id, username: user.username },
+                    changedAt: now.toISOString(),
+                    detalhes: "Chamado criado."
+                }],
+                checklist: {},
+                createdAt: now.toISOString(),
+                updatedAt: now.toISOString(),
+                createdBy: { userId: user.id, username: user.username },
+            };
+            
+            transaction.set(newRequestRef, newRequest);
+            transaction.set(counterRef, { count: newCount }, { merge: true });
         });
-
-        const now = new Date();
-        const dataPrevisaoRetorno = addDays(now, 45);
-
-        const newRequest: Omit<ReturnRequest, 'id'> = {
-            ...data,
-            numero: newNumero,
-            insumoNome: getProductFullName(product),
-            status: 'em_andamento',
-            dataPrevisaoRetorno: dataPrevisaoRetorno.toISOString(),
-            historico: [{
-                statusAnterior: 'em_andamento',
-                statusNovo: 'em_andamento',
-                changedBy: { userId: user.id, username: user.username },
-                changedAt: now.toISOString(),
-                detalhes: "Chamado criado."
-            }],
-            checklist: {},
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString(),
-            createdBy: { userId: user.id, username: user.username },
-        };
-        
-        await addDoc(collection(db, "returnRequests"), newRequest);
 
     } catch (error) {
         console.error("Error creating return request:", error);
+        throw error;
     }
   }, [user, products, getProductFullName]);
   
