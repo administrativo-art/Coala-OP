@@ -141,7 +141,7 @@ export function RepositionManagement() {
                                                             ) : (
                                                                 `Enviando: ${sentQty}`
                                                             )}
-                                                            <span className="text-muted-foreground"> x {lot.productName} (Lote: {lot.lotId.slice(-6)})</span>
+                                                            <span className="text-muted-foreground"> x {lot.productName} (Lote: {lot.lotNumber})</span>
                                                             {hasDivergence && lot.receiptNotes && (
                                                                 <p className="text-xs text-destructive pl-4 border-l-2 border-destructive ml-1 mt-1 italic">"{lot.receiptNotes}"</p>
                                                             )}

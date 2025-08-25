@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -164,7 +165,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         lotId: lot.lotId,
         productId: lot.productId,
         productName: lot.productName,
-        lotNumber: lot.lotId, // Assuming lotId is the unique identifier for the lot document
+        lotNumber: lot.lotNumber,
         quantityToMove: lot.receivedQuantity,
         fromKioskId: activity.kioskOriginId,
         fromKioskName: activity.kioskOriginName,
