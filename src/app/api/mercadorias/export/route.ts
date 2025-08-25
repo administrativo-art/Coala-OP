@@ -42,14 +42,12 @@ export async function GET() {
         })
         .filter((item): item is string => item !== null);
 
-      const classificationNames = (sim.categoryIds || [])
-        .map(id => categoryMap.get(id)?.name)
-        .filter(Boolean);
+      const lineName = sim.lineId ? categoryMap.get(sim.lineId)?.name || '' : '';
 
       return {
         name: sim.name,
         ingredients: compositionItems.join('|'),
-        classifications: classificationNames.join('|'),
+        classifications: lineName,
       };
     });
 
