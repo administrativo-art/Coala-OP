@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type UnitCategory } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type UnitCategory, type RepositionSuggestedLot } from '@/types';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -132,6 +132,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
           lotId: item.lotId,
           productId: lot.productId,
           productName: getProductFullName(product),
+          lotNumber: lot.lotNumber,
           quantityToMove: item.quantity,
         };
       })
