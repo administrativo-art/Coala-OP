@@ -135,45 +135,7 @@ export function PricingSimulator() {
     };
 
     const handleExportFichaTecnicaSimplificadaCsv = () => {
-        const csvData = simulations.map(sim => {
-            const compositionItems = simulationItems
-                .filter(item => item.simulationId === sim.id)
-                .map(item => {
-                    const baseProduct = baseProductMap.get(item.baseProductId);
-                    if (!baseProduct) return null;
-
-                    const name = baseProduct.name;
-                    const quantity = item.quantity;
-                    const unit = item.overrideUnit || baseProduct.unit;
-                    
-                    return `${name}:${quantity}:${unit}`;
-                })
-                .filter((item): item is string => item !== null);
-
-            const classificationNames = (sim.categoryIds || [])
-                .map(id => categoryMap.get(id)?.name)
-                .filter(Boolean);
-
-            return {
-                name: sim.name,
-                ingredients: compositionItems.join('|'),
-                classifications: classificationNames.join('|'),
-            };
-        });
-
-        const csv = Papa.unparse(csvData, {
-            header: true,
-            quotes: true,
-        });
-
-        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", "fichas_tecnicas_simplificadas.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.open('/api/mercadorias/export', '_blank');
     };
 
     const handleExportPdf = () => {
