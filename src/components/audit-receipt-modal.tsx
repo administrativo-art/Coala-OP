@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Loader2, Send, Eraser, Signature } from 'lucide-react';
@@ -186,7 +186,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                     render={({ field }) => (
                     <FormItem>
                         <FormControl>
-                        <Textarea placeholder="Observações de recebimento (opcional)" {...field} />
+                        <Textarea placeholder="Observações de recebimento (obrigatório se houver divergência)" {...field} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
