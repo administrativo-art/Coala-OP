@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
+import { useProducts } from '@/hooks/use-products';
 import { type RepositionActivity, type SignatureData } from '@/types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -34,6 +35,7 @@ interface DispatchModalProps {
 export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const { updateRepositionActivity } = useReposition();
     const { user } = useAuth();
+    const { products } = useProducts();
     
     const [currentStep, setCurrentStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
@@ -64,15 +66,31 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         doc.text(`Origem: ${activity.kioskOriginName}`, 14, 44);
         doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 50);
 
-        const tableColumn = ["Produto", "Lote", "Quantidade"];
+        const tableColumn = ["Produto", "Lote", "Qtd. Pacotes", "Qtd. Caixas"];
         const tableRows: any[][] = [];
 
         activity.items.forEach(item => {
             item.suggestedLots.forEach(lot => {
+                const product = products.find(p => p.id === lot.productId);
+                let boxQuantityText = '-';
+                if (product && product.multiplo_caixa && product.multiplo_caixa > 0) {
+                    const boxes = Math.floor(lot.quantityToMove / product.multiplo_caixa);
+                    const units = lot.quantityToMove % product.multiplo_caixa;
+                    if (boxes > 0) {
+                        boxQuantityText = `${boxes} ${product.rotulo_caixa || 'cx'}(s)`;
+                        if (units > 0) {
+                            boxQuantityText += ` + ${units} un`;
+                        }
+                    } else {
+                        boxQuantityText = `${units} un`;
+                    }
+                }
+
                 tableRows.push([
                     lot.productName,
-                    lot.lotId.slice(-8),
-                    lot.quantityToMove
+                    lot.lotNumber, // Usar o número do lote
+                    lot.quantityToMove,
+                    boxQuantityText
                 ]);
             });
         });
@@ -181,7 +199,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                           {activity.items.flatMap(item => item.suggestedLots.map(lot => (
                               <TableRow key={lot.lotId}>
                                   <TableCell className="font-medium">{lot.productName}</TableCell>
-                                  <TableCell>{lot.lotId.slice(-8)}</TableCell>
+                                  <TableCell>{lot.lotNumber}</TableCell>
                                   <TableCell className="text-right font-bold">{lot.quantityToMove}</TableCell>
                               </TableRow>
                           )))}
