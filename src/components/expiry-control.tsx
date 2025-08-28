@@ -436,25 +436,6 @@ function ExpiryControlContent() {
     <>
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
         <div className='p-6 space-y-4'>
-            <div className="flex flex-wrap gap-2 justify-between items-center">
-                <Link href="/dashboard/stock">
-                    <Button variant="outline">
-                        <ArrowRight className="mr-2" />
-                        Voltar para gestão de estoque
-                    </Button>
-                </Link>
-                <div className="flex flex-wrap gap-2">
-                    <Link href="/dashboard/stock/write-down">
-                        <Button variant="outline"><MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa</Button>
-                    </Link>
-                    <Link href="/dashboard/stock/transfer">
-                        <Button variant="outline"><Truck className="mr-2 h-4 w-4" /> Realizar Transferência</Button>
-                    </Link>
-                     <Button variant="outline" onClick={() => setLotForHistory(null)}>
-                        <History className="mr-2 h-4 w-4"/> Consultar Histórico
-                     </Button>
-                </div>
-            </div>
             <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -540,7 +521,9 @@ function ExpiryControlContent() {
         lots={lots}
       />
       
-      <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
+      {lotForHistory && (
+        <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
+      )}
 
       {lotToMove && (
         <MoveStockModal 
