@@ -243,8 +243,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
         </div>
         
         <div className="flex-grow overflow-hidden border rounded-lg flex flex-col">
-          <div className="overflow-auto flex-1">
-            <ScrollArea className="h-full">
+          <ScrollArea className="flex-1">
               {loading ? (
                   <div className="p-4"><Skeleton className="h-64 w-full" /></div>
               ) : (
@@ -304,8 +303,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                       </TableBody>
                   </Table>
               )}
-            </ScrollArea>
-          </div>
+          </ScrollArea>
         </div>
         <DialogFooter className="pt-4 border-t shrink-0 flex-row justify-between w-full">
             <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>
