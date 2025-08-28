@@ -19,6 +19,7 @@ import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useProducts } from '@/hooks/use-products';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, getMonth, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface FinancialPeriodAnalysisModalProps {
     open: boolean;
@@ -107,18 +108,16 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
             });
 
             // For now, EI and EF are simplified. A full historical calculation is needed for accuracy.
-            const EI = 0;
-            const EF = 0;
+            const EI = 0; // Simplified
+            const EF = 0; // Simplified
 
             const EC = movementsInPeriodForProduct.filter(h => h.type === 'ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const TI = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const TO = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_SAIDA' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const AJ_plus = movementsInPeriodForProduct.filter(h => h.type === 'ENTRADA_CORRECAO' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const vendas = movementsInPeriodForProduct.filter(h => h.type === 'SAIDA_CONSUMO' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-
-            // Consumo Teórico = EI + Compras + Transferências de Entrada - Transferências de Saída - EI + Ajustes Positivos - Ajustes Negativos - Vendas
-            const consumoTeorico = EI + EC + TI + AJ_plus - TO - EF - AJ_minus - vendas;
+            
+            const consumoTeorico = (EI + EC + TI + AJ_plus) - (TO + EF + AJ_minus);
             
             if (consumoTeorico !== 0) {
                  results.push({
@@ -196,7 +195,23 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Produto</TableHead>
-                                    <TableHead className="text-right">Consumo Teórico</TableHead>
+                                    <TableHead className="text-right">
+                                        <div className="flex items-center justify-end gap-1">
+                                            Consumo Teórico
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="max-w-xs text-center">
+                                                          (Estoque Inicial + Entradas por Compra + Transferências Recebidas + Ajustes de Entrada) - (Transferências Enviadas + Estoque Final + Ajustes de Saída)
+                                                        </p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
