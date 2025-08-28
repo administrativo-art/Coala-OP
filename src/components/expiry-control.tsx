@@ -7,13 +7,16 @@ import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import Papa from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -290,6 +293,77 @@ function ExpiryControlContent() {
 
   const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
 
+  const handleExportPdf = () => {
+    const doc = new jsPDF();
+    const kioskName = selectedKioskId === 'all' ? 'Todos os Quiosques' : kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+
+    doc.setFontSize(18);
+    doc.text(`Relatório de Estoque - ${kioskName}`, 14, 22);
+
+    groupedData.forEach(baseGroup => {
+        autoTable(doc, {
+            head: [[{ content: baseGroup.name, colSpan: 5, styles: { fontStyle: 'bold', fillColor: '#f4f4f5' } }]],
+            startY: (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 2 : 30,
+            theme: 'grid'
+        });
+
+        baseGroup.brands.forEach(brandGroup => {
+            brandGroup.products.forEach(productGroup => {
+                const productRows = productGroup.lots.map(lot => [
+                    getProductFullName(productGroup.product),
+                    lot.lotNumber,
+                    lot.quantity,
+                    lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A',
+                    selectedKioskId === 'all' ? (kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A') : locations.find(l => l.id === lot.locationId)?.name || 'N/A',
+                ]);
+
+                autoTable(doc, {
+                    head: [['Insumo', 'Lote', 'Qtd', 'Validade', 'Localização']],
+                    body: productRows,
+                    startY: (doc as any).lastAutoTable.finalY,
+                    theme: 'striped',
+                    headStyles: { fillColor: '#e4e4e7' }
+                });
+            });
+        });
+    });
+
+    doc.save(`estoque_${kioskName.replace(/\s/g, '_')}.pdf`);
+  };
+  
+  const handleExportCsv = () => {
+    const csvData: any[] = [];
+    groupedData.forEach(baseGroup => {
+        baseGroup.brands.forEach(brandGroup => {
+            brandGroup.products.forEach(productGroup => {
+                productGroup.lots.forEach(lot => {
+                    csvData.push({
+                        "Produto Base": baseGroup.name,
+                        "Insumo": getProductFullName(productGroup.product),
+                        "Marca": productGroup.product.brand || 'N/A',
+                        "Lote": lot.lotNumber,
+                        "Quantidade": lot.quantity,
+                        "Validade": lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A',
+                        "Quiosque": kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A',
+                        "Localizacao": locations.find(l => l.id === lot.locationId)?.name || 'N/A',
+                    });
+                });
+            });
+        });
+    });
+
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const kioskName = selectedKioskId === 'all' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKioskId)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
+    link.setAttribute("href", url);
+    link.setAttribute("download", `estoque_${kioskName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const renderContent = () => {
     if (loading || productsLoading || locationsLoading || baseProductsLoading) {
@@ -504,6 +578,18 @@ function ExpiryControlContent() {
                         {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full sm:w-auto" disabled={groupedData.length === 0}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Exportar
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </div>
         <div className="px-6 pb-6 pt-0 flex-1 overflow-hidden">
