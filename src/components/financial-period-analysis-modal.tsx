@@ -66,6 +66,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     }, [kiosks]);
 
     const availableYears = useMemo(() => {
+        if (!movementHistory || movementHistory.length === 0) return [];
         const years = new Set(movementHistory.map(h => {
             if (!h.timestamp) return null;
             const date = parseISO(h.timestamp);
@@ -75,7 +76,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     }, [movementHistory]);
 
     const availableMonths = useMemo(() => {
-        if (!period.year) return [];
+        if (!period.year || !movementHistory || movementHistory.length === 0) return [];
         const months = new Set(movementHistory
             .filter(h => {
                 if (!h.timestamp) return false;
@@ -95,7 +96,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
         setIsLoading(true);
         setAnalysisResult(null);
 
-        await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 50)); 
 
         const startDate = startOfMonth(new Date(parseInt(period.year), parseInt(period.month) - 1));
         const endDate = endOfMonth(startDate);
@@ -103,40 +104,28 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
         const results: AnalysisResult[] = [];
         
         for (const bp of baseProducts) {
-            const getStockAtDate = (date: Date) => {
-                let stock = 0;
-                lots.filter(l => l.productId && products.find(p => p.id === l.productId)?.baseProductId === bp.id && l.kioskId === kioskId)
-                    .forEach(l => stock += l.quantity); // This is a simplification. Needs conversion logic.
-                
-                movementHistory
-                    .filter(h => {
-                        if (!h.timestamp) return false;
-                        return isWithinInterval(parseISO(h.timestamp), { start: date, end: new Date() }) && (h.fromKioskId === kioskId || h.toKioskId === kioskId);
-                    })
-                    .sort((a, b) => parseISO(b.timestamp!).getTime() - parseISO(a.timestamp!).getTime())
-                    .forEach(h => {
-                        if (h.fromKioskId === kioskId) stock += h.quantityChange;
-                        if (h.toKioskId === kioskId) stock -= h.quantityChange;
-                    });
-                return stock;
-            };
+            const productIdsForBase = products
+                .filter(p => p.baseProductId === bp.id)
+                .map(p => p.id);
 
-            const movementsInPeriod = movementHistory.filter(h => {
-                if (!h.timestamp) return false;
+            const movementsInPeriodForProduct = movementHistory.filter(h => {
+                if (!h.timestamp || !productIdsForBase.includes(h.productId)) return false;
+
                 const movementDate = parseISO(h.timestamp);
                 return isWithinInterval(movementDate, { start: startDate, end: endDate }) &&
                        (h.fromKioskId === kioskId || h.toKioskId === kioskId);
             });
-            
-            const EI = 0; // Simplified
-            const EF = 0; // Simplified
 
-            const EC = movementsInPeriod.filter(h => h.type === 'ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const TI = movementsInPeriod.filter(h => h.type === 'TRANSFERENCIA_ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const TO = movementsInPeriod.filter(h => h.type === 'TRANSFERENCIA_SAIDA' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const AJ_plus = movementsInPeriod.filter(h => h.type === 'ENTRADA_CORRECAO' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const AJ_minus = movementsInPeriod.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const vendas = movementsInPeriod.filter(h => h.type === 'SAIDA_CONSUMO' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            // For now, EI and EF are simplified. A full historical calculation is needed for accuracy.
+            const EI = 0;
+            const EF = 0;
+
+            const EC = movementsInPeriodForProduct.filter(h => h.type === 'ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const TI = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const TO = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_SAIDA' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const AJ_plus = movementsInPeriodForProduct.filter(h => h.type === 'ENTRADA_CORRECAO' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const vendas = movementsInPeriodForProduct.filter(h => h.type === 'SAIDA_CONSUMO' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
 
             const consumoTeorico = EI + EC + TI - TO - EF + AJ_plus - AJ_minus;
             const variacao = consumoTeorico - vendas;
