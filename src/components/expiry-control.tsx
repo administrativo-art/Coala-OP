@@ -434,13 +434,7 @@ function ExpiryControlContent() {
   return (
     <>
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
-        <div className='p-6 border-b'>
-          <CardTitle className="font-headline flex items-center gap-2">
-            Controle de estoque
-          </CardTitle>
-          <CardDescription>Gerencie os lotes, vencimentos, transferências e reposições do seu estoque.</CardDescription>
-        </div>
-        <div className="p-6 space-y-4">
+        <div className='p-6 space-y-4'>
             <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -511,10 +505,8 @@ function ExpiryControlContent() {
                 </Select>
             </div>
         </div>
-        <div className="p-6 pt-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full">
+        <div className="px-6 pb-6 pt-0 flex-1 overflow-hidden">
                 {renderContent()}
-            </ScrollArea>
         </div>
       </div>
       

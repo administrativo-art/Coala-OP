@@ -47,8 +47,16 @@ function InventoryControlContent() {
             </div>
             
             <Dialog open={isStockModalOpen} onOpenChange={setIsStockModalOpen}>
-                <DialogContent className="max-w-7xl h-[95vh]">
-                    <ExpiryControl />
+                <DialogContent className="max-w-7xl h-[95vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Consulta de Estoque</DialogTitle>
+                         <DialogDescription>
+                           Visualize, adicione e gerencie todos os lotes do seu estoque.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-auto -mx-6 px-6">
+                        <ExpiryControl />
+                    </div>
                 </DialogContent>
             </Dialog>
 
