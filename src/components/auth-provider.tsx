@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
@@ -90,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
             kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
             predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
-            forms: { ...defaultGuestPermissions.forms, ...profilePermissions?.forms },
             stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profilePermissions?.stockAnalysis },
             consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
             returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
@@ -99,9 +97,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             stockCount: { ...defaultGuestPermissions.stockCount, ...profilePermissions?.stockCount },
             itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
             pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
+            reports: { ...defaultGuestPermissions.reports, ...profilePermissions?.reports },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
             audit: { ...defaultGuestPermissions.audit, ...profilePermissions?.audit },
-            authorBoardDiary: { ...defaultGuestPermissions.authorBoardDiary, ...profilePermissions?.authorBoardDiary },
+            tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

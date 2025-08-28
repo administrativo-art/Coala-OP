@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, FileText, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -31,7 +31,6 @@ const permissionsSchema = z.object({
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-    forms: z.object({ manage: z.boolean(), fill: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
@@ -44,7 +43,6 @@ const permissionsSchema = z.object({
     help: z.object({ view: z.boolean() }),
     tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
     audit: z.object({ start: z.boolean(), approve: z.boolean() }),
-    authorBoardDiary: z.object({ create: z.boolean(), viewAll: z.boolean(), validate: z.boolean() }),
 });
 
 const profileSchema = z.object({
@@ -98,7 +96,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       users: { ...defaultGuestPermissions.users, ...profile.permissions?.users },
       kiosks: { ...defaultGuestPermissions.kiosks, ...profile.permissions?.kiosks },
       predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profile.permissions?.predefinedLists },
-      forms: { ...defaultGuestPermissions.forms, ...profile.permissions?.forms },
       stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profile.permissions?.stockAnalysis },
       consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profile.permissions?.consumptionAnalysis },
       returns: { ...defaultGuestPermissions.returns, ...profile.permissions?.returns },
@@ -109,7 +106,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       pricing: { ...defaultGuestPermissions.pricing, ...profile.permissions?.pricing },
       reports: { ...defaultGuestPermissions.reports, ...profile.permissions?.reports },
       audit: { ...defaultGuestPermissions.audit, ...profile.permissions?.audit },
-      authorBoardDiary: { ...defaultGuestPermissions.authorBoardDiary, ...profile.permissions?.authorBoardDiary },
     };
 
     form.reset({
@@ -185,15 +181,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['authorBoardDiary', 'pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'forms', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests', 'reports']} className="w-full">
-                            <AccordionItem value="authorBoardDiary">
-                                <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Diário Gerencial</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.authorBoardDiary.create", "Criar/Editar diário", "Permite criar e editar os próprios registros no diário gerencial.")}
-                                    {renderPermissionSwitch("permissions.authorBoardDiary.viewAll", "Visualizar todos", "Permite visualizar os diários de todos os outros usuários.")}
-                                    {renderPermissionSwitch("permissions.authorBoardDiary.validate", "Validar diários", "Permite aprovar ou rejeitar os registros enviados por outros.")}
-                                </AccordionContent>
-                            </AccordionItem>
+                            <Accordion type="multiple" defaultValue={['reports', 'pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests']} className="w-full">
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e preço</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -284,15 +272,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.predefinedLists.add", "Criar listas", "Permite que o usuário crie novas listas de conversão.")}
                                     {renderPermissionSwitch("permissions.predefinedLists.edit", "Editar listas", "Permite que o usuário edite nomes e itens de listas existentes.")}
                                     {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir listas", "Permite que o usuário remova listas de conversão predefinida.")}
-                                </AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="forms">
-                                <AccordionTrigger className="text-lg font-semibold"><FileText className="mr-2 h-5 w-5" /> Formulários</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.forms.manage", "Gerenciar modelos", "Permite criar, editar e excluir modelos de formulário.")}
-                                    {renderPermissionSwitch("permissions.forms.fill", "Preencher formulários", "Permite preencher e enviar formulários.")}
-                                    {renderPermissionSwitch("permissions.forms.viewHistory", "Ver histórico", "Permite visualizar o histórico de formulários enviados.")}
-                                    {renderPermissionSwitch("permissions.forms.deleteHistory", "Excluir histórico", "Permite excluir envios de formulários do histórico.")}
                                 </AccordionContent>
                             </AccordionItem>
                             <AccordionItem value="kiosks">
