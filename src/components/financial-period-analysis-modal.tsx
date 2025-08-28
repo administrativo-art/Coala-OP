@@ -17,7 +17,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, getMonth, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface FinancialPeriodAnalysisModalProps {
@@ -48,7 +48,7 @@ const formatNumber = (value: number) => {
 export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPeriodAnalysisModalProps) {
     const { user } = useAuth();
     const { kiosks } = useKiosks();
-    const { baseProducts } = useBaseProducts();
+    const { baseProducts, products } = useBaseProducts();
     const { history: movementHistory, loading: historyLoading } = useMovementHistory();
     const { lots, loading: lotsLoading } = useExpiryProducts();
 
@@ -66,14 +66,22 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     }, [kiosks]);
 
     const availableYears = useMemo(() => {
-        const years = new Set(movementHistory.map(h => format(parseISO(h.timestamp), 'yyyy')));
-        return Array.from(years).sort((a, b) => b.localeCompare(a));
+        const years = new Set(movementHistory.map(h => {
+            if (!h.timestamp) return null;
+            const date = parseISO(h.timestamp);
+            return isValid(date) ? format(date, 'yyyy') : null;
+        }).filter(Boolean));
+        return Array.from(years as Set<string>).sort((a, b) => b.localeCompare(a));
     }, [movementHistory]);
 
     const availableMonths = useMemo(() => {
         if (!period.year) return [];
         const months = new Set(movementHistory
-            .filter(h => format(parseISO(h.timestamp), 'yyyy') === period.year)
+            .filter(h => {
+                if (!h.timestamp) return false;
+                const date = parseISO(h.timestamp);
+                return isValid(date) && format(date, 'yyyy') === period.year;
+            })
             .map(h => getMonth(parseISO(h.timestamp)))
         );
         return Array.from(months)
@@ -101,8 +109,11 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                     .forEach(l => stock += l.quantity); // This is a simplification. Needs conversion logic.
                 
                 movementHistory
-                    .filter(h => isAfter(parseISO(h.timestamp), date) && (h.fromKioskId === kioskId || h.toKioskId === kioskId))
-                    .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime())
+                    .filter(h => {
+                        if (!h.timestamp) return false;
+                        return isWithinInterval(parseISO(h.timestamp), { start: date, end: new Date() }) && (h.fromKioskId === kioskId || h.toKioskId === kioskId);
+                    })
+                    .sort((a, b) => parseISO(b.timestamp!).getTime() - parseISO(a.timestamp!).getTime())
                     .forEach(h => {
                         if (h.fromKioskId === kioskId) stock += h.quantityChange;
                         if (h.toKioskId === kioskId) stock -= h.quantityChange;
@@ -111,6 +122,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
             };
 
             const movementsInPeriod = movementHistory.filter(h => {
+                if (!h.timestamp) return false;
                 const movementDate = parseISO(h.timestamp);
                 return isWithinInterval(movementDate, { start: startDate, end: endDate }) &&
                        (h.fromKioskId === kioskId || h.toKioskId === kioskId);
@@ -147,7 +159,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                 });
             }
         }
-        setAnalysisResult(results);
+        setAnalysisResult(results.sort((a, b) => Math.abs(b.variacao) - Math.abs(a.variacao)));
         setIsLoading(false);
     };
 
