@@ -6,13 +6,14 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -435,10 +436,29 @@ function ExpiryControlContent() {
     <>
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
         <div className='p-6 space-y-4'>
+            <div className="flex flex-wrap gap-2 justify-between items-center">
+                <Link href="/dashboard/stock">
+                    <Button variant="outline">
+                        <ArrowRight className="mr-2" />
+                        Voltar para gestão de estoque
+                    </Button>
+                </Link>
+                <div className="flex flex-wrap gap-2">
+                    <Link href="/dashboard/stock/write-down">
+                        <Button variant="outline"><MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa</Button>
+                    </Link>
+                    <Link href="/dashboard/stock/transfer">
+                        <Button variant="outline"><Truck className="mr-2 h-4 w-4" /> Realizar Transferência</Button>
+                    </Link>
+                     <Button variant="outline" onClick={() => setLotForHistory(null)}>
+                        <History className="mr-2 h-4 w-4"/> Consultar Histórico
+                     </Button>
+                </div>
+            </div>
             <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                    placeholder="Buscar por insumo base, produto, lote, código..."
+                    placeholder="Buscar por insumo base, produto, lote, cód. de barras..."
                     className="pl-10 pr-12"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -520,9 +540,7 @@ function ExpiryControlContent() {
         lots={lots}
       />
       
-      {lotForHistory && (
-          <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
-      )}
+      <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
 
       {lotToMove && (
         <MoveStockModal 
