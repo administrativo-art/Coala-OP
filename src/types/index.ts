@@ -253,15 +253,13 @@ export type PermissionSet = {
     users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
     kiosks: { add: boolean; delete: boolean; };
     predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
-    stockAnalysis: { upload: boolean; configure: boolean; viewHistory: boolean; deleteHistory: boolean; };
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
     team: { manage: boolean, view: boolean };
-    purchasing: { suggest: boolean; approve: boolean; viewHistory: boolean; deleteHistory: boolean; };
+    purchasing: { addPrice: boolean; approve: boolean; viewHistory: boolean; };
     stockCount: { perform: boolean; approve: boolean; };
-    itemRequests: { manage: boolean; };
+    itemRequests: { add: boolean; approve: boolean; };
     pricing: { simulate: boolean; manageParameters: boolean; };
-    reports: { view: boolean; };
     help: { view: boolean; };
     tasks: { view: boolean, manage: boolean; };
     audit: { start: boolean; approve: boolean; };
@@ -554,15 +552,13 @@ export const defaultGuestPermissions: PermissionSet = {
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
-    stockAnalysis: { upload: false, configure: false, viewHistory: false, deleteHistory: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     returns: { add: false, updateStatus: false, delete: false },
-    team: { manage: false, view: false },
-    purchasing: { suggest: false, approve: false, viewHistory: false, deleteHistory: false },
-    stockCount: { perform: false, approve: false },
-    itemRequests: { manage: false },
+    team: { manage: false, view: true },
+    purchasing: { addPrice: false, approve: false, viewHistory: false },
+    stockCount: { perform: true, approve: false },
+    itemRequests: { add: true, approve: false },
     pricing: { simulate: false, manageParameters: false },
-    reports: { view: false },
     help: { view: true },
     tasks: { view: true, manage: false },
     audit: { start: false, approve: false },
@@ -573,14 +569,13 @@ export const defaultUserPermissions: PermissionSet = {
     products: { add: true, edit: false, delete: false },
     lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
     predefinedLists: { add: true, edit: true, delete: false },
-    stockAnalysis: { upload: true, configure: false, viewHistory: true, deleteHistory: false },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
     team: { view: true, manage: false },
-    purchasing: { suggest: true, approve: false, viewHistory: true, deleteHistory: false },
+    purchasing: { addPrice: true, approve: false, viewHistory: true },
     stockCount: { perform: true, approve: false },
+    itemRequests: { add: true, approve: false },
     pricing: { simulate: true, manageParameters: false },
-    reports: { view: true },
 };
 
 export const defaultAdminPermissions: PermissionSet = {
@@ -589,15 +584,13 @@ export const defaultAdminPermissions: PermissionSet = {
     users: { add: true, edit: true, delete: true, impersonate: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
-    stockAnalysis: { upload: true, configure: true, viewHistory: true, deleteHistory: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     returns: { add: true, updateStatus: true, delete: true },
     team: { manage: true, view: true },
-    purchasing: { suggest: true, approve: true, viewHistory: true, deleteHistory: true },
+    purchasing: { addPrice: true, approve: true, viewHistory: true },
     stockCount: { perform: true, approve: true },
-    itemRequests: { manage: true },
+    itemRequests: { add: true, approve: true },
     pricing: { simulate: true, manageParameters: true },
-    reports: { view: true },
     help: { view: true },
     tasks: { view: true, manage: true },
     audit: { start: true, approve: true },

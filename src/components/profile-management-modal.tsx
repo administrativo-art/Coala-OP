@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -31,19 +31,18 @@ const permissionsSchema = z.object({
     users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
     kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
     predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-    stockAnalysis: z.object({ upload: z.boolean(), configure: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     team: z.object({ manage: z.boolean, view: z.boolean() }),
-    purchasing: z.object({ suggest: z.boolean(), approve: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
+    purchasing: z.object({ addPrice: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
-    itemRequests: z.object({ manage: z.boolean() }),
+    itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
     pricing: z.object({ simulate: z.boolean(), manageParameters: z.boolean() }),
-    reports: z.object({ view: z.boolean() }),
     help: z.object({ view: z.boolean() }),
     tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
     audit: z.object({ start: z.boolean(), approve: z.boolean() }),
 });
+
 
 const profileSchema = z.object({
   name: z.string().min(3, 'O nome do perfil deve ter pelo menos 3 caracteres.'),
@@ -96,7 +95,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       users: { ...defaultGuestPermissions.users, ...profile.permissions?.users },
       kiosks: { ...defaultGuestPermissions.kiosks, ...profile.permissions?.kiosks },
       predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profile.permissions?.predefinedLists },
-      stockAnalysis: { ...defaultGuestPermissions.stockAnalysis, ...profile.permissions?.stockAnalysis },
       consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profile.permissions?.consumptionAnalysis },
       returns: { ...defaultGuestPermissions.returns, ...profile.permissions?.returns },
       team: { ...defaultGuestPermissions.team, ...profile.permissions?.team },
@@ -104,7 +102,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       stockCount: { ...defaultGuestPermissions.stockCount, ...profile.permissions?.stockCount },
       itemRequests: { ...defaultGuestPermissions.itemRequests, ...profile.permissions?.itemRequests },
       pricing: { ...defaultGuestPermissions.pricing, ...profile.permissions?.pricing },
-      reports: { ...defaultGuestPermissions.reports, ...profile.permissions?.reports },
+      help: { ...defaultGuestPermissions.help, ...profile.permissions?.help },
+      tasks: { ...defaultGuestPermissions.tasks, ...profile.permissions?.tasks },
       audit: { ...defaultGuestPermissions.audit, ...profile.permissions?.audit },
     };
 
@@ -181,7 +180,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['reports', 'pricing', 'purchasing', 'products', 'lots', 'predefinedLists', 'kiosks', 'users', 'stockAnalysis', 'consumptionAnalysis', 'returns', 'team', 'stockCount', 'itemRequests']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['pricing', 'purchasing', 'team', 'stockCount', 'audit', 'itemRequests', 'returns', 'consumptionAnalysis', 'products', 'lots', 'predefinedLists', 'kiosks', 'users', 'tasks', 'help']} className="w-full">
+                            
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e preço</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -189,20 +189,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.pricing.manageParameters", "Gerenciar parâmetros", "Permite alterar o percentual operacional e as faixas de lucro.")}
                                 </AccordionContent>
                             </AccordionItem>
-                             <AccordionItem value="reports">
-                                <AccordionTrigger className="text-lg font-semibold"><AreaChart className="mr-2 h-5 w-5" /> Relatórios</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.reports.view", "Visualizar relatórios", "Permite o acesso ao painel de relatórios e métricas.")}
-                                </AccordionContent>
-                            </AccordionItem>
+
                             <AccordionItem value="purchasing">
                                 <AccordionTrigger className="text-lg font-semibold"><ShoppingCart className="mr-2 h-5 w-5" /> Gestão de compras</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.purchasing.suggest", "Sugerir/pesquisar preços", "Permite que o usuário insira preços durante uma sessão de pesquisa.")}
+                                    {renderPermissionSwitch("permissions.purchasing.addPrice", "Adicionar preços", "Permite que o usuário insira cotações de preços durante uma sessão de pesquisa.")}
                                     {renderPermissionSwitch("permissions.purchasing.approve", "Aprovar compras", "Permite efetivar uma compra, atualizando o preço médio do insumo.")}
                                     {renderPermissionSwitch("permissions.purchasing.viewHistory", "Visualizar histórico", "Permite ver o histórico de pesquisas de preço e compras efetivadas.")}
                                 </AccordionContent>
                             </AccordionItem>
+                           
                             <AccordionItem value="team">
                                 <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Gestão de equipe</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -210,28 +206,40 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.team.manage", "Gerenciar escalas", "Permite criar, editar e excluir escalas de trabalho.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="stockCount">
                                 <AccordionTrigger className="text-lg font-semibold"><ListOrdered className="mr-2 h-5 w-5" /> Contagem de estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.stockCount.perform", "Realizar contagem", "Permite registrar contagens de estoque.")}
+                                    {renderPermissionSwitch("permissions.stockCount.perform", "Realizar contagem", "Permite registrar contagens de estoque para aprovação.")}
                                     {renderPermissionSwitch("permissions.stockCount.approve", "Aprovar contagem", "Permite aprovar ou rejeitar contagens, ajustando o estoque.")}
                                 </AccordionContent>
                             </AccordionItem>
+
+                             <AccordionItem value="audit">
+                                <AccordionTrigger className="text-lg font-semibold"><AuditIcon className="mr-2 h-5 w-5" /> Auditoria de Estoque</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.audit.start", "Iniciar auditoria", "Permite iniciar uma nova sessão de auditoria de estoque.")}
+                                    {renderPermissionSwitch("permissions.audit.approve", "Aprovar auditoria", "Permite efetivar os resultados de uma auditoria, ajustando o estoque.")}
+                                </AccordionContent>
+                            </AccordionItem>
+                            
                             <AccordionItem value="itemRequests">
                                 <AccordionTrigger className="text-lg font-semibold"><PlusCircle className="mr-2 h-5 w-5" /> Solicitações de insumos</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.itemRequests.manage", "Gerenciar solicitações", "Permite aprovar ou rejeitar solicitações de cadastro de novos insumos.")}
+                                     {renderPermissionSwitch("permissions.itemRequests.add", "Solicitar cadastro", "Permite solicitar o cadastro de um novo insumo durante a contagem.")}
+                                    {renderPermissionSwitch("permissions.itemRequests.approve", "Aprovar solicitações", "Permite aprovar ou rejeitar solicitações de cadastro de novos insumos.")}
                                 </AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="stockAnalysis">
-                                <AccordionTrigger className="text-lg font-semibold"><BarChart3 className="mr-2 h-5 w-5" /> Análise de estoque</AccordionTrigger>
+
+                            <AccordionItem value="returns">
+                                <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Devoluções e avarias</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.stockAnalysis.upload", "Fazer upload de relatório", "Permite que o usuário suba arquivos PDF para analisar o estoque.")}
-                                    {renderPermissionSwitch("permissions.stockAnalysis.configure", "Configurar parâmetros", "Permite que o usuário defina o estoque ideal e parâmetros de análise.")}
-                                    {renderPermissionSwitch("permissions.stockAnalysis.viewHistory", "Ver histórico de análises", "Permite visualizar relatórios de análises anteriores.")}
-                                    {renderPermissionSwitch("permissions.stockAnalysis.deleteHistory", "Excluir histórico", "Permite excluir relatórios do histórico de análises.")}
+                                    {renderPermissionSwitch("permissions.returns.add", "Abrir chamados", "Permite abrir novos chamados de devolução ou bonificação.")}
+                                    {renderPermissionSwitch("permissions.returns.updateStatus", "Atualizar status", "Permite alterar o status de um chamado (ex: de aberta para em andamento).")}
+                                    {renderPermissionSwitch("permissions.returns.delete", "Excluir chamados", "Permite excluir chamados do sistema.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="consumptionAnalysis">
                                 <AccordionTrigger className="text-lg font-semibold"><TrendingUp className="mr-2 h-5 w-5" /> Análise de consumo</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -240,14 +248,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.consumptionAnalysis.deleteHistory", "Excluir histórico", "Permite excluir relatórios do histórico de consumo.")}
                                 </AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="returns">
-                                <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Devoluções e bonificações</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.returns.add", "Abrir chamados", "Permite abrir novos chamados de devolução ou bonificação.")}
-                                    {renderPermissionSwitch("permissions.returns.updateStatus", "Atualizar status", "Permite alterar o status de um chamado (ex: de aberta para em andamento).")}
-                                    {renderPermissionSwitch("permissions.returns.delete", "Excluir chamados", "Permite excluir chamados do sistema.")}
-                                </AccordionContent>
-                            </AccordionItem>
+                            
                             <AccordionItem value="products">
                                 <AccordionTrigger className="text-lg font-semibold"><Package className="mr-2 h-5 w-5" /> Produtos</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -256,6 +257,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.products.delete", "Excluir produtos", "Permite que o usuário remova produtos do inventário.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="lots">
                                 <AccordionTrigger className="text-lg font-semibold"><Box className="mr-2 h-5 w-5" /> Lotes de validade</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -266,6 +268,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.lots.delete", "Excluir lotes", "Permite excluir entradas de lote do controle de validade.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="predefinedLists">
                                 <AccordionTrigger className="text-lg font-semibold"><ClipboardList className="mr-2 h-5 w-5" /> Conversão predefinida</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -274,6 +277,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.predefinedLists.delete", "Excluir listas", "Permite que o usuário remova listas de conversão predefinida.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="kiosks">
                                 <AccordionTrigger className="text-lg font-semibold"><Warehouse className="mr-2 h-5 w-5" /> Quiosques</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -281,6 +285,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.kiosks.delete", "Excluir quiosques", "Permite excluir quiosques existentes.")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             <AccordionItem value="users">
                                 <AccordionTrigger className="text-lg font-semibold"><UserCog className="mr-2 h-5 w-5" /> Gerenciamento de usuários</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -290,6 +295,22 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.users.impersonate", "Navegar como outro usuário", "Permite acessar o sistema como se fosse outro colaborador.")}
                                 </AccordionContent>
                             </AccordionItem>
+                             
+                             <AccordionItem value="tasks">
+                                <AccordionTrigger className="text-lg font-semibold"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.tasks.view", "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
+                                    {renderPermissionSwitch("permissions.tasks.manage", "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.")}
+                                </AccordionContent>
+                            </AccordionItem>
+
+                            <AccordionItem value="help">
+                                <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.help.view", "Ver Central de Ajuda", "Permite o acesso à tela da Central de Ajuda.")}
+                                </AccordionContent>
+                            </AccordionItem>
+
                             </Accordion>
                         </div>
                     </ScrollArea>
