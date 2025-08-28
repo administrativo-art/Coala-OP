@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
@@ -76,7 +75,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         show: canManageStock,
         subItems: [
             { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
-            { href: '/dashboard/stock/write-down', label: 'Baixa de estoque', icon: MinusCircle, show: true },
             { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
             { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.audit.start },
             { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
