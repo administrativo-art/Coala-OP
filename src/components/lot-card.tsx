@@ -365,8 +365,6 @@ export function LotCard({
                             )}
                             <div className="flex flex-col gap-0.5 border-l pl-1">
                                 {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
-                                {renderActionButton(lot, MinusCircle, "Baixa/Consumo", () => handleConsumeClick(lot), canEdit)}
-                                {renderActionButton(lot, Truck, "Mover", () => onMove(lot.id), canMove && lot.quantity > 0)}
                                 {renderActionButton(lot, History, "Histórico", () => onViewHistory(lot), canViewHistory)}
                                 {renderActionButton(lot, QrCode, "Imprimir Etiqueta", () => handlePrintLabel(lot, product), true)}
                                 {renderActionButton(lot, Trash2, "Excluir", () => onDelete(lot.id), canDelete, true)}
