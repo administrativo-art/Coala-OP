@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
 import { ArrowLeft, ArrowRight, MinusCircle, History, Truck } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LotMovementHistoryModal } from '@/components/lot-movement-history-modal';
+import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { useState } from 'react';
 
 function InventoryControlContent() {
@@ -38,7 +38,7 @@ function InventoryControlContent() {
                 <ExpiryControl />
             </div>
             {isHistoryModalOpen && (
-                <LotMovementHistoryModal lot={null} onOpenChange={setIsHistoryModalOpen} />
+                <MovementHistoryModal open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} />
             )}
         </>
     );

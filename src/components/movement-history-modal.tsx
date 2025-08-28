@@ -42,12 +42,12 @@ const ITEMS_PER_PAGE = 50;
 type SortKey = keyof MovementRecord | 'productName' | 'kioskName';
 type SortDirection = 'asc' | 'desc';
 
-interface ZeroedLotsAuditModalProps {
+interface MovementHistoryModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function ZeroedLotsAuditModal({ open, onOpenChange }: ZeroedLotsAuditModalProps) {
+export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModalProps) {
   const { history, loading: loadingHistory } = useMovementHistory();
   const { products, getProductFullName, loading: loadingProducts } = useProducts();
   const { kiosks, loading: loadingKiosks } = useKiosks();
