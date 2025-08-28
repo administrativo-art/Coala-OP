@@ -1,8 +1,7 @@
-
 "use client"
 
 import { useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -103,7 +102,7 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                             {movementHistory.map((item) => (
                                 <TableRow key={item.id}>
                                 <TableCell>
-                                    {format(new Date(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                    {item.timestamp && isValid(parseISO(item.timestamp)) ? format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
                                 </TableCell>
                                 {lot === null && <TableCell className="font-medium">{item.productName}</TableCell>}
                                 {lot === null && <TableCell>{item.lotNumber}</TableCell>}
