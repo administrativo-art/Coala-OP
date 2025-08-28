@@ -15,6 +15,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useProducts } from '@/hooks/use-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, getMonth, isValid } from 'date-fns';
@@ -48,7 +49,8 @@ const formatNumber = (value: number) => {
 export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPeriodAnalysisModalProps) {
     const { user } = useAuth();
     const { kiosks } = useKiosks();
-    const { baseProducts, products } = useBaseProducts();
+    const { baseProducts } = useBaseProducts();
+    const { products } = useProducts();
     const { history: movementHistory, loading: historyLoading } = useMovementHistory();
     const { lots, loading: lotsLoading } = useExpiryProducts();
 
@@ -68,9 +70,8 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     const availableYears = useMemo(() => {
         if (!movementHistory || movementHistory.length === 0) return [];
         const years = new Set(movementHistory.map(h => {
-            if (!h.timestamp) return null;
-            const date = parseISO(h.timestamp);
-            return isValid(date) ? format(date, 'yyyy') : null;
+            if (!h.timestamp || !isValid(parseISO(h.timestamp))) return null;
+            return format(parseISO(h.timestamp), 'yyyy');
         }).filter(Boolean));
         return Array.from(years as Set<string>).sort((a, b) => b.localeCompare(a));
     }, [movementHistory]);
@@ -79,7 +80,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
         if (!period.year || !movementHistory || movementHistory.length === 0) return [];
         const months = new Set(movementHistory
             .filter(h => {
-                if (!h.timestamp) return false;
+                if (!h.timestamp || !isValid(parseISO(h.timestamp))) return false;
                 const date = parseISO(h.timestamp);
                 return isValid(date) && format(date, 'yyyy') === period.year;
             })
@@ -112,7 +113,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                 if (!h.timestamp || !productIdsForBase.includes(h.productId)) return false;
 
                 const movementDate = parseISO(h.timestamp);
-                return isWithinInterval(movementDate, { start: startDate, end: endDate }) &&
+                return isValid(movementDate) && isWithinInterval(movementDate, { start: startDate, end: endDate }) &&
                        (h.fromKioskId === kioskId || h.toKioskId === kioskId);
             });
 
@@ -127,7 +128,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
             const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const vendas = movementsInPeriodForProduct.filter(h => h.type === 'SAIDA_CONSUMO' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
 
-            const consumoTeorico = EI + EC + TI - TO - EF + AJ_plus - AJ_minus;
+            const consumoTeorico = EI + EC + TI + AJ_plus - TO - EF - AJ_minus;
             const variacao = consumoTeorico - vendas;
 
             if (consumoTeorico > 0 || vendas > 0) {
