@@ -10,14 +10,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { type Kiosk, type BaseProduct, type MovementRecord } from "@/types";
-import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Loader2 } from 'lucide-react';
+import { Scale, Info, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { useProducts } from '@/hooks/use-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useProducts } from '@/hooks/use-products';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, getMonth, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -30,16 +29,7 @@ interface AnalysisResult {
     baseProductId: string;
     baseProductName: string;
     unit: string;
-    estoqueInicial: number;
-    compras: number;
-    transferenciasEntrada: number;
-    transferenciasSaida: number;
-    ajustesEntrada: number;
-    ajustesSaida: number;
-    estoqueFinal: number;
     consumoTeorico: number;
-    vendasRegistradas: number;
-    variacao: number;
 }
 
 const formatNumber = (value: number) => {
@@ -52,7 +42,6 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     const { baseProducts } = useBaseProducts();
     const { products } = useProducts();
     const { history: movementHistory, loading: historyLoading } = useMovementHistory();
-    const { lots, loading: lotsLoading } = useExpiryProducts();
 
     const [kioskId, setKioskId] = useState<string>('');
     const [period, setPeriod] = useState({ month: '', year: '' });
@@ -128,38 +117,29 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
             const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const vendas = movementsInPeriodForProduct.filter(h => h.type === 'SAIDA_CONSUMO' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
 
-            const consumoTeorico = EI + EC + TI + AJ_plus - TO - EF - AJ_minus;
-            const variacao = consumoTeorico - vendas;
-
-            if (consumoTeorico > 0 || vendas > 0) {
-                results.push({
+            // Consumo Teórico = EI + Compras + Transferências de Entrada - Transferências de Saída - EI + Ajustes Positivos - Ajustes Negativos - Vendas
+            const consumoTeorico = EI + EC + TI + AJ_plus - TO - EF - AJ_minus - vendas;
+            
+            if (consumoTeorico !== 0) {
+                 results.push({
                     baseProductId: bp.id,
                     baseProductName: bp.name,
                     unit: bp.unit,
-                    estoqueInicial: EI,
-                    compras: EC,
-                    transferenciasEntrada: TI,
-                    transferenciasSaida: TO,
-                    ajustesEntrada: AJ_plus,
-                    ajustesSaida: AJ_minus,
-                    estoqueFinal: EF,
                     consumoTeorico,
-                    vendasRegistradas: vendas,
-                    variacao,
                 });
             }
         }
-        setAnalysisResult(results.sort((a, b) => Math.abs(b.variacao) - Math.abs(a.variacao)));
+        setAnalysisResult(results.sort((a, b) => a.baseProductName.localeCompare(b.baseProductName)));
         setIsLoading(false);
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+            <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2"><Scale /> Análise de Consumo por Período</DialogTitle>
                     <DialogDescription>
-                       Calcule o consumo teórico e compare com as baixas para encontrar variações.
+                       Calcule o consumo teórico dos insumos para o período selecionado.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -204,11 +184,11 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                             <p className="text-sm">Selecione o quiosque e o período para gerar a análise.</p>
                         </div>
                     ) : analysisResult.length === 0 ? (
-                        <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
+                        <Alert>
+                            <Info className="h-4 w-4" />
                             <AlertTitle>Nenhum dado encontrado</AlertTitle>
                             <AlertDescription>
-                                Não foram encontradas movimentações ou vendas para o período e quiosque selecionados.
+                                Não foram encontradas movimentações para o período e quiosque selecionados.
                             </AlertDescription>
                         </Alert>
                     ) : (
@@ -217,8 +197,6 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                                 <TableRow>
                                     <TableHead>Produto</TableHead>
                                     <TableHead className="text-right">Consumo Teórico</TableHead>
-                                    <TableHead className="text-right">Vendas Registradas</TableHead>
-                                    <TableHead className="text-right">Variação</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -226,10 +204,6 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                                     <TableRow key={res.baseProductId}>
                                         <TableCell className="font-medium">{res.baseProductName}</TableCell>
                                         <TableCell className="text-right font-semibold">{formatNumber(res.consumoTeorico)} {res.unit}</TableCell>
-                                        <TableCell className="text-right">{formatNumber(res.vendasRegistradas)} {res.unit}</TableCell>
-                                        <TableCell className={`text-right font-bold ${res.variacao !== 0 ? 'text-destructive' : 'text-green-600'}`}>
-                                            {formatNumber(res.variacao)} {res.unit}
-                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
