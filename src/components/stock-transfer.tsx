@@ -14,9 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from './ui/skeleton';
-import { ArrowRight, PlusCircle, Trash2, Truck } from 'lucide-react';
+import { ArrowRight, PlusCircle, Trash2, Truck, ChevronsUpDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from './ui/dropdown-menu';
+import { ScrollArea } from './ui/scroll-area';
 
 interface TransferItem {
   productId: string;
@@ -37,35 +39,32 @@ export function StockTransfer() {
   const [originKioskId, setOriginKioskId] = useState<string>('');
   const [destinationKioskId, setDestinationKioskId] = useState<string>('');
   const [transferItems, setTransferItems] = useState<TransferItem[]>([]);
-  const [productToAdd, setProductToAdd] = useState<string>('');
+  const [productsToAdd, setProductsToAdd] = useState<Set<string>>(new Set());
 
   const loading = kiosksLoading || productsLoading || lotsLoading;
 
-  const handleAddProduct = () => {
-    if (!productToAdd || transferItems.some(item => item.productId === productToAdd)) {
-      return;
+  const handleAddProducts = () => {
+    const itemsToAdd: TransferItem[] = [];
+    productsToAdd.forEach(productId => {
+        if (!transferItems.some(item => item.productId === productId)) {
+             const productLots = lots.filter(lot => lot.kioskId === originKioskId && lot.productId === productId && lot.quantity > 0);
+             if (productLots.length > 0) {
+                 itemsToAdd.push({
+                    productId: productId,
+                    lots: productLots.map(lot => ({
+                        lotId: lot.id,
+                        quantity: 0,
+                        maxQuantity: lot.quantity
+                    })),
+                });
+             }
+        }
+    });
+
+    if (itemsToAdd.length > 0) {
+        setTransferItems(prev => [...prev, ...itemsToAdd]);
     }
-    const productLots = lots.filter(lot => lot.kioskId === originKioskId && lot.productId === productToAdd && lot.quantity > 0);
-    if (productLots.length > 0) {
-      setTransferItems(prev => [
-        ...prev,
-        {
-          productId: productToAdd,
-          lots: productLots.map(lot => ({
-            lotId: lot.id,
-            quantity: 0,
-            maxQuantity: lot.quantity
-          })),
-        },
-      ]);
-    } else {
-        toast({
-            variant: "destructive",
-            title: "Produto sem estoque",
-            description: "Este produto não possui lotes com estoque no quiosque de origem.",
-        })
-    }
-    setProductToAdd('');
+    setProductsToAdd(new Set());
   };
 
   const handleLotQuantityChange = (productIndex: number, lotIndex: number, newQuantity: number) => {
@@ -97,8 +96,9 @@ export function StockTransfer() {
   const availableProducts = useMemo(() => {
     if (!originKioskId) return [];
     const productIdsInOrigin = new Set(lots.filter(lot => lot.kioskId === originKioskId).map(lot => lot.productId));
-    return products.filter(p => productIdsInOrigin.has(p.id));
-  }, [originKioskId, lots, products]);
+    return products.filter(p => productIdsInOrigin.has(p.id) && !p.isArchived)
+        .sort((a,b) => getProductFullName(a).localeCompare(getProductFullName(b)));
+  }, [originKioskId, lots, products, getProductFullName]);
   
   const isTransferReady = originKioskId && destinationKioskId && transferItems.length > 0 && transferItems.some(item => item.lots.some(lot => lot.quantity > 0));
 
@@ -136,16 +136,40 @@ export function StockTransfer() {
                 <div className="flex items-end gap-2">
                     <div className="flex-grow">
                         <label className="text-sm font-medium">Adicionar Insumo</label>
-                        <Select value={productToAdd} onValueChange={setProductToAdd}>
-                            <SelectTrigger><SelectValue placeholder="Selecione um insumo para transferir..." /></SelectTrigger>
-                            <SelectContent>
-                                {availableProducts.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full justify-between font-normal">
+                                    {productsToAdd.size > 0 ? `${productsToAdd.size} insumo(s) selecionado(s)` : "Selecione insumos..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                <DropdownMenuLabel>Insumos disponíveis</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <ScrollArea className="h-48">
+                                    {availableProducts.map(product => (
+                                        <DropdownMenuCheckboxItem
+                                            key={product.id}
+                                            checked={productsToAdd.has(product.id)}
+                                            onCheckedChange={(checked) => {
+                                                const newSet = new Set(productsToAdd);
+                                                if(checked) {
+                                                    newSet.add(product.id);
+                                                } else {
+                                                    newSet.delete(product.id);
+                                                }
+                                                setProductsToAdd(newSet);
+                                            }}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {getProductFullName(product)}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </ScrollArea>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
-                    <Button onClick={handleAddProduct} disabled={!productToAdd}>
+                    <Button onClick={handleAddProducts} disabled={productsToAdd.size === 0}>
                         <PlusCircle className="mr-2" /> Adicionar
                     </Button>
                 </div>
@@ -167,7 +191,7 @@ export function StockTransfer() {
                                             <TableHead>Lote</TableHead>
                                             <TableHead>Validade</TableHead>
                                             <TableHead className="text-right">Estoque Origem</TableHead>
-                                            <TableHead className="w-[150px]">Qtd. a Mover</TableHead>
+                                            <TableHead className="w-[120px]">Qtd. a Mover</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
