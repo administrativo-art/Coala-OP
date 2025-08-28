@@ -25,7 +25,6 @@ import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
-import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Badge } from '@/components/ui/badge';
 import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -78,7 +77,6 @@ function ExpiryControlContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
-  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
 
   useEffect(() => {
@@ -435,49 +433,40 @@ function ExpiryControlContent() {
 
   return (
     <>
-      <Card className="w-full mx-auto animate-in fade-in zoom-in-95">
-        <CardHeader>
+      <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
+        <div className='p-6 border-b'>
           <CardTitle className="font-headline flex items-center gap-2">
             Controle de estoque
           </CardTitle>
           <CardDescription>Gerencie os lotes, vencimentos, transferências e reposições do seu estoque.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-            <div className="mb-4">
-                <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por insumo base, produto, lote, código..."
-                        className="pl-10 pr-12"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="icon" 
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                        onClick={() => setIsSearchScannerOpen(true)}
-                        aria-label="Escanear código de barras para busca"
-                    >
-                        <Camera className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                </div>
+        </div>
+        <div className="p-6 space-y-4">
+            <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar por insumo base, produto, lote, código..."
+                    className="pl-10 pr-12"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setIsSearchScannerOpen(true)}
+                    aria-label="Escanear código de barras para busca"
+                >
+                    <Camera className="h-4 w-4 text-muted-foreground" />
+                </Button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2">
                 <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.add}>
                     <Plus className="mr-2" /> Adicionar lote
                 </Button>
-                {permissions.lots.viewMovementHistory && (
-                    <Button variant="outline" onClick={() => setIsAuditModalOpen(true)} className="w-full sm:w-auto">
-                        <History className="mr-2" /> Histórico de movimentações
-                    </Button>
-                )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
+                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
+                        <Button variant="outline" className='w-full sm:w-auto'>
                             <Filter className="mr-2 h-4 w-4" />
                             Status {statusFilters.length > 0 && `(${statusFilters.length})`}
                         </Button>
@@ -521,11 +510,13 @@ function ExpiryControlContent() {
                     </SelectContent>
                 </Select>
             </div>
-            <div className="mt-6">
+        </div>
+        <div className="p-6 pt-0 flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
                 {renderContent()}
-            </div>
-        </CardContent>
-      </Card>
+            </ScrollArea>
+        </div>
+      </div>
       
       <AddEditLotModal 
         open={isAddEditModalOpen}
@@ -574,11 +565,6 @@ function ExpiryControlContent() {
         />
       )}
       
-      
-      <ZeroedLotsAuditModal
-        open={isAuditModalOpen}
-        onOpenChange={setIsAuditModalOpen}
-      />
       {quickProjectionProduct && (
         <QuickProjectionModal 
             baseProduct={quickProjectionProduct}
@@ -591,7 +577,7 @@ function ExpiryControlContent() {
 
 export function ExpiryControl() {
     return (
-        <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
+        <Suspense fallback={<Skeleton className="h-[90vh] w-full" />}>
             <ExpiryControlContent />
         </Suspense>
     );
