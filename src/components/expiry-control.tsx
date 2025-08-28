@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 
 const BarcodeScannerModal = dynamic(
@@ -66,8 +67,7 @@ function ExpiryControlContent() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
-  const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
-  const [initialKioskSelectionMade, setInitialKioskSelectionMade] = useState(false);
+  const [selectedKioskId, setSelectedKioskId] = useState<string>('');
 
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
@@ -103,11 +103,14 @@ function ExpiryControlContent() {
   }, [kiosks]);
   
   useEffect(() => {
-    if (!initialKioskSelectionMade && sortedKiosks.length > 0) {
-        setSelectedKiosks(sortedKiosks.map(k => k.id));
-        setInitialKioskSelectionMade(true);
+    if (kiosks.length > 0 && !selectedKioskId) {
+      if (user?.username === 'Tiago Brasil') {
+        setSelectedKioskId('all');
+      } else if (user?.assignedKioskIds && user.assignedKioskIds.length > 0) {
+        setSelectedKioskId(user.assignedKioskIds[0]);
+      }
     }
-  }, [sortedKiosks, initialKioskSelectionMade]);
+  }, [kiosks, selectedKioskId, user]);
   
   useEffect(() => {
     if (scannedLotId) {
@@ -121,16 +124,15 @@ function ExpiryControlContent() {
 
 
  const groupedData = useMemo(() => {
-    const kioskFilteredLots = (user?.username === 'Tiago Brasil')
-      ? visibleLots.filter(lot => selectedKiosks.includes(lot.kioskId))
-      : visibleLots;
+    const kioskFilteredLots = (selectedKioskId === 'all')
+      ? visibleLots
+      : visibleLots.filter(lot => lot.kioskId === selectedKioskId);
 
     const activeLots = kioskFilteredLots.filter(lot => lot.quantity > 0);
     
     const preFilteredLots = activeLots.filter(lot => {
         if (statusFilters.length === 0) return true;
         
-        // Handle "no_expiry" filter
         if (statusFilters.includes('no_expiry') && !lot.expiryDate) {
             return true;
         }
@@ -226,7 +228,7 @@ function ExpiryControlContent() {
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
-  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKiosks, user, baseProducts, getProductFullName]);
+  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKioskId, user, baseProducts, getProductFullName]);
 
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -283,16 +285,6 @@ function ExpiryControlContent() {
             return [...current, filter];
         } else {
             return current.filter(f => f !== filter);
-        }
-    });
-  };
-
-  const handleKioskFilterChange = (kioskId: string, checked: boolean) => {
-    setSelectedKiosks(current => {
-        if (checked) {
-            return [...current, kioskId];
-        } else {
-            return current.filter(id => id !== kioskId);
         }
     });
   };
@@ -518,38 +510,16 @@ function ExpiryControlContent() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                {user?.username === 'Tiago Brasil' && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                <Filter className="mr-2 h-4 w-4" />
-                                Quiosques ({selectedKiosks.length})
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64" align="start">
-                            <DropdownMenuLabel>Filtrar por quiosque</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setSelectedKiosks(sortedKiosks.map(k => k.id))}>
-                                Selecionar todos
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setSelectedKiosks([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                Limpar seleção
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <ScrollArea className="h-48">
-                            {sortedKiosks.map(kiosk => (
-                                <DropdownMenuCheckboxItem
-                                    key={kiosk.id}
-                                    checked={selectedKiosks.includes(kiosk.id)}
-                                    onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
-                                >
-                                    {kiosk.name}
-                                </DropdownMenuCheckboxItem>
-                            ))}
-                            </ScrollArea>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
+                 <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                    <SelectTrigger className="w-full sm:w-auto">
+                        <Warehouse className="mr-2 h-4 w-4" />
+                        <SelectValue placeholder="Selecione um quiosque..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {user?.username === 'Tiago Brasil' && <SelectItem value="all">Todos os quiosques</SelectItem>}
+                        {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="mt-6">
                 {renderContent()}
