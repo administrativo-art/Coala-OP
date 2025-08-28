@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState } from 'react';
@@ -99,10 +100,12 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                             </TableRow>
                             </TableHeader>
                             <TableBody>
-                            {movementHistory.map((item) => (
+                            {movementHistory.map((item) => {
+                                const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
+                                return (
                                 <TableRow key={item.id}>
                                 <TableCell>
-                                    {item.timestamp && isValid(parseISO(item.timestamp)) ? format(parseISO(item.timestamp), "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
+                                    {timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
                                 </TableCell>
                                 {lot === null && <TableCell className="font-medium">{item.productName}</TableCell>}
                                 {lot === null && <TableCell>{item.lotNumber}</TableCell>}
@@ -124,7 +127,7 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                                     </TableCell>
                                 )}
                                 </TableRow>
-                            ))}
+                            )})}
                             </TableBody>
                         </Table>
                     </div>
