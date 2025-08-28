@@ -1,17 +1,18 @@
-
 "use client";
 
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, ArrowRight, MinusCircle, History, Truck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MinusCircle, History, Truck, Scale } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { useState } from 'react';
+import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 
 function InventoryControlContent() {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
 
     return (
         <>
@@ -33,12 +34,18 @@ function InventoryControlContent() {
                         <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
                             <History className="mr-2 h-4 w-4"/> Consultar Histórico
                         </Button>
+                         <Button variant="outline" onClick={() => setIsConsumptionModalOpen(true)}>
+                            <Scale className="mr-2 h-4 w-4"/> Consumo por período
+                        </Button>
                     </div>
                 </div>
                 <ExpiryControl />
             </div>
             {isHistoryModalOpen && (
                 <MovementHistoryModal open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} />
+            )}
+            {isConsumptionModalOpen && (
+                <FinancialPeriodAnalysisModal open={isConsumptionModalOpen} onOpenChange={setIsConsumptionModalOpen} />
             )}
         </>
     );
