@@ -1,4 +1,5 @@
 
+      
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from 'react';
@@ -302,7 +303,7 @@ function ExpiryControlContent() {
 
     groupedData.forEach(baseGroup => {
         autoTable(doc, {
-            head: [[{ content: baseGroup.name, colSpan: 5, styles: { fontStyle: 'bold', fillColor: '#f4f4f5' } }]],
+            head: [[{ content: baseGroup.name, colSpan: 5, styles: { fontStyle: 'bold', fillColor: '#f4f4f5', textColor: '#000000' } }]],
             startY: (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 2 : 30,
             theme: 'grid'
         });
@@ -322,7 +323,8 @@ function ExpiryControlContent() {
                     body: productRows,
                     startY: (doc as any).lastAutoTable.finalY,
                     theme: 'striped',
-                    headStyles: { fillColor: '#e4e4e7' }
+                    headStyles: { fillColor: '#e4e4e7', textColor: '#000000' },
+                    bodyStyles: { textColor: '#000000' },
                 });
             });
         });
@@ -661,3 +663,5 @@ export function ExpiryControl() {
         </Suspense>
     );
 }
+
+    
