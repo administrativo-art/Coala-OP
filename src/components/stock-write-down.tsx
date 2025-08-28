@@ -22,6 +22,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { ScrollArea } from './ui/scroll-area';
 
 const writeDownItemSchema = z.object({
   lotId: z.string(),
