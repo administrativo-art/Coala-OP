@@ -23,7 +23,7 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
     const { permissions, loading, user } = useAuth()
 
     const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
-    const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.stockAnalysis.upload || permissions.stockAnalysis.configure || permissions.stockAnalysis.viewHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory || permissions.purchasing.suggest || permissions.purchasing.approve);
+    const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory || permissions.purchasing.addPrice || permissions.purchasing.approve);
     const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
     const canUseHelp = !loading && permissions.help.view;
     const isMasterUser = user?.username === 'Tiago Brasil';
