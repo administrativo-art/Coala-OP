@@ -36,6 +36,7 @@ import { usePurchase } from '@/hooks/use-purchase';
 
 
 const simulationItemSchema = z.object({
+  id: z.string().optional(),
   baseProductId: z.string().min(1, 'Selecione um insumo.'),
   quantity: z.coerce.number().min(0.001, 'Deve ser > 0'),
   useDefault: z.boolean(),
@@ -129,6 +130,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             const itemsForForm = simulationItems
                 .filter(item => item.simulationId === simulationToEdit.id)
                 .map(item => ({
+                    id: item.id,
                     baseProductId: item.baseProductId,
                     quantity: item.quantity,
                     useDefault: item.useDefault,
@@ -160,6 +162,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     const sourceItems = simulationItems
         .filter(item => item.simulationId === sourceSimulation.id)
         .map(item => ({
+            id: item.id,
             baseProductId: item.baseProductId,
             quantity: item.quantity,
             useDefault: item.useDefault,

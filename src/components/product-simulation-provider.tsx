@@ -14,6 +14,7 @@ interface SimulationData {
     categoryIds: string[];
     lineId?: string | null;
     items: {
+        id?: string;
         baseProductId: string;
         quantity: number;
         useDefault: boolean;

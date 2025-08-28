@@ -39,7 +39,7 @@ const lotFormSchema = z.object({
   expiryDate: z.date().optional().nullable(),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   locationId: z.string().optional(),
-  quantity: z.coerce.number().min(0, 'A quantidade não pode ser negativa.'),
+  quantity: z.coerce.number().min(0.01, 'A quantidade deve ser maior que zero.'),
   imageUrl: z.string().optional(),
 });
 

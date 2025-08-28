@@ -70,26 +70,15 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     let lotRefToUpdate: import("firebase/firestore").DocumentReference | null = null;
     let existingQuantity = 0;
 
-    let q;
-    if (lot.locationId) {
-        q = query(
-          collection(db, "lots"),
-          where("productId", "==", lot.productId),
-          where("lotNumber", "==", lot.lotNumber),
-          where("expiryDate", "==", lot.expiryDate),
-          where("kioskId", "==", lot.kioskId),
-          where("locationId", "==", lot.locationId)
-        );
-    } else {
-        q = query(
-          collection(db, "lots"),
-          where("productId", "==", lot.productId),
-          where("lotNumber", "==", lot.lotNumber),
-          where("expiryDate", "==", lot.expiryDate),
-          where("kioskId", "==", lot.kioskId),
-          where("locationId", "==", null)
-        );
-    }
+    // A unique lot is defined by product, lot number, expiry date, and kiosk.
+    // Location is metadata and doesn't define a new lot instance.
+    let q = query(
+        collection(db, "lots"),
+        where("productId", "==", lot.productId),
+        where("lotNumber", "==", lot.lotNumber),
+        where("expiryDate", "==", lot.expiryDate),
+        where("kioskId", "==", lot.kioskId)
+    );
 
     try {
         const querySnapshot = await getDocs(q);
@@ -102,7 +91,11 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             lotIdForHistory = existingDoc.id;
             batch.update(lotRefToUpdate, {
                 quantity: existingQuantity + lot.quantity,
+                // Update other metadata if it changed, e.g., image or location
                 imageUrl: lot.imageUrl || (existingDoc.data() as LotEntry).imageUrl,
+                locationId: lot.locationId || (existingDoc.data() as LotEntry).locationId || null,
+                locationName: lot.locationName || (existingDoc.data() as LotEntry).locationName || null,
+                locationCode: lot.locationCode || (existingDoc.data() as LotEntry).locationCode || null,
             });
         } else {
             const newLotRef = doc(collection(db, "lots"));
@@ -121,7 +114,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             userId: user.id,
             username: user.username,
             timestamp: new Date().toISOString(),
-            notes: 'Criação de novo lote no sistema.',
+            notes: existingQuantity > 0 ? 'Adição de quantidade a lote existente.' : 'Criação de novo lote no sistema.',
         };
         addMovementRecord(batch, movementRecord);
 
