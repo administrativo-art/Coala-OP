@@ -1,63 +1,64 @@
-//aceternity.com
+
 "use client";
 import { cn } from "@/lib/utils";
 import {
-  IconAdjustmentsBolt,
-  IconCloud,
-  IconCurrencyDollar,
-  IconEaseInOut,
-  IconHeart,
-  IconHelp,
-  IconRouteAltLeft,
-  IconTerminal2,
+  IconClipboardCheck,
+  IconReceipt2,
+  IconChartBar,
+  IconCalculator,
+  IconTruck,
+  IconUsers,
+  IconCalendarStats,
+  IconBellRinging,
 } from "@tabler/icons-react";
 
 export function FeaturesSectionWithHoverEffects() {
   const features = [
     {
-      title: "Built for developers",
+      title: "Controle de Estoque",
       description:
-        "Built for engineers, developers, dreamers, thinkers and doers.",
-      icon: <IconTerminal2 />,
+        "Gerencie lotes, vencimentos, transferências e adicione novos insumos com facilidade.",
+      icon: <IconClipboardCheck />,
     },
     {
-      title: "Ease of use",
+      title: "Análise de Custo e Preço",
       description:
-        "It's as easy as using an Apple, and as expensive as buying one.",
-      icon: <IconEaseInOut />,
+        "Calcule o CMV, simule preços de venda e analise a lucratividade de cada produto.",
+      icon: <IconCalculator />,
     },
     {
-      title: "Pricing like no other",
+      title: "Gestão de Compras",
       description:
-        "Our prices are best in the market. No cap, no lock, no credit card required.",
-      icon: <IconCurrencyDollar />,
+        "Crie cotações de preços, compare fornecedores e efetive compras de forma centralizada.",
+      icon: <IconReceipt2 />,
     },
     {
-      title: "100% Uptime guarantee",
-      description: "We just cannot be taken down by anyone.",
-      icon: <IconCloud />,
-    },
-    {
-      title: "Multi-tenant Architecture",
-      description: "You can simply share passwords instead of buying new seats",
-      icon: <IconRouteAltLeft />,
-    },
-    {
-      title: "24/7 Customer Support",
+      title: "Controle de Vencimentos",
       description:
-        "We are available a 100% of the time. Atleast our AI Agents are.",
-      icon: <IconHelp />,
+        "Receba alertas sobre produtos próximos do vencimento e evite perdas.",
+      icon: <IconBellRinging />,
     },
     {
-      title: "Money back guarantee",
+      title: "Análise de Reposição",
+      description: "Compare o estoque atual com as metas e saiba exatamente o que e quanto repor.",
+      icon: <IconChartBar />,
+    },
+    {
+      title: "Gestão de Avarias",
       description:
-        "If you donot like EveryAI, we will convince you to like us.",
-      icon: <IconAdjustmentsBolt />,
+        "Controle o processo de devolução e bonificação de insumos com fornecedores.",
+      icon: <IconTruck />,
+    },
+     {
+      title: "Escala de Trabalho",
+      description:
+        "Organize os turnos e folgas da sua equipe de forma visual e intuitiva.",
+      icon: <IconCalendarStats />,
     },
     {
-      title: "And everything else",
-      description: "I just ran out of copy ideas. Accept my sincere apologies",
-      icon: <IconHeart />,
+      title: "Perfis e Permissões",
+      description: "Defina perfis de acesso detalhados para cada colaborador do seu time.",
+      icon: <IconUsers />,
     },
   ];
   return (
