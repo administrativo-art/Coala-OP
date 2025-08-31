@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -32,7 +31,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { ZeroedLotsAuditModal } from './zeroed-lots-audit-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
@@ -569,7 +567,10 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
                     {showExportButton && (
                          <CardContent>
                              <div className="pt-4 border-t flex justify-end">
-                                <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
+                                <Button variant="outline" onClick={() => {
+                                    // A ser implementado.
+                                    toast({ variant: 'destructive', title: "Funcionalidade não implementada." });
+                                }}>
                                     <Download className="mr-2" />
                                     Relatório detalhado
                                 </Button>
@@ -582,10 +583,6 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
                 <AuditHistory />
             </TabsContent>
         </Tabs>
-      <ZeroedLotsAuditModal
-        open={isHistoryModalOpen}
-        onOpenChange={setIsHistoryModalOpen}
-      />
       <KioskSelectionModal
         open={isKioskSelectionOpen}
         onOpenChange={setIsKioskSelectionOpen}
