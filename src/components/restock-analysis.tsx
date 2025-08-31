@@ -306,23 +306,27 @@ function AnalysisTab() {
           Selecione um quiosque para ver a necessidade de reposição com base nas metas de estoque mínimo.
         </CardDescription>
         <div className="pt-2 flex justify-between items-center">
-            <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2">
                 <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
                   <SelectTrigger className="w-full max-w-sm">
-                    <SelectValue placeholder="Selecione um quiosque..." />
+                    <SelectValue placeholder="Selecione um quiosque para analisar..." />
                   </SelectTrigger>
                   <SelectContent>
                     {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {isMatrizSelected && (
+                 {selectedKioskId && (
                      <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon"><Info className="h-5 w-5 text-muted-foreground"/></Button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                                <p>O estoque mínimo da Matriz é calculado automaticamente para cobrir <strong>1 mês</strong> do consumo médio de toda a rede de quiosques. Nenhuma margem de segurança extra é adicionada.</p>
+                                {isMatrizSelected ? (
+                                    <p>O estoque mínimo da Matriz é calculado para cobrir <strong>1 mês</strong> do consumo médio de toda a rede. Nenhuma margem de segurança extra é adicionada.</p>
+                                ) : (
+                                    <p>O estoque mínimo para quiosques é calculado para cobrir <strong>12 dias</strong> de consumo médio do próprio quiosque, com base nos relatórios de venda importados.</p>
+                                )}
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
