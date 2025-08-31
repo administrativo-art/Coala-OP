@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { RepositionManagement } from './reposition-management';
 import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -305,14 +306,28 @@ function AnalysisTab() {
           Selecione um quiosque para ver a necessidade de reposição com base nas metas de estoque mínimo.
         </CardDescription>
         <div className="pt-2 flex justify-between items-center">
-            <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
-              <SelectTrigger className="w-full max-w-sm">
-                <SelectValue placeholder="Selecione um quiosque..." />
-              </SelectTrigger>
-              <SelectContent>
-                {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+                <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
+                  <SelectTrigger className="w-full max-w-sm">
+                    <SelectValue placeholder="Selecione um quiosque..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {isMatrizSelected && (
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon"><Info className="h-5 w-5 text-muted-foreground"/></Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                                <p>O estoque mínimo da Matriz é calculado automaticamente para cobrir <strong>1 mês</strong> do consumo médio de toda a rede de quiosques. Nenhuma margem de segurança extra é adicionada.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+            </div>
             {isMatrizSelected && (
                 <Button variant="outline" onClick={handleExportPdf} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
                     <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
