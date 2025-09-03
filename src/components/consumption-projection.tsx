@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -69,7 +68,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                 const dateB = b.orderDate || b.ruptureDate;
                 if (!dateA) return 1;
                 if (!dateB) return -1;
-                return dateA.getTime() - b.getTime();
+                return dateA.getTime() - dateB.getTime();
             });
     }, [results]);
     
