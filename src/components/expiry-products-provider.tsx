@@ -181,10 +181,18 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
-              const availableQuantity = sourceLot.quantity - (isFinalizingReposition ? 0 : (sourceLot.reservedQuantity || 0));
+              const availableQuantity = sourceLot.quantity - (sourceLot.reservedQuantity || 0);
               
-              if (sourceLot.quantity < quantityToMove) {
-                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${sourceLot.quantity}.`);
+              if (isFinalizingReposition) {
+                  // When finalizing, we check against the total quantity because the stock is already reserved.
+                  if (sourceLot.quantity < quantityToMove) {
+                      throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > total em estoque ${sourceLot.quantity}.`);
+                  }
+              } else {
+                  // For normal transfers, check against available (non-reserved) quantity.
+                  if (availableQuantity < quantityToMove) {
+                      throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
+                  }
               }
 
               const newSourceQuantity = sourceLot.quantity - quantityToMove;
