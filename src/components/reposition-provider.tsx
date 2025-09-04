@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -181,7 +180,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     ).filter(lot => lot.quantityToMove > 0);
     
     if (lotsToMove.length > 0) {
-      await moveMultipleLots(lotsToMove, user, true); // Pass true for isFinalizingReposition
+      await moveMultipleLots(lotsToMove, user, true, true); // Pass true for both flags
     }
     
     await updateRepositionActivity(activity.id, { status: 'Concluído' });
@@ -199,5 +198,3 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
-
-    

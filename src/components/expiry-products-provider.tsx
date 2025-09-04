@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type LotEntry, type MovementRecord, type MovementType, type User } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
 
 export type MoveLotParams = {
   lotId: string;
@@ -32,7 +32,7 @@ export interface ExpiryProductsContextType {
   updateLot: (lot: Partial<LotEntry> & { id: string }) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
-  moveMultipleLots: (params: MoveLotParams[], user: User, isFinalizingReposition?: boolean) => Promise<void>;
+  moveMultipleLots: (params: MoveLotParams[], user: User, isFinalizingReposition?: boolean, allowPartialOnFinalize?: boolean) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
   adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
 }
@@ -167,25 +167,37 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User, isFinalizingReposition: boolean = false) => {
+  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User, isFinalizingReposition = false, allowPartialOnFinalize = false) => {
+    const results: { lotId: string; requested: number; moved: number; pending: number }[] = [];
+
     try {
       await runTransaction(db, async (transaction) => {
-          const lotRefs = paramsArray.map(p => doc(db, "lots", p.lotId));
-          const sourceLotDocs = await Promise.all(lotRefs.map(ref => transaction.get(ref)));
-
-          for (const [index, sourceLotDoc] of sourceLotDocs.entries()) {
-              const params = paramsArray[index];
+          for (const params of paramsArray) {
               const { lotId, quantityToMove } = params;
+              
+              if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
+                  throw new Error(`Parâmetros inválidos para o lote ${lotId}.`);
+              }
+
+              const sourceLotRef = doc(db, "lots", lotId);
+              const sourceLotDoc = await transaction.get(sourceLotRef);
               
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
               const quantity = sourceLot.quantity || 0;
               const reserved = sourceLot.reservedQuantity || 0;
+              let movable = quantityToMove;
 
               if (isFinalizingReposition) {
-                  if (quantity < quantityToMove) {
-                      throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > total em estoque ${quantity}.`);
+                  // The max we can move is what's physically there, and what's reserved.
+                  // This handles cases where quantity was incorrectly reduced elsewhere.
+                  const maxMovable = Math.min(quantity, reserved);
+                  if (maxMovable < quantityToMove) {
+                      if (!allowPartialOnFinalize) {
+                          throw new Error(`Finalização inválida para o lote ${lotId}: solicitado ${quantityToMove}, mas apenas ${maxMovable} está reservado/disponível.`);
+                      }
+                      movable = maxMovable; // Move o que for possível
                   }
               } else {
                   const availableQuantity = quantity - reserved;
@@ -194,81 +206,81 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                   }
               }
 
-              const newSourceQuantity = quantity - quantityToMove;
-              const newReservedQuantity = isFinalizingReposition 
-                ? reserved - quantityToMove
-                : reserved;
+              if (movable > 0) {
+                const newSourceQuantity = quantity - movable;
+                const newReservedQuantity = isFinalizingReposition
+                  ? reserved - movable
+                  : reserved;
 
-              if (newReservedQuantity < 0) {
-                  throw new Error(`Invariante violado no lote ${lotId}: reservado se tornaria negativo.`);
-              }
-              if (newReservedQuantity > newSourceQuantity) {
-                  throw new Error(`Invariante violado no lote ${lotId}: reservado ${newReservedQuantity} > total ${newSourceQuantity}.`);
+                if (newReservedQuantity < 0) {
+                    throw new Error(`Invariante violado no lote ${lotId}: reservado se tornaria negativo.`);
+                }
+                if (newReservedQuantity > newSourceQuantity) {
+                    throw new Error(`Invariante violado no lote ${lotId}: reservado ${newReservedQuantity} > total ${newSourceQuantity}.`);
+                }
+
+                transaction.update(sourceLotDoc.ref, { 
+                    quantity: newSourceQuantity,
+                    reservedQuantity: newReservedQuantity,
+                });
+
+                const destQuery = query(
+                    collection(db, "lots"),
+                    where("productId", "==", sourceLot.productId),
+                    where("lotNumber", "==", sourceLot.lotNumber),
+                    where("expiryDate", "==", sourceLot.expiryDate),
+                    where("kioskId", "==", params.toKioskId)
+                  );
+                  
+                  const destSnapshot = await getDocs(destQuery);
+                  let destLotRef;
+                  let destLotIdForHistory;
+    
+                  if (!destSnapshot.empty) {
+                    destLotRef = destSnapshot.docs[0].ref;
+                    destLotIdForHistory = destSnapshot.docs[0].id;
+                    transaction.update(destLotRef, { quantity: increment(movable) });
+                  } else {
+                     destLotRef = doc(collection(db, "lots"));
+                     destLotIdForHistory = destLotRef.id;
+                     const newLotData: Omit<LotEntry, 'id'> = {
+                        productId: sourceLot.productId,
+                        productName: sourceLot.productName,
+                        lotNumber: sourceLot.lotNumber,
+                        expiryDate: sourceLot.expiryDate,
+                        kioskId: params.toKioskId,
+                        quantity: movable,
+                        reservedQuantity: 0,
+                        imageUrl: sourceLot.imageUrl,
+                        locationId: null,
+                        locationName: null,
+                        locationCode: null,
+                    };
+                    transaction.set(destLotRef, newLotData);
+                  }
+    
+                  const now = new Date().toISOString();
+                  const commonData = {
+                      productId: sourceLot.productId,
+                      productName: params.productName,
+                      lotNumber: params.lotNumber,
+                      quantityChange: movable,
+                      userId: user.id,
+                      username: user.username,
+                      timestamp: now
+                  };
+                  
+                  const movementOutRef = doc(collection(db, "movementHistory"));
+                  transaction.set(movementOutRef, { ...commonData, lotId: sourceLot.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: params.fromKioskId, fromKioskName: params.fromKioskName, toKioskId: params.toKioskId, toKioskName: params.toKioskName });
+                  
+                  const movementInRef = doc(collection(db, "movementHistory"));
+                  transaction.set(movementInRef, { ...commonData, lotId: destLotIdForHistory, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: params.fromKioskId, fromKioskName: params.fromKioskName, toKioskId: params.toKioskId, toKioskName: params.toKioskName });
               }
 
-              transaction.update(sourceLotDoc.ref, { 
-                  quantity: newSourceQuantity,
-                  reservedQuantity: Math.max(0, newReservedQuantity),
-              });
+              results.push({ lotId, requested: quantityToMove, moved: movable, pending: quantityToMove - movable });
           }
-
-           for (const [index, sourceLotDoc] of sourceLotDocs.entries()) {
-               const params = paramsArray[index];
-               const { toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName } = params;
-               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
-               
-               const destQuery = query(
-                collection(db, "lots"),
-                where("productId", "==", sourceLot.productId),
-                where("lotNumber", "==", sourceLot.lotNumber),
-                where("kioskId", "==", toKioskId)
-              );
-              
-              const destSnapshot = await getDocs(destQuery);
-              let destLotRef;
-              let destLotIdForHistory;
-
-              if (!destSnapshot.empty) {
-                destLotRef = destSnapshot.docs[0].ref;
-                destLotIdForHistory = destSnapshot.docs[0].id;
-                transaction.update(destLotRef, { quantity: increment(quantityToMove) });
-              } else {
-                 destLotRef = doc(collection(db, "lots"));
-                 destLotIdForHistory = destLotRef.id;
-                 const newLotData: Omit<LotEntry, 'id'> = {
-                    productId: sourceLot.productId,
-                    productName: sourceLot.productName,
-                    lotNumber: sourceLot.lotNumber,
-                    expiryDate: sourceLot.expiryDate,
-                    kioskId: toKioskId,
-                    quantity: quantityToMove,
-                    reservedQuantity: 0,
-                    imageUrl: sourceLot.imageUrl,
-                    locationId: null,
-                    locationName: null,
-                    locationCode: null,
-                };
-                transaction.set(destLotRef, newLotData);
-              }
-
-              const now = new Date().toISOString();
-              const commonData = {
-                  productId: sourceLot.productId,
-                  productName: productName,
-                  lotNumber: lotNumber,
-                  quantityChange: quantityToMove,
-                  userId: user.id,
-                  username: user.username,
-                  timestamp: now
-              };
-              
-              const movementOutRef = doc(collection(db, "movementHistory"));
-              transaction.set(movementOutRef, { ...commonData, lotId: sourceLot.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId, fromKioskName, toKioskId, toKioskName });
-              
-              const movementInRef = doc(collection(db, "movementHistory"));
-              transaction.set(movementInRef, { ...commonData, lotId: destLotIdForHistory, type: 'TRANSFERENCIA_ENTRADA', fromKioskId, fromKioskName, toKioskId, toKioskName });
-           }
       });
+      return results;
     } catch (error) {
       console.error("Error moving multiple lots:", error);
       throw error;
@@ -288,8 +300,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         }
         
         const currentLot = lotDoc.data() as LotEntry;
-        if(params.quantityToConsume > currentLot.quantity) {
-            throw new Error("Quantidade a ser baixada é maior que o estoque.");
+        const availableQty = (currentLot.quantity || 0) - (currentLot.reservedQuantity || 0);
+
+        if(params.quantityToConsume > availableQty) {
+            throw new Error(`Quantidade a ser baixada (${params.quantityToConsume}) é maior que o estoque disponível (${availableQty}).`);
         }
 
         const newQuantity = currentLot.quantity - params.quantityToConsume;
@@ -369,5 +383,3 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-    
