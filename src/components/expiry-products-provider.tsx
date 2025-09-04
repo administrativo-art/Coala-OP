@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -181,24 +180,31 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
-              
+              const quantity = sourceLot.quantity || 0;
+              const reserved = sourceLot.reservedQuantity || 0;
+
               if (isFinalizingReposition) {
-                  // When finalizing, we check against the total quantity because the stock is already reserved.
-                  if (sourceLot.quantity < quantityToMove) {
-                      throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > total em estoque ${sourceLot.quantity}.`);
+                  if (quantity < quantityToMove) {
+                      throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > total em estoque ${quantity}.`);
                   }
               } else {
-                  // For normal transfers, check against available (non-reserved) quantity.
-                  const availableQuantity = sourceLot.quantity - (sourceLot.reservedQuantity || 0);
+                  const availableQuantity = quantity - reserved;
                   if (availableQuantity < quantityToMove) {
                       throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
                   }
               }
 
-              const newSourceQuantity = sourceLot.quantity - quantityToMove;
+              const newSourceQuantity = quantity - quantityToMove;
               const newReservedQuantity = isFinalizingReposition 
-                ? (sourceLot.reservedQuantity || 0) - quantityToMove
-                : (sourceLot.reservedQuantity || 0);
+                ? reserved - quantityToMove
+                : reserved;
+
+              if (newReservedQuantity < 0) {
+                  throw new Error(`Invariante violado no lote ${lotId}: reservado se tornaria negativo.`);
+              }
+              if (newReservedQuantity > newSourceQuantity) {
+                  throw new Error(`Invariante violado no lote ${lotId}: reservado ${newReservedQuantity} > total ${newSourceQuantity}.`);
+              }
 
               transaction.update(sourceLotDoc.ref, { 
                   quantity: newSourceQuantity,
@@ -363,3 +369,5 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+    

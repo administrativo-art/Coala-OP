@@ -99,7 +99,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       return activityRef.id;
     } catch (error) {
       console.error("Error creating reposition activity:", error);
-      return null;
+      throw error;
     }
   }, [user]);
 
@@ -167,12 +167,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (!activity.items) return;
 
     const lotsToMove = activity.items.flatMap(item => 
-      (item.receivedLots || []).map(lot => ({
+      (item.receivedLots || item.suggestedLots).map(lot => ({
         lotId: lot.lotId,
         productId: lot.productId,
         productName: lot.productName,
         lotNumber: lot.lotNumber,
-        quantityToMove: lot.receivedQuantity,
+        quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
         fromKioskId: activity.kioskOriginId,
         fromKioskName: activity.kioskOriginName,
         toKioskId: activity.kioskDestinationId,
@@ -199,3 +199,5 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
+    
