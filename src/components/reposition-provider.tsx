@@ -180,7 +180,11 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     ).filter(lot => lot.quantityToMove > 0);
     
     if (lotsToMove.length > 0) {
-      await moveMultipleLots(lotsToMove, user, true, true); // Pass true for both flags
+      await moveMultipleLots(lotsToMove, user, { 
+        isFinalizingReposition: true,
+        allowPartialOnFinalize: true,
+        activityId: activity.id
+      }); 
     }
     
     await updateRepositionActivity(activity.id, { status: 'Concluído' });
