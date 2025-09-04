@@ -175,7 +175,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     ).filter(lot => lot.quantityToMove > 0);
     
     if (lotsToMove.length > 0) {
-      await moveMultipleLots(lotsToMove, user);
+      await moveMultipleLots(lotsToMove, user, true); // Pass true for isFinalizingReposition
     }
     
     await updateRepositionActivity(activity.id, { status: 'Concluído' });

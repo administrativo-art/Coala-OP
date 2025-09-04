@@ -33,7 +33,7 @@ export interface ExpiryProductsContextType {
   updateLot: (lot: Partial<LotEntry> & { id: string }) => Promise<void>;
   deleteLotsByIds: (lotIds: string[]) => Promise<boolean>;
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
-  moveMultipleLots: (params: MoveLotParams[], user: User) => Promise<void>;
+  moveMultipleLots: (params: MoveLotParams[], user: User, isFinalizingReposition?: boolean) => Promise<void>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
   adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
 }
@@ -168,7 +168,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User) => {
+  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User, isFinalizingReposition: boolean = false) => {
     try {
       await runTransaction(db, async (transaction) => {
           const lotRefs = paramsArray.map(p => doc(db, "lots", p.lotId));
@@ -181,14 +181,17 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
+              const availableQuantity = sourceLot.quantity - (isFinalizingReposition ? 0 : (sourceLot.reservedQuantity || 0));
               
-              if (sourceLot.quantity < quantityToMove) {
-                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${sourceLot.quantity}.`);
+              if (availableQuantity < quantityToMove) {
+                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
               }
 
               const newSourceQuantity = sourceLot.quantity - quantityToMove;
-              const newReservedQuantity = (sourceLot.reservedQuantity || 0) - quantityToMove;
-              
+              const newReservedQuantity = isFinalizingReposition 
+                ? (sourceLot.reservedQuantity || 0) - quantityToMove
+                : (sourceLot.reservedQuantity || 0);
+
               transaction.update(sourceLotDoc.ref, { 
                   quantity: newSourceQuantity,
                   reservedQuantity: Math.max(0, newReservedQuantity),
