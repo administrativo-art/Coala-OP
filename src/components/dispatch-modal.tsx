@@ -25,6 +25,7 @@ import { PhotoCaptureModal } from './photo-capture-modal';
 import Image from 'next/image';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { ScrollArea } from './ui/scroll-area';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 
 interface DispatchModalProps {
@@ -36,6 +37,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const { updateRepositionActivity } = useReposition();
     const { user } = useAuth();
     const { products } = useProducts();
+    const { lots } = useExpiryProducts();
     
     const [currentStep, setCurrentStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
@@ -192,17 +194,23 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                           <TableRow>
                               <TableHead>Produto</TableHead>
                               <TableHead>Lote</TableHead>
-                              <TableHead className="text-right">Qtd.</TableHead>
+                              <TableHead>Disponível</TableHead>
+                              <TableHead className="text-right">Qtd. a Mover</TableHead>
                           </TableRow>
                       </TableHeader>
                       <TableBody>
-                          {activity.items.flatMap(item => item.suggestedLots.map(lot => (
+                          {activity.items.flatMap(item => item.suggestedLots.map(lot => {
+                            const lotDetails = lots.find(l => l.id === lot.lotId);
+                            const availableQty = lotDetails ? lotDetails.quantity - (lotDetails.reservedQuantity || 0) : 0;
+                            return (
                               <TableRow key={lot.lotId}>
                                   <TableCell className="font-medium">{lot.productName}</TableCell>
                                   <TableCell>{lot.lotNumber}</TableCell>
+                                  <TableCell>{availableQty}</TableCell>
                                   <TableCell className="text-right font-bold">{lot.quantityToMove}</TableCell>
                               </TableRow>
-                          )))}
+                            )
+                          }))}
                       </TableBody>
                   </Table>
               </div>

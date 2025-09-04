@@ -183,8 +183,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
               const availableQuantity = sourceLot.quantity - (isFinalizingReposition ? 0 : (sourceLot.reservedQuantity || 0));
               
-              if (availableQuantity < quantityToMove) {
-                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
+              if (sourceLot.quantity < quantityToMove) {
+                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${sourceLot.quantity}.`);
               }
 
               const newSourceQuantity = sourceLot.quantity - quantityToMove;
