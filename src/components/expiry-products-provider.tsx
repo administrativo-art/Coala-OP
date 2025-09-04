@@ -176,27 +176,28 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
           for (const [index, sourceLotDoc] of sourceLotDocs.entries()) {
               const params = paramsArray[index];
-              const { lotId, toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName } = params;
+              const { lotId, quantityToMove } = params;
               
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
-              const availableQuantity = sourceLot.quantity - (sourceLot.reservedQuantity || 0);
-
-              if (availableQuantity < quantityToMove) {
-                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
+              
+              if (sourceLot.quantity < quantityToMove) {
+                  throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${sourceLot.quantity}.`);
               }
 
               const newSourceQuantity = sourceLot.quantity - quantityToMove;
+              const newReservedQuantity = (sourceLot.reservedQuantity || 0) - quantityToMove;
               
               transaction.update(sourceLotDoc.ref, { 
                   quantity: newSourceQuantity,
+                  reservedQuantity: Math.max(0, newReservedQuantity),
               });
           }
 
            for (const [index, sourceLotDoc] of sourceLotDocs.entries()) {
                const params = paramsArray[index];
-               const { toKioskId, quantityToMove, lotId, fromKioskId, productName, lotNumber, toKioskName, fromKioskName } = params;
+               const { toKioskId, quantityToMove, fromKioskId, productName, lotNumber, toKioskName, fromKioskName } = params;
                const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
                
                const destQuery = query(
