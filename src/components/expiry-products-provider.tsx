@@ -181,7 +181,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               if (!sourceLotDoc.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
               
               const sourceLot = { id: sourceLotDoc.id, ...sourceLotDoc.data() } as LotEntry;
-              const availableQuantity = sourceLot.quantity - (sourceLot.reservedQuantity || 0);
               
               if (isFinalizingReposition) {
                   // When finalizing, we check against the total quantity because the stock is already reserved.
@@ -190,6 +189,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                   }
               } else {
                   // For normal transfers, check against available (non-reserved) quantity.
+                  const availableQuantity = sourceLot.quantity - (sourceLot.reservedQuantity || 0);
                   if (availableQuantity < quantityToMove) {
                       throw new Error(`Quantidade inválida para o lote ${lotId}: mover ${quantityToMove} > disponível ${availableQuantity}.`);
                   }
