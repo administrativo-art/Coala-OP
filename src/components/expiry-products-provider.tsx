@@ -168,7 +168,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
- const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User) => {
+  const moveMultipleLots = useCallback(async (paramsArray: MoveLotParams[], user: User) => {
     try {
       await runTransaction(db, async (transaction) => {
           const lotRefs = paramsArray.map(p => doc(db, "lots", p.lotId));
@@ -193,12 +193,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                   quantity: newSourceQuantity,
                   reservedQuantity: Math.max(0, newReservedQuantity),
               });
-
-              // This read must happen after all initial reads are complete, so it's moved out of the loop logic.
-              // To fix this, we need to restructure. However, since we're creating new documents and not reading-then-writing to destination,
-              // we can handle the destination query outside the transaction if needed, or if creating a new one, just create it.
-              // For simplicity, we'll assume a new doc is created, or we query for it after the source updates.
-              // Let's defer destination writes until after all source reads/writes.
           }
 
            for (const [index, sourceLotDoc] of sourceLotDocs.entries()) {
@@ -213,28 +207,32 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 where("kioskId", "==", toKioskId)
               );
               
-              // In a real transaction, this `getDocs` would need to be moved to the top. 
-              // Since it's complex to re-query for all possible destinations upfront, we'll work around it by committing in stages or simplifying logic.
-              // For this fix, let's create a new doc always, simplifying the transaction logic. A more robust solution might involve a Cloud Function.
-              
-              const newDestLotRef = doc(collection(db, "lots"));
-              const newLotData: Omit<LotEntry, 'id'> = {
-                  productId: sourceLot.productId,
-                  productName: sourceLot.productName,
-                  lotNumber: sourceLot.lotNumber,
-                  expiryDate: sourceLot.expiryDate,
-                  kioskId: toKioskId,
-                  quantity: quantityToMove,
-                  reservedQuantity: 0,
-                  imageUrl: sourceLot.imageUrl,
-                  locationId: null,
-                  locationName: null,
-                  locationCode: null,
-              };
-              // This is a simplification. A robust solution would query for an existing destination lot first.
-              // But to fix the transaction error, we separate reads from writes.
-              // This simplified logic now only writes, based on data from pre-transaction reads.
-              transaction.set(newDestLotRef, newLotData);
+              const destSnapshot = await getDocs(destQuery);
+              let destLotRef;
+              let destLotIdForHistory;
+
+              if (!destSnapshot.empty) {
+                destLotRef = destSnapshot.docs[0].ref;
+                destLotIdForHistory = destSnapshot.docs[0].id;
+                transaction.update(destLotRef, { quantity: increment(quantityToMove) });
+              } else {
+                 destLotRef = doc(collection(db, "lots"));
+                 destLotIdForHistory = destLotRef.id;
+                 const newLotData: Omit<LotEntry, 'id'> = {
+                    productId: sourceLot.productId,
+                    productName: sourceLot.productName,
+                    lotNumber: sourceLot.lotNumber,
+                    expiryDate: sourceLot.expiryDate,
+                    kioskId: toKioskId,
+                    quantity: quantityToMove,
+                    reservedQuantity: 0,
+                    imageUrl: sourceLot.imageUrl,
+                    locationId: null,
+                    locationName: null,
+                    locationCode: null,
+                };
+                transaction.set(destLotRef, newLotData);
+              }
 
               const now = new Date().toISOString();
               const commonData = {
@@ -251,7 +249,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
               transaction.set(movementOutRef, { ...commonData, lotId: sourceLot.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId, fromKioskName, toKioskId, toKioskName });
               
               const movementInRef = doc(collection(db, "movementHistory"));
-              transaction.set(movementInRef, { ...commonData, lotId: newDestLotRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId, fromKioskName, toKioskId, toKioskName });
+              transaction.set(movementInRef, { ...commonData, lotId: destLotIdForHistory, type: 'TRANSFERENCIA_ENTRADA', fromKioskId, fromKioskName, toKioskId, toKioskName });
            }
       });
     } catch (error) {

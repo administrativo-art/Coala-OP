@@ -88,7 +88,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
 
                 tableRows.push([
                     lot.productName,
-                    lot.lotNumber, // Usar o número do lote
+                    lot.lotNumber,
                     lot.quantityToMove,
                     boxQuantityText
                 ]);
