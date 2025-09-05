@@ -533,7 +533,14 @@ function RepositionHistory() {
             onConfirm={handleRevertConfirm}
             isDeleting={isReverting}
             title="Reverter Atividade?"
-            description="Esta ação irá reabrir a atividade e reverter a movimentação de estoque (se aplicável). O status voltará para 'Aguardando despacho'."
+            description={
+                activityToRevert ? (
+                    <span>
+                        Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>.
+                        A atividade de reposição será reaberta com o status 'Aguardando despacho'.
+                    </span>
+                ) : ''
+            }
             confirmButtonText="Sim, reverter"
         />
     </>
