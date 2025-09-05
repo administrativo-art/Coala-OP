@@ -273,17 +273,38 @@ export function LotCard({
     );
   };
   
-  const getReservationInfo = (lot: LotEntry) => {
+  const getReservationDetails = (lot: LotEntry) => {
     if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
       return null;
     }
-    const activity = activities.find(act => 
-      (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') && 
-      act.items.some(item => 
-        item.suggestedLots.some(sl => sl.lotId === lot.id)
-      )
+  
+    const reservationDetails: { [kioskName: string]: number } = {};
+  
+    const relevantActivities = activities.filter(act => 
+        (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
+        act.items.some(item => 
+          item.suggestedLots.some(sl => sl.lotId === lot.id)
+        )
     );
-    return activity ? `para ${activity.kioskDestinationName}` : 'em processo';
+  
+    relevantActivities.forEach(act => {
+      act.items.forEach(item => {
+        item.suggestedLots.forEach(sl => {
+          if (sl.lotId === lot.id) {
+            const destName = act.kioskDestinationName.split(' ')[1] || act.kioskDestinationName;
+            reservationDetails[destName] = (reservationDetails[destName] || 0) + sl.quantityToMove;
+          }
+        });
+      });
+    });
+  
+    if (Object.keys(reservationDetails).length === 0) {
+      return 'em processo';
+    }
+  
+    return Object.entries(reservationDetails)
+      .map(([name, qty]) => `${name}: ${qty}`)
+      .join(', ');
   };
 
 
@@ -339,7 +360,7 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const reservationInfo = getReservationInfo(lot);
+                const reservationInfo = getReservationDetails(lot);
                 
                 let totalUnits: number;
                 let totalUnitsLabel: string;
