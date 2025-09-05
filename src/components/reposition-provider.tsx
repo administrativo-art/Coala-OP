@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type RepositionActivity, type RepositionItem, type LotEntry } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
@@ -225,65 +226,88 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         await runTransaction(db, async (transaction) => {
             const activityRef = doc(db, 'repositionActivities', activityId);
 
-            // Step 1: If the activity was completed, reverse the actual stock movement.
-            if (activityToRevert.status === 'Concluído') {
-                const lotsToReverse = activityToRevert.items.flatMap(item => 
+            // Step 1: If the activity was completed, prepare to reverse the actual stock movement.
+            // Collect all document references that need to be read.
+            const lotsToReverse = activityToRevert.status === 'Concluído' 
+                ? activityToRevert.items.flatMap(item => 
                     (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
                         lotId: lot.lotId,
                         productId: lot.productId,
                         lotNumber: lot.lotNumber,
                         quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
                     }))
-                ).filter(lot => lot.quantityToMove > 0);
-                
-                for (const itemToReverse of lotsToReverse) {
-                    const originalLotRef = doc(db, 'lots', itemToReverse.lotId);
-                    const originalLotDoc = await transaction.get(originalLotRef);
-                    if (!originalLotDoc.exists()) continue; // Should not happen if data is consistent
-
-                    const originalLotData = originalLotDoc.data() as LotEntry;
-
-                    const destinationLotId = destLotIdKey({
-                        productId: itemToReverse.productId,
-                        kioskId: activityToRevert.kioskDestinationId,
-                        lotNumber: itemToReverse.lotNumber,
-                        expiryDate: originalLotData.expiryDate,
-                    });
-
-                    const destinationLotRef = doc(db, 'lots', destinationLotId);
-                    const destinationLotDoc = await transaction.get(destinationLotRef);
-
-                    if (destinationLotDoc.exists()) {
-                        transaction.update(destinationLotRef, { quantity: -itemToReverse.quantityToMove });
-                        transaction.update(originalLotRef, { quantity: +itemToReverse.quantityToMove });
-                    } else {
-                        // This case is complex - if the lot was new at destination. For now, we assume it exists.
-                        // A more robust solution might recreate the lot at origin.
-                        console.warn(`Cannot revert: destination lot ${destinationLotId} does not exist.`);
-                    }
-                }
-            }
+                  ).filter(lot => lot.quantityToMove > 0)
+                : [];
             
-            // Step 2: Re-reserve the stock quantities
-            const lotRefsToRead = activityToRevert.items.flatMap(item => 
-                item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
-            );
-            const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
-            const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
-            const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data() as LotEntry]));
+            const refsToRead: Map<string, ReturnType<typeof doc>> = new Map();
+            
+            // Add original lots to read queue
+            activityToRevert.items.flatMap(item => item.suggestedLots).forEach(lot => {
+                if (!refsToRead.has(lot.lotId)) {
+                    refsToRead.set(lot.lotId, doc(db, 'lots', lot.lotId));
+                }
+            });
 
+            // Add destination lots to read queue (if reversal is needed)
+            if (lotsToReverse.length > 0) {
+                // Get expiry dates first (this is a read outside transaction, but it's on static data)
+                const sourceLotsData = await Promise.all(
+                    lotsToReverse.map(item => getDoc(doc(db, 'lots', item.lotId)))
+                );
+                const expiryMap = new Map(sourceLotsData.map(d => [d.id, (d.data() as LotEntry)?.expiryDate]));
+
+                lotsToReverse.forEach(item => {
+                     const destinationLotId = destLotIdKey({
+                        productId: item.productId,
+                        kioskId: activityToRevert.kioskDestinationId,
+                        lotNumber: item.lotNumber,
+                        expiryDate: expiryMap.get(item.lotId),
+                    });
+                     if (!refsToRead.has(destinationLotId)) {
+                        refsToRead.set(destinationLotId, doc(db, 'lots', destinationLotId));
+                    }
+                });
+            }
+
+            // Step 2: Execute all reads.
+            const readDocs = await Promise.all(Array.from(refsToRead.values()).map(ref => transaction.get(ref)));
+            const docDataMap = new Map(readDocs.map(d => [d.id, d.data() as LotEntry]));
+
+            // Step 3: Perform writes.
+            // Reverse stock movement if necessary.
+            if (lotsToReverse.length > 0) {
+                const sourceLotsData = await Promise.all(
+                    lotsToReverse.map(item => getDoc(doc(db, 'lots', item.lotId)))
+                );
+                 const expiryMap = new Map(sourceLotsData.map(d => [d.id, (d.data() as LotEntry)?.expiryDate]));
+
+                lotsToReverse.forEach(item => {
+                    const destinationLotId = destLotIdKey({
+                        productId: item.productId,
+                        kioskId: activityToRevert.kioskDestinationId,
+                        lotNumber: item.lotNumber,
+                        expiryDate: expiryMap.get(item.lotId),
+                    });
+                    
+                    const sourceLotRef = doc(db, 'lots', item.lotId);
+                    const destLotRef = doc(db, 'lots', destinationLotId);
+                    
+                    if (docDataMap.has(destinationLotId)) {
+                        transaction.update(destLotRef, { quantity: increment(-item.quantityToMove) });
+                        transaction.update(sourceLotRef, { quantity: increment(item.quantityToMove) });
+                    }
+                });
+            }
+
+            // Re-reserve stock by reverting the un-reservation from cancellation or finalization.
             activityToRevert.items.forEach(item => {
                 item.suggestedLots.forEach(lotToReReserve => {
-                    const currentLotData = lotDataMap.get(lotToReReserve.lotId);
-                    if (currentLotData) {
-                        const currentReserved = currentLotData.reservedQuantity || 0;
-                        const newReserved = currentReserved + lotToReReserve.quantityToMove;
-                        transaction.update(doc(db, 'lots', lotToReReserve.lotId), { reservedQuantity: newReserved });
-                    }
+                    const lotRef = doc(db, 'lots', lotToReReserve.lotId);
+                    transaction.update(lotRef, { reservedQuantity: increment(lotToReReserve.quantityToMove) });
                 });
             });
 
-            // Step 3: Reset the activity status to 'Aguardando despacho'
+            // Finally, update the activity status.
             transaction.update(activityRef, {
                 status: 'Aguardando despacho',
                 receiptNotes: '',
