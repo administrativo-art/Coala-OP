@@ -9,7 +9,7 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart } from 'lucide-react';
+import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart, Shield } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
@@ -343,6 +343,12 @@ export function LotCard({
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                                 {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
+                                {lot.reservedQuantity && lot.reservedQuantity > 0 && (
+                                    <p className="text-blue-600 font-bold flex items-center gap-1">
+                                        <Shield className="h-3 w-3"/>
+                                        Reserva: {lot.reservedQuantity}
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
