@@ -493,12 +493,16 @@ function RepositionHistory() {
             </CardHeader>
             <CardContent>
                 <Accordion type="multiple" className="w-full space-y-3">
-                    {historicalActivities.map(activity => (
+                    {historicalActivities.map(activity => {
+                        const totalPackages = activity.items.reduce((sum, item) => sum + item.suggestedLots.reduce((s, l) => s + l.quantityToMove, 0), 0);
+                        const hasDivergence = activity.status === 'Recebido com divergência';
+                        
+                        return (
                         <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
-                            <AccordionTrigger className="p-4 hover:no-underline">
+                            <AccordionTrigger className="p-4 hover:no-underline text-left">
                                 <div className="flex justify-between items-center w-full">
                                     <div>
-                                        <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                        <p className="font-semibold text-base">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
                                         <p className="text-sm text-muted-foreground">
                                             {activity.status === 'Concluído' ? 'Concluída em' : 'Cancelada em'} {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
                                         </p>
@@ -507,13 +511,45 @@ function RepositionHistory() {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">
-                                <ul className="list-disc pl-5 mt-1 text-sm space-y-1">
-                                    {activity.items.flatMap(item => item.suggestedLots).map(lot => (
-                                        <li key={lot.lotId}>
-                                            {lot.quantityToMove} x {lot.productName} (Lote: {lot.lotNumber})
-                                        </li>
-                                    ))}
-                                </ul>
+                               <div className="space-y-4">
+                                {activity.receiptNotes && (
+                                    <blockquote className="mt-2 border-l-2 pl-4 italic text-sm text-muted-foreground">
+                                        <strong>Notas do Recebimento:</strong> "{activity.receiptNotes}"
+                                    </blockquote>
+                                )}
+                                <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Insumo</TableHead>
+                                            <TableHead>Lote</TableHead>
+                                            <TableHead className="text-center">Qtd. Enviada</TableHead>
+                                            <TableHead className="text-center">Qtd. Recebida</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {activity.items.flatMap(item => 
+                                            item.suggestedLots.map(lot => {
+                                                const receivedLot = activity.items.flatMap(i => i.receivedLots || []).find(rl => rl.lotId === lot.lotId);
+                                                const receivedQty = receivedLot?.receivedQuantity;
+                                                const sentQty = lot.quantityToMove;
+                                                const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
+
+                                                return (
+                                                    <TableRow key={lot.lotId} className={cn(isDivergent && "bg-destructive/10")}>
+                                                        <TableCell className="font-medium">{lot.productName}</TableCell>
+                                                        <TableCell>{lot.lotNumber}</TableCell>
+                                                        <TableCell className="text-center">{sentQty}</TableCell>
+                                                        <TableCell className={cn("text-center font-bold", isDivergent && "text-destructive")}>
+                                                            {receivedQty ?? '-'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })
+                                        )}
+                                    </TableBody>
+                                </Table>
+                                </div>
                                 {permissions.reposition.cancel && (
                                     <div className="mt-4 pt-4 border-t flex justify-end">
                                         <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
@@ -521,9 +557,10 @@ function RepositionHistory() {
                                         </Button>
                                     </div>
                                 )}
+                               </div>
                             </AccordionContent>
                         </AccordionItem>
-                    ))}
+                    )})}
                 </Accordion>
             </CardContent>
         </Card>
@@ -535,10 +572,7 @@ function RepositionHistory() {
             title="Reverter Atividade?"
             description={
                 activityToRevert ? (
-                    <span>
-                        Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>.
-                        A atividade de reposição será reaberta com o status 'Aguardando despacho'.
-                    </span>
+                    <div>Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>. A atividade de reposição será reaberta com o status 'Aguardando despacho'.</div>
                 ) : ''
             }
             confirmButtonText="Sim, reverter"
