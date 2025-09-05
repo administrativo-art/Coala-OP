@@ -1,4 +1,3 @@
-
 "use client"
 
 import Image from 'next/image';
@@ -9,7 +8,7 @@ import QRCode from 'qrcode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart, Shield } from 'lucide-react';
+import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart, Shield, Database, Copy } from 'lucide-react';
 import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
@@ -254,6 +253,11 @@ export function LotCard({
     doc.save(`etiqueta_${productName.replace(/ /g,"_")}_${lotNumber}.pdf`);
   };
 
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast({ title: "ID do Lote Copiado!" });
+  };
+  
   const renderActionButton = (lot: LotEntry, Icon: React.ElementType, tooltip: string, action: () => void, permission: boolean, destructive = false) => {
     if (!permission) return null;
     return (
@@ -335,7 +339,26 @@ export function LotCard({
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <p className="font-semibold">Lote: {lot.lotNumber}</p>
+                                <p className="font-semibold flex items-center gap-1">
+                                  <span>Lote: {lot.lotNumber}</span>
+                                   {user?.username === 'Tiago Brasil' && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
+                                                        <Database className="h-3 w-3" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="flex items-center gap-2">
+                                                    <p className="font-mono text-xs">{lot.id}</p>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopyId(lot.id)}>
+                                                        <Copy className="h-3 w-3" />
+                                                    </Button>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
+                                </p>
                                 <Badge variant={status.variant as any} className={status.className}>
                                     {status.text}
                                 </Badge>
