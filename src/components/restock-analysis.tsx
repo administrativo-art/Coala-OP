@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { useAuth } from '@/hooks/use-auth';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 interface SuggestedLot {
     lot: LotEntry;
