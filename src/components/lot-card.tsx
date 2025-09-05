@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import Image from 'next/image';
@@ -365,16 +366,14 @@ export function LotCard({
                                    {user?.username === 'Tiago Brasil' && (
                                         <TooltipProvider>
                                             <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground">
-                                                        <Database className="h-3 w-3" />
-                                                    </Button>
+                                                <TooltipTrigger>
+                                                  <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleCopyId(lot.id)}>
+                                                    <Database className="h-3 w-3 text-muted-foreground" />
+                                                    <Copy className="h-3 w-3 text-muted-foreground" />
+                                                  </div>
                                                 </TooltipTrigger>
                                                 <TooltipContent className="flex items-center gap-2">
                                                     <p className="font-mono text-xs">{lot.id}</p>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopyId(lot.id)}>
-                                                        <Copy className="h-3 w-3" />
-                                                    </Button>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
@@ -435,5 +434,3 @@ export function LotCard({
     </>
   );
 }
-
-    

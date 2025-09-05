@@ -227,7 +227,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                     ))}
                     <div className="p-4 border rounded-lg space-y-2">
                         <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do recebedor</Label>
-                        <div className="rounded-md border bg-background">
+                        <div className="rounded-md border bg-white">
                             <SignatureCanvas
                             ref={sigCanvas}
                             penColor="black"

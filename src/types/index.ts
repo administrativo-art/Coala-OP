@@ -207,7 +207,7 @@ export type ProductSimulationItem = {
   baseProductId: string;
   quantity: number;
   useDefault: boolean;
-  overrideCostPerUnit?: overrideCostPerUnit;
+  overrideCostPerUnit?: number;
   overrideUnit?: string;
 };
 
