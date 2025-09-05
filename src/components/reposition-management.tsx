@@ -10,14 +10,13 @@ import { Card } from "./ui/card";
 import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { AuditReceiptModal } from "./audit-receipt-modal";
-import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useProducts } from "@/hooks/use-products";
@@ -43,7 +42,7 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 export function RepositionManagement() {
     const { activities, loading, deleteRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
     const { user, permissions } = useAuth();
-    const { products, getProductFullName } = useProducts();
+    const { products } = useProducts();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
@@ -82,21 +81,31 @@ export function RepositionManagement() {
         doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 38);
         doc.text(`Data da Solicitação: ${format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 44);
 
-        const tableColumn = ["Produto", "Lote", "Qtd. a Mover"];
+        const tableColumn = ["Produto", "Lote", "Qtd. Pacotes", "Qtd. Caixas"];
         const tableRows: any[][] = [];
 
         activity.items.forEach(item => {
             item.suggestedLots.forEach(lot => {
                 const product = products.find(p => p.id === lot.productId);
-                let quantityText = `${lot.quantityToMove}`;
-                if(product) {
-                    quantityText += ` ${product.rotulo_caixa || 'un'}`;
+                let boxQuantityText = '-';
+                if (product && product.multiplo_caixa && product.multiplo_caixa > 0) {
+                    const boxes = Math.floor(lot.quantityToMove / product.multiplo_caixa);
+                    const units = lot.quantityToMove % product.multiplo_caixa;
+                    if (boxes > 0) {
+                        boxQuantityText = `${boxes} ${product.rotulo_caixa || 'cx'}(s)`;
+                        if (units > 0) {
+                            boxQuantityText += ` + ${units} un`;
+                        }
+                    } else {
+                        boxQuantityText = `${units} un`;
+                    }
                 }
-                
+
                 tableRows.push([
                     lot.productName,
                     lot.lotNumber,
                     lot.quantityToMove,
+                    boxQuantityText
                 ]);
             });
         });
