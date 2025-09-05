@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo } from 'react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -16,7 +18,7 @@ import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory } from '@/types';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
@@ -25,8 +27,6 @@ import { RepositionManagement } from './reposition-management';
 import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 interface SuggestedLot {
