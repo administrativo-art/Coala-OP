@@ -1,3 +1,4 @@
+
 "use client"
 
 import Image from 'next/image';
@@ -339,7 +340,7 @@ export function LotCard({
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <p className="font-semibold flex items-center gap-1">
+                                <div className="font-semibold flex items-center gap-1">
                                   <span>Lote: {lot.lotNumber}</span>
                                    {user?.username === 'Tiago Brasil' && (
                                         <TooltipProvider>
@@ -358,7 +359,7 @@ export function LotCard({
                                             </Tooltip>
                                         </TooltipProvider>
                                     )}
-                                </p>
+                                </div>
                                 <Badge variant={status.variant as any} className={status.className}>
                                     {status.text}
                                 </Badge>
