@@ -182,33 +182,38 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
     if (!user) throw new Error("Usuário não autenticado.");
     if (!activity.items) return;
-
-    const itemsToMove = activity.items.flatMap(item => 
-      (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
-        lotId: lot.lotId,
-        productId: lot.productId,
-        productName: lot.productName,
-        lotNumber: lot.lotNumber,
-        quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
-        fromKioskId: activity.kioskOriginId,
-        fromKioskName: activity.kioskOriginName,
-        toKioskId: activity.kioskDestinationId,
-        toKioskName: activity.kioskDestinationName,
-      }))
-    ).filter(lot => lot.quantityToMove > 0);
     
+    // Determine the actual quantity moved for each lot based on receivedLots
+    const itemsToMove = activity.items.flatMap(item => 
+        (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
+            lotId: lot.lotId,
+            productId: lot.productId,
+            productName: lot.productName,
+            lotNumber: lot.lotNumber,
+            quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
+            fromKioskId: activity.kioskOriginId,
+            fromKioskName: activity.kioskOriginName,
+            toKioskId: activity.kioskDestinationId,
+            toKioskName: activity.kioskDestinationName,
+        }))
+    ).filter(lot => lot.quantityToMove > 0);
+
     if (itemsToMove.length > 0) {
-      const results = await moveMultipleLots(itemsToMove, user, { 
-        isFinalizingReposition: true,
-        allowPartialOnFinalize: true, // This is key to handle old inconsistent data
-        activityId: activity.id
-      }); 
-
-      const pendingSum = results.reduce((acc, r) => acc + r.pending, 0);
-      if (pendingSum > 0) {
-        console.warn(`Atividade ${activity.id} finalizada parcialmente. Pendente: ${pendingSum}`);
-      }
-
+        await moveMultipleLots(itemsToMove, user, { 
+            isFinalizingReposition: true,
+            activityId: activity.id,
+            allowPartialOnFinalize: true, // Always allow partial on finalization
+        });
+    } else {
+         // Even if no items were received, we need to release the reservation
+         await runTransaction(db, async (transaction) => {
+            for (const item of activity.items) {
+                for (const lot of item.suggestedLots) {
+                    const lotRef = doc(db, 'lots', lot.lotId);
+                    transaction.update(lotRef, { reservedQuantity: increment(-lot.quantityToMove) });
+                }
+            }
+        });
     }
     
     await updateRepositionActivity(activity.id, { status: 'Concluído' });
@@ -226,88 +231,82 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         await runTransaction(db, async (transaction) => {
             const activityRef = doc(db, 'repositionActivities', activityId);
 
-            // Step 1: If the activity was completed, prepare to reverse the actual stock movement.
-            // Collect all document references that need to be read.
-            const lotsToReverse = activityToRevert.status === 'Concluído' 
-                ? activityToRevert.items.flatMap(item => 
-                    (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
-                        lotId: lot.lotId,
-                        productId: lot.productId,
-                        lotNumber: lot.lotNumber,
-                        quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
-                    }))
-                  ).filter(lot => lot.quantityToMove > 0)
-                : [];
-            
+            // Step 1: Collect all necessary document references to read first
             const refsToRead: Map<string, ReturnType<typeof doc>> = new Map();
-            
-            // Add original lots to read queue
-            activityToRevert.items.flatMap(item => item.suggestedLots).forEach(lot => {
-                if (!refsToRead.has(lot.lotId)) {
-                    refsToRead.set(lot.lotId, doc(db, 'lots', lot.lotId));
-                }
+            const sourceLotIds = activityToRevert.items.flatMap(item => item.suggestedLots.map(l => l.lotId));
+            sourceLotIds.forEach(id => {
+                if (!refsToRead.has(id)) refsToRead.set(id, doc(db, 'lots', id));
             });
 
-            // Add destination lots to read queue (if reversal is needed)
-            if (lotsToReverse.length > 0) {
-                // Get expiry dates first (this is a read outside transaction, but it's on static data)
-                const sourceLotsData = await Promise.all(
-                    lotsToReverse.map(item => getDoc(doc(db, 'lots', item.lotId)))
+            // If the activity was completed, we also need to read the destination lots
+            if (activityToRevert.status === 'Concluído') {
+                const sourceLotsSnaps = await Promise.all(
+                    activityToRevert.items.flatMap(i => i.suggestedLots.map(l => getDoc(doc(db, 'lots', l.lotId))))
                 );
-                const expiryMap = new Map(sourceLotsData.map(d => [d.id, (d.data() as LotEntry)?.expiryDate]));
+                const expiryMap = new Map(sourceLotsSnaps.map(snap => [snap.id, (snap.data() as LotEntry)?.expiryDate]));
 
-                lotsToReverse.forEach(item => {
-                     const destinationLotId = destLotIdKey({
-                        productId: item.productId,
-                        kioskId: activityToRevert.kioskDestinationId,
-                        lotNumber: item.lotNumber,
-                        expiryDate: expiryMap.get(item.lotId),
+                activityToRevert.items.forEach(item => {
+                    (item.receivedLots || item.suggestedLots).forEach(lot => {
+                        const destinationLotId = destLotIdKey({
+                            productId: lot.productId,
+                            kioskId: activityToRevert.kioskDestinationId,
+                            lotNumber: lot.lotNumber,
+                            expiryDate: expiryMap.get(lot.lotId),
+                        });
+                        if (!refsToRead.has(destinationLotId)) {
+                            refsToRead.set(destinationLotId, doc(db, 'lots', destinationLotId));
+                        }
                     });
-                     if (!refsToRead.has(destinationLotId)) {
-                        refsToRead.set(destinationLotId, doc(db, 'lots', destinationLotId));
-                    }
                 });
             }
 
-            // Step 2: Execute all reads.
+            // Step 2: Execute all reads
             const readDocs = await Promise.all(Array.from(refsToRead.values()).map(ref => transaction.get(ref)));
-            const docDataMap = new Map(readDocs.map(d => [d.id, d.data() as LotEntry]));
+            const docDataMap = new Map(readDocs.map(d => [d.id, d.data()]));
 
-            // Step 3: Perform writes.
-            // Reverse stock movement if necessary.
-            if (lotsToReverse.length > 0) {
-                const sourceLotsData = await Promise.all(
-                    lotsToReverse.map(item => getDoc(doc(db, 'lots', item.lotId)))
+
+            // Step 3: Perform all writes
+            // Reverse stock movement if activity was completed
+            if (activityToRevert.status === 'Concluído') {
+                const sourceLotsSnaps = await Promise.all(
+                    activityToRevert.items.flatMap(i => i.suggestedLots.map(l => getDoc(doc(db, 'lots', l.lotId))))
                 );
-                 const expiryMap = new Map(sourceLotsData.map(d => [d.id, (d.data() as LotEntry)?.expiryDate]));
+                const expiryMap = new Map(sourceLotsSnaps.map(snap => [snap.id, (snap.data() as LotEntry)?.expiryDate]));
 
-                lotsToReverse.forEach(item => {
-                    const destinationLotId = destLotIdKey({
-                        productId: item.productId,
-                        kioskId: activityToRevert.kioskDestinationId,
-                        lotNumber: item.lotNumber,
-                        expiryDate: expiryMap.get(item.lotId),
+                activityToRevert.items.forEach(item => {
+                    const lotsToProcess = item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots;
+                    lotsToProcess.forEach(lot => {
+                        const receivedQty = (lot as any).receivedQuantity ?? lot.quantityToMove;
+                        if (receivedQty > 0) {
+                            const sourceLotRef = doc(db, 'lots', lot.lotId);
+                            const destinationLotId = destLotIdKey({
+                                productId: lot.productId,
+                                kioskId: activityToRevert.kioskDestinationId,
+                                lotNumber: lot.lotNumber,
+                                expiryDate: expiryMap.get(lot.lotId),
+                            });
+                            const destLotRef = doc(db, 'lots', destinationLotId);
+
+                            if (docDataMap.has(destinationLotId)) {
+                                transaction.update(destLotRef, { quantity: increment(-receivedQty) });
+                                transaction.update(sourceLotRef, { quantity: increment(receivedQty) });
+                            }
+                        }
                     });
-                    
-                    const sourceLotRef = doc(db, 'lots', item.lotId);
-                    const destLotRef = doc(db, 'lots', destinationLotId);
-                    
-                    if (docDataMap.has(destinationLotId)) {
-                        transaction.update(destLotRef, { quantity: increment(-item.quantityToMove) });
-                        transaction.update(sourceLotRef, { quantity: increment(item.quantityToMove) });
-                    }
                 });
             }
 
-            // Re-reserve stock by reverting the un-reservation from cancellation or finalization.
+            // Re-reserve stock for the activity
             activityToRevert.items.forEach(item => {
                 item.suggestedLots.forEach(lotToReReserve => {
                     const lotRef = doc(db, 'lots', lotToReReserve.lotId);
-                    transaction.update(lotRef, { reservedQuantity: increment(lotToReReserve.quantityToMove) });
+                    if (docDataMap.has(lotToReReserve.lotId)) { // Ensure lot exists before trying to update
+                         transaction.update(lotRef, { reservedQuantity: increment(lotToReReserve.quantityToMove) });
+                    }
                 });
             });
-
-            // Finally, update the activity status.
+            
+            // Finally, update the activity status back to pending
             transaction.update(activityRef, {
                 status: 'Aguardando despacho',
                 receiptNotes: '',
@@ -319,7 +318,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         console.error("Error reverting reposition activity:", error);
         throw error;
     }
-}, [user, activities]);
+  }, [user, activities]);
 
 
   const value = useMemo(() => ({
@@ -334,3 +333,4 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
