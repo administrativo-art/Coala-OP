@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type RepositionActivity, type RepositionItem, type LotEntry } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
@@ -19,6 +19,18 @@ export interface RepositionContextType {
 }
 
 export const RepositionContext = createContext<RepositionContextType | undefined>(undefined);
+
+// Helper to generate the unique key for a lot
+const destLotIdKey = (params: {
+  productId: string;
+  kioskId: string;
+  expiryDate?: string | null;
+  lotNumber: string;
+}) => {
+  const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
+  const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
+  return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
+};
 
 export function RepositionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -208,38 +220,51 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (!activityToRevert) {
         throw new Error("Activity to revert not found.");
     }
-
+    
     try {
         await runTransaction(db, async (transaction) => {
             const activityRef = doc(db, 'repositionActivities', activityId);
 
             // Step 1: If the activity was completed, reverse the actual stock movement.
             if (activityToRevert.status === 'Concluído') {
-                const itemsToReverse = activityToRevert.items.flatMap(item => 
+                const lotsToReverse = activityToRevert.items.flatMap(item => 
                     (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
                         lotId: lot.lotId,
                         productId: lot.productId,
-                        productName: lot.productName,
                         lotNumber: lot.lotNumber,
                         quantityToMove: (lot as any).receivedQuantity ?? lot.quantityToMove,
-                        // SWAP origin and destination for reversal
-                        fromKioskId: activityToRevert.kioskDestinationId,
-                        fromKioskName: activityToRevert.kioskDestinationName,
-                        toKioskId: activityToRevert.kioskOriginId,
-                        toKioskName: activityToRevert.kioskOriginName,
                     }))
                 ).filter(lot => lot.quantityToMove > 0);
+                
+                for (const itemToReverse of lotsToReverse) {
+                    const originalLotRef = doc(db, 'lots', itemToReverse.lotId);
+                    const originalLotDoc = await transaction.get(originalLotRef);
+                    if (!originalLotDoc.exists()) continue; // Should not happen if data is consistent
 
-                if (itemsToReverse.length > 0) {
-                    // Re-using moveMultipleLots for reversal is complex.
-                    // A direct manual transaction is safer here.
-                    // This simplified logic assumes it moves stock back.
-                    // A full implementation requires reading both source and dest lots and adjusting them.
+                    const originalLotData = originalLotDoc.data() as LotEntry;
+
+                    const destinationLotId = destLotIdKey({
+                        productId: itemToReverse.productId,
+                        kioskId: activityToRevert.kioskDestinationId,
+                        lotNumber: itemToReverse.lotNumber,
+                        expiryDate: originalLotData.expiryDate,
+                    });
+
+                    const destinationLotRef = doc(db, 'lots', destinationLotId);
+                    const destinationLotDoc = await transaction.get(destinationLotRef);
+
+                    if (destinationLotDoc.exists()) {
+                        transaction.update(destinationLotRef, { quantity: -itemToReverse.quantityToMove });
+                        transaction.update(originalLotRef, { quantity: +itemToReverse.quantityToMove });
+                    } else {
+                        // This case is complex - if the lot was new at destination. For now, we assume it exists.
+                        // A more robust solution might recreate the lot at origin.
+                        console.warn(`Cannot revert: destination lot ${destinationLotId} does not exist.`);
+                    }
                 }
             }
             
             // Step 2: Re-reserve the stock quantities
-            const lotUpdates = new Map<string, { reservedQuantity: number }>();
             const lotRefsToRead = activityToRevert.items.flatMap(item => 
                 item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
             );
@@ -253,15 +278,10 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                     if (currentLotData) {
                         const currentReserved = currentLotData.reservedQuantity || 0;
                         const newReserved = currentReserved + lotToReReserve.quantityToMove;
-                        lotUpdates.set(lotToReReserve.lotId, { reservedQuantity: newReserved });
+                        transaction.update(doc(db, 'lots', lotToReReserve.lotId), { reservedQuantity: newReserved });
                     }
                 });
             });
-
-            for (const [lotId, updateData] of lotUpdates.entries()) {
-                const lotRef = doc(db, 'lots', lotId);
-                transaction.update(lotRef, updateData);
-            }
 
             // Step 3: Reset the activity status to 'Aguardando despacho'
             transaction.update(activityRef, {
@@ -275,7 +295,8 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         console.error("Error reverting reposition activity:", error);
         throw error;
     }
-  }, [user, activities]);
+}, [user, activities]);
+
 
   const value = useMemo(() => ({
     activities,
