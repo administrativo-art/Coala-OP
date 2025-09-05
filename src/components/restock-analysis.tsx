@@ -28,6 +28,7 @@ import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { useAuth } from '@/hooks/use-auth';
 
 interface SuggestedLot {
     lot: LotEntry;
