@@ -26,6 +26,7 @@ import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 interface SuggestedLot {
@@ -485,7 +486,7 @@ function RepositionHistory() {
                                     <div>
                                         <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            Concluída em {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: 'pt-BR' }) : ''}
+                                            Concluída em {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
                                         </p>
                                     </div>
                                     <Badge>Concluído</Badge>
