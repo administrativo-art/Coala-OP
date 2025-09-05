@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState } from 'react';
@@ -8,18 +9,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { History, Trash2, ArrowRight } from 'lucide-react';
+import { History, ArrowRight, Undo2 } from 'lucide-react';
 import { useMovementHistory } from '@/hooks/use-movement-history';
-import { type LotEntry, type MovementRecord } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 
-const getMovementTypeStyle = (type: MovementRecord['type']) => {
+const getMovementTypeStyle = (type: MovementType) => {
     if (type?.includes('ENTRADA')) return 'text-green-600';
     if (type?.includes('SAIDA')) return 'text-destructive';
     if (type?.includes('TRANSFERENCIA')) return 'text-blue-600';
@@ -32,11 +34,12 @@ interface LotMovementHistoryModalProps {
 }
 
 export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistoryModalProps) {
-  const { history, loading, deleteMovementRecord } = useMovementHistory();
+  const { history, loading } = useMovementHistory();
   const { permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
-  const [recordToDelete, setRecordToDelete] = useState<MovementRecord | null>(null);
+  const { revertMovement, loading: expiryLoading } = useExpiryProducts();
+  const [recordToRevert, setRecordToRevert] = useState<MovementRecord | null>(null);
 
   const movementHistory = useMemo(() => {
     if (loading) return [];
@@ -55,18 +58,18 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     })
   }, [lot, history, loading, kiosks]);
 
-  const handleDeleteConfirm = async () => {
-    if (!recordToDelete) return;
+  const handleRevertConfirm = async () => {
+    if (!recordToRevert) return;
     try {
-        await deleteMovementRecord(recordToDelete.id);
-        toast({ title: "Registro excluído com sucesso!" });
-        setRecordToDelete(null);
-    } catch {
-        toast({ variant: 'destructive', title: "Erro ao excluir registro." });
+        await revertMovement(recordToRevert);
+        toast({ title: "Movimentação revertida com sucesso!" });
+        setRecordToRevert(null);
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: "Erro ao reverter.", description: error.message });
     }
   };
   
-  const canDelete = permissions.lots.delete;
+  const canRevert = permissions.lots.delete;
 
   return (
     <>
@@ -96,14 +99,14 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                                 <TableHead>Quiosque</TableHead>
                                 <TableHead className="text-right">Qtd.</TableHead>
                                 <TableHead>Usuário</TableHead>
-                                {canDelete && <TableHead className="text-right">Ações</TableHead>}
+                                {canRevert && <TableHead className="text-right">Ações</TableHead>}
                             </TableRow>
                             </TableHeader>
                             <TableBody>
                             {movementHistory.map((item) => {
                                 const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
                                 return (
-                                <TableRow key={item.id}>
+                                <TableRow key={item.id} className={item.reverted ? 'bg-muted/50 text-muted-foreground' : ''}>
                                 <TableCell>
                                     {timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
                                 </TableCell>
@@ -111,7 +114,7 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                                 {lot === null && <TableCell>{item.lotNumber}</TableCell>}
                                 <TableCell>
                                     <Badge variant="outline" className={cn(getMovementTypeStyle(item.type))}>
-                                        {item.type}
+                                        {item.reverted ? 'Revertido' : item.type}
                                     </Badge>
                                 </TableCell>
                                 <TableCell>{item.kioskName}
@@ -119,10 +122,10 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
                                 <TableCell>{item.username}</TableCell>
-                                {canDelete && (
+                                {canRevert && (
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setRecordToDelete(item)}>
-                                            <Trash2 className="h-4 w-4"/>
+                                        <Button variant="ghost" size="icon" className="text-blue-600 h-8 w-8" onClick={() => setRecordToRevert(item)} disabled={item.reverted || item.type.includes('ESTORNO')}>
+                                            <Undo2 className="h-4 w-4"/>
                                         </Button>
                                     </TableCell>
                                 )}
@@ -148,11 +151,13 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     </Dialog>
 
     <DeleteConfirmationDialog 
-        open={!!recordToDelete}
-        onOpenChange={() => setRecordToDelete(null)}
-        onConfirm={handleDeleteConfirm}
-        itemName="este registro de histórico"
-        description="Esta ação é permanente e não pode ser desfeita. O registro de movimentação será removido."
+        open={!!recordToRevert}
+        onOpenChange={() => setRecordToRevert(null)}
+        onConfirm={handleRevertConfirm}
+        isDeleting={expiryLoading}
+        title="Reverter Movimentação?"
+        description={<>Esta ação irá criar um movimento de estorno para anular o efeito do registro selecionado. O estoque será ajustado de acordo. <strong className='block mt-2'>Esta ação não pode ser desfeita.</strong></>}
+        confirmButtonText="Sim, reverter"
     />
     </>
   );

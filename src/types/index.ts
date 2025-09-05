@@ -106,7 +106,7 @@ export type LotEntry = {
   locationCode?: string | null;
 };
 
-export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'ENTRADA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA';
+export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'ENTRADA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA' | 'ENTRADA_ESTORNO' | 'SAIDA_ESTORNO';
 
 export type MovementRecord = {
   id: string;
@@ -125,6 +125,8 @@ export type MovementRecord = {
   timestamp: string; // ISO String
   notes?: string;
   activityId?: string;
+  reverted?: boolean;
+  revertedFromId?: string;
 };
 
 
