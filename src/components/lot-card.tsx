@@ -32,6 +32,7 @@ import { useRouter } from 'next/navigation';
 import { QuickProjectionModal } from './quick-projection-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useReposition } from '@/hooks/use-reposition';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
@@ -174,6 +175,7 @@ export function LotCard({
 }: LotCardProps) {
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
+  const { activities } = useReposition();
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -269,6 +271,20 @@ export function LotCard({
         </TooltipTrigger><TooltipContent><p>{tooltip}</p></TooltipContent></Tooltip></TooltipProvider>
     );
   };
+  
+  const getReservationInfo = (lot: LotEntry) => {
+    if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
+      return null;
+    }
+    const activity = activities.find(act => 
+        act.status === 'Aguardando despacho' && 
+        act.items.some(item => 
+            item.suggestedLots.some(sl => sl.lotId === lot.id)
+        )
+    );
+    return activity ? `para ${activity.kioskDestinationName}` : 'em processo';
+  };
+
 
   return (
     <>
@@ -319,6 +335,7 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
+                const reservationInfo = getReservationInfo(lot);
                 
                 let totalUnits: number;
                 let totalUnitsLabel: string;
@@ -341,7 +358,7 @@ export function LotCard({
                         <div>
                             <div className="flex items-center gap-2 mb-1">
                                 <div className="font-semibold flex items-center gap-1">
-                                    <span>Lote: {lot.lotNumber}</span>
+                                    Lote: {lot.lotNumber}
                                    {user?.username === 'Tiago Brasil' && (
                                         <TooltipProvider>
                                             <Tooltip>
@@ -367,12 +384,10 @@ export function LotCard({
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                                 {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
-                                {lot.reservedQuantity && lot.reservedQuantity > 0 && (
-                                    <p className="text-blue-600 font-bold flex items-center gap-1">
-                                        <Shield className="h-3 w-3"/>
-                                        Reserva: {lot.reservedQuantity}
-                                    </p>
-                                )}
+                                <div className="text-blue-600 font-bold flex items-center gap-1">
+                                    <Shield className="h-3 w-3"/>
+                                    Reserva: {lot.reservedQuantity || 0} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
+                                </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
