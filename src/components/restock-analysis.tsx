@@ -460,10 +460,16 @@ function RepositionHistory() {
     const { permissions } = useAuth();
     const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
     const [isReverting, setIsReverting] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
     const historicalActivities = useMemo(() => {
-        return activities.filter(activity => activity.status === 'Concluído' || activity.status === 'Cancelada');
-    }, [activities]);
+        return activities.filter(activity => {
+            if (statusFilter === 'all') {
+                return activity.status === 'Concluído' || activity.status === 'Cancelada';
+            }
+            return activity.status === statusFilter;
+        });
+    }, [activities, statusFilter]);
 
     const handleRevertConfirm = async () => {
         if (!activityToRevert) return;
@@ -474,94 +480,111 @@ function RepositionHistory() {
     };
 
     if (loading) return <Skeleton className="h-64 w-full" />;
+    
+    const hasAnyHistory = activities.some(a => a.status === 'Concluído' || a.status === 'Cancelada');
 
-    if (historicalActivities.length === 0) {
-        return (
+    if (!hasAnyHistory) {
+         return (
             <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                 <History className="mx-auto h-12 w-12" />
                 <p className="mt-4 font-semibold">Nenhum histórico encontrado.</p>
             </div>
         );
     }
-
+    
     return (
     <>
         <Card>
             <CardHeader>
                 <CardTitle>Histórico de Reposições</CardTitle>
                 <CardDescription>Consulte todas as atividades de reposição que já foram concluídas ou canceladas.</CardDescription>
+                <div className="pt-2">
+                    <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)} className="w-full sm:w-auto">
+                        <TabsList>
+                            <TabsTrigger value="all">Todos</TabsTrigger>
+                            <TabsTrigger value="Concluído">Concluídos</TabsTrigger>
+                            <TabsTrigger value="Cancelada">Cancelados</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
             </CardHeader>
             <CardContent>
-                <Accordion type="multiple" className="w-full space-y-3">
-                    {historicalActivities.map(activity => {
-                        const totalPackages = activity.items.reduce((sum, item) => sum + item.suggestedLots.reduce((s, l) => s + l.quantityToMove, 0), 0);
-                        const hasDivergence = activity.status === 'Recebido com divergência';
-                        
-                        return (
-                        <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
-                            <AccordionTrigger className="p-4 hover:no-underline text-left">
-                                <div className="flex justify-between items-center w-full">
-                                    <div>
-                                        <p className="font-semibold text-base">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {activity.status === 'Concluído' ? 'Concluída em' : 'Cancelada em'} {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
-                                        </p>
+                {historicalActivities.length === 0 ? (
+                    <div className="text-center py-16 text-muted-foreground">
+                        <Inbox className="mx-auto h-12 w-12" />
+                        <p className="mt-4 font-semibold">Nenhum registro para este filtro.</p>
+                    </div>
+                ) : (
+                    <Accordion type="multiple" className="w-full space-y-3">
+                        {historicalActivities.map(activity => {
+                            const hasDivergence = activity.status === 'Recebido com divergência';
+                            
+                            return (
+                            <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
+                                <AccordionTrigger className="p-4 hover:no-underline text-left">
+                                    <div className="flex justify-between items-center w-full">
+                                        <div>
+                                            <p className="font-semibold text-base">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {activity.status === 'Concluído' ? 'Concluída em' : 'Cancelada em'} {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
+                                            </p>
+                                        </div>
+                                        <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>{activity.status}</Badge>
                                     </div>
-                                    <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>{activity.status}</Badge>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4 pt-0">
-                               <div className="space-y-4">
-                                {activity.receiptNotes && (
-                                    <blockquote className="mt-2 border-l-2 pl-4 italic text-sm text-muted-foreground">
-                                        <strong>Notas do Recebimento:</strong> "{activity.receiptNotes}"
-                                    </blockquote>
-                                )}
-                                <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Insumo</TableHead>
-                                            <TableHead>Lote</TableHead>
-                                            <TableHead className="text-center">Qtd. Enviada</TableHead>
-                                            <TableHead className="text-center">Qtd. Recebida</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {activity.items.flatMap(item => 
-                                            item.suggestedLots.map(lot => {
-                                                const receivedLot = activity.items.flatMap(i => i.receivedLots || []).find(rl => rl.lotId === lot.lotId);
-                                                const receivedQty = receivedLot?.receivedQuantity;
-                                                const sentQty = lot.quantityToMove;
-                                                const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
+                                </AccordionTrigger>
+                                <AccordionContent className="p-4 pt-0">
+                                <div className="space-y-4">
+                                    {activity.receiptNotes && (
+                                        <blockquote className="mt-2 border-l-2 pl-4 italic text-sm text-muted-foreground">
+                                            <strong>Notas do Recebimento:</strong> "{activity.receiptNotes}"
+                                        </blockquote>
+                                    )}
+                                    <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Insumo</TableHead>
+                                                <TableHead>Lote</TableHead>
+                                                <TableHead className="text-center">Qtd. Enviada</TableHead>
+                                                <TableHead className="text-center">Qtd. Recebida</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {activity.items.flatMap(item => 
+                                                item.suggestedLots.map(lot => {
+                                                    const receivedLot = activity.items.flatMap(i => i.receivedLots || []).find(rl => rl.lotId === lot.lotId);
+                                                    const receivedQty = receivedLot?.receivedQuantity;
+                                                    const sentQty = lot.quantityToMove;
+                                                    const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
 
-                                                return (
-                                                    <TableRow key={lot.lotId} className={cn(isDivergent && "bg-destructive/10")}>
-                                                        <TableCell className="font-medium">{lot.productName}</TableCell>
-                                                        <TableCell>{lot.lotNumber}</TableCell>
-                                                        <TableCell className="text-center">{sentQty}</TableCell>
-                                                        <TableCell className={cn("text-center font-bold", isDivergent && "text-destructive")}>
-                                                            {receivedQty ?? '-'}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })
-                                        )}
-                                    </TableBody>
-                                </Table>
-                                </div>
-                                {permissions.reposition.cancel && (
-                                    <div className="mt-4 pt-4 border-t flex justify-end">
-                                        <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
-                                            <Undo2 className="mr-2 h-4 w-4" /> Reverter Atividade
-                                        </Button>
+                                                    return (
+                                                        <TableRow key={lot.lotId} className={cn(isDivergent && "bg-destructive/10")}>
+                                                            <TableCell className="font-medium">{lot.productName}</TableCell>
+                                                            <TableCell>{lot.lotNumber}</TableCell>
+                                                            <TableCell className="text-center">{sentQty}</TableCell>
+                                                            <TableCell className={cn("text-center font-bold", isDivergent && "text-destructive")}>
+                                                                {receivedQty ?? '-'}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })
+                                            )}
+                                        </TableBody>
+                                    </Table>
                                     </div>
-                                )}
-                               </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    )})}
-                </Accordion>
+                                    {permissions.reposition.cancel && (
+                                        <div className="mt-4 pt-4 border-t flex justify-end">
+                                            <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
+                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter Atividade
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        )})}
+                    </Accordion>
+                )}
             </CardContent>
         </Card>
         <DeleteConfirmationDialog 
