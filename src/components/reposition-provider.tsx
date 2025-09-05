@@ -121,42 +121,41 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const deleteRepositionActivity = useCallback(async (activityId: string) => {
     const activityToDelete = activities.find(a => a.id === activityId);
     if (!activityToDelete) return;
-
+  
     if (activityToDelete.status === 'Aguardando despacho' || activityToDelete.status === 'Aguardando recebimento') {
       try {
         await runTransaction(db, async (transaction) => {
-            const lotRefsToRead = activityToDelete.items.flatMap(item => 
-                item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
-            );
-            const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
-            const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
-            const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data()]));
-
-            const lotUpdates = new Map<string, number>();
-
-            activityToDelete.items.forEach(item => {
-                item.suggestedLots.forEach(lotToUnreserve => {
-                    const currentReserved = lotUpdates.get(lotToUnreserve.lotId) ?? lotDataMap.get(lotToUnreserve.lotId)?.reservedQuantity ?? 0;
-                    const newReserved = Math.max(0, currentReserved - lotToUnreserve.quantityToMove);
-                    lotUpdates.set(lotToUnreserve.lotId, newReserved);
-                });
+          // 1. Read all lots first
+          const lotRefsToRead = activityToDelete.items.flatMap(item => 
+            item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
+          );
+          const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
+          const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
+          const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data() as LotEntry]));
+  
+          // 2. Perform logic and prepare updates
+          const lotUpdates = new Map<string, { reservedQuantity: number }>();
+          
+          activityToDelete.items.forEach(item => {
+            item.suggestedLots.forEach(lotToUnreserve => {
+              const currentData = lotDataMap.get(lotToUnreserve.lotId);
+              if (currentData) {
+                const currentReserved = currentData.reservedQuantity || 0;
+                const newReserved = Math.max(0, currentReserved - lotToUnreserve.quantityToMove);
+                lotUpdates.set(lotToUnreserve.lotId, { reservedQuantity: newReserved });
+              }
             });
-
-            for (const [lotId, newReserved] of lotUpdates.entries()) {
-                const lotRef = doc(db, 'lots', lotId);
-                const currentQuantity = lotDataMap.get(lotId)?.quantity ?? 0;
-                
-                // Invariant check: reserved quantity cannot be greater than total quantity
-                if (newReserved > currentQuantity) {
-                    console.warn(`Tentativa de correção de reserva inconsistente para o lote ${lotId}. Definindo reserva igual ao estoque total (${currentQuantity}).`);
-                    transaction.update(lotRef, { reservedQuantity: currentQuantity });
-                } else {
-                    transaction.update(lotRef, { reservedQuantity: newReserved });
-                }
-            }
+          });
+  
+          // 3. Write all updates
+          for (const [lotId, updateData] of lotUpdates.entries()) {
+            const lotRef = doc(db, 'lots', lotId);
+            transaction.update(lotRef, updateData);
+          }
         });
       } catch (error) {
         console.error("Error un-reserving stock during activity deletion:", error);
+        // Continue to delete the activity to prevent it from being stuck
       }
     }
   
@@ -185,7 +184,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (itemsToMove.length > 0) {
       const results = await moveMultipleLots(itemsToMove, user, { 
         isFinalizingReposition: true,
-        allowPartialOnFinalize: true,
+        allowPartialOnFinalize: true, // This is key to handle old inconsistent data
         activityId: activity.id
       }); 
 
