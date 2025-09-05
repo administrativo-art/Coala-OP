@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -457,7 +458,7 @@ function RepositionHistory() {
     const { activities, loading } = useReposition();
 
     const historicalActivities = useMemo(() => {
-        return activities.filter(activity => activity.status === 'Concluído');
+        return activities.filter(activity => activity.status === 'Concluído' || activity.status === 'Cancelada');
     }, [activities]);
 
     if (loading) return <Skeleton className="h-64 w-full" />;
@@ -475,7 +476,7 @@ function RepositionHistory() {
         <Card>
             <CardHeader>
                 <CardTitle>Histórico de Reposições</CardTitle>
-                <CardDescription>Consulte todas as atividades de reposição que já foram concluídas.</CardDescription>
+                <CardDescription>Consulte todas as atividades de reposição que já foram concluídas ou canceladas.</CardDescription>
             </CardHeader>
             <CardContent>
                 <Accordion type="multiple" className="w-full space-y-3">
@@ -486,10 +487,10 @@ function RepositionHistory() {
                                     <div>
                                         <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            Concluída em {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
+                                            {activity.status === 'Concluído' ? 'Concluída em' : 'Cancelada em'} {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
                                         </p>
                                     </div>
-                                    <Badge>Concluído</Badge>
+                                    <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>{activity.status}</Badge>
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="p-4 pt-0">

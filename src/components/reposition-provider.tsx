@@ -3,7 +3,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type RepositionActivity, type RepositionItem } from '@/types';
+import { type RepositionActivity, type RepositionItem, type LotEntry } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -14,7 +14,7 @@ export interface RepositionContextType {
   loading: boolean;
   createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>) => Promise<string | null>;
   updateRepositionActivity: (activityId: string, updates: Partial<RepositionActivity>) => Promise<void>;
-  deleteRepositionActivity: (activityId: string) => Promise<void>;
+  cancelRepositionActivity: (activityId: string) => Promise<void>;
   finalizeRepositionActivity: (activity: RepositionActivity) => Promise<void>;
 }
 
@@ -118,49 +118,52 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
   
-  const deleteRepositionActivity = useCallback(async (activityId: string) => {
-    const activityToDelete = activities.find(a => a.id === activityId);
-    if (!activityToDelete) return;
-  
-    if (activityToDelete.status === 'Aguardando despacho' || activityToDelete.status === 'Aguardando recebimento') {
-      try {
-        await runTransaction(db, async (transaction) => {
-          // 1. Read all lots first
-          const lotRefsToRead = activityToDelete.items.flatMap(item => 
-            item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
-          );
-          const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
-          const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
-          const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data() as LotEntry]));
-  
-          // 2. Perform logic and prepare updates
-          const lotUpdates = new Map<string, { reservedQuantity: number }>();
-          
-          activityToDelete.items.forEach(item => {
-            item.suggestedLots.forEach(lotToUnreserve => {
-              const currentData = lotDataMap.get(lotToUnreserve.lotId);
-              if (currentData) {
-                const currentReserved = currentData.reservedQuantity || 0;
-                const newReserved = Math.max(0, currentReserved - lotToUnreserve.quantityToMove);
-                lotUpdates.set(lotToUnreserve.lotId, { reservedQuantity: newReserved });
-              }
-            });
-          });
-  
-          // 3. Write all updates
-          for (const [lotId, updateData] of lotUpdates.entries()) {
-            const lotRef = doc(db, 'lots', lotId);
-            transaction.update(lotRef, updateData);
-          }
-        });
-      } catch (error) {
-        console.error("Error un-reserving stock during activity deletion:", error);
-        // Continue to delete the activity to prevent it from being stuck
-      }
+  const cancelRepositionActivity = useCallback(async (activityId: string) => {
+    const activityToCancel = activities.find(a => a.id === activityId);
+    if (!activityToCancel || activityToCancel.status === 'Concluído' || activityToCancel.status === 'Cancelada') {
+        console.warn("Activity cannot be cancelled or not found.");
+        return;
     }
   
-    await deleteDoc(doc(db, 'repositionActivities', activityId));
-  
+    try {
+      await runTransaction(db, async (transaction) => {
+        // 1. Read all lots first if activity is in a state where stock is reserved
+        if (activityToCancel.status === 'Aguardando despacho' || activityToCancel.status === 'Aguardando recebimento') {
+            const lotRefsToRead = activityToCancel.items.flatMap(item => 
+              item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
+            );
+            const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
+            const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
+            const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data() as LotEntry]));
+    
+            // 2. Prepare updates to un-reserve stock
+            const lotUpdates = new Map<string, { reservedQuantity: number }>();
+            activityToCancel.items.forEach(item => {
+              item.suggestedLots.forEach(lotToUnreserve => {
+                const currentData = lotDataMap.get(lotToUnreserve.lotId);
+                if (currentData) {
+                  const currentReserved = currentData.reservedQuantity || 0;
+                  const newReserved = Math.max(0, currentReserved - lotToUnreserve.quantityToMove);
+                  lotUpdates.set(lotToUnreserve.lotId, { reservedQuantity: newReserved });
+                }
+              });
+            });
+    
+            // 3. Write all lot updates
+            for (const [lotId, updateData] of lotUpdates.entries()) {
+              const lotRef = doc(db, 'lots', lotId);
+              transaction.update(lotRef, updateData);
+            }
+        }
+
+        // 4. Update the activity status to 'cancelada'
+        const activityRef = doc(db, 'repositionActivities', activityId);
+        transaction.update(activityRef, { status: 'Cancelada', updatedAt: new Date().toISOString() });
+      });
+    } catch (error) {
+      console.error("Error cancelling reposition activity:", error);
+      throw error;
+    }
   }, [activities]);
   
   const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
@@ -204,9 +207,9 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     loading,
     createRepositionActivity,
     updateRepositionActivity,
-    deleteRepositionActivity,
+    cancelRepositionActivity,
     finalizeRepositionActivity,
-  }), [activities, loading, createRepositionActivity, updateRepositionActivity, deleteRepositionActivity, finalizeRepositionActivity]);
+  }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity]);
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }

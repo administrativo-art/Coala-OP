@@ -6,7 +6,7 @@ import { useReposition } from "@/hooks/use-reposition";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format, parseISO } from "date-fns";
@@ -33,18 +33,20 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
             return <Badge className="bg-green-600 text-white hover:bg-green-700">{status}</Badge>;
         case 'Concluído':
             return <Badge variant="default">{status}</Badge>;
+        case 'Cancelada':
+            return <Badge variant="destructive">{status}</Badge>;
         default:
             return <Badge>{status}</Badge>;
     }
 }
 
 export function RepositionManagement() {
-    const { activities, loading, deleteRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
+    const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
     const { user, permissions } = useAuth();
     const { products } = useProducts();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
-    const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
+    const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
     const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
     const [isFinalizing, setIsFinalizing] = useState(false);
 
@@ -57,7 +59,7 @@ export function RepositionManagement() {
         )
     }
     
-    const activeActivities = activities.filter(activity => activity.status !== 'Concluído');
+    const activeActivities = activities.filter(activity => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
 
     if (activeActivities.length === 0) {
         return (
@@ -122,10 +124,10 @@ export function RepositionManagement() {
         doc.save(`lista_separacao_${activity.id.slice(0, 8)}.pdf`);
     };
 
-    const handleDeleteConfirm = async () => {
-        if (activityToDelete) {
-            await deleteRepositionActivity(activityToDelete.id);
-            setActivityToDelete(null);
+    const handleCancelConfirm = async () => {
+        if (activityToCancel) {
+            await cancelRepositionActivity(activityToCancel.id);
+            setActivityToCancel(null);
         }
     };
     
@@ -168,9 +170,21 @@ export function RepositionManagement() {
                                     </div>
                                 </div>
                             </AccordionTrigger>
-                            <Button variant="ghost" size="icon" className="ml-2 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setActivityToDelete(activity); }}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {permissions.reposition.cancel && (
+                                <DeleteConfirmationDialog
+                                    open={false}
+                                    onOpenChange={()=>{}}
+                                    onConfirm={handleCancelConfirm}
+                                    itemName={`a atividade de reposição`}
+                                    description="Esta ação não pode ser desfeita. O estoque reservado será liberado e a atividade será movida para o histórico como cancelada."
+                                    confirmButtonText="Sim, cancelar atividade"
+                                    triggerButton={
+                                        <Button variant="ghost" size="icon" className="ml-2 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setActivityToCancel(activity); }}>
+                                            <Ban className="h-4 w-4" />
+                                        </Button>
+                                    }
+                                />
+                            )}
                         </div>
                         <AccordionContent className="p-4 pt-0">
                              <div className="space-y-4">
@@ -261,16 +275,6 @@ export function RepositionManagement() {
             />
         )}
 
-        {activityToDelete && (
-            <DeleteConfirmationDialog 
-                open={!!activityToDelete}
-                onOpenChange={() => setActivityToDelete(null)}
-                onConfirm={handleDeleteConfirm}
-                itemName={`a atividade de reposição`}
-                description="Esta ação não pode ser desfeita. A atividade será permanentemente removida."
-            />
-        )}
-        
         {activityToFinalize && (
             <DeleteConfirmationDialog 
                 open={!!activityToFinalize}
