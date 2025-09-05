@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -16,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -26,6 +25,8 @@ import { RepositionManagement } from './reposition-management';
 import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { format, parseISO } from 'date-fns';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -451,18 +452,78 @@ function AnalysisTab() {
   );
 }
 
+function RepositionHistory() {
+    const { activities, loading } = useReposition();
+
+    const historicalActivities = useMemo(() => {
+        return activities.filter(activity => activity.status === 'Concluído');
+    }, [activities]);
+
+    if (loading) return <Skeleton className="h-64 w-full" />;
+
+    if (historicalActivities.length === 0) {
+        return (
+            <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                <History className="mx-auto h-12 w-12" />
+                <p className="mt-4 font-semibold">Nenhum histórico encontrado.</p>
+            </div>
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Histórico de Reposições</CardTitle>
+                <CardDescription>Consulte todas as atividades de reposição que já foram concluídas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Accordion type="multiple" className="w-full space-y-3">
+                    {historicalActivities.map(activity => (
+                        <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
+                            <AccordionTrigger className="p-4 hover:no-underline">
+                                <div className="flex justify-between items-center w-full">
+                                    <div>
+                                        <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Concluída em {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: 'pt-BR' }) : ''}
+                                        </p>
+                                    </div>
+                                    <Badge>Concluído</Badge>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 pt-0">
+                                <ul className="list-disc pl-5 mt-1 text-sm space-y-1">
+                                    {activity.items.flatMap(item => item.suggestedLots).map(lot => (
+                                        <li key={lot.lotId}>
+                                            {lot.quantityToMove} x {lot.productName} (Lote: {lot.lotNumber})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </AccordionContent>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
+            </CardContent>
+        </Card>
+    );
+}
+
 export function RestockAnalysis() {
   return (
     <Tabs defaultValue="analysis" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="analysis"><Wand2 className="mr-2 h-4 w-4" /> Análise</TabsTrigger>
         <TabsTrigger value="management"><Truck className="mr-2 h-4 w-4" /> Gerenciar reposição</TabsTrigger>
+        <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico</TabsTrigger>
       </TabsList>
       <TabsContent value="analysis" className="mt-4">
         <AnalysisTab />
       </TabsContent>
       <TabsContent value="management" className="mt-4">
         <RepositionManagement />
+      </TabsContent>
+      <TabsContent value="history" className="mt-4">
+        <RepositionHistory />
       </TabsContent>
     </Tabs>
   );

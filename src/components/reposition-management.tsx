@@ -57,8 +57,10 @@ export function RepositionManagement() {
             </div>
         )
     }
+    
+    const activeActivities = activities.filter(activity => activity.status !== 'Concluído');
 
-    if (activities.length === 0) {
+    if (activeActivities.length === 0) {
         return (
             <Card className="flex flex-col items-center justify-center text-center py-16 text-muted-foreground border-2 border-dashed">
                 <Inbox className="h-12 w-12 mb-4" />
@@ -150,7 +152,7 @@ export function RepositionManagement() {
     return (
         <>
         <div className="space-y-3">
-            {activities.map(activity => (
+            {activeActivities.map(activity => (
                 <Accordion type="single" collapsible key={activity.id}>
                     <AccordionItem value={activity.id} className="border rounded-lg">
                         <div className="flex items-center p-4">
