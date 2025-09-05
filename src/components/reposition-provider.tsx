@@ -61,39 +61,37 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     try {
       const activityRef = await addDoc(collection(db, 'repositionActivities'), newActivity);
       
-      // Reserve stock in a transaction
       await runTransaction(db, async (transaction) => {
-        const lotRefsAndData: { lotRef: any, lotToMove: any }[] = [];
+        const lotRefsToRead = data.items.flatMap(item => item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId)));
+        const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
+        const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
+        const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data()]));
 
-        // 1. Prepare all document references
         for (const item of data.items) {
           for (const lotToMove of item.suggestedLots) {
-            const lotRef = doc(db, 'lots', lotToMove.lotId);
-            lotRefsAndData.push({ lotRef, lotToMove });
+            const currentData = lotDataMap.get(lotToMove.lotId);
+            if (!currentData) {
+              throw new Error(`Lote ${lotToMove.lotId} não encontrado`);
+            }
+            
+            const currentReserved = currentData.reservedQuantity || 0;
+            const availableQuantity = currentData.quantity - currentReserved;
+
+            if (availableQuantity < lotToMove.quantityToMove) {
+               throw new Error(`Estoque insuficiente para reservar no lote ${lotToMove.lotNumber}. Disponível: ${availableQuantity}, Necessário: ${lotToMove.quantityToMove}`);
+            }
           }
         }
-
-        // 2. Read all documents first
-        const lotDocs = await Promise.all(
-          lotRefsAndData.map(item => transaction.get(item.lotRef))
-        );
-
-        // 3. Perform all writes
-        lotDocs.forEach((lotDoc, index) => {
-          if (!lotDoc.exists()) {
-            throw new Error(`Lot ${lotRefsAndData[index].lotToMove.lotId} not found`);
-          }
-          const currentData = lotDoc.data();
-          const currentReserved = currentData.reservedQuantity || 0;
-          const { lotRef, lotToMove } = lotRefsAndData[index];
-          
-          if (currentData.quantity < currentReserved + lotToMove.quantityToMove) {
-             throw new Error(`Estoque insuficiente para reservar no lote ${lotToMove.lotNumber}. Disponível: ${currentData.quantity - currentReserved}, Necessário: ${lotToMove.quantityToMove}`);
-          }
-          
-          const newReserved = currentReserved + lotToMove.quantityToMove;
-          transaction.update(lotRef, { reservedQuantity: newReserved });
-        });
+        
+        for (const item of data.items) {
+            for (const lotToMove of item.suggestedLots) {
+                const lotRef = doc(db, 'lots', lotToMove.lotId);
+                const currentData = lotDataMap.get(lotToMove.lotId)!;
+                const currentReserved = currentData.reservedQuantity || 0;
+                const newReserved = currentReserved + lotToMove.quantityToMove;
+                transaction.update(lotRef, { reservedQuantity: newReserved });
+            }
+        }
       });
 
       return activityRef.id;
@@ -123,55 +121,45 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const deleteRepositionActivity = useCallback(async (activityId: string) => {
     const activityToDelete = activities.find(a => a.id === activityId);
     if (!activityToDelete) return;
-    
+
     if (activityToDelete.status === 'Aguardando despacho' || activityToDelete.status === 'Aguardando recebimento') {
       try {
         await runTransaction(db, async (transaction) => {
-          const lotUpdates = new Map<string, { lotRef: any, newReserved: number }>();
-          const lotRefsToRead: any[] = [];
-  
-          // Prepare reads
-          for (const item of activityToDelete.items) {
-            for (const lotToMove of item.suggestedLots) {
-              const lotRef = doc(db, 'lots', lotToMove.lotId);
-              if (!lotRefsToRead.some(r => r.path === lotRef.path)) {
-                lotRefsToRead.push(lotRef);
-              }
-            }
-          }
-  
-          const lotDocs = await Promise.all(lotRefsToRead.map(ref => transaction.get(ref)));
-          const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data()]));
-  
-          // Calculate new reserved quantities
-          for (const item of activityToDelete.items) {
-            for (const lotToMove of item.suggestedLots) {
-              const lotRef = doc(db, 'lots', lotToMove.lotId);
-              const currentData = lotDataMap.get(lotToMove.lotId);
-              if (currentData) {
-                const currentReserved = lotUpdates.get(lotToMove.lotId)?.newReserved ?? (currentData.reservedQuantity || 0);
-                const quantityToUnreserve = lotToMove.quantityToMove || 0;
-                
-                // Sanitize newReserved to ensure it doesn't go below zero or exceed total quantity
-                let newReserved = Math.max(0, currentReserved - quantityToUnreserve);
-                newReserved = Math.min(newReserved, currentData.quantity || 0);
+            const lotRefsToRead = activityToDelete.items.flatMap(item => 
+                item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId))
+            );
+            const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
+            const lotDocs = await Promise.all(uniqueLotRefs.map(ref => transaction.get(ref)));
+            const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data()]));
 
-                lotUpdates.set(lotToMove.lotId, { lotRef, newReserved });
-              }
+            const lotUpdates = new Map<string, number>();
+
+            activityToDelete.items.forEach(item => {
+                item.suggestedLots.forEach(lotToUnreserve => {
+                    const currentReserved = lotUpdates.get(lotToUnreserve.lotId) ?? lotDataMap.get(lotToUnreserve.lotId)?.reservedQuantity ?? 0;
+                    const newReserved = Math.max(0, currentReserved - lotToUnreserve.quantityToMove);
+                    lotUpdates.set(lotToUnreserve.lotId, newReserved);
+                });
+            });
+
+            for (const [lotId, newReserved] of lotUpdates.entries()) {
+                const lotRef = doc(db, 'lots', lotId);
+                const currentQuantity = lotDataMap.get(lotId)?.quantity ?? 0;
+                
+                // Invariant check: reserved quantity cannot be greater than total quantity
+                if (newReserved > currentQuantity) {
+                    console.warn(`Tentativa de correção de reserva inconsistente para o lote ${lotId}. Definindo reserva igual ao estoque total (${currentQuantity}).`);
+                    transaction.update(lotRef, { reservedQuantity: currentQuantity });
+                } else {
+                    transaction.update(lotRef, { reservedQuantity: newReserved });
+                }
             }
-          }
-  
-          // Apply writes
-          for (const [, { lotRef, newReserved }] of lotUpdates) {
-            transaction.update(lotRef, { reservedQuantity: newReserved });
-          }
         });
       } catch (error) {
         console.error("Error un-reserving stock during activity deletion:", error);
       }
     }
   
-    // Always delete the activity itself
     await deleteDoc(doc(db, 'repositionActivities', activityId));
   
   }, [activities]);
@@ -181,7 +169,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (!activity.items) return;
 
     const itemsToMove = activity.items.flatMap(item => 
-      (item.receivedLots || item.suggestedLots).map(lot => ({
+      (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => ({
         lotId: lot.lotId,
         productId: lot.productId,
         productName: lot.productName,
@@ -197,22 +185,18 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (itemsToMove.length > 0) {
       const results = await moveMultipleLots(itemsToMove, user, { 
         isFinalizingReposition: true,
-        allowPartialOnFinalize: true, // Allow moving what's possible, even if less than reserved
+        allowPartialOnFinalize: true,
         activityId: activity.id
       }); 
 
       const pendingSum = results.reduce((acc, r) => acc + r.pending, 0);
       if (pendingSum > 0) {
-        // Handle partial finalization (e.g., create new task, update activity status)
         console.warn(`Atividade ${activity.id} finalizada parcialmente. Pendente: ${pendingSum}`);
-        await updateRepositionActivity(activity.id, { status: 'Concluído' }); // Or a custom "partial" status
-      } else {
-        await updateRepositionActivity(activity.id, { status: 'Concluído' });
       }
 
-    } else {
-      await updateRepositionActivity(activity.id, { status: 'Concluído' });
     }
+    
+    await updateRepositionActivity(activity.id, { status: 'Concluído' });
 
   }, [user, moveMultipleLots, updateRepositionActivity]);
 

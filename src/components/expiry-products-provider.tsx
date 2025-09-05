@@ -56,8 +56,7 @@ function destLotIdKey(params: {
   lotNumber: string;
 }) {
   const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
-  // Use a format that avoids invalid characters for Firestore IDs
-  const cleanLotNumber = lotNumber.replace(/[^a-zA-Z0-9-]/g, '_');
+  const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
   return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
 }
 
@@ -190,105 +189,106 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     if (!paramsArray?.length) throw new Error('Nenhum item para movimentar.');
 
     await runTransaction(db, async (transaction) => {
-        for (const it of paramsArray) {
-            const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
+      for (const it of paramsArray) {
+        const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
 
-            if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
-                throw new Error(`Parâmetros inválidos para o lote ${lotId}.`);
+        if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
+          throw new Error(`Parâmetros inválidos para o lote ${lotId}.`);
+        }
+        
+        // 1. LEITURAS
+        const sourceRef = doc(db, 'lots', lotId);
+        const sourceSnap = await transaction.get(sourceRef);
+        if (!sourceSnap.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
+        const source = sourceSnap.data() as LotEntry;
+        
+        const destId = destLotIdKey({
+            productId: productId,
+            kioskId: toKioskId,
+            lotNumber: lotNumber,
+            expiryDate: source.expiryDate,
+        });
+        const destRef = doc(db, 'lots', destId);
+        const destSnap = await transaction.get(destRef);
+
+        // 2. LÓGICA E VALIDAÇÕES
+        const quantity = Number(source.quantity ?? 0);
+        const reserved = Number(source.reservedQuantity ?? 0);
+        
+        let movable = quantityToMove;
+        
+        if (isFinalizingReposition) {
+          const maxByReserved = Math.max(0, Math.min(reserved, quantity));
+          if (maxByReserved < movable) {
+            if (!allowPartialOnFinalize) {
+              throw new Error(`Finalização impraticável no lote ${lotId}: reservado ${reserved}, total ${quantity}, solicitado ${quantityToMove}.`);
             }
-            
-            // 1. LEITURAS PRIMEIRO
-            const sourceRef = doc(db, 'lots', lotId);
-            const sourceSnap = await transaction.get(sourceRef);
-            if (!sourceSnap.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
-            const source = sourceSnap.data() as LotEntry;
-            
-            const destId = destLotIdKey({
-                productId: productId,
+            movable = maxByReserved;
+          }
+        } else {
+          const available = quantity - reserved;
+          if (available < movable) {
+            throw new Error(`Quantidade inválida no lote ${lotId}: disponível ${available} < mover ${movable}.`);
+          }
+        }
+        
+        if (movable <= 0) {
+          results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove });
+          continue;
+        }
+
+        // 3. ESCRITAS
+        const newQuantity = quantity - movable;
+        const newReserved = isFinalizingReposition ? Math.max(0, reserved - movable) : reserved;
+        
+        if (newReserved < 0) throw new Error(`Invariante violada: reservado negativo em ${lotId}.`);
+        if (newReserved > newQuantity) {
+          throw new Error(`Invariante violada: reservado ${newReserved} > total ${newQuantity} em ${lotId}.`);
+        }
+        
+        transaction.update(sourceRef, {
+            quantity: newQuantity,
+            reservedQuantity: newReserved,
+        });
+
+        if (destSnap.exists()) {
+            transaction.update(destRef, { quantity: increment(movable) });
+        } else {
+            transaction.set(destRef, {
+                ...source,
                 kioskId: toKioskId,
-                lotNumber: lotNumber,
-                expiryDate: source.expiryDate,
-            });
-            const destRef = doc(db, 'lots', destId);
-            const destSnap = await transaction.get(destRef);
-
-            // 2. LÓGICA / VALIDAÇÕES
-            const quantity = Number(source.quantity ?? 0);
-            const reserved = Number(source.reservedQuantity ?? 0);
-            
-            let movable = quantityToMove;
-            
-            if (isFinalizingReposition) {
-                const maxByReserved = Math.max(0, Math.min(reserved, quantity));
-                if (maxByReserved < movable) {
-                    if (!allowPartialOnFinalize) {
-                        throw new Error(`Finalização impraticável no lote ${lotId}: reservado ${reserved}, total ${quantity}, solicitado ${quantityToMove}.`);
-                    }
-                    movable = maxByReserved; 
-                }
-            } else {
-                const available = quantity - reserved;
-                if (available < movable) {
-                    throw new Error(`Quantidade inválida no lote ${lotId}: disponível ${available} < mover ${movable}.`);
-                }
-            }
-            
-            if (movable <= 0) {
-                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove });
-                continue;
-            }
-
-            // 3. ESCRITAS
-            const newQuantity = quantity - movable;
-            const newReserved = isFinalizingReposition ? Math.max(0, reserved - movable) : reserved;
-            
-            if (newReserved < 0) throw new Error(`Invariante violada: reservado negativo em ${lotId}.`);
-            if (newReserved > newQuantity) {
-              throw new Error(`Invariante violada: reservado ${newReserved} > total ${newQuantity} em ${lotId}.`);
-            }
-            
-            transaction.update(sourceRef, {
-                quantity: newQuantity,
-                reservedQuantity: newReserved,
-            });
-
-            if (destSnap.exists()) {
-                transaction.update(destRef, { quantity: increment(movable) });
-            } else {
-                transaction.set(destRef, {
-                    ...source,
-                    kioskId: toKioskId,
-                    quantity: movable,
-                    reservedQuantity: 0,
-                    locationId: null,
-                    locationName: null,
-                    locationCode: null,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                });
-            }
-
-            const now = new Date().toISOString();
-            const commonData = {
-                productId: source.productId,
-                productName: it.productName,
-                lotNumber: it.lotNumber,
-                quantityChange: movable,
-                userId: user.id,
-                username: user.username,
-                timestamp: now
-            };
-            
-            addMovementRecord(transaction, { ...commonData, lotId: source.id, sourceLotId: source.id, destLotId: destRef.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
-            addMovementRecord(transaction, { ...commonData, lotId: destRef.id, sourceLotId: source.id, destLotId: destRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
-
-            results.push({
-              lotId,
-              requested: quantityToMove,
-              moved: movable,
-              pending: quantityToMove - movable,
+                quantity: movable,
+                reservedQuantity: 0,
+                locationId: null,
+                locationName: null,
+                locationCode: null,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
             });
         }
+        
+        const now = new Date().toISOString();
+        const commonData = {
+            productId: source.productId,
+            productName: it.productName,
+            lotNumber: it.lotNumber,
+            quantityChange: movable,
+            userId: user.id,
+            username: user.username,
+            timestamp: now,
+            activityId: activityId,
+        };
+        
+        addMovementRecord(transaction, { ...commonData, lotId: source.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, toKioskId: it.toKioskId, fromKioskName: it.fromKioskName, toKioskName: it.toKioskName });
+        addMovementRecord(transaction, { ...commonData, lotId: destRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: it.fromKioskId, toKioskId: it.toKioskId, fromKioskName: it.fromKioskName, toKioskName: it.toKioskName });
+
+        results.push({
+          lotId,
+          requested: quantityToMove,
+          moved: movable,
+          pending: quantityToMove - movable,
+        });
+      }
     });
 
     return results;
