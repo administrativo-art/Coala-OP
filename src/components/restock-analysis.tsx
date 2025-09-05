@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -18,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2 } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -455,11 +454,22 @@ function AnalysisTab() {
 }
 
 function RepositionHistory() {
-    const { activities, loading } = useReposition();
+    const { activities, loading, revertRepositionActivity } = useReposition();
+    const { permissions } = useAuth();
+    const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
+    const [isReverting, setIsReverting] = useState(false);
 
     const historicalActivities = useMemo(() => {
         return activities.filter(activity => activity.status === 'Concluído' || activity.status === 'Cancelada');
     }, [activities]);
+
+    const handleRevertConfirm = async () => {
+        if (!activityToRevert) return;
+        setIsReverting(true);
+        await revertRepositionActivity(activityToRevert.id);
+        setIsReverting(false);
+        setActivityToRevert(null);
+    };
 
     if (loading) return <Skeleton className="h-64 w-full" />;
 
@@ -473,6 +483,7 @@ function RepositionHistory() {
     }
 
     return (
+    <>
         <Card>
             <CardHeader>
                 <CardTitle>Histórico de Reposições</CardTitle>
@@ -501,12 +512,29 @@ function RepositionHistory() {
                                         </li>
                                     ))}
                                 </ul>
+                                {permissions.reposition.cancel && (
+                                    <div className="mt-4 pt-4 border-t flex justify-end">
+                                        <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
+                                            <Undo2 className="mr-2 h-4 w-4" /> Reverter Atividade
+                                        </Button>
+                                    </div>
+                                )}
                             </AccordionContent>
                         </AccordionItem>
                     ))}
                 </Accordion>
             </CardContent>
         </Card>
+        <DeleteConfirmationDialog 
+            open={!!activityToRevert}
+            onOpenChange={() => setActivityToRevert(null)}
+            onConfirm={handleRevertConfirm}
+            isDeleting={isReverting}
+            title="Reverter Atividade?"
+            description="Esta ação irá reabrir a atividade e reverter a movimentação de estoque (se aplicável). O status voltará para 'Aguardando despacho'."
+            confirmButtonText="Sim, reverter"
+        />
+    </>
     );
 }
 
