@@ -6,7 +6,7 @@ import { useReposition } from "@/hooks/use-reposition";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download } from "lucide-react";
 import { type RepositionActivity } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format } from "date-fns";
@@ -17,6 +17,9 @@ import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { AuditReceiptModal } from "./audit-receipt-modal";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useProducts } from "@/hooks/use-products";
 
 
 const getStatusBadge = (status: RepositionActivity['status']) => {
@@ -39,6 +42,7 @@ const getStatusBadge = (status: RepositionActivity['status']) => {
 export function RepositionManagement() {
     const { activities, loading, deleteRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
     const { user, permissions } = useAuth();
+    const { products, getProductFullName } = useProducts();
     const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
     const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
     const [activityToDelete, setActivityToDelete] = useState<RepositionActivity | null>(null);
@@ -65,6 +69,47 @@ export function RepositionManagement() {
             </Card>
         )
     }
+    
+    const handleExportSeparationList = (activity: RepositionActivity) => {
+        const doc = new jsPDF();
+        
+        doc.setFontSize(18);
+        doc.text("Lista de Separação de Estoque", 14, 22);
+
+        doc.setFontSize(11);
+        doc.text(`Origem: ${activity.kioskOriginName}`, 14, 32);
+        doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 38);
+        doc.text(`Data da Solicitação: ${format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 44);
+
+        const tableColumn = ["Produto", "Lote", "Qtd. a Mover"];
+        const tableRows: any[][] = [];
+
+        activity.items.forEach(item => {
+            item.suggestedLots.forEach(lot => {
+                const product = products.find(p => p.id === lot.productId);
+                let quantityText = `${lot.quantityToMove}`;
+                if(product) {
+                    quantityText += ` ${product.rotulo_caixa || 'un'}`;
+                }
+                
+                tableRows.push([
+                    lot.productName,
+                    lot.lotNumber,
+                    lot.quantityToMove,
+                ]);
+            });
+        });
+
+        autoTable(doc, {
+            startY: 55,
+            head: [tableColumn],
+            body: tableRows,
+            theme: 'striped',
+            headStyles: { fillColor: '#273344' }
+        });
+
+        doc.save(`lista_separacao_${activity.id.slice(0, 8)}.pdf`);
+    };
 
     const handleDeleteConfirm = async () => {
         if (activityToDelete) {
@@ -99,7 +144,7 @@ export function RepositionManagement() {
                 <Accordion type="single" collapsible key={activity.id}>
                     <AccordionItem value={activity.id} className="border rounded-lg">
                         <div className="flex items-center p-4">
-                            <AccordionTrigger className="p-0 hover:no-underline flex-1">
+                            <AccordionTrigger className="p-0 hover:no-underline flex-1 text-left">
                                 <div className="flex justify-between items-center w-full">
                                     <div>
                                         <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
@@ -154,10 +199,16 @@ export function RepositionManagement() {
 
                                 <div className="flex justify-end pt-4 border-t gap-2">
                                      {activity.status === 'Aguardando despacho' && (
-                                        <Button onClick={() => setActivityToDispatch(activity)}>
-                                            <Truck className="mr-2 h-4 w-4" />
-                                            Gerenciar Despacho
-                                        </Button>
+                                        <>
+                                            <Button variant="outline" onClick={() => handleExportSeparationList(activity)}>
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Exportar PDF de Separação
+                                            </Button>
+                                            <Button onClick={() => setActivityToDispatch(activity)}>
+                                                <Truck className="mr-2 h-4 w-4" />
+                                                Gerenciar Despacho
+                                            </Button>
+                                        </>
                                     )}
                                     {activity.status === 'Aguardando recebimento' && (
                                          <Button onClick={() => setActivityToAudit(activity)}>
