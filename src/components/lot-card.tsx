@@ -341,7 +341,7 @@ export function LotCard({
                         <div>
                             <div className="flex items-center gap-2 mb-1">
                                 <div className="font-semibold flex items-center gap-1">
-                                  <span>Lote: {lot.lotNumber}</span>
+                                    <span>Lote: {lot.lotNumber}</span>
                                    {user?.username === 'Tiago Brasil' && (
                                         <TooltipProvider>
                                             <Tooltip>
