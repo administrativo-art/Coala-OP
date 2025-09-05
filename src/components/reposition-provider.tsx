@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -123,42 +124,56 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     const activityToDelete = activities.find(a => a.id === activityId);
     if (!activityToDelete) return;
     
-    // Only un-reserve if it was not yet finalized
     if (activityToDelete.status === 'Aguardando despacho' || activityToDelete.status === 'Aguardando recebimento') {
       try {
         await runTransaction(db, async (transaction) => {
-          const lotRefsAndData: { lotRef: any, lotToMove: any }[] = [];
-          
+          const lotUpdates = new Map<string, { lotRef: any, newReserved: number }>();
+          const lotRefsToRead: any[] = [];
+  
+          // Prepare reads
           for (const item of activityToDelete.items) {
-              for (const lotToMove of item.suggestedLots) {
-                  const lotRef = doc(db, 'lots', lotToMove.lotId);
-                  lotRefsAndData.push({ lotRef, lotToMove });
+            for (const lotToMove of item.suggestedLots) {
+              const lotRef = doc(db, 'lots', lotToMove.lotId);
+              if (!lotRefsToRead.some(r => r.path === lotRef.path)) {
+                lotRefsToRead.push(lotRef);
               }
+            }
           }
-          
-          const lotDocs = await Promise.all(
-            lotRefsAndData.map(item => transaction.get(item.lotRef))
-          );
+  
+          const lotDocs = await Promise.all(lotRefsToRead.map(ref => transaction.get(ref)));
+          const lotDataMap = new Map(lotDocs.map(doc => [doc.id, doc.data()]));
+  
+          // Calculate new reserved quantities
+          for (const item of activityToDelete.items) {
+            for (const lotToMove of item.suggestedLots) {
+              const lotRef = doc(db, 'lots', lotToMove.lotId);
+              const currentData = lotDataMap.get(lotToMove.lotId);
+              if (currentData) {
+                const currentReserved = lotUpdates.get(lotToMove.lotId)?.newReserved ?? (currentData.reservedQuantity || 0);
+                const quantityToUnreserve = lotToMove.quantityToMove || 0;
+                
+                // Sanitize newReserved to ensure it doesn't go below zero or exceed total quantity
+                let newReserved = Math.max(0, currentReserved - quantityToUnreserve);
+                newReserved = Math.min(newReserved, currentData.quantity || 0);
 
-          lotDocs.forEach((lotDoc, index) => {
-              if (lotDoc.exists()) {
-                  const currentData = lotDoc.data();
-                  const currentReserved = currentData.reservedQuantity || 0;
-                  const { lotRef, lotToMove } = lotRefsAndData[index];
-                  const newReserved = Math.max(0, currentReserved - lotToMove.quantityToMove);
-                  transaction.update(lotRef, { reservedQuantity: newReserved });
+                lotUpdates.set(lotToMove.lotId, { lotRef, newReserved });
               }
-          });
+            }
+          }
+  
+          // Apply writes
+          for (const [, { lotRef, newReserved }] of lotUpdates) {
+            transaction.update(lotRef, { reservedQuantity: newReserved });
+          }
         });
       } catch (error) {
         console.error("Error un-reserving stock during activity deletion:", error);
-        // Do not block deletion if un-reserving fails, but log it.
       }
     }
-
+  
     // Always delete the activity itself
     await deleteDoc(doc(db, 'repositionActivities', activityId));
-
+  
   }, [activities]);
   
   const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {

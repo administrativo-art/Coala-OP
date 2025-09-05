@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -24,7 +25,7 @@ export type MoveLotParams = {
 type MoveOptions = {
   isFinalizingReposition?: boolean;
   activityId?: string;
-  allowPartialOnFinalize?: boolean;
+  allowPartialOnFinalize?: boolean; 
 };
 
 export type ConsumeLotParams = {
@@ -214,6 +215,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             // 2. LÓGICA / VALIDAÇÕES
             const quantity = Number(source.quantity ?? 0);
             const reserved = Number(source.reservedQuantity ?? 0);
+            
             let movable = quantityToMove;
             
             if (isFinalizingReposition) {
