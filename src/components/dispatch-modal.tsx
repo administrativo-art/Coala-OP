@@ -201,7 +201,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                       <TableBody>
                           {activity.items.flatMap(item => item.suggestedLots.map(lot => {
                             const lotDetails = lots.find(l => l.id === lot.lotId);
-                            const availableQty = lotDetails ? lotDetails.quantity - (lotDetails.reservedQuantity || 0) : 0;
+                            const availableQty = lotDetails ? lotDetails.quantity : 0;
                             return (
                               <TableRow key={lot.lotId}>
                                   <TableCell className="font-medium">{lot.productName}</TableCell>
