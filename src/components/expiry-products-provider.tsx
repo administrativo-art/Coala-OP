@@ -6,6 +6,8 @@ import { type LotEntry, type MovementRecord, type MovementType, type User } from
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { pruneUndefined } from '@/lib/utils';
+
 
 export type MoveLotParams = {
   lotId: string;
@@ -54,7 +56,8 @@ function destLotIdKey(params: {
 }) {
   const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
   // Use a format that avoids invalid characters for Firestore IDs
-  return `prod_${productId}__kiosk_${kioskId}__lot_${lotNumber.replace(/[^a-zA-Z0-9]/g, '_')}__exp_${expiryDate}`;
+  const cleanLotNumber = lotNumber.replace(/[^a-zA-Z0-9-]/g, '_');
+  return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
 }
 
 
@@ -77,50 +80,45 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     return () => unsubscribe();
   }, []);
 
-  const addMovementRecord = (batch: any, record: Omit<MovementRecord, 'id'>) => {
+  const addMovementRecord = (batchOrTx: any, record: Omit<MovementRecord, 'id'>) => {
     const movementHistoryRef = doc(collection(db, "movementHistory"));
-    batch.set(movementHistoryRef, record);
+    batchOrTx.set(movementHistoryRef, pruneUndefined(record));
   };
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>, user: User) => {
     if (!user) throw new Error("Usuário não autenticado");
 
-    const batch = writeBatch(db);
-    let lotRefToUpdate: import("firebase/firestore").DocumentReference | null = null;
-    let existingQuantity = 0;
-
-    const uniqueId = destLotIdKey({
-        productId: lot.productId,
-        kioskId: lot.kioskId,
-        lotNumber: lot.lotNumber,
-        expiryDate: lot.expiryDate,
-    });
-    
-    const potentialLotRef = doc(db, 'lots', uniqueId);
-
     try {
         await runTransaction(db, async (transaction) => {
-            const existingDoc = await transaction.get(potentialLotRef);
-            let lotIdForHistory: string;
+            const uniqueId = destLotIdKey({
+                productId: lot.productId,
+                kioskId: lot.kioskId,
+                lotNumber: lot.lotNumber,
+                expiryDate: lot.expiryDate,
+            });
+            
+            const lotRef = doc(db, 'lots', uniqueId);
+            const existingDoc = await transaction.get(lotRef);
 
             if (existingDoc.exists()) {
-                lotRefToUpdate = existingDoc.ref;
-                existingQuantity = (existingDoc.data() as LotEntry).quantity;
-                lotIdForHistory = existingDoc.id;
-                transaction.update(lotRefToUpdate, {
+                transaction.update(lotRef, {
                     quantity: increment(lot.quantity),
-                    imageUrl: lot.imageUrl || (existingDoc.data() as LotEntry).imageUrl,
-                    locationId: lot.locationId || (existingDoc.data() as LotEntry).locationId || null,
-                    locationName: lot.locationName || (existingDoc.data() as LotEntry).locationName || null,
-                    locationCode: lot.locationCode || (existingDoc.data() as LotEntry).locationCode || null,
+                    imageUrl: lot.imageUrl || existingDoc.data().imageUrl || null,
+                    locationId: lot.locationId || existingDoc.data().locationId || null,
+                    locationName: lot.locationName || existingDoc.data().locationName || null,
+                    locationCode: lot.locationCode || existingDoc.data().locationCode || null,
+                    updatedAt: serverTimestamp(),
                 });
             } else {
-                lotIdForHistory = potentialLotRef.id;
-                transaction.set(potentialLotRef, lot);
+                transaction.set(lotRef, {
+                  ...lot,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                });
             }
 
              const movementRecord: Omit<MovementRecord, 'id'> = {
-                lotId: lotIdForHistory,
+                lotId: uniqueId,
                 productId: lot.productId,
                 productName: lot.productName,
                 lotNumber: lot.lotNumber,
@@ -130,14 +128,14 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 userId: user.id,
                 username: user.username,
                 timestamp: new Date().toISOString(),
-                notes: existingQuantity > 0 ? 'Adição de quantidade a lote existente.' : 'Criação de novo lote no sistema.',
+                notes: existingDoc.exists() ? 'Adição de quantidade a lote existente.' : 'Criação de novo lote no sistema.',
             };
-            const movementHistoryRef = doc(collection(db, "movementHistory"));
-            transaction.set(movementHistoryRef, movementRecord);
+            addMovementRecord(transaction, movementRecord);
         });
 
     } catch (error) {
         console.error("Error adding lot:", error);
+        throw error;
     }
   }, []);
   
@@ -198,42 +196,36 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 throw new Error(`Parâmetros inválidos para o lote ${lotId}.`);
             }
             
-            const sourceRef = doc(db, 'lots', it.lotId);
+            // 1. LEITURAS PRIMEIRO
+            const sourceRef = doc(db, 'lots', lotId);
+            const sourceSnap = await transaction.get(sourceRef);
+            if (!sourceSnap.exists()) throw new Error(`Lote de origem ${lotId} não encontrado.`);
+            const source = sourceSnap.data() as LotEntry;
+            
             const destId = destLotIdKey({
                 productId: productId,
                 kioskId: toKioskId,
                 lotNumber: lotNumber,
-                expiryDate: lots.find(l => l.id === lotId)?.expiryDate
+                expiryDate: source.expiryDate,
             });
             const destRef = doc(db, 'lots', destId);
-            
-            // 1. READS FIRST
-            const [sourceSnap, destSnap] = await Promise.all([
-                transaction.get(sourceRef),
-                transaction.get(destRef),
-            ]);
+            const destSnap = await transaction.get(destRef);
 
-            if (!sourceSnap.exists()) {
-                throw new Error(`Lote de origem ${lotId} não encontrado.`);
-            }
-
-            const source = sourceSnap.data() as LotEntry;
+            // 2. LÓGICA / VALIDAÇÕES
             const quantity = Number(source.quantity ?? 0);
             const reserved = Number(source.reservedQuantity ?? 0);
-            const available = quantity - reserved;
-
             let movable = quantityToMove;
             
-            // 2. LOGIC / VALIDATIONS
             if (isFinalizingReposition) {
                 const maxByReserved = Math.max(0, Math.min(reserved, quantity));
                 if (maxByReserved < movable) {
                     if (!allowPartialOnFinalize) {
                         throw new Error(`Finalização impraticável no lote ${lotId}: reservado ${reserved}, total ${quantity}, solicitado ${quantityToMove}.`);
                     }
-                    movable = maxByReserved;
+                    movable = maxByReserved; 
                 }
             } else {
+                const available = quantity - reserved;
                 if (available < movable) {
                     throw new Error(`Quantidade inválida no lote ${lotId}: disponível ${available} < mover ${movable}.`);
                 }
@@ -244,7 +236,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 continue;
             }
 
-            // 3. WRITES
+            // 3. ESCRITAS
             const newQuantity = quantity - movable;
             const newReserved = isFinalizingReposition ? Math.max(0, reserved - movable) : reserved;
             
@@ -269,6 +261,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                     locationId: null,
                     locationName: null,
                     locationCode: null,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
                 });
             }
 
@@ -283,8 +277,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 timestamp: now
             };
             
-            addMovementRecord(transaction, { ...commonData, lotId: source.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
-            addMovementRecord(transaction, { ...commonData, lotId: destRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
+            addMovementRecord(transaction, { ...commonData, lotId: source.id, sourceLotId: source.id, destLotId: destRef.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
+            addMovementRecord(transaction, { ...commonData, lotId: destRef.id, sourceLotId: source.id, destLotId: destRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: it.fromKioskId, fromKioskName: it.fromKioskName, toKioskId: it.toKioskId, toKioskName: it.toKioskName });
 
             results.push({
               lotId,
@@ -296,7 +290,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
 
     return results;
-  }, [lots]);
+  }, [lots, user]);
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams, user: User) => {
     if (!user) {
@@ -333,8 +327,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             notes: params.notes,
         };
 
-        const movementRef = doc(collection(db, 'movementHistory'));
-        transaction.set(movementRef, movementRecord);
+        addMovementRecord(transaction, movementRecord);
         transaction.update(lotRef, { quantity: newQuantity });
     });
   }, []);
@@ -374,8 +367,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             notes: movementNotes,
         };
 
-        const movementRef = doc(collection(db, 'movementHistory'));
-        transaction.set(movementRef, movementRecord);
+        addMovementRecord(transaction, movementRecord);
         transaction.update(lotRef, { quantity: newQuantity });
     });
 }, []);
@@ -394,5 +386,3 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-    

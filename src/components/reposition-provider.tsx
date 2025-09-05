@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type RepositionActivity, type RepositionItem } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
@@ -165,7 +165,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     if (!user) throw new Error("Usuário não autenticado.");
     if (!activity.items) return;
 
-    const lotsToMove = activity.items.flatMap(item => 
+    const itemsToMove = activity.items.flatMap(item => 
       (item.receivedLots || item.suggestedLots).map(lot => ({
         lotId: lot.lotId,
         productId: lot.productId,
@@ -179,15 +179,25 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       }))
     ).filter(lot => lot.quantityToMove > 0);
     
-    if (lotsToMove.length > 0) {
-      await moveMultipleLots(lotsToMove, user, { 
+    if (itemsToMove.length > 0) {
+      const results = await moveMultipleLots(itemsToMove, user, { 
         isFinalizingReposition: true,
-        allowPartialOnFinalize: true,
+        allowPartialOnFinalize: true, // Allow moving what's possible, even if less than reserved
         activityId: activity.id
       }); 
+
+      const pendingSum = results.reduce((acc, r) => acc + r.pending, 0);
+      if (pendingSum > 0) {
+        // Handle partial finalization (e.g., create new task, update activity status)
+        console.warn(`Atividade ${activity.id} finalizada parcialmente. Pendente: ${pendingSum}`);
+        await updateRepositionActivity(activity.id, { status: 'Concluído' }); // Or a custom "partial" status
+      } else {
+        await updateRepositionActivity(activity.id, { status: 'Concluído' });
+      }
+
+    } else {
+      await updateRepositionActivity(activity.id, { status: 'Concluído' });
     }
-    
-    await updateRepositionActivity(activity.id, { status: 'Concluído' });
 
   }, [user, moveMultipleLots, updateRepositionActivity]);
 
