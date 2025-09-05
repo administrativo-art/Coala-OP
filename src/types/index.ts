@@ -124,6 +124,7 @@ export type MovementRecord = {
   username: string;
   timestamp: string; // ISO String
   notes?: string;
+  activityId?: string;
 };
 
 
@@ -206,7 +207,7 @@ export type ProductSimulationItem = {
   baseProductId: string;
   quantity: number;
   useDefault: boolean;
-  overrideCostPerUnit?: number;
+  overrideCostPerUnit?: overrideCostPerUnit;
   overrideUnit?: string;
 };
 
@@ -256,7 +257,7 @@ export type PermissionSet = {
     consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
     returns: { add: boolean; updateStatus: boolean; delete: boolean; };
     team: { manage: boolean, view: boolean };
-    purchasing: { addPrice: boolean; approve: boolean; viewHistory: boolean; };
+    purchasing: { addPrice: boolean; approve: boolean; viewHistory: boolean; deleteHistory: boolean; };
     stockCount: { perform: boolean; approve: boolean; };
     itemRequests: { add: boolean; approve: boolean; };
     pricing: { simulate: boolean; manageParameters: boolean; };
@@ -492,6 +493,7 @@ export type RepositionSuggestedLot = {
   lotId: string;
   productId: string;
   productName: string;
+  lotNumber: string;
   quantityToMove: number;
   receiptNotes?: string;
 };
@@ -555,7 +557,7 @@ export const defaultGuestPermissions: PermissionSet = {
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     returns: { add: false, updateStatus: false, delete: false },
     team: { manage: false, view: true },
-    purchasing: { addPrice: false, approve: false, viewHistory: false },
+    purchasing: { addPrice: false, approve: false, viewHistory: false, deleteHistory: false },
     stockCount: { perform: true, approve: false },
     itemRequests: { add: true, approve: false },
     pricing: { simulate: false, manageParameters: false },
@@ -572,7 +574,7 @@ export const defaultUserPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
     returns: { add: true, updateStatus: true, delete: false },
     team: { view: true, manage: false },
-    purchasing: { addPrice: true, approve: false, viewHistory: true },
+    purchasing: { addPrice: true, approve: false, viewHistory: true, deleteHistory: false },
     stockCount: { perform: true, approve: false },
     itemRequests: { add: true, approve: false },
     pricing: { simulate: true, manageParameters: false },
@@ -587,7 +589,7 @@ export const defaultAdminPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     returns: { add: true, updateStatus: true, delete: true },
     team: { manage: true, view: true },
-    purchasing: { addPrice: true, approve: true, viewHistory: true },
+    purchasing: { addPrice: true, approve: true, viewHistory: true, deleteHistory: true },
     stockCount: { perform: true, approve: true },
     itemRequests: { add: true, approve: true },
     pricing: { simulate: true, manageParameters: true },
@@ -641,3 +643,5 @@ export type Task = {
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
 };
+
+    

@@ -311,7 +311,10 @@ export function LotCard({
                                 <div className="space-y-2">
                                     {productGroup.lots.slice(0, 4).map(lot => (
                                         <div key={lot.id} className="p-2 border rounded-md text-sm">
-                                            <p className="font-semibold">Lote: {lot.lotNumber}</p>
+                                            <div className="font-semibold flex justify-between">
+                                                <span>Lote: {lot.lotNumber}</span>
+                                                <Badge variant={getStatus(lot, product).variant as any} className={getStatus(lot, product).className}>{getStatus(lot, product).text}</Badge>
+                                            </div>
                                             <p className="text-muted-foreground">Qtd: {lot.quantity.toLocaleString('pt-BR')} | Val: {lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
                                             <p className="text-xs text-muted-foreground">{getKioskName(lot.kioskId)}</p>
                                         </div>
@@ -384,10 +387,12 @@ export function LotCard({
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                                 {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
-                                <div className="text-blue-600 font-bold flex items-center gap-1">
-                                    <Shield className="h-3 w-3"/>
-                                    Reserva: {lot.reservedQuantity || 0} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
-                                </div>
+                                {lot.reservedQuantity && lot.reservedQuantity > 0 && (
+                                    <div className="text-blue-600 font-bold flex items-center gap-1">
+                                        <Shield className="h-3 w-3"/>
+                                        Reserva: {lot.reservedQuantity} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -430,3 +435,5 @@ export function LotCard({
     </>
   );
 }
+
+    
