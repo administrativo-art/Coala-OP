@@ -384,12 +384,10 @@ export function LotCard({
                             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                 <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
                                 {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
-                                {(lot.reservedQuantity ?? 0) > 0 && (
                                 <div className="text-blue-600 font-bold flex items-center gap-1">
                                     <Shield className="h-3 w-3"/>
-                                    Reserva: {lot.reservedQuantity} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
+                                    Reserva: {lot.reservedQuantity || 0} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
                                 </div>
-                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
