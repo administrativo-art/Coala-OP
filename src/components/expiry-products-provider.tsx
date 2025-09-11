@@ -217,7 +217,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
 
             if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
-                throw new Error(`Parâmetros inválidos para o lote ${lotId}.`);
+                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove });
+                continue;
             }
 
             const sourceSnap = lotSnaps[index];
@@ -245,7 +246,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             }
             
             if (movable <= 0) {
-                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove });
+                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove - movable });
                 continue;
             }
 
@@ -292,7 +293,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
 
     return results;
-  }, [lots, user]);
+  }, [user]);
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams, user: User) => {
     if (!user) {
