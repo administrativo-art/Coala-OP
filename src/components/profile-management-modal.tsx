@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -44,18 +44,16 @@ const permissionsSchema = z.object({
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
   pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
-  settings: z.object({ view: z.boolean(), manageUsers: z.boolean(), manageKiosks: z.boolean(), manageProfiles: z.boolean(), manageLabels: z.boolean() }),
-  // Legacy
-  products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
-  users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
-  kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
-  predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
-  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
+  settings: {
+    view: z.boolean(),
+    manageUsers: z.boolean(),
+    manageKiosks: z.boolean(),
+    manageProfiles: z.boolean(),
+    manageLabels: z.boolean(),
+  },
+  help: z.object({ view: z.boolean() }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
-  reposition: { cancel: z.boolean() },
-  help: { view: z.boolean() },
+  users: z.object({ impersonate: z.boolean() }),
 });
 
 

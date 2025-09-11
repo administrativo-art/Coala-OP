@@ -287,7 +287,7 @@ export type PermissionSet = {
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   // Admin
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
-  // Legado
+  // Legado - para manter a compatibilidade
   products: { add: boolean; edit: boolean; delete: boolean; };
   lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
   users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
