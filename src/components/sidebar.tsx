@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
@@ -54,15 +55,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     };
 }, []);
 
-  const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
-  const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.purchasing.suggest || permissions.purchasing.approve || permissions.stockCount.perform || permissions.audit.start);
-  const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
+  const canManageUsers = !loading && permissions.settings.view;
+  const canManageStock = !loading && permissions.stock.view;
+  const canManageTeam = !loading && permissions.team.view;
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
-  const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
-  const canSimulatePricing = !loading && permissions.pricing.simulate;
+  const canRegister = !loading && permissions.registration.view;
+  const canSimulatePricing = !loading && permissions.pricing.view;
   const canViewTasks = !loading && permissions.tasks.view;
-  const canAudit = !loading && permissions.audit.start;
+  const canAudit = !loading && permissions.stock.audit.start;
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
@@ -76,7 +77,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         subItems: [
             { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
             { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
-            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.audit.start },
+            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.stock.audit.start },
             { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
             { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
             { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
@@ -88,7 +89,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: BookOpen, group: 'suporte', show: canUseHelp },
-  ], [legacyTasks.length, canViewTasks, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.audit.start, canAudit]);
+  ], [legacyTasks.length, canViewTasks, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.stock.audit.start, canAudit]);
   
   const filteredNavItems = useMemo(() => {
     if (!searchTerm) return navItems.filter(item => item.show !== false);
@@ -293,3 +294,5 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     </div>
   )
 }
+
+    
