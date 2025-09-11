@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import Image from 'next/image';
@@ -169,11 +168,13 @@ export function LotCard({
     onMove,
     onDelete,
     onViewHistory,
-    canEdit,
-    canMove,
-    canDelete,
-    canViewHistory,
 }: LotCardProps) {
+  const { permissions } = useAuth();
+  const canEdit = permissions.stock.inventoryControl.editLot;
+  const canMove = permissions.stock.inventoryControl.transfer;
+  const canDelete = permissions.stock.inventoryControl.writeDown; // Assuming writeDown and delete are linked
+  const canViewHistory = permissions.stock.inventoryControl.viewHistory;
+  
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
   const { activities } = useReposition();

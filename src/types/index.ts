@@ -251,29 +251,60 @@ export type DailyLog = {
 
 
 export type PermissionSet = {
-    products: { add: boolean; edit: boolean; delete: boolean; };
-    lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-    users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
-    kiosks: { add: boolean; delete: boolean; };
-    predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
-    consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-    returns: { add: boolean; updateStatus: boolean; delete: boolean; };
-    team: { manage: boolean, view: boolean };
-    purchasing: { addPrice: boolean; approve: boolean; viewHistory: boolean; deleteHistory: boolean; };
-    stockCount: { perform: boolean; approve: boolean; };
-    itemRequests: { add: boolean; approve: boolean; };
-    pricing: { simulate: boolean; manageParameters: boolean; };
-    help: { view: boolean; };
-    tasks: { view: boolean, manage: boolean; };
+  // Cadastros
+  registration: {
+    view: boolean;
+    items: { add: boolean; edit: boolean; delete: boolean; };
+    baseProducts: { add: boolean; edit: boolean; delete: boolean; };
+    entities: { add: boolean; edit: boolean; delete: boolean; };
+  };
+  // Estoque
+  stock: {
+    view: boolean;
+    inventoryControl: {
+      addLot: boolean;
+      editLot: boolean;
+      writeDown: boolean;
+      transfer: boolean;
+      viewHistory: boolean;
+    };
+    stockCount: { perform: boolean; approve: boolean; requestItem: boolean; };
     audit: { start: boolean; approve: boolean; };
-    reposition: { cancel: boolean; };
+    analysis: {
+      view: boolean;
+      restock: boolean;
+      consumption: boolean;
+      projection: boolean;
+      valuation: boolean;
+    };
+    purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; };
+    returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; };
+    conversions: { view: boolean; };
+  };
+  // Equipe
+  team: { view: boolean; manage: boolean; };
+  // Custo e Preço
+  pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
+  // Admin
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
+  // Legado
+  products: { add: boolean; edit: boolean; delete: boolean; };
+  lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
+  users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
+  kiosks: { add: boolean; delete: boolean; };
+  predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
+  consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
+  itemRequests: { add: boolean; approve: boolean; };
+  tasks: { view: boolean, manage: boolean; };
+  reposition: { cancel: boolean; };
+  help: { view: boolean; };
 };
 
 export type Profile = {
     id: string;
     name: string;
     isDefaultAdmin?: boolean;
-    permissions: PermissionSet;
+    permissions: Partial<PermissionSet>;
 }
 
 export type User = {
@@ -552,55 +583,64 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
+    // Cadastros
+    registration: {
+        view: false,
+        items: { add: false, edit: false, delete: false },
+        baseProducts: { add: false, edit: false, delete: false },
+        entities: { add: false, edit: false, delete: false },
+    },
+    // Estoque
+    stock: {
+        view: true,
+        inventoryControl: { addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true },
+        stockCount: { perform: true, approve: false, requestItem: true },
+        audit: { start: false, approve: false },
+        analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true },
+        purchasing: { view: false, suggest: false, approve: false, deleteHistory: false },
+        returns: { view: true, add: true, updateStatus: false, delete: false },
+        conversions: { view: true },
+    },
+    // Equipe
+    team: { view: true, manage: false },
+    // Custo e Preço
+    pricing: { view: false, simulate: false, manageParameters: false },
+    // Admin
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
+    // Legado
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
-    returns: { add: false, updateStatus: false, delete: false },
-    team: { manage: false, view: true },
-    purchasing: { addPrice: false, approve: false, viewHistory: false, deleteHistory: false },
-    stockCount: { perform: true, approve: false },
     itemRequests: { add: true, approve: false },
-    pricing: { simulate: false, manageParameters: false },
-    help: { view: true },
     tasks: { view: true, manage: false },
-    audit: { start: false, approve: false },
     reposition: { cancel: false },
+    help: { view: true },
 };
 
 export const defaultUserPermissions: PermissionSet = {
-    ...defaultGuestPermissions,
-    products: { add: true, edit: false, delete: false },
-    lots: { add: true, edit: true, move: true, delete: false, viewMovementHistory: true },
-    predefinedLists: { add: true, edit: true, delete: false },
-    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: false },
-    returns: { add: true, updateStatus: true, delete: false },
-    team: { view: true, manage: false },
-    purchasing: { addPrice: true, approve: false, viewHistory: true, deleteHistory: false },
-    stockCount: { perform: true, approve: false },
-    itemRequests: { add: true, approve: false },
-    pricing: { simulate: true, manageParameters: false },
+    ...defaultGuestPermissions
 };
 
 export const defaultAdminPermissions: PermissionSet = {
+    registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
+    stock: { view: true, inventoryControl: { addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { perform: true, approve: true, requestItem: true }, audit: { start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
+    team: { view: true, manage: true },
+    pricing: { view: true, simulate: true, manageParameters: true },
+    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
+    // Legacy - keep all true for admin
     products: { add: true, edit: true, delete: true },
     lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
     users: { add: true, edit: true, delete: true, impersonate: true },
     kiosks: { add: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
-    returns: { add: true, updateStatus: true, delete: true },
-    team: { manage: true, view: true },
-    purchasing: { addPrice: true, approve: true, viewHistory: true, deleteHistory: true },
-    stockCount: { perform: true, approve: true },
     itemRequests: { add: true, approve: true },
-    pricing: { simulate: true, manageParameters: true },
-    help: { view: true },
     tasks: { view: true, manage: true },
-    audit: { start: true, approve: true },
     reposition: { cancel: true },
+    help: { view: true },
 };
 
 

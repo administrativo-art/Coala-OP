@@ -84,22 +84,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             ...profilePermissions,
+            // Deep merge for nested permission objects
+            registration: { ...defaultGuestPermissions.registration, ...profilePermissions?.registration },
+            stock: { ...defaultGuestPermissions.stock, ...profilePermissions?.stock },
+            team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
+            pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
+            settings: { ...defaultGuestPermissions.settings, ...profilePermissions?.settings },
+            help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
+            // Legacy permissions for backward compatibility if needed, can be removed later
             products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
             lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
             kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
-            predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
-            consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
-            returns: { ...defaultGuestPermissions.returns, ...profilePermissions?.returns },
-            team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
-            purchasing: { ...defaultGuestPermissions.purchasing, ...profilePermissions?.purchasing },
-            stockCount: { ...defaultGuestPermissions.stockCount, ...profilePermissions?.stockCount },
-            itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
-            pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
-            help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
-            audit: { ...defaultGuestPermissions.audit, ...profilePermissions?.audit },
-            tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
-            reposition: { ...defaultGuestPermissions.reposition, ...profilePermissions?.reposition },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

@@ -9,9 +9,14 @@ import { useAuth } from '@/hooks/use-auth';
 
 export function StockManagement() {
     const { permissions } = useAuth();
-    const canPurchase = permissions.purchasing.suggest || permissions.purchasing.approve;
-    const canCountStock = permissions.stockCount.perform || permissions.stockCount.approve;
-    const canAuditStock = permissions.audit.start || permissions.audit.approve;
+    
+    const canViewInventoryControl = permissions.stock.inventoryControl.addLot || permissions.stock.inventoryControl.editLot || permissions.stock.inventoryControl.writeDown || permissions.stock.inventoryControl.transfer || permissions.stock.inventoryControl.viewHistory;
+    const canViewStockCount = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
+    const canViewAudit = permissions.stock.audit.start || permissions.stock.audit.approve;
+    const canViewAnalysis = permissions.stock.analysis.view;
+    const canViewPurchasing = permissions.stock.purchasing.view;
+    const canViewReturns = permissions.stock.returns.view;
+    const canViewConversions = permissions.stock.conversions.view;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -20,7 +25,7 @@ export function StockManagement() {
                 <p className="text-lg text-muted-foreground mt-2">Gerencie lotes, vencimentos, reposição e consumo do seu estoque em um só lugar.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                {canViewInventoryControl && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <ClipboardCheck className="h-10 w-10 text-primary" />
@@ -35,9 +40,9 @@ export function StockManagement() {
                             </Button>
                         </Link>
                     </CardContent>
-                </Card>
+                </Card>}
 
-                 {canCountStock && (
+                 {canViewStockCount && (
                     <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                         <CardHeader className="p-0 items-center">
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
@@ -56,7 +61,7 @@ export function StockManagement() {
                     </Card>
                 )}
 
-                {canAuditStock && (
+                {canViewAudit && (
                     <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                         <CardHeader className="p-0 items-center">
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
@@ -75,7 +80,7 @@ export function StockManagement() {
                     </Card>
                 )}
                 
-                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                {canViewAnalysis && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <BarChart3 className="h-10 w-10 text-primary" />
@@ -90,8 +95,8 @@ export function StockManagement() {
                             </Button>
                         </Link>
                     </CardContent>
-                </Card>
-                 {canPurchase && (
+                </Card>}
+                 {canViewPurchasing && (
                     <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                         <CardHeader className="p-0 items-center">
                             <div className="p-4 bg-primary/10 rounded-full mb-4">
@@ -109,7 +114,7 @@ export function StockManagement() {
                         </CardContent>
                     </Card>
                 )}
-                <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                {canViewReturns && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <ShieldAlert className="h-10 w-10 text-primary" />
@@ -124,8 +129,8 @@ export function StockManagement() {
                             </Button>
                         </Link>
                     </CardContent>
-                </Card>
-                 <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                </Card>}
+                 {canViewConversions && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Repeat className="h-10 w-10 text-primary" />
@@ -140,7 +145,7 @@ export function StockManagement() {
                             </Button>
                         </Link>
                     </CardContent>
-                </Card>
+                </Card>}
             </div>
         </div>
     );
