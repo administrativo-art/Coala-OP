@@ -22,13 +22,13 @@ import { GlobalBarcodeScanner } from "./global-barcode-scanner"
 export function Header({ tasks }: { tasks: LegacyTask[] }) {
     const { permissions, loading, user } = useAuth()
 
-    const canManageUsers = !loading && permissions.users && (permissions.users.add || permissions.users.edit || permissions.users.delete);
-    const canManageStock = !loading && (permissions.lots.add || permissions.lots.edit || permissions.lots.move || permissions.lots.delete || permissions.lots.viewMovementHistory || permissions.consumptionAnalysis.upload || permissions.consumptionAnalysis.viewHistory || permissions.purchasing.addPrice || permissions.purchasing.approve);
-    const canManageTeam = !loading && permissions.team && (permissions.team.manage || permissions.team.view);
+    const canManageUsers = !loading && permissions.settings.view;
+    const canManageStock = !loading && permissions.stock.view;
+    const canManageTeam = !loading && permissions.team.view;
     const canUseHelp = !loading && permissions.help.view;
     const isMasterUser = user?.username === 'Tiago Brasil';
-    const canRegister = isMasterUser || permissions.products.add || permissions.products.edit;
-    const canSimulatePricing = !loading && permissions.pricing.simulate;
+    const canRegister = !loading && permissions.registration.view;
+    const canSimulatePricing = !loading && permissions.pricing.view;
     const canViewTasks = !loading && permissions.tasks.view;
 
 
