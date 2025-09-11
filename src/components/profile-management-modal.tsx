@@ -44,17 +44,24 @@ const permissionsSchema = z.object({
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
   pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
-  settings: {
+  settings: z.object({
     view: z.boolean(),
     manageUsers: z.boolean(),
     manageKiosks: z.boolean(),
     manageProfiles: z.boolean(),
     manageLabels: z.boolean(),
-  },
+  }),
   help: z.object({ view: z.boolean() }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
-  users: z.object({ impersonate: z.boolean() }),
-  reposition: z.object({ cancel: z.boolean() }),
+  // Legacy permissions that might still exist on the data object
+  products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
+  lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }).optional(),
+  users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
+  kiosks: z.object({ add: z.boolean(), delete: z.boolean() }).optional(),
+  predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
+  consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }).optional(),
+  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }).optional(),
+  reposition: z.object({ cancel: z.boolean() }).optional(),
 });
 
 
