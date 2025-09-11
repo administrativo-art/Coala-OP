@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, ClipboardList, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -54,6 +54,7 @@ const permissionsSchema = z.object({
   help: z.object({ view: z.boolean() }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
   users: z.object({ impersonate: z.boolean() }),
+  reposition: z.object({ cancel: z.boolean() }),
 });
 
 
@@ -167,7 +168,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
   
-   const renderModuleToggle = (label: string, name: `permissions.${keyof PermissionSet}`, description?: string) => (
+   const renderModuleToggle = (label: string, name: `permissions.${keyof PermissionSet}.view`, description?: string) => (
     <FormField
       control={form.control}
       name={name}
@@ -259,7 +260,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                          {renderModuleToggle("Ver Análises de Estoque", "permissions.stock.analysis.view")}
                                         {renderPermissionSwitch("permissions.stock.analysis.restock", "Analisar Reposição", "Permite ver a tela de análise de reposição.")}
                                         {renderPermissionSwitch("permissions.stock.analysis.consumption", "Analisar Consumo", "Permite ver a tela de consumo médio.")}
-                                        {renderPermissionSwitch("permissions.stock.analysis.projection", "Analisar Projeção", "Permite ver a projeção de consumo vs. validade.")}
+                                        {renderPermissionSwitch("permissions.stock.analysis.projection", "Analisar Projeção", "Permite ver o valor financeiro do estoque.")}
                                         {renderPermissionSwitch("permissions.stock.analysis.valuation", "Analisar Avaliação Financeira", "Permite ver o valor financeiro do estoque.")}
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
@@ -378,3 +379,5 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     </>
   );
 }
+
+    
