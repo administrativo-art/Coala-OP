@@ -237,17 +237,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
             const activityRef = doc(db, 'repositionActivities', activityId);
 
             // Step 1: Collect all necessary document references to read first
-            const refsToRead: Map<string, ReturnType<typeof doc>> = new Map();
             const lotMetadataPromises: Promise<{ lotId: string, expiryDate: string | null }>[] = [];
 
             activityToRevert.items.forEach(item => {
                 item.suggestedLots.forEach(lot => {
                     const sourceLotRef = doc(db, 'lots', lot.lotId);
-                    if (!refsToRead.has(lot.lotId)) {
-                        refsToRead.set(lot.lotId, sourceLotRef);
-                        // Fetch metadata outside the transaction for lookups
-                        lotMetadataPromises.push(getDoc(sourceLotRef).then(snap => ({ lotId: snap.id, expiryDate: (snap.data() as LotEntry)?.expiryDate || null })));
-                    }
+                    lotMetadataPromises.push(getDoc(sourceLotRef).then(snap => ({ lotId: snap.id, expiryDate: (snap.data() as LotEntry)?.expiryDate || null })));
                 });
             });
 
@@ -264,43 +259,13 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                             lotNumber: lot.lotNumber,
                             expiryDate: expiryMap.get(lot.lotId),
                         });
-                        if (!refsToRead.has(destinationLotId)) {
-                            refsToRead.set(destinationLotId, doc(db, 'lots', destinationLotId));
-                        }
-                    });
-                });
-            }
-
-            // Step 2: Execute all reads within the transaction
-            const readDocs = await Promise.all(Array.from(refsToRead.values()).map(ref => transaction.get(ref)));
-            const docDataMap = new Map(readDocs.map(d => [d.id, d.data()]));
-
-            // Step 3: Perform all writes
-            // Reverse stock movement if activity was completed
-            if (activityToRevert.status === 'Concluído') {
-                 const lotMetadata = await Promise.all(lotMetadataPromises);
-                 const expiryMap = new Map(lotMetadata.map(m => [m.lotId, m.expiryDate]));
-
-                activityToRevert.items.forEach(item => {
-                    const lotsToProcess = item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots;
-                    lotsToProcess.forEach(lot => {
+                        const destLotRef = doc(db, 'lots', destinationLotId);
+                        const sourceLotRef = doc(db, 'lots', lot.lotId);
                         const receivedQty = (lot as any).receivedQuantity ?? lot.quantityToMove;
-                        if (receivedQty > 0) {
-                            const sourceLotRef = doc(db, 'lots', lot.lotId);
-                            const destinationLotId = destLotIdKey({
-                                productId: lot.productId,
-                                kioskId: activityToRevert.kioskDestinationId,
-                                lotNumber: lot.lotNumber,
-                                expiryDate: expiryMap.get(lot.lotId),
-                            });
-                            const destLotRef = doc(db, 'lots', destinationLotId);
 
-                            if (docDataMap.has(destinationLotId)) {
-                                transaction.update(destLotRef, { quantity: increment(-receivedQty) });
-                            }
-                             if (docDataMap.has(lot.lotId)) {
-                                transaction.update(sourceLotRef, { quantity: increment(receivedQty) });
-                            }
+                        if (receivedQty > 0) {
+                            transaction.update(destLotRef, { quantity: increment(-receivedQty) });
+                            transaction.update(sourceLotRef, { quantity: increment(receivedQty) });
                         }
                     });
                 });
@@ -342,4 +307,5 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
 
