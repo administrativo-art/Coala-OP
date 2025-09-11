@@ -3,7 +3,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type RepositionActivity, type RepositionItem, type LotEntry } from '@/types';
+import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -226,62 +226,67 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 }, [user, moveMultipleLots, updateRepositionActivity]);
   
   const revertRepositionActivity = useCallback(async (activityId: string) => {
-    if (!user) throw new Error("Usuário não autenticado.");
+    if (!user) throw new Error("User not authenticated.");
     const activityToRevert = activities.find(a => a.id === activityId);
     if (!activityToRevert) {
         throw new Error("Atividade para reverter não encontrada.");
     }
-    
+    if (activityToRevert.status !== 'Concluído') {
+        throw new Error("Só é possível reverter atividades concluídas.");
+    }
+
     try {
         await runTransaction(db, async (transaction) => {
-            const activityRef = doc(db, 'repositionActivities', activityId);
-
-            // Step 1: Collect all necessary document references to read first
-            const lotMetadataPromises: Promise<{ lotId: string, expiryDate: string | null }>[] = [];
-
-            activityToRevert.items.forEach(item => {
-                item.suggestedLots.forEach(lot => {
-                    const sourceLotRef = doc(db, 'lots', lot.lotId);
-                    lotMetadataPromises.push(getDoc(sourceLotRef).then(snap => ({ lotId: snap.id, expiryDate: (snap.data() as LotEntry)?.expiryDate || null })));
-                });
-            });
-
-            // If the activity was completed, we also need to find the destination lots to read them
-            if (activityToRevert.status === 'Concluído') {
-                const lotMetadata = await Promise.all(lotMetadataPromises);
-                const expiryMap = new Map(lotMetadata.map(m => [m.lotId, m.expiryDate]));
-                
-                activityToRevert.items.forEach(item => {
-                    (item.receivedLots || item.suggestedLots).forEach(lot => {
-                        const destinationLotId = destLotIdKey({
-                            productId: lot.productId,
-                            kioskId: activityToRevert.kioskDestinationId,
-                            lotNumber: lot.lotNumber,
-                            expiryDate: expiryMap.get(lot.lotId),
-                        });
-                        const destLotRef = doc(db, 'lots', destinationLotId);
-                        const sourceLotRef = doc(db, 'lots', lot.lotId);
-                        const receivedQty = (lot as any).receivedQuantity ?? lot.quantityToMove;
-
-                        if (receivedQty > 0) {
-                            transaction.update(destLotRef, { quantity: increment(-receivedQty) });
-                            transaction.update(sourceLotRef, { quantity: increment(receivedQty) });
-                        }
-                    });
-                });
+            // Step 1: Find all movements related to this activity's finalization.
+            const movementsQuery = query(
+                collection(db, 'movementHistory'),
+                where('activityId', '==', activityId),
+                where('type', '==', 'TRANSFERENCIA_ENTRADA')
+            );
+            const movementDocs = await getDocs(movementsQuery);
+            if (movementDocs.empty) {
+                // If no movements, it means nothing was received. We just need to un-reserve.
             }
 
-            // Un-reserve stock from source lot (only relevant if not completed)
-             if (activityToRevert.status !== 'Concluído') {
-                activityToRevert.items.forEach(item => {
-                    item.suggestedLots.forEach(lot => {
-                        const lotRef = doc(db, 'lots', lot.lotId);
-                        transaction.update(lotRef, { reservedQuantity: increment(-lot.quantityToMove) });
-                    });
-                });
-             }
+            const refsToRead: DocumentReference[] = [];
+            const reversalOps: {sourceRef: DocumentReference, destRef: DocumentReference, qty: number}[] = [];
+
+            const lotIdToSourceRef = new Map<string, DocumentReference>();
+            activityToRevert.items.forEach(item => item.suggestedLots.forEach(lot => lotIdToSourceRef.set(lot.lotId, doc(db, 'lots', lot.lotId))));
             
-            // Finally, update the activity status back to pending
+            // Collect all reads
+            movementDocs.forEach(movementDoc => {
+                const movement = movementDoc.data() as MovementRecord;
+                const destRef = doc(db, 'lots', movement.lotId);
+                const sourceRef = lotIdToSourceRef.get(movement.revertedFromId || ''); // This assumes we add revertedFromId
+                 if(sourceRef) {
+                    refsToRead.push(destRef, sourceRef);
+                    reversalOps.push({sourceRef, destRef, qty: movement.quantityChange});
+                }
+            });
+
+            // Step 2: Execute all reads
+            await Promise.all(refsToRead.map(ref => transaction.get(ref)));
+
+            // Step 3: Perform all writes
+            // Debit from destination, credit back to source
+            for(const op of reversalOps) {
+                transaction.update(op.destRef, { quantity: increment(-op.qty) });
+                transaction.update(op.sourceRef, { quantity: increment(op.qty) });
+            }
+
+            // Restore original reservation
+            activityToRevert.items.forEach(item => {
+                item.suggestedLots.forEach(lot => {
+                    const sourceRef = lotIdToSourceRef.get(lot.lotId);
+                    if(sourceRef) {
+                       transaction.update(sourceRef, { reservedQuantity: increment(lot.quantityToMove) });
+                    }
+                });
+            });
+            
+            // Re-open the activity
+            const activityRef = doc(db, 'repositionActivities', activityId);
             transaction.update(activityRef, {
                 status: 'Aguardando despacho',
                 receiptNotes: '',
@@ -289,9 +294,9 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                 updatedAt: new Date().toISOString()
             });
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error reverting reposition activity:", error);
-        throw error;
+        throw new Error(error.message || "Ocorreu um erro desconhecido ao reverter.");
     }
   }, [user, activities]);
 
@@ -307,5 +312,6 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
 
 
