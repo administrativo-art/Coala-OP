@@ -595,7 +595,7 @@ function RepositionHistory() {
             title="Reverter Atividade?"
             description={
                 activityToRevert ? (
-                    <div>Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>. A atividade de reposição será reaberta com o status 'Aguardando despacho'.</div>
+                    <>Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>. A atividade de reposição será reaberta com o status 'Aguardando despacho'.</>
                 ) : ''
             }
             confirmButtonText="Sim, reverter"
