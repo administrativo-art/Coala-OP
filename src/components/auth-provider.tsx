@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
             audit: { ...defaultGuestPermissions.audit, ...profilePermissions?.audit },
             tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
+            reposition: { ...defaultGuestPermissions.reposition, ...profilePermissions?.reposition },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);

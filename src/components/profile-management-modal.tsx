@@ -34,13 +34,14 @@ const permissionsSchema = z.object({
     consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     team: z.object({ manage: z.boolean, view: z.boolean() }),
-    purchasing: z.object({ addPrice: z.boolean(), approve: z.boolean(), viewHistory: z.boolean() }),
+    purchasing: z.object({ addPrice: z.boolean(), approve: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean() }),
     itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
     pricing: z.object({ simulate: z.boolean(), manageParameters: z.boolean() }),
     help: z.object({ view: z.boolean() }),
     tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
     audit: z.object({ start: z.boolean(), approve: z.boolean() }),
+    reposition: z.object({ cancel: z.boolean() }),
 });
 
 
@@ -105,6 +106,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       help: { ...defaultGuestPermissions.help, ...profile.permissions?.help },
       tasks: { ...defaultGuestPermissions.tasks, ...profile.permissions?.tasks },
       audit: { ...defaultGuestPermissions.audit, ...profile.permissions?.audit },
+      reposition: { ...defaultGuestPermissions.reposition, ...profile.permissions?.reposition },
     };
 
     form.reset({
@@ -196,6 +198,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.purchasing.addPrice", "Adicionar preços", "Permite que o usuário insira cotações de preços durante uma sessão de pesquisa.")}
                                     {renderPermissionSwitch("permissions.purchasing.approve", "Aprovar compras", "Permite efetivar uma compra, atualizando o preço médio do insumo.")}
                                     {renderPermissionSwitch("permissions.purchasing.viewHistory", "Visualizar histórico", "Permite ver o histórico de pesquisas de preço e compras efetivadas.")}
+                                    {renderPermissionSwitch("permissions.purchasing.deleteHistory", "Excluir histórico de preços", "Permite excluir registros do histórico de preços efetivados.")}
                                 </AccordionContent>
                             </AccordionItem>
                            
@@ -207,14 +210,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
-                            <AccordionItem value="stockCount">
+                             <AccordionItem value="stockCount">
                                 <AccordionTrigger className="text-lg font-semibold"><ListOrdered className="mr-2 h-5 w-5" /> Contagem de estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderPermissionSwitch("permissions.stockCount.perform", "Realizar contagem", "Permite registrar contagens de estoque para aprovação.")}
                                     {renderPermissionSwitch("permissions.stockCount.approve", "Aprovar contagem", "Permite aprovar ou rejeitar contagens, ajustando o estoque.")}
                                 </AccordionContent>
                             </AccordionItem>
-
+                            
                              <AccordionItem value="audit">
                                 <AccordionTrigger className="text-lg font-semibold"><AuditIcon className="mr-2 h-5 w-5" /> Auditoria de Estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -237,6 +240,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.returns.add", "Abrir chamados", "Permite abrir novos chamados de devolução ou bonificação.")}
                                     {renderPermissionSwitch("permissions.returns.updateStatus", "Atualizar status", "Permite alterar o status de um chamado (ex: de aberta para em andamento).")}
                                     {renderPermissionSwitch("permissions.returns.delete", "Excluir chamados", "Permite excluir chamados do sistema.")}
+                                </AccordionContent>
+                            </AccordionItem>
+                            
+                            <AccordionItem value="reposition">
+                                <AccordionTrigger className="text-lg font-semibold"><Truck className="mr-2 h-5 w-5" /> Reposição</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderPermissionSwitch("permissions.reposition.cancel", "Cancelar atividades", "Permite cancelar uma atividade de reposição que está em andamento.")}
                                 </AccordionContent>
                             </AccordionItem>
 
