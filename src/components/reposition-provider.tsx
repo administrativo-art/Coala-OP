@@ -99,10 +99,9 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         for (const item of data.items) {
             for (const lotToMove of item.suggestedLots) {
                 const lotRef = doc(db, 'lots', lotToMove.lotId);
-                const currentData = lotDataMap.get(lotToMove.lotId)!;
-                const currentReserved = currentData.reservedQuantity || 0;
-                const newReserved = currentReserved + lotToMove.quantityToMove;
-                transaction.update(lotRef, { reservedQuantity: newReserved });
+                transaction.update(lotRef, { 
+                    reservedQuantity: increment(lotToMove.quantityToMove)
+                });
             }
         }
       });
@@ -140,19 +139,33 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   
     try {
       await runTransaction(db, async (transaction) => {
-        if (activityToCancel.status === 'Aguardando despacho' || activityToCancel.status === 'Aguardando recebimento') {
-            for (const item of activityToCancel.items) {
-                for (const lotToUnreserve of item.suggestedLots) {
-                    const lotRef = doc(db, 'lots', lotToUnreserve.lotId);
-                    transaction.update(lotRef, {
-                        reservedQuantity: increment(-lotToUnreserve.quantityToMove)
-                    });
-                }
-            }
-        }
-
+        // 1. Mark the activity as cancelled
         const activityRef = doc(db, 'repositionActivities', activityId);
         transaction.update(activityRef, { status: 'Cancelada', updatedAt: new Date().toISOString() });
+        
+        if (activityToCancel.status === 'Aguardando despacho' || activityToCancel.status === 'Aguardando recebimento') {
+            const affectedLotIds = new Set(activityToCancel.items.flatMap(item => item.suggestedLots.map(l => l.lotId)));
+            const activeActivities = (await getDocs(query(collection(db, "repositionActivities"), where("status", "==", "Aguardando despacho")))).docs
+                .map(d => ({id: d.id, ...d.data()} as RepositionActivity))
+                .filter(a => a.id !== activityId); // Exclude the one being cancelled
+
+            for (const lotId of affectedLotIds) {
+                // Find all other active reservations for this lot
+                let newReservedQuantity = 0;
+                for (const activeActivity of activeActivities) {
+                    for (const item of activeActivity.items) {
+                        for (const lot of item.suggestedLots) {
+                            if (lot.lotId === lotId) {
+                                newReservedQuantity += lot.quantityToMove;
+                            }
+                        }
+                    }
+                }
+                // Update the lot with the recalculated reserved quantity
+                const lotRef = doc(db, 'lots', lotId);
+                transaction.update(lotRef, { reservedQuantity: newReservedQuantity });
+            }
+        }
       });
     } catch (error) {
       console.error("Error cancelling reposition activity:", error);
@@ -160,42 +173,46 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [activities]);
   
- const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
+  const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
     if (!user) throw new Error("Usuário não autenticado.");
     if (!activity.items) return;
 
-    // Determine the actual quantity received for each lot.
     const itemsToMove = activity.items.flatMap(item => 
         (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => {
-            const receivedQty = (lot as any).receivedQuantity;
+            const receivedQty = (lot as any).receivedQuantity === undefined ? lot.quantityToMove : (lot as any).receivedQuantity;
             
             return {
                 lotId: lot.lotId,
                 productId: lot.productId,
                 productName: lot.productName,
                 lotNumber: lot.lotNumber,
-                quantityToMove: receivedQty, // This is the key change: use received quantity
+                quantityToMove: receivedQty,
+                originalSentQuantity: lot.quantityToMove, // Pass the original sent quantity
                 fromKioskId: activity.kioskOriginId,
                 fromKioskName: activity.kioskOriginName,
                 toKioskId: activity.kioskDestinationId,
                 toKioskName: activity.kioskDestinationName,
             };
         })
-    ).filter(lot => lot.quantityToMove > 0);
+    );
 
-    if (itemsToMove.length > 0) {
-        await moveMultipleLots(itemsToMove, user, { 
+    const validItemsToMove = itemsToMove.filter(item => item.quantityToMove > 0);
+
+    if (validItemsToMove.length > 0) {
+        await moveMultipleLots(validItemsToMove, user, { 
             isFinalizingReposition: true,
             activityId: activity.id,
             allowPartialOnFinalize: true, 
         });
-    } else {
+    }
+
+    // For items with zero quantity received, just release the reservation.
+    const zeroQuantityItems = itemsToMove.filter(item => item.quantityToMove === 0);
+    if (zeroQuantityItems.length > 0) {
         await runTransaction(db, async (transaction) => {
-            for (const item of activity.items) {
-                for (const lot of item.suggestedLots) {
-                    const lotRef = doc(db, 'lots', lot.lotId);
-                    transaction.update(lotRef, { reservedQuantity: increment(-lot.quantityToMove) });
-                }
+            for (const item of zeroQuantityItems) {
+                const lotRef = doc(db, 'lots', item.lotId);
+                transaction.update(lotRef, { reservedQuantity: increment(-item.originalSentQuantity) });
             }
         });
     }
@@ -216,36 +233,81 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
     try {
         await runTransaction(db, async (transaction) => {
+             // 1. Find all movements related to this activity
             const movementsQuery = query(
                 collection(db, 'movementHistory'),
                 where('activityId', '==', activityId),
-                where('type', 'in', ['TRANSFERENCIA_ENTRADA', 'TRANSFERENCIA_SAIDA'])
+                where('reverted', '!=', true) // Only find non-reverted movements
             );
-            const movementDocs = await getDocs(movementsQuery);
-            if (movementDocs.empty) {
-                console.log("No movements to revert, just updating status.");
+            const movementDocs = (await getDocs(movementsQuery)).docs;
+            const entryMovements = movementDocs.map(d => d.data() as MovementRecord).filter(m => m.type === 'TRANSFERENCIA_ENTRADA');
+
+            if (entryMovements.length === 0) {
+                 console.log("No entry movements found to revert for this activity. Updating status only.");
             }
 
-            for (const movementDoc of movementDocs.docs) {
-                const movement = movementDoc.data() as MovementRecord;
+            // 2. For each entry movement, perform the reverse operation
+            for (const entryMovement of entryMovements) {
+                 // Debit from destination
+                const destLotRef = doc(db, 'lots', entryMovement.lotId);
+                transaction.update(destLotRef, { quantity: increment(-entryMovement.quantityChange) });
+
+                // Find the corresponding source lot and credit it back
+                const sourceLotRef = doc(db, 'lots', entryMovement.revertedFromId!);
+                transaction.update(sourceLotRef, { quantity: increment(entryMovement.quantityChange) });
+
+                 // Create reversal movement records for audit trail
+                const now = new Date().toISOString();
+                const reversalNotes = `Estorno da atividade de reposição ${activityId}`;
                 
-                if (movement.type === 'TRANSFERENCIA_ENTRADA') {
-                    const lotRef = doc(db, 'lots', movement.lotId);
-                    transaction.update(lotRef, { quantity: increment(-movement.quantityChange) });
-                } else if (movement.type === 'TRANSFERENCIA_SAIDA') {
-                    const lotRef = doc(db, 'lots', movement.lotId);
-                    transaction.update(lotRef, {
-                        quantity: increment(movement.quantityChange),
-                        reservedQuantity: increment(movement.quantityChange)
-                    });
-                }
+                const sourceReversal: Omit<MovementRecord, 'id'> = {
+                    ...entryMovement,
+                    lotId: sourceLotRef.id,
+                    type: 'ENTRADA_ESTORNO',
+                    toKioskId: entryMovement.fromKioskId,
+                    toKioskName: entryMovement.fromKioskName,
+                    fromKioskId: entryMovement.toKioskId,
+                    fromKioskName: entryMovement.toKioskName,
+                    timestamp: now,
+                    notes: reversalNotes,
+                    revertedFromId: entryMovement.id,
+                };
+                 const destReversal: Omit<MovementRecord, 'id'> = {
+                    ...entryMovement,
+                    lotId: destLotRef.id,
+                    type: 'SAIDA_ESTORNO',
+                    timestamp: now,
+                    notes: reversalNotes,
+                    revertedFromId: entryMovement.id,
+                };
+
+                const sourceMovementRef = doc(collection(db, "movementHistory"));
+                const destMovementRef = doc(collection(db, "movementHistory"));
+                transaction.set(sourceMovementRef, sourceReversal);
+                transaction.set(destMovementRef, destReversal);
+                
+                // Mark original movements as reverted
+                const originalEntryRef = doc(db, 'movementHistory', entryMovement.id);
+                const originalExitRef = doc(db, 'movementHistory', entryMovement.revertedFromId!);
+                transaction.update(originalEntryRef, { reverted: true });
+                transaction.update(originalExitRef, { reverted: true });
             }
             
+            // 3. Re-reserve the original quantities
+            for (const item of activityToRevert.items) {
+                for (const lot of item.suggestedLots) {
+                     const lotRef = doc(db, 'lots', lot.lotId);
+                     transaction.update(lotRef, { reservedQuantity: increment(lot.quantityToMove) });
+                }
+            }
+
+            // 4. Update the activity status back to 'Aguardando despacho'
             const activityRef = doc(db, 'repositionActivities', activityId);
             transaction.update(activityRef, {
                 status: 'Aguardando despacho',
                 receiptNotes: '',
-                receiptSignature: {},
+                receiptSignature: {}, // Clear signatures
+                transportSignature: {},
                 updatedAt: new Date().toISOString()
             });
         });
@@ -267,6 +329,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
 
 
 
