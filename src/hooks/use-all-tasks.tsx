@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useContext, useMemo } from 'react';
@@ -62,7 +61,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     
     const allLegacyTasks: LegacyTask[] = [];
 
-    if (permissions.stockCount.approve) {
+    if (permissions.stock.stockCount.approve) {
         counts.forEach(count => {
             if (count.status === 'pending') {
                 allLegacyTasks.push({
@@ -98,7 +97,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                 icon: ClipboardCheck
             });
         }
-         if ((activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.audit.approve) {
+         if ((activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.audit.approve) {
              allLegacyTasks.push({
                 id: `finalize-${activity.id}`,
                 type: 'Reposição',
@@ -110,7 +109,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         }
     });
 
-    if (permissions.returns.updateStatus) {
+    if (permissions.stock.returns.updateStatus) {
         returnRequests.forEach(request => {
             if (request.status === 'em_andamento') {
                 allLegacyTasks.push({
