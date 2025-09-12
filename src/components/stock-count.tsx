@@ -104,57 +104,63 @@ function PendingApprovals() {
 
   return (
     <Accordion type="multiple" className="w-full space-y-3">
-      {pendingCounts.map(count => (
-        <AccordionItem key={count.id} value={count.id} className="border rounded-lg">
-          <AccordionTrigger className="p-4 hover:no-underline">
-            <div className="flex justify-between items-center w-full">
-              <div>
-                <p className="font-semibold">Contagem de {count.kioskName}</p>
-                <p className="text-sm text-muted-foreground">
-                  Por {count.countedBy.username} em {format(new Date(count.countedAt), 'dd/MM/yyyy HH:mm')}
-                </p>
-              </div>
-              <Badge variant="secondary">{count.items.length} itens com divergência</Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="p-4 pt-0">
-            <div className="rounded-md border mb-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Lote</TableHead>
-                    <TableHead className="text-center">Qtd. sistema</TableHead>
-                    <TableHead className="text-center">Qtd. contada</TableHead>
-                    <TableHead className="text-center">Diferença</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {count.items.map(item => (
-                    <TableRow key={item.lotId}>
-                      <TableCell className="font-medium">{item.productName}</TableCell>
-                      <TableCell>{item.lotNumber}</TableCell>
-                      <TableCell className="text-center">{item.systemQuantity}</TableCell>
-                      <TableCell className="text-center">{item.countedQuantity}</TableCell>
-                      <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.difference > 0 ? `+${item.difference}` : item.difference}
-                      </TableCell>
+      {pendingCounts.map(count => {
+        const divergentItems = count.items.filter(item => item.difference !== 0);
+        return (
+            <AccordionItem key={count.id} value={count.id} className="border rounded-lg">
+            <AccordionTrigger className="p-4 hover:no-underline">
+                <div className="flex justify-between items-center w-full">
+                <div>
+                    <p className="font-semibold">Contagem de {count.kioskName}</p>
+                    <p className="text-sm text-muted-foreground">
+                    Por {count.countedBy.username} em {format(new Date(count.countedAt), 'dd/MM/yyyy HH:mm')}
+                    </p>
+                </div>
+                <Badge variant="secondary">{divergentItems.length} itens com divergência</Badge>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="p-4 pt-0">
+                <div className="rounded-md border mb-4">
+                <Table>
+                    <TableHeader>
+                    <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Lote</TableHead>
+                        <TableHead className="text-center">Qtd. sistema</TableHead>
+                        <TableHead className="text-center">Qtd. contada</TableHead>
+                        <TableHead className="text-center">Diferença</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button size="sm" variant="destructive" onClick={() => handleReject(count)} disabled={isProcessing}>
-                <X className="mr-2 h-4 w-4" /> Rejeitar
-              </Button>
-              <Button size="sm" onClick={() => handleApprove(count)} disabled={isProcessing}>
-                <Check className="mr-2 h-4 w-4" /> Aprovar e ajustar estoque
-              </Button>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      ))}
+                    </TableHeader>
+                    <TableBody>
+                    {count.items.map(item => {
+                        const isDivergent = item.difference !== 0;
+                        return (
+                            <TableRow key={item.lotId} className={isDivergent ? 'bg-muted/50' : ''}>
+                                <TableCell className="font-medium">{item.productName}</TableCell>
+                                <TableCell>{item.lotNumber}</TableCell>
+                                <TableCell className="text-center">{item.systemQuantity}</TableCell>
+                                <TableCell className="text-center">{item.countedQuantity}</TableCell>
+                                <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : ''}`}>
+                                    {item.difference > 0 ? `+${item.difference}` : item.difference}
+                                </TableCell>
+                            </TableRow>
+                        )
+                    })}
+                    </TableBody>
+                </Table>
+                </div>
+                <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="destructive" onClick={() => handleReject(count)} disabled={isProcessing}>
+                    <X className="mr-2 h-4 w-4" /> Rejeitar
+                </Button>
+                <Button size="sm" onClick={() => handleApprove(count)} disabled={isProcessing}>
+                    <Check className="mr-2 h-4 w-4" /> Aprovar e ajustar estoque
+                </Button>
+                </div>
+            </AccordionContent>
+            </AccordionItem>
+        )
+    })}
     </Accordion>
   );
 }
@@ -363,8 +369,12 @@ export function StockCount() {
       };
     });
 
-    if (itemsToSave.length === 0) {
-        toast({ title: 'Nenhuma alteração', description: 'Não há itens para registrar na contagem.' });
+    const itemsWithChanges = itemsToSave.filter(
+      item => item.difference !== 0 || item.notes
+    );
+
+    if (itemsWithChanges.length === 0) {
+        toast({ title: 'Nenhuma alteração para salvar', description: 'Nenhuma quantidade foi alterada ou observação adicionada.' });
         return;
     }
 
