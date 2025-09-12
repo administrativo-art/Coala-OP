@@ -165,32 +165,26 @@ function HelpModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open:
             <HelpCircle /> Instruções de Contagem
           </DialogTitle>
           <DialogDescription>
-            Siga estas dicas para uma contagem de estoque precisa.
+            Siga estas regras para uma contagem de estoque precisa.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
           <div>
-            <h4 className="font-semibold">1. Produtos Fechados</h4>
+            <h4 className="font-semibold">1. Como devo contar?</h4>
             <p className="text-sm text-muted-foreground">
-              Para produtos em embalagens fechadas (ex: sacos, potes), simplesmente conte o número de embalagens. A quantidade inicial de cada embalagem já está registrada.
+             Só iremos contar as embalagens fechadas. As que já foram abertas, não iremos considerar como insumo para contagem do estoque.
             </p>
           </div>
           <div>
-            <h4 className="font-semibold">2. Produtos Abertos/Usados</h4>
+            <h4 className="font-semibold">2. Insumo não Encontrado?</h4>
             <p className="text-sm text-muted-foreground">
-              Para produtos que são vendidos por peso ou volume (ex: pós, caldas), utilize uma balança para obter a quantidade exata do que restou na embalagem e registre esse valor.
+             Se você encontrar um item no estoque físico que não aparece na lista, utilize o botão "Solicitar Cadastro de Insumo" para notificar o administrador.
             </p>
           </div>
           <div>
-            <h4 className="font-semibold">3. Observações</h4>
+            <h4 className="font-semibold">3. Encontrou um produto vencido, avariado ou com algum problema?</h4>
             <p className="text-sm text-muted-foreground">
-              Encontrou um produto vencido, avariado ou com algum problema? Use o campo "Observações" para descrever a situação. O administrador irá analisar e tomar a ação necessária.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-semibold">4. Insumo não Encontrado?</h4>
-            <p className="text-sm text-muted-foreground">
-              Se você encontrar um item no estoque físico que não aparece na lista, utilize o botão "Solicitar Cadastro de Insumo" para notificar o administrador.
+             Use o campo "Observações" para descrever a situação. O administrador irá analisar e tomar a ação necessária.
             </p>
           </div>
         </div>
@@ -313,7 +307,7 @@ export function StockCount() {
   };
 
   const loading = kiosksLoading || lotsLoading || productsLoading;
-  const canManageRequests = permissions.stock.stockCount.requestItem;
+  const canManageRequests = permissions.itemRequests.approve;
   const canApproveCounts = permissions.stock.stockCount.approve;
 
   const showManagementTab = canManageRequests || canApproveCounts;
