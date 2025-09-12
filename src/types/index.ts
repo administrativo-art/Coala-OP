@@ -261,22 +261,10 @@ export type PermissionSet = {
   // Estoque
   stock: {
     view: boolean;
-    inventoryControl: {
-      addLot: boolean;
-      editLot: boolean;
-      writeDown: boolean;
-      transfer: boolean;
-      viewHistory: boolean;
-    };
-    stockCount: { perform: boolean; approve: boolean; requestItem: boolean; };
-    audit: { start: boolean; approve: boolean; };
-    analysis: {
-      view: boolean;
-      restock: boolean;
-      consumption: boolean;
-      projection: boolean;
-      valuation: boolean;
-    };
+    inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
+    stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
+    audit: { view: boolean; start: boolean; approve: boolean; };
+    analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; };
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; };
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; };
     conversions: { view: boolean; };
@@ -587,31 +575,25 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
-    // Cadastros
     registration: {
         view: false,
         items: { add: false, edit: false, delete: false },
         baseProducts: { add: false, edit: false, delete: false },
         entities: { add: false, edit: false, delete: false },
     },
-    // Estoque
     stock: {
         view: true,
-        inventoryControl: { addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true },
-        stockCount: { perform: true, approve: false, requestItem: true },
-        audit: { start: false, approve: false },
+        inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true },
+        stockCount: { view: true, perform: true, approve: false, requestItem: true },
+        audit: { view: false, start: false, approve: false },
         analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true },
         purchasing: { view: false, suggest: false, approve: false, deleteHistory: false },
         returns: { view: true, add: true, updateStatus: false, delete: false },
         conversions: { view: true },
     },
-    // Equipe
     team: { view: true, manage: false },
-    // Custo e Preço
     pricing: { view: false, simulate: false, manageParameters: false },
-    // Admin
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
-    // Legado - para manter a compatibilidade
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
@@ -624,17 +606,13 @@ export const defaultGuestPermissions: PermissionSet = {
     help: { view: true },
 };
 
-export const defaultUserPermissions: PermissionSet = {
-    ...defaultGuestPermissions
-};
 
 export const defaultAdminPermissions: PermissionSet = {
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
-    stock: { view: true, inventoryControl: { addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { perform: true, approve: true, requestItem: true }, audit: { start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
+    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
     team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
-    // Legacy - keep all true for admin
     products: { add: true, edit: true, delete: true },
     lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
     users: { add: true, edit: true, delete: true, impersonate: true },
@@ -646,6 +624,8 @@ export const defaultAdminPermissions: PermissionSet = {
     reposition: { cancel: true },
     help: { view: true },
 };
+
+export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };
 
 
 export type StockAuditContextType = {
@@ -704,4 +684,6 @@ export type Task = {
     legacyLink?: string;
     legacyIcon?: React.FC<any>;
 };
+    
+
     

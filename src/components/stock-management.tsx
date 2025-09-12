@@ -11,9 +11,9 @@ export function StockManagement() {
     const { permissions } = useAuth();
     
     // Corrected permission logic for granular control
-    const canViewInventoryControl = permissions.stock.inventoryControl.viewHistory || permissions.stock.inventoryControl.addLot || permissions.stock.inventoryControl.editLot || permissions.stock.inventoryControl.transfer || permissions.stock.inventoryControl.writeDown;
-    const canViewStockCount = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
-    const canViewAudit = permissions.stock.audit.start || permissions.stock.audit.approve;
+    const canViewInventoryControl = permissions.stock.inventoryControl.view;
+    const canViewStockCount = permissions.stock.stockCount.view;
+    const canViewAudit = permissions.stock.audit.view;
     const canViewAnalysis = permissions.stock.analysis.view;
     const canViewPurchasing = permissions.stock.purchasing.view;
     const canViewReturns = permissions.stock.returns.view;
@@ -151,3 +151,5 @@ export function StockManagement() {
         </div>
     );
 }
+
+    

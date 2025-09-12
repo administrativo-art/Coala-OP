@@ -34,9 +34,9 @@ const permissionsSchema = z.object({
   }),
   stock: z.object({
     view: z.boolean(),
-    inventoryControl: z.object({ addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
-    stockCount: z.object({ perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
-    audit: z.object({ start: z.boolean(), approve: z.boolean() }),
+    inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
+    stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
+    audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
     analysis: z.object({
       view: z.boolean(),
       restock: z.boolean(),
@@ -250,6 +250,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                      {renderModuleToggle("Ver Módulo de Estoque", "permissions.stock.view")}
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
+                                        {renderModuleToggle("Ver Controle de Estoque", "permissions.stock.inventoryControl.view")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.addLot", "Adicionar Lotes", "Permite adicionar novos lotes de produtos ao estoque.")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.editLot", "Editar Lotes", "Permite editar informações de lotes existentes.")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.writeDown", "Dar Baixa em Lotes", "Permite registrar saídas por consumo ou descarte.")}
@@ -258,12 +259,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Contagem</h4>
+                                        {renderModuleToggle("Ver Contagem de Estoque", "permissions.stock.stockCount.view")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.perform", "Realizar Contagem", "Permite registrar contagens parciais de estoque.")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.approve", "Aprovar Contagem", "Permite aprovar divergências, ajustando o estoque.")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.requestItem", "Solicitar Novo Insumo", "Permite solicitar cadastro de um item não encontrado.")}
                                      </div>
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Auditoria</h4>
+                                         {renderModuleToggle("Ver Auditoria de Estoque", "permissions.stock.audit.view")}
                                         {renderPermissionSwitch("permissions.stock.audit.start", "Iniciar Auditoria", "Permite iniciar uma auditoria completa de um quiosque.")}
                                         {renderPermissionSwitch("permissions.stock.audit.approve", "Aprovar Auditoria", "Permite finalizar uma auditoria, efetivando os ajustes.")}
                                      </div>
@@ -395,3 +398,5 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     </>
   );
 }
+
+    
