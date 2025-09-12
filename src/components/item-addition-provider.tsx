@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ItemAdditionRequest, type Task } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, runTransaction, writeBatch, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useTasks } from '@/hooks/use-tasks';
@@ -13,7 +13,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 export interface ItemAdditionContextType {
   requests: ItemAdditionRequest[];
   loading: boolean;
-  addRequest: (data: { kioskId: string; productName: string; brand?: string; notes?: string }) => Promise<void>;
+  addRequest: (data: Partial<Omit<ItemAdditionRequest, 'id' | 'kioskName' | 'requestedBy' | 'status' | 'createdAt' | 'taskId'>>) => Promise<void>;
   updateRequestStatus: (requestId: string, status: 'completed' | 'rejected') => Promise<void>;
 }
 
@@ -41,8 +41,8 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
     return () => unsubscribe();
   }, []);
 
-  const addRequest = useCallback(async (data: { kioskId: string; productName: string; brand?: string; notes?: string }) => {
-    if (!user || !adminProfileId) throw new Error("Usuário ou perfil de admin não encontrado.");
+  const addRequest = useCallback(async (data: Partial<Omit<ItemAdditionRequest, 'id' | 'kioskName' | 'requestedBy' | 'status' | 'createdAt' | 'taskId'>>) => {
+    if (!user || !adminProfileId || !data.kioskId) throw new Error("Dados de usuário ou quiosque insuficientes.");
     
     const kiosk = kiosks.find(k => k.id === data.kioskId);
     if (!kiosk) throw new Error("Quiosque não encontrado.");
@@ -53,7 +53,13 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
     const taskRef = doc(collection(db, "tasks"));
 
     const newRequest: Omit<ItemAdditionRequest, 'id'> = {
-      ...data,
+      kioskId: data.kioskId,
+      productName: data.productName!,
+      brand: data.brand,
+      lote: data.lote,
+      barcode: data.barcode,
+      expiryDate: data.expiryDate,
+      notes: data.notes,
       kioskName: kiosk.name,
       requestedBy: {
         userId: user.id,

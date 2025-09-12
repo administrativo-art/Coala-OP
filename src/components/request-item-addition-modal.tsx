@@ -11,12 +11,20 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from './ui/textarea';
 import { useItemAddition } from '@/hooks/use-item-addition';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 const requestSchema = z.object({
   productName: z.string().min(3, 'O nome do insumo é obrigatório.'),
   brand: z.string().optional(),
+  lote: z.string().optional(),
+  barcode: z.string().optional(),
+  expiryDate: z.date().optional().nullable(),
   notes: z.string().optional(),
 });
 
@@ -37,6 +45,9 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
     defaultValues: {
       productName: '',
       brand: '',
+      lote: '',
+      barcode: '',
+      expiryDate: null,
       notes: '',
     },
   });
@@ -51,7 +62,13 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
       return;
     }
     
-    await addRequest({ kioskId, ...values });
+    const dataToSend = {
+        ...values,
+        kioskId,
+        expiryDate: values.expiryDate ? values.expiryDate.toISOString() : null
+    }
+
+    await addRequest(dataToSend);
     toast({
       title: 'Solicitação enviada!',
       description: 'Sua solicitação de cadastro foi enviada para o administrador.',
@@ -102,6 +119,69 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
                 )}
               />
             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <FormField
+                control={form.control}
+                name="lote"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Lote</FormLabel>
+                    <FormControl><Input placeholder="Lote do produto" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="barcode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Código de barras</FormLabel>
+                    <FormControl><Input placeholder="Código de barras" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+             <FormField
+                control={form.control}
+                name="expiryDate"
+                render={({ field }) => (
+                <FormItem className="flex flex-col">
+                    <FormLabel>Data de vencimento</FormLabel>
+                    <Popover>
+                    <PopoverTrigger asChild>
+                        <FormControl>
+                        <Button
+                            variant={"outline"}
+                            className={cn(
+                            "pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                            )}
+                        >
+                            {field.value ? (
+                            format(field.value, "dd/MM/yyyy")
+                            ) : (
+                            <span>Selecione a data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                        </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                        mode="single"
+                        selected={field.value ?? undefined}
+                        onSelect={field.onChange}
+                        initialFocus
+                        locale={ptBR}
+                        />
+                    </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                </FormItem>
+                )}
+            />
             <FormField
               control={form.control}
               name="notes"
@@ -110,7 +190,7 @@ export function RequestItemAdditionModal({ open, onOpenChange, kioskId }: Reques
                   <FormLabel>Observações</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Adicione informações relevantes, como lote, validade, quantidade encontrada, etc."
+                      placeholder="Adicione informações relevantes, como quantidade encontrada, etc."
                       {...field}
                     />
                   </FormControl>

@@ -514,6 +514,9 @@ export type ItemAdditionRequest = {
   };
   productName: string;
   brand?: string;
+  lote?: string;
+  barcode?: string;
+  expiryDate?: string | null;
   notes?: string;
   status: 'pending' | 'completed' | 'rejected';
   createdAt: string; // ISO String
