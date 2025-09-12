@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type LotEntry, type MovementRecord, type MovementType, type User } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType, type User, type StockCount } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -43,7 +43,7 @@ export interface ExpiryProductsContextType {
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
-  adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
+  adjustLotQuantity: (count: StockCount, approvedBy: User) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
@@ -216,7 +216,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
 
             if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
-                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove });
+                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove - movable });
                 continue;
             }
 
@@ -336,43 +336,36 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
   }, []);
 
-  const adjustLotQuantity = useCallback(async (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => {
+  const adjustLotQuantity = useCallback(async (count: StockCount, approvedBy: User) => {
     if (!approvedBy) {
         throw new Error("Usuário de aprovação não autenticado.");
     }
     await runTransaction(db, async (transaction) => {
-        const lotRef = doc(db, "lots", lotId);
-        const lotDoc = await transaction.get(lotRef);
+        for (const item of count.items) {
+            if (item.difference === 0) continue;
 
-        if (!lotDoc.exists()) {
-            throw new Error("Lote não encontrado para ajuste.");
+            const lotRef = doc(db, "lots", item.lotId);
+            
+            const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
+            const movementNotes = `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}.`;
+
+            const movementRecord: Omit<MovementRecord, 'id'> = {
+                lotId: item.lotId,
+                productId: item.productId,
+                productName: item.productName,
+                lotNumber: item.lotNumber,
+                type: movementType,
+                quantityChange: Math.abs(item.difference),
+                fromKioskId: count.kioskId,
+                userId: approvedBy.id,
+                username: approvedBy.username,
+                timestamp: new Date().toISOString(),
+                notes: movementNotes,
+            };
+
+            addMovementRecord(transaction, movementRecord);
+            transaction.update(lotRef, { quantity: item.countedQuantity });
         }
-
-        const currentLot = lotDoc.data() as LotEntry;
-        const currentQuantity = currentLot.quantity;
-        const difference = newQuantity - currentQuantity;
-
-        if (difference === 0) return; // No change needed
-
-        const movementType: MovementType = difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-        const movementNotes = `Ajuste de estoque aprovado por ${approvedBy.username}. Contado por ${countedBy.username}.`;
-
-        const movementRecord: Omit<MovementRecord, 'id'> = {
-            lotId: lotId,
-            productId: currentLot.productId,
-            productName: currentLot.productName,
-            lotNumber: currentLot.lotNumber,
-            type: movementType,
-            quantityChange: Math.abs(difference),
-            fromKioskId: currentLot.kioskId,
-            userId: approvedBy.id,
-            username: approvedBy.username,
-            timestamp: new Date().toISOString(),
-            notes: movementNotes,
-        };
-
-        addMovementRecord(transaction, movementRecord);
-        transaction.update(lotRef, { quantity: newQuantity });
     });
 }, []);
 
@@ -443,5 +436,3 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-    

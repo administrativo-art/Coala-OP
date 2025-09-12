@@ -59,19 +59,20 @@ function PendingApprovals() {
     if (!user) return;
     setIsProcessing(true);
     
-    await Promise.all(count.items.map(item => {
-        if (item.difference !== 0) {
-            return adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy, user);
-        }
-        return Promise.resolve();
-    }));
+    try {
+        await adjustLotQuantity(count, user);
 
-    await updateStockCount(count.id, {
-        status: 'approved',
-        reviewedBy: { userId: user.id, username: user.username },
-        reviewedAt: new Date().toISOString(),
-    });
-    setIsProcessing(false);
+        await updateStockCount(count.id, {
+            status: 'approved',
+            reviewedBy: { userId: user.id, username: user.username },
+            reviewedAt: new Date().toISOString(),
+        });
+    } catch (error: any) {
+        // Handle potential errors from adjustLotQuantity (e.g., transaction failed)
+        console.error("Failed to approve stock count:", error);
+    } finally {
+        setIsProcessing(false);
+    }
   };
   
   const handleReject = async (count: StockCountType) => {
