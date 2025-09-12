@@ -8,24 +8,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ListTodo, CheckCircle2, History, AlertCircle } from 'lucide-react';
 import { TaskList } from './task-list';
 import { TaskDetailModal } from './task-detail-modal';
-import { type Task } from '@/types';
+import { type Task, type LegacyTask } from '@/types';
 import { useAllTasks } from '@/hooks/use-all-tasks';
 
+// Adapter to make LegacyTask compatible with what TaskList expects
+const adaptLegacyTaskToTask = (legacyTask: LegacyTask): Task => ({
+    id: legacyTask.id,
+    title: legacyTask.title,
+    description: legacyTask.description,
+    status: 'pending', // All legacy tasks are considered pending
+    assigneeType: 'profile', // Placeholder
+    assigneeId: 'admin', // Placeholder
+    requiresApproval: false,
+    origin: { type: 'form', id: legacyTask.id }, // Generic origin
+    history: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // These are not part of the original LegacyTask but are needed for the component
+    legacyLink: legacyTask.link,
+    legacyIcon: legacyTask.icon,
+});
+
+
 export function TaskManager() {
-    const { allTasks, loading } = useAllTasks();
+    const { allTasks, legacyTasks, loading } = useAllTasks();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
     const taskLists = useMemo(() => {
-        const pending = allTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
+        // New tasks logic
+        const pendingNew = allTasks.filter(t => t.status === 'pending' || t.status === 'reopened');
         const awaitingApproval = allTasks.filter(t => t.status === 'awaiting_approval');
         const completed = allTasks.filter(t => t.status === 'completed');
         
+        // Adapt legacy tasks to the new Task format
+        const adaptedLegacyTasks = legacyTasks.map(adaptLegacyTaskToTask);
+
+        // Combine new pending tasks with legacy tasks
+        const allPending = [...pendingNew, ...adaptedLegacyTasks];
+
         return {
-            pending,
+            pending: allPending,
             awaiting_approval: awaitingApproval,
             completed,
         };
-    }, [allTasks]);
+    }, [allTasks, legacyTasks]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;

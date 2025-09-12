@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -676,6 +675,15 @@ export type TaskHistoryItem = {
     details?: string;
 };
 
+export interface LegacyTask {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  link: string;
+  icon: React.FC<any>;
+}
+
 export type Task = {
     id: string;
     title: string;
@@ -692,6 +700,8 @@ export type Task = {
     updatedAt: string; // ISO string
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
+    // Properties for adapted legacy tasks
+    legacyLink?: string;
+    legacyIcon?: React.FC<any>;
 };
-
     

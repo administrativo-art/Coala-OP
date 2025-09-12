@@ -44,24 +44,38 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
     );
   }
 
+  const handleTaskClick = (task: Task) => {
+    if (task.legacyLink) {
+        router.push(task.legacyLink);
+    } else {
+        onTaskSelect(task);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {tasks.map(task => {
         const { icon: StatusIcon, color: statusColor, label: statusLabel } = getStatusInfo(task.status);
         const createdAt = task.createdAt;
+        const LegacyIcon = task.legacyIcon;
 
         return (
           <div
             key={task.id}
             className="border rounded-lg p-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50"
-            onClick={() => onTaskSelect(task)}
+            onClick={() => handleTaskClick(task)}
           >
-            <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusColor}`} />
+            {LegacyIcon ? (
+                 <LegacyIcon className={`h-6 w-6 mt-1 shrink-0 text-primary`} />
+            ) : (
+                 <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusColor}`} />
+            )}
             <div className="flex-grow">
               <p className="font-semibold">{task.title}</p>
               <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">
                   <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
               </div>
+              {task.description && <p className="text-xs text-muted-foreground mt-1">{task.description}</p>}
             </div>
             <Badge variant="outline">{statusLabel}</Badge>
           </div>
