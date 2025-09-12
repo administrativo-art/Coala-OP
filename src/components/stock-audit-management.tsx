@@ -13,7 +13,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
-import { type StockAuditItem, type StockAuditSession, type StockAuditDivergence } from '@/types';
+import { type StockAuditItem, type StockAuditSession, type StockAuditDivergence, type LotEntry } from '@/types';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -337,8 +337,8 @@ function AuditForm({
 
 function AuditHistory() {
     const { auditSessions, deleteAuditSession, loading } = useStockAudit();
-    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
     const { permissions } = useAuth();
+    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
 
     const completedAudits = useMemo(() => {
         return auditSessions.filter(s => s.status === 'completed');
@@ -445,30 +445,51 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
 
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
-    
-    const kiosk = kiosks.find(k => k.id === kioskId);
-    if(!kiosk) return;
-    
-    const productMap = new Map(products.map(p => [p.id, p]));
 
-    const kioskLots = lots.filter(l => {
-        const product = productMap.get(l.productId);
-        return l.kioskId === kioskId && l.quantity > 0 && product && !product.isArchived;
+    const kiosk = kiosks.find(k => k.id === kioskId);
+    if (!kiosk) return;
+
+    const productMap = new Map(products.map(p => [p.id, p]));
+    const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
+
+    const groupedLots: { [key: string]: LotEntry } = {};
+
+    activeLots.forEach(lot => {
+        const product = productMap.get(lot.productId);
+        if (!product || product.isArchived) return;
+
+        const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
+
+        if (groupedLots[uniqueKey]) {
+            groupedLots[uniqueKey].quantity += lot.quantity;
+        } else {
+            groupedLots[uniqueKey] = { ...lot };
+        }
     });
 
-    const auditItems: StockAuditItem[] = kioskLots.map(lot => {
+    const auditItems: StockAuditItem[] = Object.values(groupedLots).map(lot => {
         const product = productMap.get(lot.productId)!;
+        const systemQuantity = lot.quantity;
         return {
             productId: lot.productId,
             productName: getProductFullName(product),
-            lotId: lot.id,
+            lotId: lot.id, // The ID of the first lot instance encountered for this group
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate || '',
-            systemQuantity: lot.quantity,
-            countedQuantity: lot.quantity, // Pre-fill counted quantity
+            systemQuantity: systemQuantity,
+            countedQuantity: systemQuantity, // Pre-fill with system quantity
             divergences: [],
-        }
+        };
     });
+    
+    if (auditItems.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Quiosque Vazio",
+            description: "Não há lotes em estoque para auditar neste quiosque.",
+        });
+        return;
+    }
 
     const newSessionId = await addAuditSession({
       kioskId: kiosk.id,
@@ -480,12 +501,9 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     });
 
     if (newSessionId) {
-        // Since useStockAudit now manages activeSession, we can rely on its state update.
-        // The useEffect in the provider will update the session list.
-        // We find the newly created session and set it as active.
         const createdSession = await new Promise<StockAuditSession | undefined>(resolve => {
             const check = () => {
-                const session = auditSessions.find(s => s.id === newSessionId);
+                const session = auditSessions.find(s => s.id === newSessionId) || { id: newSessionId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
                 if (session) {
                     resolve(session);
                 } else {
@@ -507,11 +525,20 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
 
   const handleFinalize = async (items: StockAuditItem[]) => {
     if(!activeSession || !user) return;
-
-    for (const item of items) {
-        if (item.systemQuantity !== item.countedQuantity) {
-            await adjustLotQuantity(item.lotId, item.countedQuantity, activeSession.auditedBy, user);
-        }
+    
+    const itemsToAdjust = items.filter(item => item.systemQuantity !== item.countedQuantity);
+    
+    if (itemsToAdjust.length > 0) {
+      await adjustLotQuantity({
+          kioskId: activeSession.kioskId,
+          countedBy: activeSession.auditedBy,
+          items: itemsToAdjust,
+          // Dummy values for properties not needed by adjustLotQuantity from StockCount
+          id: activeSession.id, 
+          kioskName: activeSession.kioskName,
+          status: 'approved',
+          countedAt: activeSession.startedAt
+      }, user);
     }
     
     await updateAuditSession(activeSession.id, {
@@ -605,3 +632,5 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
+
+    
