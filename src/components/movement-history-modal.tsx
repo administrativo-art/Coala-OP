@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useMemo, useState } from 'react';
@@ -181,12 +180,13 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
 
   const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
+        const qty = typeof item.quantityChange === 'number' && !isNaN(item.quantityChange) ? item.quantityChange : 0;
         if (item.type?.includes('ENTRADA')) {
-            acc.totalEntradas += item.quantityChange;
+            acc.totalEntradas += qty;
         } else if (item.type?.includes('SAIDA')) {
-            acc.totalSaidas += item.quantityChange;
-        } else if (item.type?.includes('TRANSFERENCIA')) {
-            acc.totalTransferencias += item.quantityChange;
+            acc.totalSaidas += qty;
+        } else if (item.type?.includes('TRANSFERENCIA_SAIDA')) { // Only count one side of transfer
+            acc.totalTransferencias += qty;
         }
         return acc;
     }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0 });
