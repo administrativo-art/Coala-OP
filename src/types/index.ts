@@ -126,6 +126,8 @@ export type MovementRecord = {
   timestamp: string; // ISO String
   notes?: string;
   activityId?: string;
+  reverted?: boolean;
+  revertedFromId?: string;
 };
 
 
@@ -520,6 +522,7 @@ export type ItemAdditionRequest = {
     username: string;
   };
   reviewedAt?: string; // ISO String
+  taskId?: string;
 };
 
 export type RepositionSuggestedLot = {
@@ -654,7 +657,7 @@ export type StockAuditContextType = {
 }
 
 export type TaskOrigin = {
-    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary' | 'consumption-projection';
+    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary' | 'consumption-projection' | 'item_addition_request';
     id: string; // ID of the originating document (e.g., submissionId, returnRequestId)
     questionId?: string; // Optional: for tasks generated from specific form questions
     details?: any;

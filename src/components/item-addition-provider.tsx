@@ -2,11 +2,13 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ItemAdditionRequest } from '@/types';
+import { type ItemAdditionRequest, type Task } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useTasks } from '@/hooks/use-tasks';
+import { useProfiles } from '@/hooks/use-profiles';
 
 export interface ItemAdditionContextType {
   requests: ItemAdditionRequest[];
@@ -20,6 +22,8 @@ export const ItemAdditionContext = createContext<ItemAdditionContextType | undef
 export function ItemAdditionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
+  const { addTask } = useTasks();
+  const { adminProfileId } = useProfiles();
   const [requests, setRequests] = useState<ItemAdditionRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,10 +42,15 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const addRequest = useCallback(async (data: { kioskId: string; productName: string; brand?: string; notes?: string }) => {
-    if (!user) throw new Error("Usuário não autenticado.");
+    if (!user || !adminProfileId) throw new Error("Usuário ou perfil de admin não encontrado.");
     
     const kiosk = kiosks.find(k => k.id === data.kioskId);
     if (!kiosk) throw new Error("Quiosque não encontrado.");
+
+    const now = new Date().toISOString();
+
+    const requestRef = doc(collection(db, "itemAdditionRequests"));
+    const taskRef = doc(collection(db, "tasks"));
 
     const newRequest: Omit<ItemAdditionRequest, 'id'> = {
       ...data,
@@ -51,37 +60,90 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
         username: user.username,
       },
       status: 'pending',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      taskId: taskRef.id,
+    };
+
+    const newTask: Omit<Task, 'id'> = {
+        title: `Nova solicitação de cadastro: ${data.productName}`,
+        description: `Solicitado por ${user.username} para o quiosque ${kiosk.name}.`,
+        status: 'pending',
+        assigneeType: 'profile',
+        assigneeId: adminProfileId,
+        requiresApproval: false,
+        origin: {
+            type: 'item_addition_request',
+            id: requestRef.id,
+        },
+        history: [{
+            timestamp: now,
+            author: { id: user.id, name: user.username },
+            action: 'created',
+            details: 'Tarefa criada automaticamente via solicitação de cadastro.'
+        }],
+        createdAt: now,
+        updatedAt: now,
     };
 
     try {
-      await addDoc(collection(db, "itemAdditionRequests"), newRequest);
+        const batch = writeBatch(db);
+        batch.set(requestRef, newRequest);
+        batch.set(taskRef, newTask);
+        await batch.commit();
     } catch (error) {
-      console.error("Error adding item request:", error);
+      console.error("Error adding item request and task:", error);
       throw error;
     }
-  }, [user, kiosks]);
+  }, [user, kiosks, adminProfileId, addTask]);
 
   const updateRequestStatus = useCallback(async (requestId: string, status: 'completed' | 'rejected') => {
     if (!user) throw new Error("Usuário não autenticado.");
 
     const requestRef = doc(db, "itemAdditionRequests", requestId);
+    const requestDoc = requests.find(r => r.id === requestId);
+    
+    if (!requestDoc) {
+      console.error("Request not found for update");
+      return;
+    }
+
+    const now = new Date().toISOString();
     const updatePayload: Partial<ItemAdditionRequest> = {
       status,
       reviewedBy: {
         userId: user.id,
         username: user.username,
       },
-      reviewedAt: new Date().toISOString(),
+      reviewedAt: now,
+    };
+    
+    const taskUpdates: Partial<Task> = {
+      status: 'completed',
+      completedAt: now,
+      history: [
+        ...(requestDoc.taskId ? (await getDoc(doc(db, 'tasks', requestDoc.taskId))).data()?.history || [] : []),
+        {
+          timestamp: now,
+          author: { id: user.id, name: user.username },
+          action: 'completed',
+          details: `Solicitação marcada como '${status === 'completed' ? 'Concluída' : 'Rejeitada'}'.`
+        }
+      ]
     };
 
     try {
-      await updateDoc(requestRef, updatePayload);
+      const batch = writeBatch(db);
+      batch.update(requestRef, updatePayload);
+      if (requestDoc.taskId) {
+        batch.update(doc(db, 'tasks', requestDoc.taskId), taskUpdates);
+      }
+      await batch.commit();
+
     } catch (error) {
       console.error("Error updating item request status:", error);
       throw error;
     }
-  }, [user]);
+  }, [user, requests]);
 
   const value: ItemAdditionContextType = useMemo(() => ({
     requests,
