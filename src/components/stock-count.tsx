@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X } from 'lucide-react';
+import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X, HelpCircle } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { RequestItemAdditionModal } from '@/components/request-item-addition-modal';
 import { ItemAdditionRequestManagement } from '@/components/item-addition-request-management';
@@ -31,6 +31,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 
 const countItemSchema = z.object({
@@ -155,6 +156,49 @@ function PendingApprovals() {
   );
 }
 
+function HelpModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HelpCircle /> Instruções de Contagem
+          </DialogTitle>
+          <DialogDescription>
+            Siga estas dicas para uma contagem de estoque precisa.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4 space-y-4">
+          <div>
+            <h4 className="font-semibold">1. Produtos Fechados</h4>
+            <p className="text-sm text-muted-foreground">
+              Para produtos em embalagens fechadas (ex: sacos, potes), simplesmente conte o número de embalagens. A quantidade inicial de cada embalagem já está registrada.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-semibold">2. Produtos Abertos/Usados</h4>
+            <p className="text-sm text-muted-foreground">
+              Para produtos que são vendidos por peso ou volume (ex: pós, caldas), utilize uma balança para obter a quantidade exata do que restou na embalagem e registre esse valor.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-semibold">3. Observações</h4>
+            <p className="text-sm text-muted-foreground">
+              Encontrou um produto vencido, avariado ou com algum problema? Use o campo "Observações" para descrever a situação. O administrador irá analisar e tomar a ação necessária.
+            </p>
+          </div>
+          <div>
+            <h4 className="font-semibold">4. Insumo não Encontrado?</h4>
+            <p className="text-sm text-muted-foreground">
+              Se você encontrar um item no estoque físico que não aparece na lista, utilize o botão "Solicitar Cadastro de Insumo" para notificar o administrador.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 export function StockCount() {
   const { user, permissions } = useAuth();
@@ -166,6 +210,7 @@ export function StockCount() {
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
 
   const kioskLots = useMemo(() => {
@@ -182,8 +227,9 @@ export function StockCount() {
 
         const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
         
-        if (lotsByUniqueKey[uniqueKey]) {
-            lotsByUniqueKey[uniqueKey].quantity += lot.quantity;
+        const existingLot = lotsByUniqueKey[uniqueKey];
+        if (existingLot) {
+            existingLot.quantity += lot.quantity;
         } else {
             lotsByUniqueKey[uniqueKey] = { ...lot };
         }
@@ -296,6 +342,14 @@ export function StockCount() {
                                 {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsHelpModalOpen(true)}
+                                className="bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900"
+                            >
+                                <HelpCircle className="mr-2 h-4 w-4" />
+                                Tá com dúvida? Clica aqui!
+                            </Button>
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsRequestModalOpen(true)}
@@ -427,6 +481,8 @@ export function StockCount() {
         onOpenChange={setIsRequestModalOpen}
         kioskId={selectedKioskId}
       />
+
+      <HelpModal open={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
     </div>
   );
 }
