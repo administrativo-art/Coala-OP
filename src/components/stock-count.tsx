@@ -59,11 +59,12 @@ function PendingApprovals() {
     if (!user) return;
     setIsProcessing(true);
     
-    for (const item of count.items) {
+    await Promise.all(count.items.map(item => {
         if (item.difference !== 0) {
-            await adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy, user);
+            return adjustLotQuantity(item.lotId, item.countedQuantity, count.countedBy, user);
         }
-    }
+        return Promise.resolve();
+    }));
 
     await updateStockCount(count.id, {
         status: 'approved',
