@@ -410,7 +410,7 @@ function PricingReportDashboard() {
 
 export default function DashboardPage() {
     const { user, permissions } = useAuth();
-    const canAuditStock = permissions.audit.start || permissions.audit.approve;
+    const canAuditStock = permissions.stock.audit.start || permissions.stock.audit.approve;
     
     return (
         <div className="space-y-6">
