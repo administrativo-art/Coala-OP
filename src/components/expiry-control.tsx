@@ -128,7 +128,9 @@ function ExpiryControlContent() {
 
 
  const groupedData = useMemo(() => {
-    const kioskFilteredLots = (selectedKioskId === 'all')
+    const isAllKiosks = selectedKioskId === 'all';
+    
+    const kioskFilteredLots = isAllKiosks
       ? visibleLots
       : visibleLots.filter(lot => lot.kioskId === selectedKioskId);
 
@@ -151,7 +153,7 @@ function ExpiryControlContent() {
         return isExpiring || isExpired;
     });
 
-    const filteredLots = preFilteredLots.filter(lot => {
+    const searchedLots = preFilteredLots.filter(lot => {
       const search = searchTerm.toLowerCase();
       const product = products.find(p => p.id === lot.productId);
       if (!product) return false;
@@ -172,38 +174,47 @@ function ExpiryControlContent() {
       );
     });
     
-    const lotsByProduct = filteredLots.reduce((acc, lot) => {
-      if (!acc[lot.productId]) {
-        acc[lot.productId] = [];
-      }
-      acc[lot.productId].push(lot);
-      return acc;
-    }, {} as Record<string, LotEntry[]>);
+    let finalLotsToGroup: LotEntry[];
 
-    const groupedLotsByProduct: Record<string, LotEntry[]> = {};
-    for (const productId in lotsByProduct) {
-        const productLots = lotsByProduct[productId];
-        const lotsByKey: Record<string, LotEntry> = {};
-
-        productLots.forEach(lot => {
-            const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
-            if (lotsByKey[key]) {
-                lotsByKey[key].quantity += lot.quantity;
-                if (lot.reservedQuantity) {
-                    lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
-                }
-            } else {
-                lotsByKey[key] = { ...lot };
+    if (isAllKiosks) {
+        // When viewing all kiosks, we don't group by lot number/expiry,
+        // as each entry from a different kiosk is unique.
+        finalLotsToGroup = searchedLots;
+    } else {
+        // When viewing a single kiosk, group lots with same product/lot/expiry.
+        const lotsByProduct = searchedLots.reduce((acc, lot) => {
+            if (!acc[lot.productId]) {
+                acc[lot.productId] = [];
             }
-        });
-        groupedLotsByProduct[productId] = Object.values(lotsByKey);
+            acc[lot.productId].push(lot);
+            return acc;
+        }, {} as Record<string, LotEntry[]>);
+
+        const groupedLotsByProduct: Record<string, LotEntry[]> = {};
+        for (const productId in lotsByProduct) {
+            const productLots = lotsByProduct[productId];
+            const lotsByKey: Record<string, LotEntry> = {};
+
+            productLots.forEach(lot => {
+                const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
+                if (lotsByKey[key]) {
+                    lotsByKey[key].quantity += lot.quantity;
+                    if (lot.reservedQuantity) {
+                        lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
+                    }
+                } else {
+                    lotsByKey[key] = { ...lot };
+                }
+            });
+            groupedLotsByProduct[productId] = Object.values(lotsByKey);
+        }
+        finalLotsToGroup = Object.values(groupedLotsByProduct).flat();
     }
     
-    const finalGroupedAndFilteredLots = Object.values(groupedLotsByProduct).flat();
 
     const groups: Map<string, GroupedByBaseProduct> = new Map();
 
-    finalGroupedAndFilteredLots.forEach(lot => {
+    finalLotsToGroup.forEach(lot => {
       const product = products.find(p => p.id === lot.productId);
       if (!product) return;
 
@@ -453,7 +464,7 @@ function ExpiryControlContent() {
                         lotTotalValue = lot.quantity * productConfig.packageSize;
                         lotTotalUnit = productConfig.unit;
                     }
-
+                    
                     if (lotTotalValue > 0) {
                         if (!convertedTotals[lotTotalUnit]) {
                             convertedTotals[lotTotalUnit] = 0;
