@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X, HelpCircle } from 'lucide-react';
+import { Save, ListOrdered, Inbox, PlusCircle, UserCheck, ShieldCheck, Check, X, HelpCircle, History } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { RequestItemAdditionModal } from '@/components/request-item-addition-modal';
 import { ItemAdditionRequestManagement } from '@/components/item-addition-request-management';
@@ -154,6 +154,78 @@ function PendingApprovals() {
       ))}
     </Accordion>
   );
+}
+
+function CountHistory() {
+    const { counts, loading: loadingCounts } = useStockCount();
+
+    const historicalCounts = useMemo(() => {
+        return counts.filter(c => c.status === 'approved' || c.status === 'rejected');
+    }, [counts]);
+    
+    if (loadingCounts) {
+        return <Skeleton className="h-64 w-full" />;
+    }
+
+    if (historicalCounts.length === 0) {
+        return (
+            <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                <History className="h-12 w-12 mx-auto mb-4" />
+                <p className="font-semibold">Nenhum histórico</p>
+                <p className="text-sm">Nenhuma contagem foi aprovada ou rejeitada ainda.</p>
+            </div>
+        );
+    }
+    
+    return (
+         <Accordion type="multiple" className="w-full space-y-3">
+            {historicalCounts.map(count => (
+                <AccordionItem key={count.id} value={count.id} className="border rounded-lg">
+                    <AccordionTrigger className="p-4 hover:no-underline">
+                        <div className="flex justify-between items-center w-full">
+                            <div>
+                                <p className="font-semibold">Contagem de {count.kioskName}</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Revisada por {count.reviewedBy?.username} em {count.reviewedAt ? format(new Date(count.reviewedAt), 'dd/MM/yyyy HH:mm') : ''}
+                                </p>
+                            </div>
+                            <Badge variant={count.status === 'approved' ? 'default' : 'destructive'}>
+                                {count.status === 'approved' ? 'Aprovada' : 'Rejeitada'}
+                            </Badge>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="p-4 pt-0">
+                        <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Produto</TableHead>
+                                    <TableHead>Lote</TableHead>
+                                    <TableHead className="text-center">Qtd. sistema</TableHead>
+                                    <TableHead className="text-center">Qtd. contada</TableHead>
+                                    <TableHead className="text-center">Diferença</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                            {count.items.map(item => (
+                                <TableRow key={item.lotId}>
+                                <TableCell className="font-medium">{item.productName}</TableCell>
+                                <TableCell>{item.lotNumber}</TableCell>
+                                <TableCell className="text-center">{item.systemQuantity}</TableCell>
+                                <TableCell className="text-center">{item.countedQuantity}</TableCell>
+                                <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {item.difference > 0 ? `+${item.difference}` : item.difference}
+                                </TableCell>
+                                </TableRow>
+                            ))}
+                            </TableBody>
+                        </Table>
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+            ))}
+        </Accordion>
+    )
 }
 
 function HelpModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
@@ -449,9 +521,10 @@ export function StockCount() {
                 {showManagementTab && (
                      <TabsContent value="management" className="mt-4">
                         <Tabs defaultValue="approvals" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
+                            <TabsList className="grid w-full grid-cols-3">
                                 {canApproveCounts && <TabsTrigger value="approvals">Aprovações de contagem</TabsTrigger>}
                                 {canManageRequests && <TabsTrigger value="requests">Solicitações de cadastro</TabsTrigger>}
+                                <TabsTrigger value="history">Histórico</TabsTrigger>
                             </TabsList>
                             {canApproveCounts && (
                                 <TabsContent value="approvals" className="mt-4">
@@ -463,6 +536,9 @@ export function StockCount() {
                                     <ItemAdditionRequestManagement />
                                 </TabsContent>
                             )}
+                            <TabsContent value="history" className="mt-4">
+                                <CountHistory />
+                            </TabsContent>
                         </Tabs>
                     </TabsContent>
                 )}
