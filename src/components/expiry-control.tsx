@@ -1,4 +1,5 @@
 
+
       
 "use client"
 
@@ -170,10 +171,39 @@ function ExpiryControlContent() {
         baseProductMatch
       );
     });
+    
+    const lotsByProduct = filteredLots.reduce((acc, lot) => {
+      if (!acc[lot.productId]) {
+        acc[lot.productId] = [];
+      }
+      acc[lot.productId].push(lot);
+      return acc;
+    }, {} as Record<string, LotEntry[]>);
+
+    const groupedLotsByProduct: Record<string, LotEntry[]> = {};
+    for (const productId in lotsByProduct) {
+        const productLots = lotsByProduct[productId];
+        const lotsByKey: Record<string, LotEntry> = {};
+
+        productLots.forEach(lot => {
+            const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
+            if (lotsByKey[key]) {
+                lotsByKey[key].quantity += lot.quantity;
+                if (lot.reservedQuantity) {
+                    lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
+                }
+            } else {
+                lotsByKey[key] = { ...lot };
+            }
+        });
+        groupedLotsByProduct[productId] = Object.values(lotsByKey);
+    }
+    
+    const finalGroupedAndFilteredLots = Object.values(groupedLotsByProduct).flat();
 
     const groups: Map<string, GroupedByBaseProduct> = new Map();
 
-    filteredLots.forEach(lot => {
+    finalGroupedAndFilteredLots.forEach(lot => {
       const product = products.find(p => p.id === lot.productId);
       if (!product) return;
 
