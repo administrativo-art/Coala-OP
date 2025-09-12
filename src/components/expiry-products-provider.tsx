@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -43,8 +44,7 @@ export interface ExpiryProductsContextType {
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
-  approveStockCount: (
-    itemsToAdjust: StockCountItem[], 
+  adjustLotQuantity: (
     count: StockCount,
     approvedBy: User
   ) => Promise<void>;
@@ -340,12 +340,13 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
   }, []);
 
-  const approveStockCount = useCallback(async (
-    itemsToAdjust: StockCountItem[],
+  const adjustLotQuantity = useCallback(async (
     count: StockCount,
     approvedBy: User
   ) => {
     if (!approvedBy) throw new Error("Usuário de aprovação não autenticado.");
+    
+    const itemsToAdjust = count.items.filter(item => item.difference !== 0);
     if (itemsToAdjust.length === 0) {
       const countRef = doc(db, "stockCounts", count.id);
       await updateDoc(countRef, {
@@ -363,7 +364,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
           where('productId', '==', item.productId),
           where('lotNumber', '==', item.lotNumber),
           where('expiryDate', '==', item.expiryDate || null),
-          where('kioskId', '==', count.kioskId)
+          where('kioskId', '==', count.kioskId) // Explicitly filter by kioskId
         );
         
         const lotDocs = (await getDocs(lotsQuery)).docs;
@@ -387,7 +388,15 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             locationName: firstOldLot?.locationName,
             locationCode: firstOldLot?.locationCode,
           };
-          const newLotRef = doc(collection(db, 'lots')); // Auto-generate ID
+
+          const newLotId = destLotIdKey({
+            productId: newLotData.productId,
+            kioskId: newLotData.kioskId,
+            lotNumber: newLotData.lotNumber,
+            expiryDate: newLotData.expiryDate,
+          });
+
+          const newLotRef = doc(db, 'lots', newLotId);
           transaction.set(newLotRef, { ...newLotData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 
           // Create history record.
@@ -480,9 +489,9 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
       forceDeleteLotById,
       moveMultipleLots,
       consumeFromLot,
-      approveStockCount,
+      adjustLotQuantity,
       revertMovement,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, approveStockCount, revertMovement]);
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }

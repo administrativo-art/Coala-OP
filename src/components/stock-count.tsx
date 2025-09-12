@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -47,7 +48,7 @@ type CountFormValues = z.infer<typeof countFormSchema>;
 
 function PendingApprovals() {
   const { counts, updateStockCount, loading: loadingCounts } = useStockCount();
-  const { approveStockCount } = useExpiryProducts();
+  const { adjustLotQuantity } = useExpiryProducts();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
@@ -58,12 +59,10 @@ function PendingApprovals() {
 
   const handleApprove = async (count: StockCountType) => {
     if (!user) return;
-    
-    const itemsToAdjust = count.items.filter(item => item.difference !== 0);
-    
+
     setIsProcessing(true);
     try {
-        await approveStockCount(itemsToAdjust, count, user);
+        await adjustLotQuantity(count, user);
         toast({ title: 'Sucesso!', description: 'O estoque foi ajustado com base na contagem.' });
     } catch (error: any) {
         console.error("Failed to approve stock count:", error);
