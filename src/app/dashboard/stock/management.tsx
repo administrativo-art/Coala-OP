@@ -9,9 +9,9 @@ import { useAuth } from '@/hooks/use-auth';
 
 export function StockManagement() {
     const { permissions } = useAuth();
-    const canPurchase = permissions.purchasing.suggest || permissions.purchasing.approve;
-    const canCountStock = permissions.stockCount.perform || permissions.stockCount.approve;
-    const canAuditStock = permissions.audit.start || permissions.audit.approve;
+    const canPurchase = permissions.stock.purchasing.view;
+    const canCountStock = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
+    const canAuditStock = permissions.stock.audit.start || permissions.stock.audit.approve;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
