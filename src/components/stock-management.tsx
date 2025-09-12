@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 export function StockManagement() {
     const { permissions } = useAuth();
     
-    // Correctly check for the main view permission for each sub-module.
+    // Corrected permission logic for granular control
     const canViewInventoryControl = permissions.stock.inventoryControl.viewHistory || permissions.stock.inventoryControl.addLot || permissions.stock.inventoryControl.editLot || permissions.stock.inventoryControl.transfer || permissions.stock.inventoryControl.writeDown;
     const canViewStockCount = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
     const canViewAudit = permissions.stock.audit.start || permissions.stock.audit.approve;
