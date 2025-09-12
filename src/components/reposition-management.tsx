@@ -242,7 +242,7 @@ export function RepositionManagement() {
                                             Auditar Recebimento
                                         </Button>
                                     )}
-                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.audit.approve && (
+                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.audit.approve && (
                                         <>
                                             <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
                                                 <Undo2 className="mr-2 h-4 w-4" />
