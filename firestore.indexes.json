@@ -26,10 +26,13 @@
         {
           "fieldPath": "reverted",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     }
   ],
   "fieldOverrides": []
 }
-
