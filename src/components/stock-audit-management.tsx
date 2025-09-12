@@ -69,20 +69,18 @@ const auditItemSchema = z.object({
 const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
-    // Check each item
     for (const item of data.items) {
         const difference = item.systemQuantity - item.countedQuantity;
-        if (difference > 0) { // Only require justification if there's a shortfall
+        if (difference > 0.001) { // Use tolerance for float comparison
             const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
-            if (Math.abs(totalDivergenceQty - difference) > 0.001) { // Use a tolerance for float comparison
-                return false; // The sum of divergences must match the total difference
+            if (Math.abs(totalDivergenceQty - difference) > 0.001) {
+                return false; 
             }
         }
     }
     return true;
 }, {
     message: 'A soma das justificativas deve ser igual à diferença total.',
-    // We can't specify a path here easily, so we'll handle showing a global error.
 });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
@@ -374,7 +372,7 @@ function AuditHistory() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Badge>Concluída</Badge>
-                                    {permissions.audit.approve && (
+                                    {permissions.stock.audit.approve && (
                                         <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setSessionToDelete(session)}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -459,19 +457,22 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
         const product = productMap.get(lot.productId);
         if (!product || product.isArchived) return;
 
+        // Use a key that includes product, lot number, and expiry date to uniquely identify a stock item
         const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
-
+        
         const existingLot = groupedLots[uniqueKey];
         if (existingLot) {
+            // If it exists, sum the quantity
             existingLot.quantity += lot.quantity;
         } else {
+            // Otherwise, add it to the map
             groupedLots[uniqueKey] = { ...lot };
         }
     });
 
     const auditItems: StockAuditItem[] = Object.values(groupedLots).map(lot => {
         const product = productMap.get(lot.productId)!;
-        const systemQuantity = lot.quantity;
+        const systemQuantity = lot.quantity; // This now represents the correctly summed quantity
         return {
             productId: lot.productId,
             productName: getProductFullName(product),
@@ -528,17 +529,20 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const handleFinalize = async (items: StockAuditItem[]) => {
     if(!activeSession || !user) return;
     
-    const itemsToAdjust = items.filter(item => item.systemQuantity !== item.countedQuantity);
+    // The adjustLotQuantity expects a StockCount object. We create a temporary one.
+    const itemsToAdjust = items.filter(item => item.systemQuantity !== item.countedQuantity).map(item => ({
+        ...item,
+        difference: item.countedQuantity - item.systemQuantity
+    }));
     
     if (itemsToAdjust.length > 0) {
       await adjustLotQuantity({
           kioskId: activeSession.kioskId,
           countedBy: activeSession.auditedBy,
           items: itemsToAdjust,
-          // Dummy values for properties not needed by adjustLotQuantity from StockCount
-          id: activeSession.id, 
+          id: activeSession.id,
           kioskName: activeSession.kioskName,
-          status: 'approved',
+          status: 'approved', // This status is for the temp object, not the session
           countedAt: activeSession.startedAt
       }, user);
     }
