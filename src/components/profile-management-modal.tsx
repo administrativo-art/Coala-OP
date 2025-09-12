@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -38,7 +37,13 @@ const permissionsSchema = z.object({
     inventoryControl: z.object({ addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
     audit: z.object({ start: z.boolean(), approve: z.boolean() }),
-    analysis: z.object({ view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() }),
+    analysis: z.object({
+      view: z.boolean(),
+      restock: z.boolean(),
+      consumption: z.boolean(),
+      projection: z.boolean(),
+      valuation: z.boolean(),
+    }),
     purchasing: z.object({ view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
     conversions: z.object({ view: z.boolean() }),
@@ -112,23 +117,22 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     // Deep merge with defaults to ensure all keys are present
     const mergedPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
     
-    for (const mainKey in profile.permissions) {
-        if (Object.prototype.hasOwnProperty.call(profile.permissions, mainKey)) {
-            const key = mainKey as keyof PermissionSet;
-            if (typeof profile.permissions[key] === 'object' && profile.permissions[key] !== null) {
-                if (!mergedPermissions[key]) {
-                    (mergedPermissions as any)[key] = {};
+    // Custom deep merge function
+    const deepMerge = (target: any, source: any) => {
+        for (const key in source) {
+            if (source.hasOwnProperty(key)) {
+                if (source[key] instanceof Object && !Array.isArray(source[key])) {
+                    if (!target[key]) Object.assign(target, { [key]: {} });
+                    deepMerge(target[key], source[key]);
+                } else {
+                    Object.assign(target, { [key]: source[key] });
                 }
-                for (const subKey in profile.permissions[key]) {
-                    if (Object.prototype.hasOwnProperty.call(profile.permissions[key], subKey)) {
-                        (mergedPermissions[key] as any)[subKey] = (profile.permissions[key] as any)[subKey];
-                    }
-                }
-            } else {
-                 (mergedPermissions as any)[key] = profile.permissions[key];
             }
         }
+        return target;
     }
+    
+    deepMerge(mergedPermissions, profile.permissions);
 
     form.reset({
       name: profile.name,

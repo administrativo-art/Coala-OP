@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY); // Clear impersonation from storage
     router.push('/login');
-  }, [router, currentUser]);
+  }, [router]);
 
   useEffect(() => {
     if (!profilesContext || profilesContext.loading) {
@@ -81,11 +81,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const profilePermissions = userProfile ? userProfile.permissions : defaultGuestPermissions;
         
+        // Deep merge logic
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             ...profilePermissions,
-            // Deep merge for nested permission objects
-            registration: { ...defaultGuestPermissions.registration, ...profilePermissions?.registration },
+            registration: { 
+                ...defaultGuestPermissions.registration, 
+                ...profilePermissions?.registration,
+                items: { ...defaultGuestPermissions.registration.items, ...profilePermissions?.registration?.items },
+                baseProducts: { ...defaultGuestPermissions.registration.baseProducts, ...profilePermissions?.registration?.baseProducts },
+                entities: { ...defaultGuestPermissions.registration.entities, ...profilePermissions?.registration?.entities },
+            },
             stock: { 
               ...defaultGuestPermissions.stock, 
               ...profilePermissions?.stock,
@@ -101,11 +107,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
             settings: { ...defaultGuestPermissions.settings, ...profilePermissions?.settings },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
-            // Legacy permissions for backward compatibility if needed, can be removed later
+            tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
+            // Legacy permissions
             products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
             lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
             kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
+            predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
+            consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
+            itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
+            reposition: { ...defaultGuestPermissions.reposition, ...profilePermissions?.reposition },
         };
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
