@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -388,13 +388,19 @@ function AnalysisTab() {
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                                 </div>
-                            ) : result.suggestion ? (
-                                <Button variant="outline" size="sm" onClick={() => setSuggestionToView(result)}>
-                                <Wand2 className="mr-2 h-4 w-4"/> Ver sugestão
+                            ) : (
+                                <Button
+                                    variant={result.suggestion ? "outline" : "secondary"}
+                                    size="sm"
+                                    onClick={() => setSuggestionToView(result)}
+                                >
+                                    {result.suggestion ? (
+                                        <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
+                                    ) : (
+                                        <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
+                                    )}
                                 </Button>
-                            ) : result.restockNeeded > 0 ? (
-                                `${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`
-                            ) : '-'}
+                            )}
                             </TableCell>
                             <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                         </TableRow>
@@ -499,7 +505,7 @@ function RepositionHistory() {
                 <CardTitle>Histórico de Reposições</CardTitle>
                 <CardDescription>Consulte todas as atividades de reposição que já foram concluídas ou canceladas.</CardDescription>
                 <div className="pt-2">
-                    <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)} className="w-full sm:w-auto">
+                    <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)} className="w-full sm:w-auto">
                         <TabsList>
                             <TabsTrigger value="all">Todos</TabsTrigger>
                             <TabsTrigger value="Concluído">Concluídos</TabsTrigger>
@@ -624,3 +630,5 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
+
+    
