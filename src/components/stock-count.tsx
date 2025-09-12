@@ -251,8 +251,8 @@ export function StockCount() {
   };
 
   const loading = kiosksLoading || lotsLoading || productsLoading;
-  const canManageRequests = permissions.itemRequests.manage;
-  const canApproveCounts = permissions.stockCount.approve;
+  const canManageRequests = permissions.itemRequests.add;
+  const canApproveCounts = permissions.stock.stockCount.approve;
 
   const showManagementTab = canManageRequests || canApproveCounts;
 
