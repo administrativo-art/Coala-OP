@@ -1,5 +1,4 @@
 
-
       
 "use client"
 
@@ -173,43 +172,35 @@ function ExpiryControlContent() {
         baseProductMatch
       );
     });
-    
-    let finalLotsToGroup: LotEntry[];
 
-    if (isAllKiosks) {
-        // When viewing all kiosks, we don't group by lot number/expiry,
-        // as each entry from a different kiosk is unique.
-        finalLotsToGroup = searchedLots;
-    } else {
-        // When viewing a single kiosk, group lots with same product/lot/expiry.
-        const lotsByProduct = searchedLots.reduce((acc, lot) => {
-            if (!acc[lot.productId]) {
-                acc[lot.productId] = [];
-            }
-            acc[lot.productId].push(lot);
-            return acc;
-        }, {} as Record<string, LotEntry[]>);
-
-        const groupedLotsByProduct: Record<string, LotEntry[]> = {};
-        for (const productId in lotsByProduct) {
-            const productLots = lotsByProduct[productId];
-            const lotsByKey: Record<string, LotEntry> = {};
-
-            productLots.forEach(lot => {
-                const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
-                if (lotsByKey[key]) {
-                    lotsByKey[key].quantity += lot.quantity;
-                    if (lot.reservedQuantity) {
-                        lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
-                    }
-                } else {
-                    lotsByKey[key] = { ...lot };
-                }
-            });
-            groupedLotsByProduct[productId] = Object.values(lotsByKey);
+    const lotsByProduct = searchedLots.reduce((acc, lot) => {
+        if (!acc[lot.productId]) {
+            acc[lot.productId] = [];
         }
-        finalLotsToGroup = Object.values(groupedLotsByProduct).flat();
+        acc[lot.productId].push(lot);
+        return acc;
+    }, {} as Record<string, LotEntry[]>);
+
+    const groupedLotsByProduct: Record<string, LotEntry[]> = {};
+    for (const productId in lotsByProduct) {
+        const productLots = lotsByProduct[productId];
+        const lotsByKey: Record<string, LotEntry> = {};
+
+        productLots.forEach(lot => {
+            // The key now includes the kioskId to prevent incorrect grouping across kiosks
+            const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}-${lot.kioskId}`;
+            if (lotsByKey[key]) {
+                lotsByKey[key].quantity += lot.quantity;
+                if (lot.reservedQuantity) {
+                    lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
+                }
+            } else {
+                lotsByKey[key] = { ...lot };
+            }
+        });
+        groupedLotsByProduct[productId] = Object.values(lotsByKey);
     }
+    const finalLotsToGroup = Object.values(groupedLotsByProduct).flat();
     
 
     const groups: Map<string, GroupedByBaseProduct> = new Map();
@@ -704,5 +695,7 @@ export function ExpiryControl() {
         </Suspense>
     );
 }
+
+    
 
     
