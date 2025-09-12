@@ -68,11 +68,20 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
   const enrichedHistory = useMemo(() => {
     if (loading) return [];
     const kioskMap = new Map(kiosks.map(k => [k.id, k.name]));
-    return history.map(record => ({
-      ...record,
-      productName: products.find(p => p.id === record.productId)?.baseName || record.productName,
-      kioskName: record.fromKioskId ? kioskMap.get(record.fromKioskId) : 'N/A'
-    }));
+    return history.map(record => {
+      let mainKioskName = 'N/A';
+      if(record.type.startsWith('TRANSFERENCIA')) {
+        mainKioskName = kioskMap.get(record.fromKioskId!) || 'N/A';
+      } else {
+        mainKioskName = kioskMap.get(record.fromKioskId! || record.toKioskId!) || 'N/A';
+      }
+
+      return {
+        ...record,
+        productName: products.find(p => p.id === record.productId)?.baseName || record.productName,
+        kioskName: mainKioskName
+      };
+    });
   }, [history, products, kiosks, loading]);
 
   const filteredAndSortedHistory = useMemo(() => {
@@ -152,7 +161,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
         if (item.type?.includes('TRANSFERENCIA')) {
             kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
         } else {
-            kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
+            kioskDisplay = item.kioskName || 'N/A';
         }
         return [
             timestampDate && isValid(timestampDate) ? format(timestampDate, 'dd/MM/yy HH:mm', { locale: ptBR }) : 'N/A',
@@ -160,7 +169,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
             item.lotNumber,
             (item.type && MOVEMENT_TYPE_CONFIG[item.type]?.label) || item.type || 'N/A',
             kioskDisplay,
-            item.quantityChange,
+            (item.quantityChange ?? 0).toLocaleString('pt-BR'),
             item.username,
             item.notes || ''
         ];
@@ -271,11 +280,11 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                           let kioskDisplay = '';
                           const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
 
-                          if (item.type?.includes('TRANSFERENCIA')) {
-                              kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
-                          } else {
-                              kioskDisplay = item.fromKioskName || item.toKioskName || 'N/A';
-                          }
+                           if (item.type?.includes('TRANSFERENCIA')) {
+                                kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
+                            } else {
+                                kioskDisplay = item.kioskName || 'N/A';
+                            }
                           
                           return (
                               <TableRow key={item.id}>
@@ -319,3 +328,5 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
     </Dialog>
   );
 }
+
+    
