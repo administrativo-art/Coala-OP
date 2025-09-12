@@ -116,7 +116,7 @@ function PendingApprovals() {
                     Por {count.countedBy.username} em {format(new Date(count.countedAt), 'dd/MM/yyyy HH:mm')}
                     </p>
                 </div>
-                <Badge variant="secondary">{divergentItems.length} itens com divergência</Badge>
+                <Badge variant="secondary">{divergentItems.length} item(s) com divergência</Badge>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
@@ -132,20 +132,18 @@ function PendingApprovals() {
                     </TableRow>
                     </TableHeader>
                     <TableBody>
-                    {count.items.map(item => {
-                        const isDivergent = item.difference !== 0;
-                        return (
-                            <TableRow key={item.lotId} className={isDivergent ? 'bg-muted/50' : ''}>
+                    {count.items.filter(item => item.difference !== 0).map(item => (
+                            <TableRow key={item.lotId} className={'bg-muted/50'}>
                                 <TableCell className="font-medium">{item.productName}</TableCell>
                                 <TableCell>{item.lotNumber}</TableCell>
                                 <TableCell className="text-center">{item.systemQuantity}</TableCell>
                                 <TableCell className="text-center">{item.countedQuantity}</TableCell>
-                                <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : ''}`}>
+                                <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                     {item.difference > 0 ? `+${item.difference}` : item.difference}
                                 </TableCell>
                             </TableRow>
                         )
-                    })}
+                    )}
                     </TableBody>
                 </Table>
                 </div>
@@ -190,12 +188,15 @@ function CountHistory() {
          <Accordion type="multiple" className="w-full space-y-3">
             {historicalCounts.map(count => (
                 <AccordionItem key={count.id} value={count.id} className="border rounded-lg">
-                    <AccordionTrigger className="p-4 hover:no-underline">
+                    <AccordionTrigger className="p-4 hover:no-underline text-left">
                         <div className="flex justify-between items-center w-full">
                             <div>
                                 <p className="font-semibold">Contagem de {count.kioskName}</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Revisada por {count.reviewedBy?.username} em {count.reviewedAt ? format(new Date(count.reviewedAt), 'dd/MM/yyyy HH:mm') : ''}
+                                    Contado por: {count.countedBy.username} em {format(new Date(count.countedAt), 'dd/MM/yyyy')}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    Revisado por: {count.reviewedBy?.username} em {count.reviewedAt ? format(new Date(count.reviewedAt), 'dd/MM/yyyy HH:mm') : ''}
                                 </p>
                             </div>
                             <Badge variant={count.status === 'approved' ? 'default' : 'destructive'}>
@@ -216,17 +217,19 @@ function CountHistory() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                            {count.items.map(item => (
-                                <TableRow key={item.lotId}>
-                                <TableCell className="font-medium">{item.productName}</TableCell>
-                                <TableCell>{item.lotNumber}</TableCell>
-                                <TableCell className="text-center">{item.systemQuantity}</TableCell>
-                                <TableCell className="text-center">{item.countedQuantity}</TableCell>
-                                <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {item.difference > 0 ? `+${item.difference}` : item.difference}
-                                </TableCell>
+                            {count.items.map(item => {
+                                const isDivergent = item.difference !== 0;
+                                return (
+                                <TableRow key={item.lotId} className={isDivergent ? 'bg-muted/50' : ''}>
+                                    <TableCell className="font-medium">{item.productName}</TableCell>
+                                    <TableCell>{item.lotNumber}</TableCell>
+                                    <TableCell className="text-center">{item.systemQuantity}</TableCell>
+                                    <TableCell className="text-center">{item.countedQuantity}</TableCell>
+                                    <TableCell className={`text-center font-bold ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : ''}`}>
+                                        {item.difference !== 0 ? (item.difference > 0 ? `+${item.difference}` : item.difference) : '-'}
+                                    </TableCell>
                                 </TableRow>
-                            ))}
+                            )})}
                             </TableBody>
                         </Table>
                         </div>
@@ -315,7 +318,7 @@ export function StockCount() {
         const productB = productMap.get(b.productId);
         if (productA && productB) {
             const nameA = getProductFullName(productA);
-            const nameB = getProductFullName(productB);
+            const nameB = getProductFullName(b.productB);
             if (nameA !== nameB) {
                 return nameA.localeCompare(nameB);
             }
@@ -353,9 +356,9 @@ export function StockCount() {
     const kiosk = kiosks.find(k => k.id === selectedKioskId);
     if (!kiosk) return;
 
-    const itemsToSave: StockCountItem[] = values.items.map((item, index) => {
-      const lot = kioskLots[index];
-      const difference = item.countedQuantity - lot.quantity;
+    const itemsToSave: StockCountItem[] = kioskLots.map((lot, index) => {
+      const countedItem = values.items[index];
+      const difference = countedItem.countedQuantity - lot.quantity;
       return {
         productId: lot.productId,
         productName: lot.productName,
@@ -363,18 +366,14 @@ export function StockCount() {
         lotNumber: lot.lotNumber,
         expiryDate: lot.expiryDate || '',
         systemQuantity: lot.quantity,
-        countedQuantity: item.countedQuantity,
+        countedQuantity: countedItem.countedQuantity,
         difference,
-        notes: item.notes,
+        notes: countedItem.notes,
       };
     });
 
-    const itemsWithChanges = itemsToSave.filter(
-      item => item.difference !== 0 || item.notes
-    );
-
-    if (itemsWithChanges.length === 0) {
-        toast({ title: 'Nenhuma alteração para salvar', description: 'Nenhuma quantidade foi alterada ou observação adicionada.' });
+    if (itemsToSave.length === 0) {
+        toast({ title: 'Nenhum item para salvar', description: 'A lista de contagem está vazia.' });
         return;
     }
 
