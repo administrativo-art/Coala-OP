@@ -43,7 +43,11 @@ export interface ExpiryProductsContextType {
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
-  approveStockCount: (count: StockCount, itemsToAdjust: StockCountItem[], approvedBy: User) => Promise<void>;
+  approveStockCount: (
+    itemsToAdjust: StockCountItem[], 
+    count: StockCount,
+    approvedBy: User
+  ) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
@@ -336,7 +340,11 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
   }, []);
 
-  const approveStockCount = useCallback(async (count: StockCount, itemsToAdjust: StockCountItem[], approvedBy: User) => {
+  const approveStockCount = useCallback(async (
+    itemsToAdjust: StockCountItem[], 
+    count: StockCount,
+    approvedBy: User
+) => {
     if (!approvedBy) {
       throw new Error("Usuário de aprovação não autenticado.");
     }
@@ -351,43 +359,39 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         return;
     }
     
-    // Step 1: Read all lot documents first, outside the transaction.
-    const lotRefs = itemsToAdjust.map(item => doc(db, "lots", item.lotId));
-    
     try {
-        const lotDocs = await Promise.all(lotRefs.map(ref => getDoc(ref)));
-
         await runTransaction(db, async (transaction) => {
-            // Step 2: Now, perform only write operations inside the transaction.
+            // Step 1: Read all necessary lot documents.
+            const lotRefs = itemsToAdjust.map(item => doc(db, "lots", item.lotId));
+            const lotDocs = await Promise.all(lotRefs.map(ref => transaction.get(ref)));
+
+            // Step 2: Perform write operations.
             itemsToAdjust.forEach((item, index) => {
                 const lotDoc = lotDocs[index];
                 if (!lotDoc.exists()) {
-                    // If a lot doesn't exist, we can't proceed. Throwing an error will abort the transaction.
-                    throw new Error(`Lote com ID ${item.lotId} não foi encontrado no banco de dados. A operação foi cancelada.`);
+                    throw new Error(`Lote com ID ${item.lotId} não foi encontrado.`);
                 }
                 
-                const lotRef = doc(db, "lots", item.lotId);
+                const lotRef = lotDoc.ref;
                 transaction.update(lotRef, { quantity: item.countedQuantity });
         
-                // Create movement record for auditing
                 const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
                 const movementRecord: Omit<MovementRecord, 'id'> = {
-                lotId: item.lotId,
-                productId: item.productId,
-                productName: item.productName,
-                lotNumber: item.lotNumber,
-                type: movementType,
-                quantityChange: Math.abs(item.difference),
-                fromKioskId: count.kioskId,
-                userId: approvedBy.id,
-                username: approvedBy.username,
-                timestamp: new Date().toISOString(),
-                notes: `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}. Observações: ${item.notes || ''}`.trim(),
+                    lotId: item.lotId,
+                    productId: item.productId,
+                    productName: item.productName,
+                    lotNumber: item.lotNumber,
+                    type: movementType,
+                    quantityChange: Math.abs(item.difference),
+                    fromKioskId: count.kioskId,
+                    userId: approvedBy.id,
+                    username: approvedBy.username,
+                    timestamp: new Date().toISOString(),
+                    notes: `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}. Observações: ${item.notes || ''}`.trim(),
                 };
                 addMovementRecord(transaction, movementRecord);
             });
             
-            // Finally, update the status of the stock count document itself
             const countRef = doc(db, "stockCounts", count.id);
             transaction.update(countRef, {
                 status: 'approved',
@@ -396,7 +400,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             });
         });
     } catch(error) {
-        console.error("Transaction failed: ", error);
+        console.error("Transaction failed in approveStockCount: ", error);
         throw error;
     }
   }, []);
@@ -468,6 +472,3 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
-
-
-    

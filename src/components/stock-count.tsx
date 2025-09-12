@@ -63,7 +63,7 @@ function PendingApprovals() {
     
     setIsProcessing(true);
     try {
-        await approveStockCount(count, itemsToAdjust, user);
+        await approveStockCount(itemsToAdjust, count, user);
         toast({ title: 'Sucesso!', description: 'O estoque foi ajustado com base na contagem.' });
     } catch (error: any) {
         console.error("Failed to approve stock count:", error);
@@ -560,5 +560,3 @@ export function StockCount() {
     </div>
   );
 }
-
-    
