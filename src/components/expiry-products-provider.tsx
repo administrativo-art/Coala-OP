@@ -341,68 +341,82 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const approveStockCount = useCallback(async (
-    itemsToAdjust: StockCountItem[], 
+    itemsToAdjust: StockCountItem[],
     count: StockCount,
     approvedBy: User
-) => {
-    if (!approvedBy) {
-      throw new Error("Usuário de aprovação não autenticado.");
+  ) => {
+    if (!approvedBy) throw new Error("Usuário de aprovação não autenticado.");
+    if (itemsToAdjust.length === 0) {
+      const countRef = doc(db, "stockCounts", count.id);
+      await updateDoc(countRef, {
+        status: 'approved',
+        reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
+        reviewedAt: new Date().toISOString(),
+      });
+      return;
     }
-     if (itemsToAdjust.length === 0) {
-        // If there are no items with divergence, just update the count status
-        const countRef = doc(db, "stockCounts", count.id);
-        await updateDoc(countRef, {
-            status: 'approved',
-            reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
-            reviewedAt: new Date().toISOString(),
-        });
-        return;
-    }
-    
-    try {
-        await runTransaction(db, async (transaction) => {
-            // Step 1: Read all necessary lot documents.
-            const lotRefs = itemsToAdjust.map(item => doc(db, "lots", item.lotId));
-            const lotDocs = await Promise.all(lotRefs.map(ref => transaction.get(ref)));
-
-            // Step 2: Perform write operations.
-            itemsToAdjust.forEach((item, index) => {
-                const lotDoc = lotDocs[index];
-                if (!lotDoc.exists()) {
-                    throw new Error(`Lote com ID ${item.lotId} não foi encontrado.`);
-                }
-                
-                const lotRef = lotDoc.ref;
-                transaction.update(lotRef, { quantity: item.countedQuantity });
+  
+    await runTransaction(db, async (transaction) => {
+      // For each item with a difference, find all corresponding lots.
+      for (const item of itemsToAdjust) {
+        const lotsQuery = query(collection(db, 'lots'),
+          where('productId', '==', item.productId),
+          where('lotNumber', '==', item.lotNumber),
+          where('expiryDate', '==', item.expiryDate || null),
+          where('kioskId', '==', count.kioskId)
+        );
         
-                const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-                const movementRecord: Omit<MovementRecord, 'id'> = {
-                    lotId: item.lotId,
-                    productId: item.productId,
-                    productName: item.productName,
-                    lotNumber: item.lotNumber,
-                    type: movementType,
-                    quantityChange: Math.abs(item.difference),
-                    fromKioskId: count.kioskId,
-                    userId: approvedBy.id,
-                    username: approvedBy.username,
-                    timestamp: new Date().toISOString(),
-                    notes: `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}. Observações: ${item.notes || ''}`.trim(),
-                };
-                addMovementRecord(transaction, movementRecord);
-            });
-            
-            const countRef = doc(db, "stockCounts", count.id);
-            transaction.update(countRef, {
-                status: 'approved',
-                reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
-                reviewedAt: new Date().toISOString(),
-            });
-        });
-    } catch(error) {
-        console.error("Transaction failed in approveStockCount: ", error);
-        throw error;
-    }
+        const lotDocs = (await getDocs(lotsQuery)).docs;
+  
+        // Delete all old lots for this item.
+        lotDocs.forEach(lotDoc => transaction.delete(lotDoc.ref));
+        
+        // Create a new consolidated lot if the counted quantity is > 0.
+        if (item.countedQuantity > 0) {
+          const firstOldLot = lotDocs.length > 0 ? (lotDocs[0].data() as LotEntry) : null;
+          const newLotData: Omit<LotEntry, 'id'> = {
+            productId: item.productId,
+            productName: item.productName,
+            lotNumber: item.lotNumber,
+            expiryDate: item.expiryDate || null,
+            kioskId: count.kioskId,
+            quantity: item.countedQuantity,
+            reservedQuantity: 0,
+            imageUrl: firstOldLot?.imageUrl,
+            locationId: firstOldLot?.locationId,
+            locationName: firstOldLot?.locationName,
+            locationCode: firstOldLot?.locationCode,
+          };
+          const newLotRef = doc(collection(db, 'lots')); // Auto-generate ID
+          transaction.set(newLotRef, { ...newLotData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+
+          // Create history record.
+          const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
+          const movementRecord: Omit<MovementRecord, 'id'> = {
+              lotId: newLotRef.id,
+              productId: item.productId,
+              productName: item.productName,
+              lotNumber: item.lotNumber,
+              type: movementType,
+              quantityChange: Math.abs(item.difference),
+              fromKioskId: count.kioskId,
+              userId: approvedBy.id,
+              username: approvedBy.username,
+              timestamp: new Date().toISOString(),
+              notes: `Ajuste via contagem. Contado por ${count.countedBy.username}. Observações: ${item.notes || ''}`.trim(),
+          };
+          addMovementRecord(transaction, movementRecord);
+        }
+      }
+      
+      // Finally, update the count status.
+      const countRef = doc(db, "stockCounts", count.id);
+      transaction.update(countRef, {
+        status: 'approved',
+        reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
+        reviewedAt: new Date().toISOString(),
+      });
+    });
   }, []);
 
 const revertMovement = useCallback(async (movement: MovementRecord) => {
