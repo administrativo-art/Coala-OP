@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type LotEntry, type MovementRecord, type MovementType, type User, type StockCount } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { pruneUndefined } from '@/lib/utils';
 
@@ -453,3 +452,5 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+    
