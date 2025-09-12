@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -216,7 +217,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
 
             if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
-                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove - movable });
+                results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove - 0 });
                 continue;
             }
 
