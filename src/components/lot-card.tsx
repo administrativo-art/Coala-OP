@@ -173,7 +173,6 @@ export function LotCard({
   const canEdit = permissions.stock.inventoryControl.editLot;
   const canMove = permissions.stock.inventoryControl.transfer;
   const canDelete = permissions.stock.inventoryControl.writeDown; // Assuming writeDown and delete are linked
-  const canViewHistory = permissions.stock.inventoryControl.viewHistory;
   
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();
@@ -436,7 +435,6 @@ export function LotCard({
                             )}
                             <div className="flex flex-col gap-0.5 border-l pl-1">
                                 {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
-                                {renderActionButton(lot, History, "Histórico", () => onViewHistory(lot), canViewHistory)}
                                 {renderActionButton(lot, QrCode, "Imprimir Etiqueta", () => handlePrintLabel(lot, product), true)}
                                 {renderActionButton(lot, Trash2, "Excluir", () => onDelete(lot.id), canDelete, true)}
                             </div>
