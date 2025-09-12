@@ -81,19 +81,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const profilePermissions = userProfile ? userProfile.permissions : defaultGuestPermissions;
         
-        // Deep merge logic
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             ...profilePermissions,
-            registration: { 
-                ...defaultGuestPermissions.registration, 
+            registration: {
+                ...defaultGuestPermissions.registration,
                 ...profilePermissions?.registration,
                 items: { ...defaultGuestPermissions.registration.items, ...profilePermissions?.registration?.items },
                 baseProducts: { ...defaultGuestPermissions.registration.baseProducts, ...profilePermissions?.registration?.baseProducts },
                 entities: { ...defaultGuestPermissions.registration.entities, ...profilePermissions?.registration?.entities },
             },
-            stock: { 
-              ...defaultGuestPermissions.stock, 
+            stock: {
+              ...defaultGuestPermissions.stock,
               ...profilePermissions?.stock,
               inventoryControl: { ...defaultGuestPermissions.stock.inventoryControl, ...profilePermissions?.stock?.inventoryControl },
               stockCount: { ...defaultGuestPermissions.stock.stockCount, ...profilePermissions?.stock?.stockCount },
