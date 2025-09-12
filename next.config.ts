@@ -25,9 +25,6 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  experimental: {
-    ppr: true, // Adding this flag to help with stability
-  },
 };
 
 export default nextConfig;
