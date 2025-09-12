@@ -361,10 +361,10 @@ export function StockCount() {
         difference,
         notes: item.notes,
       };
-    }).filter(item => item.difference !== 0 || (item.notes && item.notes.trim() !== ''));
+    });
 
     if (itemsToSave.length === 0) {
-        toast({ title: 'Nenhuma alteração', description: 'Não há diferenças ou observações para salvar.' });
+        toast({ title: 'Nenhuma alteração', description: 'Não há itens para registrar na contagem.' });
         return;
     }
 
