@@ -56,7 +56,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 }, []);
 
   const canManageUsers = !loading && permissions.settings.view;
-  const canManageStock = !loading && permissions.stock.view;
   const canManageTeam = !loading && permissions.team.view;
   const canUseHelp = !loading && permissions.help.view;
   const isMasterUser = user?.username === 'Tiago Brasil';
@@ -64,6 +63,15 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canSimulatePricing = !loading && permissions.pricing.view;
   const canViewTasks = !loading && permissions.tasks.view;
   const canAudit = !loading && permissions.stock.audit.start;
+  const canManageStock = !loading && (
+    permissions.stock.inventoryControl.view ||
+    permissions.stock.stockCount.view ||
+    permissions.stock.audit.view ||
+    permissions.stock.analysis.view ||
+    permissions.stock.purchasing.view ||
+    permissions.stock.returns.view ||
+    permissions.stock.conversions.view
+  );
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
@@ -75,13 +83,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         group: 'operacao', 
         show: canManageStock,
         subItems: [
-            { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: true },
-            { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: true },
-            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.stock.audit.start },
-            { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: true },
-            { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: true },
-            { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: true },
-            { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: true },
+            { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
+            { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: permissions.stock.stockCount.view },
+            { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.stock.audit.view },
+            { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart2, show: permissions.stock.analysis.view },
+            { href: '/dashboard/stock/purchasing', label: 'Compras', icon: DollarSign, show: permissions.stock.purchasing.view },
+            { href: '/dashboard/stock/returns', label: 'Avarias', icon: ShieldAlert, show: permissions.stock.returns.view },
+            { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: permissions.stock.conversions.view },
         ]
     },
     { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'operacao', show: canManageTeam },
@@ -89,7 +97,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'admin', show: canSimulatePricing },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'admin', show: canManageUsers },
     { href: '/dashboard/help', label: 'Ajuda', icon: BookOpen, group: 'suporte', show: canUseHelp },
-  ], [legacyTasks.length, canViewTasks, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions.stock.audit.start, canAudit]);
+  ], [legacyTasks.length, canViewTasks, canManageStock, canManageTeam, canRegister, canSimulatePricing, canManageUsers, canUseHelp, permissions]);
   
   const filteredNavItems = useMemo(() => {
     if (!searchTerm) return navItems.filter(item => item.show !== false);
@@ -294,5 +302,3 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     </div>
   )
 }
-
-    
