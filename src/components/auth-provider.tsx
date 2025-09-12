@@ -86,7 +86,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ...profilePermissions,
             // Deep merge for nested permission objects
             registration: { ...defaultGuestPermissions.registration, ...profilePermissions?.registration },
-            stock: { ...defaultGuestPermissions.stock, ...profilePermissions?.stock },
+            stock: { 
+              ...defaultGuestPermissions.stock, 
+              ...profilePermissions?.stock,
+              inventoryControl: { ...defaultGuestPermissions.stock.inventoryControl, ...profilePermissions?.stock?.inventoryControl },
+              stockCount: { ...defaultGuestPermissions.stock.stockCount, ...profilePermissions?.stock?.stockCount },
+              audit: { ...defaultGuestPermissions.stock.audit, ...profilePermissions?.stock?.audit },
+              analysis: { ...defaultGuestPermissions.stock.analysis, ...profilePermissions?.stock?.analysis },
+              purchasing: { ...defaultGuestPermissions.stock.purchasing, ...profilePermissions?.stock?.purchasing },
+              returns: { ...defaultGuestPermissions.stock.returns, ...profilePermissions?.stock?.returns },
+              conversions: { ...defaultGuestPermissions.stock.conversions, ...profilePermissions?.stock?.conversions },
+            },
             team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
             pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
             settings: { ...defaultGuestPermissions.settings, ...profilePermissions?.settings },
