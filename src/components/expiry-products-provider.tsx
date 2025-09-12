@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -45,6 +44,7 @@ export interface ExpiryProductsContextType {
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
   adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
+  revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
@@ -376,6 +376,57 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
 }, []);
 
+const revertMovement = useCallback(async (movement: MovementRecord) => {
+    if (!user) throw new Error("User not authenticated to revert movement.");
+    if (movement.reverted) throw new Error("This movement has already been reverted.");
+
+    await runTransaction(db, async (transaction) => {
+        // Identify the lot involved
+        const lotRef = doc(db, 'lots', movement.lotId);
+        const lotDoc = await transaction.get(lotRef);
+        if (!lotDoc.exists()) throw new Error("Lot related to the movement not found.");
+
+        let quantityChange = 0;
+        let newMovementType: MovementType | null = null;
+        let newMovementNotes = `Estorno do movimento ${movement.id.slice(0, 5)}`;
+
+        if (movement.type.startsWith('ENTRADA')) {
+            quantityChange = -movement.quantityChange;
+            newMovementType = 'SAIDA_ESTORNO';
+        } else if (movement.type.startsWith('SAIDA')) {
+            quantityChange = movement.quantityChange;
+            newMovementType = 'ENTRADA_ESTORNO';
+        } else {
+            throw new Error("Only entry or exit movements can be reverted this way.");
+        }
+
+        // Apply the reverse quantity change
+        transaction.update(lotRef, { quantity: increment(quantityChange) });
+
+        // Create a new movement record for the reversal
+        const reversalRecord: Omit<MovementRecord, 'id'> = {
+            lotId: movement.lotId,
+            productId: movement.productId,
+            productName: movement.productName,
+            lotNumber: movement.lotNumber,
+            type: newMovementType,
+            quantityChange: movement.quantityChange,
+            fromKioskId: movement.fromKioskId,
+            toKioskId: movement.toKioskId,
+            userId: user.id,
+            username: user.username,
+            timestamp: new Date().toISOString(),
+            notes: newMovementNotes,
+            revertedFromId: movement.id,
+        };
+        addMovementRecord(transaction, reversalRecord);
+
+        // Mark the original movement as reverted
+        const originalMovementRef = doc(db, 'movementHistory', movement.id);
+        transaction.update(originalMovementRef, { reverted: true });
+    });
+}, [user]);
+
 
   const value: ExpiryProductsContextType = useMemo(() => ({
       lots,
@@ -387,7 +438,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       moveMultipleLots,
       consumeFromLot,
       adjustLotQuantity,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity]);
+      revertMovement,
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+    
