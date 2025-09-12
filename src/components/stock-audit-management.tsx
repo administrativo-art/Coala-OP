@@ -39,6 +39,7 @@ const DIVERGENCE_REASONS = [
     "Vencido",
     "Avariado",
     "Contagem errada",
+    "Contagem de rotina",
     "Outros"
 ];
 
@@ -153,7 +154,7 @@ function JustificationSection({ itemIndex, control, difference }: { itemIndex: n
           />
         ))}
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={addNewDivergence} className="w-full">
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={addNewDivergence}>
         <PlusCircle className="mr-2 h-4 w-4"/> Adicionar justificativa
       </Button>
     </div>
@@ -460,8 +461,9 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
 
         const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
 
-        if (groupedLots[uniqueKey]) {
-            groupedLots[uniqueKey].quantity += lot.quantity;
+        const existingLot = groupedLots[uniqueKey];
+        if (existingLot) {
+            existingLot.quantity += lot.quantity;
         } else {
             groupedLots[uniqueKey] = { ...lot };
         }
@@ -632,5 +634,3 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
-
-    
