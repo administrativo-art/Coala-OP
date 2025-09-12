@@ -293,7 +293,7 @@ function AuditForm({
                                                 />
                                             </div>
                                             
-                                            {hasDivergence ? (
+                                            {hasDivergence && difference > 0 ? (
                                                 <JustificationSection itemIndex={index} control={form.control} difference={difference} />
                                             ) : (
                                                 <div className="p-3 text-center rounded-lg bg-green-500/10 text-green-700 font-medium flex items-center justify-center gap-2">
@@ -465,7 +465,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate || '',
             systemQuantity: lot.quantity,
-            countedQuantity: 0,
+            countedQuantity: lot.quantity, // Pre-fill counted quantity
             divergences: [],
         }
     });
@@ -480,7 +480,20 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     });
 
     if (newSessionId) {
-        const createdSession = auditSessions.find(s => s.id === newSessionId)
+        // Since useStockAudit now manages activeSession, we can rely on its state update.
+        // The useEffect in the provider will update the session list.
+        // We find the newly created session and set it as active.
+        const createdSession = await new Promise<StockAuditSession | undefined>(resolve => {
+            const check = () => {
+                const session = auditSessions.find(s => s.id === newSessionId);
+                if (session) {
+                    resolve(session);
+                } else {
+                    setTimeout(check, 100);
+                }
+            };
+            check();
+        });
         if (createdSession) setActiveSession(createdSession);
     }
   };
