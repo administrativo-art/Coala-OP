@@ -44,7 +44,7 @@ export interface ExpiryProductsContextType {
   forceDeleteLotById: (lotId: string) => Promise<boolean>;
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
-  adjustLotQuantity: (count: StockCount, approvedBy: User) => Promise<void>;
+  approveStockCount: (count: StockCount, approvedBy: User) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
@@ -337,38 +337,54 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
   }, []);
 
-  const adjustLotQuantity = useCallback(async (count: StockCount, approvedBy: User) => {
+  const approveStockCount = useCallback(async (count: StockCount, approvedBy: User) => {
     if (!approvedBy) {
-        throw new Error("Usuário de aprovação não autenticado.");
+      throw new Error("Usuário de aprovação não autenticado.");
     }
+    
+    // Step 1: Read all lot documents first, outside the transaction.
+    const lotRefs = count.items.map(item => doc(db, "lots", item.lotId));
+    const lotDocs = await Promise.all(lotRefs.map(ref => getDoc(ref)));
+
     await runTransaction(db, async (transaction) => {
-        for (const item of count.items) {
-            if (item.difference === 0) continue;
-
-            const lotRef = doc(db, "lots", item.lotId);
-            
-            const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-            const movementNotes = `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}.`;
-
-            const movementRecord: Omit<MovementRecord, 'id'> = {
-                lotId: item.lotId,
-                productId: item.productId,
-                productName: item.productName,
-                lotNumber: item.lotNumber,
-                type: movementType,
-                quantityChange: Math.abs(item.difference),
-                fromKioskId: count.kioskId,
-                userId: approvedBy.id,
-                username: approvedBy.username,
-                timestamp: new Date().toISOString(),
-                notes: movementNotes,
-            };
-
-            addMovementRecord(transaction, movementRecord);
-            transaction.update(lotRef, { quantity: item.countedQuantity });
+      // Step 2: Now, perform only write operations inside the transaction.
+      count.items.forEach((item, index) => {
+        const lotDoc = lotDocs[index];
+        if (!lotDoc.exists()) {
+            // If a lot doesn't exist, we can't proceed. Throwing an error will abort the transaction.
+            throw new Error(`Lote com ID ${item.lotId} não encontrado. A operação foi cancelada.`);
         }
+        
+        // Directly set the new quantity
+        transaction.update(lotDoc.ref, { quantity: item.countedQuantity });
+  
+        // Create movement record for auditing
+        const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
+        const movementRecord: Omit<MovementRecord, 'id'> = {
+          lotId: item.lotId,
+          productId: item.productId,
+          productName: item.productName,
+          lotNumber: item.lotNumber,
+          type: movementType,
+          quantityChange: Math.abs(item.difference),
+          fromKioskId: count.kioskId,
+          userId: approvedBy.id,
+          username: approvedBy.username,
+          timestamp: new Date().toISOString(),
+          notes: `Ajuste de estoque via contagem. Contado por ${count.countedBy.username}.`,
+        };
+        addMovementRecord(transaction, movementRecord);
+      });
+      
+      // Finally, update the status of the stock count document itself
+      const countRef = doc(db, "stockCounts", count.id);
+      transaction.update(countRef, {
+        status: 'approved',
+        reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
+        reviewedAt: new Date().toISOString(),
+      });
     });
-}, []);
+  }, []);
 
 const revertMovement = useCallback(async (movement: MovementRecord) => {
     if (!user) throw new Error("User not authenticated to revert movement.");
@@ -431,9 +447,9 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
       forceDeleteLotById,
       moveMultipleLots,
       consumeFromLot,
-      adjustLotQuantity,
+      approveStockCount,
       revertMovement,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement]);
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, approveStockCount, revertMovement]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }

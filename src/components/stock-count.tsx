@@ -47,9 +47,10 @@ type CountFormValues = z.infer<typeof countFormSchema>;
 
 function PendingApprovals() {
   const { counts, updateStockCount, loading: loadingCounts } = useStockCount();
-  const { adjustLotQuantity } = useExpiryProducts();
+  const { approveStockCount } = useExpiryProducts();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
+  const { toast } = useToast();
 
   const pendingCounts = useMemo(() => {
     return counts.filter(c => c.status === 'pending');
@@ -60,16 +61,15 @@ function PendingApprovals() {
     setIsProcessing(true);
     
     try {
-        await adjustLotQuantity(count, user);
-
-        await updateStockCount(count.id, {
-            status: 'approved',
-            reviewedBy: { userId: user.id, username: user.username },
-            reviewedAt: new Date().toISOString(),
-        });
+        await approveStockCount(count, user);
+        toast({ title: 'Sucesso!', description: 'O estoque foi ajustado com base na contagem.' });
     } catch (error: any) {
-        // Handle potential errors from adjustLotQuantity (e.g., transaction failed)
         console.error("Failed to approve stock count:", error);
+         toast({ 
+            variant: 'destructive',
+            title: 'Erro ao aprovar', 
+            description: error.message || 'Não foi possível efetivar o ajuste de estoque.' 
+        });
     } finally {
         setIsProcessing(false);
     }
