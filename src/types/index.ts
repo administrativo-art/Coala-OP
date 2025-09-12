@@ -296,7 +296,7 @@ export type PermissionSet = {
   consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
   itemRequests: { add: boolean; approve: boolean; };
   tasks: { view: boolean, manage: boolean; };
-  reposition: { cancel: boolean; };
+  reposition: { cancel: boolean; revert: boolean; };
   help: { view: boolean; };
 };
 
@@ -616,7 +616,7 @@ export const defaultGuestPermissions: PermissionSet = {
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     itemRequests: { add: true, approve: false },
     tasks: { view: true, manage: false },
-    reposition: { cancel: false },
+    reposition: { cancel: false, revert: false },
     help: { view: true },
 };
 
@@ -639,7 +639,7 @@ export const defaultAdminPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     itemRequests: { add: true, approve: true },
     tasks: { view: true, manage: true },
-    reposition: { cancel: true },
+    reposition: { cancel: true, revert: true },
     help: { view: true },
 };
 
