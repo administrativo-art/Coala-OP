@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -171,24 +170,41 @@ export function StockCount() {
 
   const kioskLots = useMemo(() => {
     if (!selectedKioskId) return [];
-    return lots
-      .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0)
-      .sort((a, b) => {
-        const productA = products.find(p => p.id === a.productId);
-        const productB = products.find(p => p.id === b.productId);
+    
+    const activeLots = lots.filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0);
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    const lotsByUniqueKey: Record<string, LotEntry> = {};
+
+    activeLots.forEach(lot => {
+        const product = productMap.get(lot.productId);
+        if (!product || product.isArchived) return;
+
+        const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
+        
+        if (lotsByUniqueKey[uniqueKey]) {
+            lotsByUniqueKey[uniqueKey].quantity += lot.quantity;
+        } else {
+            lotsByUniqueKey[uniqueKey] = { ...lot };
+        }
+    });
+
+    return Object.values(lotsByUniqueKey).sort((a, b) => {
+        const productA = productMap.get(a.productId);
+        const productB = productMap.get(b.productId);
         if (productA && productB) {
-          const nameA = getProductFullName(productA);
-          const nameB = getProductFullName(productB);
-          if (nameA !== nameB) {
-            return nameA.localeCompare(nameB);
-          }
+            const nameA = getProductFullName(productA);
+            const nameB = getProductFullName(productB);
+            if (nameA !== nameB) {
+                return nameA.localeCompare(nameB);
+            }
         }
         if (a.expiryDate && b.expiryDate) {
             return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
         }
         return 0;
-      });
-  }, [selectedKioskId, lots, products, getProductFullName]);
+    });
+}, [selectedKioskId, lots, products, getProductFullName]);
 
   const form = useForm<CountFormValues>({
     resolver: zodResolver(countFormSchema),
@@ -251,7 +267,7 @@ export function StockCount() {
   };
 
   const loading = kiosksLoading || lotsLoading || productsLoading;
-  const canManageRequests = permissions.itemRequests.add;
+  const canManageRequests = permissions.stock.stockCount.requestItem;
   const canApproveCounts = permissions.stock.stockCount.approve;
 
   const showManagementTab = canManageRequests || canApproveCounts;
@@ -274,7 +290,7 @@ export function StockCount() {
                 <TabsContent value="count" className="mt-4">
                      <div className="space-y-4">
                         <div className="flex flex-col sm:flex-row gap-2">
-                            <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                            <Select value={selectedKioskId} onValueChange={(value) => { setSelectedKioskId(value); form.reset({ items: [] }); }}>
                                 <SelectTrigger className="flex-grow"><SelectValue placeholder="Selecione um quiosque para iniciar..." /></SelectTrigger>
                                 <SelectContent>
                                 {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
