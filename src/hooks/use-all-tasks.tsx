@@ -7,7 +7,8 @@ import { useTasks } from './use-tasks';
 import { useReposition } from './use-reposition';
 import { useReturnRequests } from './use-return-requests';
 import { useStockCount } from './use-stock-count';
-import { ClipboardCheck, Truck, ShieldAlert, ListOrdered } from 'lucide-react';
+import { useItemAddition } from './use-item-addition';
+import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, PackagePlus } from 'lucide-react';
 import { type Task } from '@/types';
 
 export interface LegacyTask {
@@ -39,8 +40,9 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { requests: returnRequests, loading: returnsLoading } = useReturnRequests();
   const { counts, loading: countsLoading } = useStockCount();
+  const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
 
-  const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || countsLoading;
+  const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || countsLoading || itemAdditionLoading;
 
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
@@ -123,9 +125,24 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
             }
         });
     }
+
+    if (permissions.itemRequests.approve) {
+      itemAdditionRequests.forEach(req => {
+        if (req.status === 'pending') {
+          allLegacyTasks.push({
+            id: `item-request-${req.id}`,
+            type: 'Cadastro',
+            title: `Solicitação de cadastro de insumo`,
+            description: `Enviada por ${req.requestedBy.username} para o quiosque ${req.kioskName}.`,
+            link: '/dashboard/stock/count',
+            icon: PackagePlus,
+          });
+        }
+      });
+    }
     
     return allLegacyTasks;
-  }, [user, permissions, counts, repositionActivities, returnRequests, loading]);
+  }, [user, permissions, counts, repositionActivities, returnRequests, itemAdditionRequests, loading]);
   
   const value = {
     allTasks,
