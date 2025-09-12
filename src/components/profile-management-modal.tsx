@@ -62,7 +62,7 @@ const permissionsSchema = z.object({
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }).optional(),
   itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }).optional(),
-  reposition: z.object({ cancel: z.boolean(), revert: z.boolean() }).optional(),
+  reposition: z.object({ cancel: z.boolean() }).optional(),
 });
 
 
@@ -292,7 +292,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>
                                         {renderPermissionSwitch("permissions.reposition.cancel", "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.")}
-                                        {renderPermissionSwitch("permissions.reposition.revert", "Reverter Atividade", "Permite reverter uma atividade de reposição já concluída.")}
                                      </div>
                                 </AccordionContent>
                             </AccordionItem>

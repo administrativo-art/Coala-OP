@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -462,9 +463,8 @@ function AnalysisTab() {
 }
 
 function RepositionHistory() {
-    const { activities, loading, revertRepositionActivity } = useReposition();
+    const { activities, loading } = useReposition();
     const { permissions } = useAuth();
-    const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
     const [isReverting, setIsReverting] = useState(false);
     const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
@@ -476,14 +476,6 @@ function RepositionHistory() {
             return activity.status === statusFilter;
         });
     }, [activities, statusFilter]);
-
-    const handleRevertConfirm = async () => {
-        if (!activityToRevert) return;
-        setIsReverting(true);
-        await revertRepositionActivity(activityToRevert.id);
-        setIsReverting(false);
-        setActivityToRevert(null);
-    };
 
     if (loading) return <Skeleton className="h-64 w-full" />;
     
@@ -578,13 +570,6 @@ function RepositionHistory() {
                                         </TableBody>
                                     </Table>
                                     </div>
-                                    {permissions.reposition.cancel && (
-                                        <div className="mt-4 pt-4 border-t flex justify-end">
-                                            <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
-                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter Atividade
-                                            </Button>
-                                        </div>
-                                    )}
                                 </div>
                                 </AccordionContent>
                             </AccordionItem>
@@ -593,19 +578,6 @@ function RepositionHistory() {
                 )}
             </CardContent>
         </Card>
-        <DeleteConfirmationDialog 
-            open={!!activityToRevert}
-            onOpenChange={() => setActivityToRevert(null)}
-            onConfirm={handleRevertConfirm}
-            isDeleting={isReverting}
-            title="Reverter Atividade?"
-            description={
-                activityToRevert ? (
-                    <>Esta ação irá debitar o estoque do <strong>{activityToRevert.kioskDestinationName}</strong> e creditar de volta na <strong>{activityToRevert.kioskOriginName}</strong>. A atividade de reposição será reaberta com o status 'Aguardando despacho'.</>
-                ) : ''
-            }
-            confirmButtonText="Sim, reverter"
-        />
     </>
     );
 }

@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState } from 'react';
@@ -35,6 +36,8 @@ const MOVEMENT_TYPE_CONFIG: Record<MovementType, { label: string; color: string 
     'ENTRADA_CORRECAO': { label: 'Ajuste entrada', color: 'bg-green-100 text-green-800' },
     'TRANSFERENCIA_SAIDA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
     'TRANSFERENCIA_ENTRADA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
+    'ENTRADA_ESTORNO': { label: 'Estorno (Entrada)', color: 'bg-green-100 text-green-800' },
+    'SAIDA_ESTORNO': { label: 'Estorno (Saída)', color: 'bg-red-100 text-red-800' },
 };
 
 const ITEMS_PER_PAGE = 50;

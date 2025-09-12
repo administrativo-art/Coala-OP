@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -125,8 +126,6 @@ export type MovementRecord = {
   timestamp: string; // ISO String
   notes?: string;
   activityId?: string;
-  reverted?: boolean;
-  revertedFromId?: string;
 };
 
 
@@ -296,7 +295,7 @@ export type PermissionSet = {
   consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
   itemRequests: { add: boolean; approve: boolean; };
   tasks: { view: boolean, manage: boolean; };
-  reposition: { cancel: boolean; revert: boolean; };
+  reposition: { cancel: boolean; };
   help: { view: boolean; };
 };
 
@@ -607,7 +606,7 @@ export const defaultGuestPermissions: PermissionSet = {
     pricing: { view: false, simulate: false, manageParameters: false },
     // Admin
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
-    // Legado
+    // Legado - para manter a compatibilidade
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
@@ -616,7 +615,7 @@ export const defaultGuestPermissions: PermissionSet = {
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     itemRequests: { add: true, approve: false },
     tasks: { view: true, manage: false },
-    reposition: { cancel: false, revert: false },
+    reposition: { cancel: false },
     help: { view: true },
 };
 
@@ -639,7 +638,7 @@ export const defaultAdminPermissions: PermissionSet = {
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     itemRequests: { add: true, approve: true },
     tasks: { view: true, manage: true },
-    reposition: { cancel: true, revert: true },
+    reposition: { cancel: true },
     help: { view: true },
 };
 

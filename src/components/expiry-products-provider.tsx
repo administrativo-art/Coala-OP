@@ -45,7 +45,6 @@ export interface ExpiryProductsContextType {
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
   adjustLotQuantity: (lotId: string, newQuantity: number, countedBy: { userId: string, username: string }, approvedBy: User) => Promise<void>;
-  revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
 export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
@@ -377,85 +376,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     });
 }, []);
 
- const revertMovement = useCallback(async (movement: MovementRecord) => {
-    if (!user) throw new Error("User not authenticated.");
-
-    await runTransaction(db, async (transaction) => {
-      const originalMovementRef = doc(db, "movementHistory", movement.id);
-      
-      // Mark original movement as reverted
-      transaction.update(originalMovementRef, { reverted: true });
-
-      const lotRef = doc(db, "lots", movement.lotId);
-      const lotDoc = await transaction.get(lotRef);
-      if (!lotDoc.exists()) throw new Error(`Lot ${movement.lotId} not found to revert movement.`);
-      const lotData = lotDoc.data() as LotEntry;
-
-      let newMovementType: MovementType;
-      let quantityChange = movement.quantityChange;
-
-      switch (movement.type) {
-        case 'ENTRADA':
-        case 'ENTRADA_CORRECAO':
-          newMovementType = 'SAIDA_ESTORNO';
-          transaction.update(lotRef, { quantity: increment(-quantityChange) });
-          break;
-        case 'SAIDA_CONSUMO':
-        case 'SAIDA_DESCARTE':
-        case 'SAIDA_CORRECAO':
-          newMovementType = 'ENTRADA_ESTORNO';
-          transaction.update(lotRef, { quantity: increment(quantityChange) });
-          break;
-        // Reverting a transfer is more complex. It's essentially a new transfer in the opposite direction.
-        // For simplicity, we'll create counter-movements.
-        case 'TRANSFERENCIA_SAIDA':
-          {
-            const destLotId = destLotIdKey({ productId: movement.productId, kioskId: movement.toKioskId!, lotNumber: movement.lotNumber, expiryDate: lotData.expiryDate });
-            const destLotRef = doc(db, "lots", destLotId);
-            const destLotDoc = await transaction.get(destLotRef);
-            if (!destLotDoc.exists()) throw new Error("Destination lot not found for transfer reversal.");
-            
-            // Debit from destination, credit back to source
-            transaction.update(destLotRef, { quantity: increment(-quantityChange) });
-            transaction.update(lotRef, { quantity: increment(quantityChange) });
-
-            newMovementType = 'ENTRADA_ESTORNO'; // Conceptually, it's an entry back to the source
-          }
-          break;
-        case 'TRANSFERENCIA_ENTRADA':
-           {
-            const sourceLotId = lotData.id; // The current lot IS the destination of the original transfer
-            const sourceLotRef = doc(db, "lots", sourceLotId);
-
-            const originalSourceLot = lots.find(l => l.productId === movement.productId && l.kioskId === movement.fromKioskId && l.lotNumber === movement.lotNumber && l.expiryDate === lotData.expiryDate);
-            if (!originalSourceLot) throw new Error("Original source lot not found for transfer reversal.");
-            
-            const originalSourceLotRef = doc(db, "lots", originalSourceLot.id);
-
-            // Debit from this lot (original destination), credit back to original source
-            transaction.update(sourceLotRef, { quantity: increment(-quantityChange) });
-            transaction.update(originalSourceLotRef, { quantity: increment(quantityChange) });
-
-            newMovementType = 'SAIDA_ESTORNO'; // Conceptually, a saída from this lot
-           }
-          break;
-        default:
-          throw new Error(`Cannot revert movement of type ${movement.type}`);
-      }
-
-      // Create a new movement record for the reversal
-      const reversalRecord: Omit<MovementRecord, 'id'> = {
-        ...movement,
-        type: newMovementType,
-        timestamp: new Date().toISOString(),
-        notes: `Estorno do movimento ${movement.id}.`,
-        revertedFromId: movement.id,
-      };
-      addMovementRecord(transaction, reversalRecord);
-    });
-
-  }, [user, lots]);
-
 
   const value: ExpiryProductsContextType = useMemo(() => ({
       lots,
@@ -467,8 +387,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
       moveMultipleLots,
       consumeFromLot,
       adjustLotQuantity,
-      revertMovement,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement]);
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
