@@ -240,9 +240,9 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString()}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{totalSaidas.toLocaleString()}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString()}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{(totalEntradas || 0).toLocaleString()}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{(totalSaidas || 0).toLocaleString()}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{(totalTransferencias || 0).toLocaleString()}</p></CardContent></Card>
         </div>
         
         <div className="flex-grow overflow-hidden border rounded-lg flex flex-col">
@@ -296,7 +296,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                                       )}
                                   </TableCell>
                                   <TableCell className="text-xs">{kioskDisplay}</TableCell>
-                                  <TableCell className="text-right font-bold">{item.quantityChange}</TableCell>
+                                  <TableCell className="text-right font-bold">{(item.quantityChange ?? 0).toLocaleString('pt-BR')}</TableCell>
                                   <TableCell>{item.username}</TableCell>
                               </TableRow>
                           )
