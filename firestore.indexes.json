@@ -14,6 +14,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "movementHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "activityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reverted",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
