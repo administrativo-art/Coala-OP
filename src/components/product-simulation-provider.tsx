@@ -38,7 +38,7 @@ export interface ProductSimulationContextType {
   priceHistory: SimulationPriceHistory[];
   loading: boolean;
   addSimulation: (data: SimulationData) => Promise<void>;
-  updateSimulation: (data: Partial<ProductSimulation> & { id: string }) => Promise<void>;
+  updateSimulation: (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
 }
