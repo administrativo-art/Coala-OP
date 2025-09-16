@@ -151,7 +151,7 @@ export function PricingSimulator() {
             yPos += 8;
         };
     
-        addTitle("Ficha Técnica Completa");
+        addTitle("Ficha técnica completa");
         doc.setFontSize(10);
         doc.text(`Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`, 14, yPos);
         yPos += 10;
@@ -161,13 +161,12 @@ export function PricingSimulator() {
     
             const imageSize = 30;
             const hasImage = sim.ppo?.referenceImageUrl;
-            let initialYForText = yPos;
+            let textX = 14;
             
             if (hasImage) {
                 try {
                     doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
-                    initialYForText = yPos;
-                    yPos += imageSize + 5; 
+                    textX = 14 + imageSize + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
@@ -175,20 +174,16 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, hasImage ? 14 + imageSize + 5 : 14, initialYForText + 5);
+            doc.text(sim.name, textX, yPos + 5);
 
             doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
     
             const summaryInfo = `SKU: ${sim.ppo?.sku || 'N/A'} | Preço Venda: ${formatCurrency(sim.salePrice)} | Custo Bruto: ${formatCurrency(sim.grossCost)} | Lucro: ${sim.profitPercentage.toFixed(2)}% | Markup: ${sim.markup.toFixed(2)}x | Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`;
-            const infoLines = doc.splitTextToSize(summaryInfo, hasImage ? 198 - (14 + imageSize + 5) : 182);
-            doc.text(infoLines, hasImage ? 14 + imageSize + 5 : 14, initialYForText + 12);
+            const infoLines = doc.splitTextToSize(summaryInfo, 198 - textX);
+            doc.text(infoLines, textX, yPos + 12);
             
-            if (!hasImage) {
-                yPos += (infoLines.length * 5) + 3;
-            } else {
-                 yPos = Math.max(yPos, initialYForText + 12 + (infoLines.length * 5));
-            }
+            yPos += imageSize + 5;
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
@@ -226,14 +221,20 @@ export function PricingSimulator() {
                  if(sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                      ppoTableBody.push(['Modo de Montagem', sim.ppo.assemblyInstructions.map((instr, i) => `${i + 1}. ${instr.text}`).join('\n')]);
                  }
+                 if(sim.ppo.allergens && sim.ppo.allergens.length > 0) {
+                    ppoTableBody.push(['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]);
+                 }
+                 if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
                 
                 if (ppoTableBody.length > 0) {
                      autoTable(doc, {
                         startY: yPos,
+                        head: [['Detalhe da Ficha', 'Informação']],
                         body: ppoTableBody,
-                        theme: 'plain',
+                        theme: 'striped',
+                        headStyles: { fillColor: '#273344' },
                         styles: { cellPadding: 2 },
-                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
+                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
                     });
                      yPos = (doc as any).lastAutoTable.finalY + 10;
                 }
@@ -479,7 +480,7 @@ export function PricingSimulator() {
                                             {line && <Badge variant="secondary">{line.name}</Badge>}
                                         </div>
                                     </div>
-                                    <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">
+                                    <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">
                                         <div className="flex items-center gap-3 flex-grow">
                                             
                                         </div>
@@ -583,11 +584,11 @@ export function PricingSimulator() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaPdf}>Ficha Técnica Completa (PDF)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha Técnica Simplificada (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaPdf}>Ficha técnica completa (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaCsv}>Ficha Técnica Completa (CSV)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha Técnica Simplificada (CSV)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaCsv}>Ficha técnica completa (CSV)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
