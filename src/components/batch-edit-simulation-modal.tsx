@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from './ui/separator';
 import { Loader2 } from 'lucide-react';
 import { Input } from './ui/input';
+import { ScrollArea } from './ui/scroll-area';
 
 
 const batchEditSchema = z.object({
@@ -126,7 +127,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl">
+            <DialogContent className="max-w-xl h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Alterar mercadorias em lote</DialogTitle>
                     <DialogDescription>
@@ -134,155 +135,158 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
-                        <FormField
-                            control={form.control}
-                            name="target"
-                            render={({ field }) => (
-                                <FormItem className="space-y-3">
-                                    <FormLabel>Quais itens você quer alterar?</FormLabel>
-                                    <FormControl>
-                                        <RadioGroup
-                                            onValueChange={field.onChange}
-                                            value={field.value}
-                                            className="flex gap-4"
-                                        >
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
-                                                <FormLabel className="font-normal">Itens selecionados ({selectedSimulationIds.size})</FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="filtered" /></FormControl>
-                                                <FormLabel className="font-normal">Resultado filtrado ({filteredSimulations.length})</FormLabel>
-                                            </FormItem>
-                                        </RadioGroup>
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
-
-                        <Separator />
-
-                        <div className="space-y-4">
-                            <h3 className="font-medium">Alterações</h3>
-                             {/* Linha */}
-                            <div className="p-4 border rounded-lg space-y-4">
-                                <FormLabel>Linha</FormLabel>
-                                <FormField control={form.control} name="lineAction" render={({ field }) => (
-                                    <FormItem><FormControl>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="keep">Não alterar</SelectItem>
-                                                <SelectItem value="set">Definir como:</SelectItem>
-                                                <SelectItem value="clear">Limpar valor</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl></FormItem>
-                                )}/>
-                                {lineAction === 'set' && (
-                                     <FormField control={form.control} name="lineId" render={({ field }) => (
-                                        <FormItem><FormControl>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <SelectTrigger><SelectValue placeholder="Selecione uma linha..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </FormControl><FormMessage /></FormItem>
-                                     )}/>
-                                )}
-                            </div>
-                            {/* Categoria */}
-                            <div className="p-4 border rounded-lg space-y-4">
-                                <FormLabel>Categoria</FormLabel>
-                                 <FormField control={form.control} name="categoryAction" render={({ field }) => (
-                                    <FormItem><FormControl>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="keep">Não alterar</SelectItem>
-                                                <SelectItem value="set">Definir como:</SelectItem>
-                                                <SelectItem value="clear">Limpar valor</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl></FormItem>
-                                )}/>
-                                 {categoryAction === 'set' && (
-                                     <FormField control={form.control} name="categoryId" render={({ field }) => (
-                                        <FormItem><FormControl>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <SelectTrigger><SelectValue placeholder="Selecione uma categoria..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </FormControl><FormMessage /></FormItem>
-                                     )}/>
-                                )}
-                            </div>
-                             {/* Grupo */}
-                            <div className="p-4 border rounded-lg space-y-4">
-                                <FormLabel>Grupo por Insumo</FormLabel>
-                                 <FormField control={form.control} name="groupAction" render={({ field }) => (
-                                    <FormItem><FormControl>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="keep">Não alterar</SelectItem>
-                                                <SelectItem value="set">Definir como:</SelectItem>
-                                                <SelectItem value="clear">Limpar valor</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl></FormItem>
-                                )}/>
-                                 {groupAction === 'set' && (
-                                     <FormField control={form.control} name="groupId" render={({ field }) => (
-                                        <FormItem><FormControl>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <SelectTrigger><SelectValue placeholder="Selecione um grupo..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </FormControl><FormMessage /></FormItem>
-                                     )}/>
-                                )}
-                            </div>
-                            {/* Preço de Venda */}
-                            <div className="p-4 border rounded-lg space-y-4">
-                                <FormLabel>Preço de Venda</FormLabel>
-                                <FormField control={form.control} name="priceAction" render={({ field }) => (
-                                    <FormItem><FormControl>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="keep">Não alterar</SelectItem>
-                                                <SelectItem value="increase">Aumentar valor</SelectItem>
-                                                <SelectItem value="decrease">Diminuir valor</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl></FormItem>
-                                )}/>
-                                {priceAction !== 'keep' && (
-                                    <div className="flex gap-4 items-center">
-                                        <FormField control={form.control} name="priceAdjustmentType" render={({ field }) => (
-                                            <FormItem className="flex-grow"><FormControl>
-                                                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4">
-                                                    <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="percentage" /></FormControl><FormLabel className="font-normal">Percentual (%)</FormLabel></FormItem>
-                                                    <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="fixed" /></FormControl><FormLabel className="font-normal">Fixo (R$)</FormLabel></FormItem>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
+                        <ScrollArea className="flex-1 pr-6 -mr-6">
+                            <div className="space-y-6 pt-4">
+                                <FormField
+                                    control={form.control}
+                                    name="target"
+                                    render={({ field }) => (
+                                        <FormItem className="space-y-3">
+                                            <FormLabel>Quais itens você quer alterar?</FormLabel>
+                                            <FormControl>
+                                                <RadioGroup
+                                                    onValueChange={field.onChange}
+                                                    value={field.value}
+                                                    className="flex gap-4"
+                                                >
+                                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                                        <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
+                                                        <FormLabel className="font-normal">Itens selecionados ({selectedSimulationIds.size})</FormLabel>
+                                                    </FormItem>
+                                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                                        <FormControl><RadioGroupItem value="filtered" /></FormControl>
+                                                        <FormLabel className="font-normal">Resultado filtrado ({filteredSimulations.length})</FormLabel>
+                                                    </FormItem>
                                                 </RadioGroup>
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <Separator />
+
+                                <div className="space-y-4">
+                                    <h3 className="font-medium">Alterações</h3>
+                                    {/* Linha */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Linha</FormLabel>
+                                        <FormField control={form.control} name="lineAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="set">Definir como:</SelectItem>
+                                                        <SelectItem value="clear">Limpar valor</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </FormControl></FormItem>
                                         )}/>
-                                        <FormField control={form.control} name="priceValue" render={({ field }) => (
-                                            <FormItem className="w-24"><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
-                                        )}/>
+                                        {lineAction === 'set' && (
+                                            <FormField control={form.control} name="lineId" render={({ field }) => (
+                                                <FormItem><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger><SelectValue placeholder="Selecione uma linha..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        )}
                                     </div>
-                                )}
+                                    {/* Categoria */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Categoria</FormLabel>
+                                        <FormField control={form.control} name="categoryAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="set">Definir como:</SelectItem>
+                                                        <SelectItem value="clear">Limpar valor</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormControl></FormItem>
+                                        )}/>
+                                        {categoryAction === 'set' && (
+                                            <FormField control={form.control} name="categoryId" render={({ field }) => (
+                                                <FormItem><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger><SelectValue placeholder="Selecione uma categoria..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        )}
+                                    </div>
+                                    {/* Grupo */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Grupo por Insumo</FormLabel>
+                                        <FormField control={form.control} name="groupAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="set">Definir como:</SelectItem>
+                                                        <SelectItem value="clear">Limpar valor</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormControl></FormItem>
+                                        )}/>
+                                        {groupAction === 'set' && (
+                                            <FormField control={form.control} name="groupId" render={({ field }) => (
+                                                <FormItem><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger><SelectValue placeholder="Selecione um grupo..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        )}
+                                    </div>
+                                    {/* Preço de Venda */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Preço de Venda</FormLabel>
+                                        <FormField control={form.control} name="priceAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="increase">Aumentar valor</SelectItem>
+                                                        <SelectItem value="decrease">Diminuir valor</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormControl></FormItem>
+                                        )}/>
+                                        {priceAction !== 'keep' && (
+                                            <div className="flex gap-4 items-center">
+                                                <FormField control={form.control} name="priceAdjustmentType" render={({ field }) => (
+                                                    <FormItem className="flex-grow"><FormControl>
+                                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4">
+                                                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="percentage" /></FormControl><FormLabel className="font-normal">Percentual (%)</FormLabel></FormItem>
+                                                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="fixed" /></FormControl><FormLabel className="font-normal">Fixo (R$)</FormLabel></FormItem>
+                                                        </RadioGroup>
+                                                    </FormControl></FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="priceValue" render={({ field }) => (
+                                                    <FormItem className="w-24"><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                                                )}/>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        <DialogFooter className="pt-4">
+                        </ScrollArea>
+                        <DialogFooter className="pt-4 border-t mt-auto">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                             <Button type="submit" disabled={isSubmitting}>
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
