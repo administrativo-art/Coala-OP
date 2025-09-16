@@ -266,6 +266,9 @@ export type ProductSimulation = {
     userId: string;
     username: string;
   };
+  // Derived fields
+  priceBandId?: string | null;
+  priceCategoryId?: string | null;
 };
 
 // Manager's Diary Types
@@ -632,6 +635,7 @@ export type PricingParameters = {
   profitGoals: number[];
   priceBands: PriceBand[];
   priceCategories: PriceCategory[];
+  profitRanges: ProfitRange[];
 };
 
 export const defaultGuestPermissions: PermissionSet = {

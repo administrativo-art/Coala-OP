@@ -459,6 +459,8 @@ export function PricingSimulator() {
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
+                        const band = sim.priceBandId && pricingParameters?.priceBands?.find(b => b.id === sim.priceBandId);
+                        const category = sim.priceCategoryId && pricingParameters?.priceCategories?.find(c => c.id === sim.priceCategoryId);
 
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-0 rounded-lg overflow-hidden bg-muted/40 relative">
@@ -476,8 +478,8 @@ export function PricingSimulator() {
                                      <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                            {simCategories.map(cat => <Badge key={cat.id} style={{backgroundColor: `${cat.color}20`, color: cat.color, borderColor: `${cat.color}80`}} variant="outline">{cat.name}</Badge>)}
                                             {line && <Badge variant="secondary">{line.name}</Badge>}
+                                            {category && <Badge variant="outline">{category.name}</Badge>}
                                         </div>
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">

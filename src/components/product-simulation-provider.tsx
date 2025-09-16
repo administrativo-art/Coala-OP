@@ -2,11 +2,12 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory, type SimulationChangeHistory } from '@/types';
+import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory, type SimulationChangeHistory, type PricingParameters } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useCompanySettings } from '@/hooks/use-company-settings';
 
 interface SimulationData {
     name: string;
@@ -49,17 +50,73 @@ export const ProductSimulationContext = createContext<ProductSimulationContextTy
 export function ProductSimulationProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const { baseProducts } = useBaseProducts();
-    const [simulations, setSimulations] = useState<ProductSimulation[]>([]);
+    const { pricingParameters } = useCompanySettings();
+    const [rawSimulations, setRawSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<SimulationPriceHistory[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const simulations = useMemo(() => {
+        if (!pricingParameters || !rawSimulations.length) return rawSimulations;
+
+        const { priceBands, priceCategories } = pricingParameters;
+        if (!priceBands || !priceCategories) return rawSimulations;
+        
+        const categoriesByBand = priceCategories.reduce((acc, cat) => {
+            if (!acc[cat.priceBandId]) {
+                acc[cat.priceBandId] = [];
+            }
+            acc[cat.priceBandId].push(cat);
+            return acc;
+        }, {} as Record<string, typeof priceCategories>);
+        
+        Object.values(categoriesByBand).forEach(cats => cats.sort((a,b) => a.priority - b.priority));
+        
+        return rawSimulations.map(sim => {
+            const salePrice = sim.salePrice;
+            let priceBandId = null;
+            let priceCategoryId = null;
+
+            const band = priceBands.find(b => b.status === 'active' && salePrice >= b.min && salePrice < b.max);
+
+            if (band) {
+                priceBandId = band.id;
+                let foundCategory = false;
+                const categoriesInBand = categoriesByBand[band.id] || [];
+
+                for(const category of categoriesInBand) {
+                    if (category.status !== 'active') continue;
+                    
+                    const rulesMet = category.rules.every(rule => {
+                        if (rule.field === 'lineId' && rule.operator === 'equals') {
+                            return sim.lineId === rule.value;
+                        }
+                        // Add other rule evaluations here (volume, tags) as they are implemented
+                        return false;
+                    });
+
+                    if(rulesMet) {
+                        priceCategoryId = category.id;
+                        foundCategory = true;
+                        break;
+                    }
+                }
+                
+                if (!foundCategory) {
+                    priceCategoryId = band.defaultCategoryId;
+                }
+            }
+
+            return { ...sim, priceBandId, priceCategoryId };
+        });
+
+    }, [rawSimulations, pricingParameters]);
 
     useEffect(() => {
         const qSims = query(collection(db, "productSimulations"));
         const unsubSims = onSnapshot(qSims, (snapshot) => {
             const data = snapshot.docs.map(doc => {
                 const docData = doc.data();
-                // Backward compatibility for old categoryId string
                 if (docData.categoryId && !docData.categoryIds) {
                     docData.categoryIds = [docData.categoryId];
                 } else if (!docData.categoryIds) {
@@ -68,7 +125,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 delete docData.categoryId;
                 return { id: doc.id, ...docData } as ProductSimulation;
             });
-            setSimulations(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            setRawSimulations(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
             setLoading(false);
         }, (error) => {
             console.error("Error fetching simulations:", error);
@@ -295,11 +352,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const historyDetails: SimulationChangeHistory['details'] = [];
             
             if (updates.hasOwnProperty('lineId')) {
-                historyDetails.push({ field: 'linha', from: currentSim.lineId || null, to: updates.lineId! });
+                historyDetails.push({ field: 'lineId', from: currentSim.lineId || null, to: updates.lineId! });
             }
             if (updates.hasOwnProperty('categoryIds')) {
-                // For simplicity, we'll log the whole array. More complex logic could diff the arrays.
-                 historyDetails.push({ field: 'categoria', from: (currentSim.categoryIds || []).join(','), to: updates.categoryIds!.join(',') });
+                historyDetails.push({ field: 'categoria', from: (currentSim.categoryIds || []).join(','), to: updates.categoryIds!.join(',') });
             }
             
             const historyEntry: SimulationChangeHistory = {
