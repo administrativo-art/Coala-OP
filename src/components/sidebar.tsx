@@ -248,7 +248,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </div>
         )}
 
-       <nav ref={navRef} className={cn("flex-1 overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
+       <nav ref={navRef} className={cn("flex-1 flex flex-col overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
         <ul>
             {navGroups.main.items.map(item => (
                 <li key={item.href}>{renderNavItem(item)}</li>
@@ -287,6 +287,12 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 })}
             </Accordion>
         )}
+        <div className="mt-auto p-2">
+            <Button variant="ghost" className="w-full justify-center" size="icon" onClick={() => setIsCollapsed(!isCollapsed)}>
+                {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
+                <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
+            </Button>
+        </div>
       </nav>
       
       <div className="p-2 border-t">
@@ -295,10 +301,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
              <ThemeToggle />
              <span className="text-xs text-muted-foreground">v1.0.0</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsCollapsed(!isCollapsed)}>
-            {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-            <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
-          </Button>
         </div>
         {isCollapsed && <ThemeToggle />}
       </div>
