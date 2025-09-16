@@ -176,27 +176,26 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 : 5));
+            doc.text(sim.name, textX, yPos + (hasImage ? 5 : 5));
 
-            yPos += (hasImage ? imageSize : 10) + 5;
-            
             const summaryBody = [[
-              { content: `SKU\n${sim.ppo?.sku || 'N/A'}`, styles: { halign: 'center' } },
-              { content: `Preço Venda\n${formatCurrency(sim.salePrice)}`, styles: { halign: 'center' } },
-              { content: `Custo Bruto\n${formatCurrency(sim.grossCost)}`, styles: { halign: 'center' } },
-              { content: `Lucro\n${sim.profitPercentage.toFixed(2)}%`, styles: { halign: 'center' } },
-              { content: `Markup\n${sim.markup.toFixed(2)}x`, styles: { halign: 'center' } },
-              { content: `Meta\n${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`, styles: { halign: 'center' } },
+              { content: `SKU\n${sim.ppo?.sku || 'N/A'}` },
+              { content: `Preço Venda\n${formatCurrency(sim.salePrice)}` },
+              { content: `Custo Bruto\n${formatCurrency(sim.grossCost)}` },
+              { content: `Lucro\n${sim.profitPercentage.toFixed(2)}%` },
+              { content: `Markup\n${sim.markup.toFixed(2)}x` },
+              { content: `Meta\n${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}` },
             ]];
 
             autoTable(doc, {
-                startY: yPos,
+                startY: yPos + (hasImage ? imageSize - 20 : 0) + 10,
                 body: summaryBody,
                 theme: 'plain',
-                styles: { fontSize: 9, cellPadding: 2, lineWidth: 0.1, lineColor: '#ddd' },
-                headStyles: { fillColor: false, textColor: 'black', fontSize: 8 },
+                styles: { halign: 'center', cellPadding: 2, fontSize: 8 },
+                columnStyles: { 0: { fontStyle: 'bold' } },
             });
             yPos = (doc as any).lastAutoTable.finalY + 5;
+
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
@@ -242,7 +241,6 @@ export function PricingSimulator() {
                 if (ppoTableBody.length > 0) {
                      autoTable(doc, {
                         startY: yPos,
-                        head: [['Detalhe', 'Informação']],
                         body: ppoTableBody,
                         theme: 'striped',
                         headStyles: { fillColor: '#6B7280' },
@@ -266,10 +264,28 @@ export function PricingSimulator() {
                 doc.addPage();
                 yPos = 15;
             }
-
+            
             doc.setFontSize(16);
-            doc.text(`Ficha Técnica: ${sim.name}`, 14, yPos);
+            doc.text('Ficha técnica simplificada', 14, yPos);
             yPos += 10;
+
+            const imageSize = 30;
+            const hasImage = sim.ppo?.referenceImageUrl;
+            let textX = 14;
+
+            if (hasImage) {
+                try {
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
+                    textX = 14 + imageSize + 5;
+                } catch (e) {
+                    console.error("Failed to add image to PDF", e);
+                }
+            }
+            
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            yPos += (hasImage ? imageSize : 0) + 10;
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
