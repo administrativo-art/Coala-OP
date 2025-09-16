@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -27,6 +26,7 @@ import { Badge } from "./ui/badge";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
+import { PpoModal } from "./ppo-modal";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -51,6 +51,7 @@ export function PricingSimulator() {
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
@@ -66,6 +67,11 @@ export function PricingSimulator() {
     const handleEdit = (simulation: ProductSimulation) => {
         setSimulationToEdit(simulation);
         setIsAddEditModalOpen(true);
+    };
+
+    const handlePpoClick = (simulation: ProductSimulation) => {
+        setSimulationToEdit(simulation);
+        setIsPpoModalOpen(true);
     };
 
     const handleDelete = async (simulationId: string) => {
@@ -456,7 +462,7 @@ export function PricingSimulator() {
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
-                                         <Button variant="ghost" size="icon" className="h-8 w-8">
+                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePpoClick(sim)}>
                                             <span className="font-bold text-xs">PPO</span>
                                         </Button>
                                       </div>
@@ -614,6 +620,12 @@ export function PricingSimulator() {
                 onOpenChange={setIsAddEditModalOpen}
                 simulationToEdit={simulationToEdit}
                 onDelete={handleDelete}
+            />
+            
+             <PpoModal
+                open={isPpoModalOpen}
+                onOpenChange={setIsPpoModalOpen}
+                simulation={simulationToEdit}
             />
             
             <CategoryManagementModal
