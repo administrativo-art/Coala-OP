@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -37,7 +38,7 @@ interface BulkUpdatePayload {
     line: { action: 'keep' | 'set' | 'clear', id?: string };
     category: { action: 'keep' | 'set' | 'clear', id?: string };
     group: { action: 'keep' | 'set' | 'clear', id?: string };
-    price: { action: 'keep' | 'increase' | 'decrease', type: 'percentage' | 'fixed', value: number };
+    price: { action: 'keep' | 'change', type: 'percentage' | 'fixed', value: number };
 }
 
 export interface ProductSimulationContextType {
@@ -277,15 +278,14 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             }
             
             // Handle Price
-            if (updates.price.action !== 'keep' && updates.price.value > 0) {
+            if (updates.price.action === 'change' && updates.price.value !== 0) {
                  const oldPrice = sim.salePrice;
                  let newSalePrice = oldPrice;
-                 const multiplier = updates.price.action === 'increase' ? 1 : -1;
 
                  if (updates.price.type === 'percentage') {
-                     newSalePrice = oldPrice * (1 + (updates.price.value / 100) * multiplier);
+                     newSalePrice = oldPrice * (1 + (updates.price.value / 100));
                  } else { // fixed
-                     newSalePrice = oldPrice + (updates.price.value * multiplier);
+                     newSalePrice = oldPrice + updates.price.value;
                  }
                  
                  newSalePrice = Math.max(0, newSalePrice); 
@@ -345,3 +345,5 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
+
+    
