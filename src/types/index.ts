@@ -203,6 +203,19 @@ export type SimulationPriceHistory = {
   }
 };
 
+export type SimulationChangeHistory = {
+  timestamp: string; // ISO String
+  userId: string;
+  username: string;
+  action: 'batch_edit';
+  details: {
+    field: 'linha' | 'categoria';
+    from: string | null;
+    to: string | null;
+  }[];
+};
+
+
 export type ProductSimulationItem = {
   id: string;
   simulationId: string;
@@ -233,6 +246,8 @@ export type ProductSimulation = {
   id: string;
   name: string;
   categoryIds: string[];
+  linha?: string | null; // Canonical field for line
+  categoria?: string | null; // Canonical field for category
   lineId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
@@ -246,6 +261,7 @@ export type ProductSimulation = {
   markup: number;
   notes?: string;
   ppo?: Partial<PPO>;
+  historicoAlteracoes?: SimulationChangeHistory[];
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
   updatedBy?: {

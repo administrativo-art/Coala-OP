@@ -40,12 +40,13 @@ type SortKey = keyof ProductSimulation | 'name';
 type SortDirection = 'asc' | 'desc';
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdatePrices, priceHistory } = useProductSimulation();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
     const { permissions } = useAuth();
-
+    
+    const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
@@ -180,7 +181,7 @@ export function PricingSimulator() {
             yPos += (hasImage ? imageSize : 0) + 10;
 
             autoTable(doc, {
-                startY: yPos + 10,
+                startY: yPos,
                 body: [[
                   { content: `SKU\n${sim.ppo?.sku || 'N/A'}` },
                   { content: `Preço Venda\n${formatCurrency(sim.salePrice)}` },
@@ -276,7 +277,7 @@ export function PricingSimulator() {
 
             if (hasImage) {
                 try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imagePos);
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
                     textX = 14 + imageSize + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
@@ -381,6 +382,21 @@ export function PricingSimulator() {
         setLineFilters(new Set());
         setSearchTerm('');
     };
+    
+    const handleSelectionChange = (id: string, isSelected: boolean) => {
+        setSelectedSimulations(prev => {
+            const newSet = new Set(prev);
+            if (isSelected) newSet.add(id);
+            else newSet.delete(id);
+            return newSet;
+        });
+    };
+
+    const handleSelectAllChange = (isSelected: boolean) => {
+        setSelectedSimulations(isSelected ? new Set(simulationsByCategory.map(p => p.id)) : new Set());
+    };
+    
+    const allFilteredSelected = simulationsByCategory.length > 0 && selectedSimulations.size === simulationsByCategory.length;
 
     const renderSortableHeader = (label: string, key: SortKey) => (
         <Button variant="ghost" onClick={() => handleSort(key)} className="justify-end w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
@@ -421,7 +437,8 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                 <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                    <Checkbox checked={allFilteredSelected} onCheckedChange={handleSelectAllChange} />
                     <Button variant="ghost" onClick={() => handleSort('name')} className="justify-start w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
                         Mercadoria
                         {sortConfig.key === 'name' && <ArrowUpDown className="ml-2 h-4 w-4" />}
@@ -453,7 +470,8 @@ export function PricingSimulator() {
                                         <div className="flex-1 bg-border"></div>
                                     )}
                                 </div>
-                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-8 pr-4 py-2 group">
+                                <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-4 pr-4 py-2 group">
+                                     <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
                                      <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
@@ -667,6 +685,9 @@ export function PricingSimulator() {
             <BatchEditSimulationModal
                 open={isBatchEditModalOpen}
                 onOpenChange={setIsBatchEditModalOpen}
+                simulations={simulations}
+                filteredSimulations={simulationsByCategory}
+                selectedSimulationIds={selectedSimulations}
             />
         </div>
     );

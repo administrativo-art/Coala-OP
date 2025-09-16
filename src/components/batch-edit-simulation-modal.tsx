@@ -6,6 +6,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { useProductSimulation } from '@/hooks/use-product-simulation';
+import { useToast } from '@/hooks/use-toast';
+import { type ProductSimulation } from '@/types';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -13,6 +16,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from './ui/separator';
+import { Loader2 } from 'lucide-react';
+
 
 const batchEditSchema = z.object({
   target: z.enum(['selected', 'filtered']),
@@ -42,15 +47,21 @@ type BatchEditFormValues = z.infer<typeof batchEditSchema>;
 interface BatchEditSimulationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  simulations: ProductSimulation[];
+  filteredSimulations: ProductSimulation[];
+  selectedSimulationIds: Set<string>;
 }
 
-export function BatchEditSimulationModal({ open, onOpenChange }: BatchEditSimulationModalProps) {
+export function BatchEditSimulationModal({ open, onOpenChange, simulations, filteredSimulations, selectedSimulationIds }: BatchEditSimulationModalProps) {
     const { categories } = useProductSimulationCategories();
+    const { bulkUpdateSimulations } = useProductSimulation();
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const form = useForm<BatchEditFormValues>({
         resolver: zodResolver(batchEditSchema),
         defaultValues: {
-            target: 'selected',
+            target: selectedSimulationIds.size > 0 ? 'selected' : 'filtered',
             lineAction: 'keep',
             categoryAction: 'keep',
         }
@@ -62,9 +73,43 @@ export function BatchEditSimulationModal({ open, onOpenChange }: BatchEditSimula
     const lineAction = form.watch('lineAction');
     const categoryAction = form.watch('categoryAction');
 
-    const onSubmit = (values: BatchEditFormValues) => {
-        console.log(values); // Placeholder
-        onOpenChange(false);
+    const onSubmit = async (values: BatchEditFormValues) => {
+        setIsSubmitting(true);
+        
+        const targetSimulations = values.target === 'selected'
+            ? simulations.filter(sim => selectedSimulationIds.has(sim.id))
+            : filteredSimulations;
+
+        if (targetSimulations.length === 0) {
+            toast({ variant: 'destructive', title: 'Nenhum item para atualizar.' });
+            setIsSubmitting(false);
+            return;
+        }
+
+        const simulationIds = targetSimulations.map(sim => sim.id);
+        const updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>> = {};
+        
+        if (values.lineAction === 'set' && values.lineId) {
+            updates.linha = values.lineId;
+        } else if (values.lineAction === 'clear') {
+            updates.linha = null;
+        }
+        
+        if (values.categoryAction === 'set' && values.categoryId) {
+            updates.categoria = values.categoryId;
+        } else if (values.categoryAction === 'clear') {
+            updates.categoria = null;
+        }
+        
+        try {
+            await bulkUpdateSimulations(simulationIds, updates);
+            toast({ title: "Sucesso!", description: `${simulationIds.length} mercadorias foram atualizadas.` });
+            onOpenChange(false);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro ao atualizar', description: 'Não foi possível completar a operação.' });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -91,12 +136,12 @@ export function BatchEditSimulationModal({ open, onOpenChange }: BatchEditSimula
                                             className="flex gap-4"
                                         >
                                             <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="selected" /></FormControl>
-                                                <FormLabel className="font-normal">Itens selecionados (0)</FormLabel>
+                                                <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
+                                                <FormLabel className="font-normal">Itens selecionados ({selectedSimulationIds.size})</FormLabel>
                                             </FormItem>
                                             <FormItem className="flex items-center space-x-2 space-y-0">
                                                 <FormControl><RadioGroupItem value="filtered" /></FormControl>
-                                                <FormLabel className="font-normal">Resultado filtrado (0)</FormLabel>
+                                                <FormLabel className="font-normal">Resultado filtrado ({filteredSimulations.length})</FormLabel>
                                             </FormItem>
                                         </RadioGroup>
                                     </FormControl>
@@ -166,7 +211,10 @@ export function BatchEditSimulationModal({ open, onOpenChange }: BatchEditSimula
 
                         <DialogFooter className="pt-4">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                            <Button type="submit">Aplicar alterações</Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Aplicar alterações
+                            </Button>
                         </DialogFooter>
                     </form>
                 </Form>
@@ -174,4 +222,3 @@ export function BatchEditSimulationModal({ open, onOpenChange }: BatchEditSimula
         </Dialog>
     );
 }
-

@@ -2,9 +2,9 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory } from '@/types';
+import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory, type SimulationChangeHistory } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 
@@ -29,7 +29,7 @@ interface SimulationData {
     profitValue: number;
     profitPercentage: number;
     markup: number;
-    ppo?: ProductSimulation['ppo']; // Added PPO
+    ppo?: ProductSimulation['ppo'];
 }
 
 export interface ProductSimulationContextType {
@@ -41,6 +41,7 @@ export interface ProductSimulationContextType {
   updateSimulation: (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
+  bulkUpdateSimulations: (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>>) => Promise<void>;
 }
 
 export const ProductSimulationContext = createContext<ProductSimulationContextType | undefined>(undefined);
@@ -279,6 +280,50 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }
     }, [user]);
 
+    const bulkUpdateSimulations = useCallback(async (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>>) => {
+        if (!user) throw new Error("Usuário não autenticado.");
+        if (simulationIds.length === 0) return;
+
+        const batch = writeBatch(db);
+        const now = new Date().toISOString();
+        const historyDetails: SimulationChangeHistory['details'] = [];
+
+        for (const simId of simulationIds) {
+            const simRef = doc(db, "productSimulations", simId);
+            const currentSim = simulations.find(s => s.id === simId);
+            if (!currentSim) continue;
+            
+            if (updates.hasOwnProperty('linha')) {
+                historyDetails.push({ field: 'linha', from: currentSim.linha || null, to: updates.linha! });
+            }
+            if (updates.hasOwnProperty('categoria')) {
+                historyDetails.push({ field: 'categoria', from: currentSim.categoria || null, to: updates.categoria! });
+            }
+            
+            const historyEntry: SimulationChangeHistory = {
+                timestamp: now,
+                userId: user.id,
+                username: user.username,
+                action: 'batch_edit',
+                details: historyDetails,
+            };
+            
+            batch.update(simRef, { 
+                ...updates,
+                updatedAt: now,
+                updatedBy: { userId: user.id, username: user.username },
+                historicoAlteracoes: arrayUnion(historyEntry)
+            });
+        }
+
+        try {
+            await batch.commit();
+        } catch (error) {
+            console.error("Error performing bulk simulation update:", error);
+            throw error;
+        }
+    }, [user, simulations]);
+
 
     const value = useMemo(() => {
         return {
@@ -290,8 +335,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             updateSimulation,
             deleteSimulation,
             bulkUpdatePrices,
+            bulkUpdateSimulations,
         }
-    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, baseProducts]);
+    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, bulkUpdateSimulations, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
