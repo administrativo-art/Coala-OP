@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown, Check } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown, Check, TrendingUp, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -123,6 +123,17 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
+  
+  const [simulatedPrice, setSimulatedPrice] = useState<number | null>(null);
+  const [simulatedProfitGoal, setSimulatedProfitGoal] = useState<number | null>(null);
+  
+  useEffect(() => {
+    if(open) {
+      // Reset simulators when modal opens
+      setSimulatedPrice(null);
+      setSimulatedProfitGoal(null);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -148,6 +159,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 profitGoal: simulationToEdit.profitGoal,
                 notes: simulationToEdit.notes,
             });
+            setSimulatedPrice(simulationToEdit.salePrice);
+            setSimulatedProfitGoal(simulationToEdit.profitGoal);
         } else {
             form.reset({ name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
         }
@@ -185,10 +198,10 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
   const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
   
-   const { cmv, partialCosts } = useMemo(() => {
+   const { cmv, partialCosts, itemImpacts, top3Impacts } = useMemo(() => {
     let totalCmv = 0;
     const partials: Record<number, number> = {};
-    const itemDetails: { name: string; cost: number }[] = [];
+    const impacts: { index: number; name: string; cost: number; percentage: number }[] = [];
 
     watchedItems.forEach((item, index) => {
         const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
@@ -215,7 +228,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
             
             partials[index] = partialCost;
             totalCmv += partialCost;
-            itemDetails.push({ name: baseProduct.name, cost: partialCost });
+            impacts.push({ index, name: baseProduct.name, cost: partialCost, percentage: 0 });
 
         } catch (e) {
             console.error("Error calculating CMV for item:", item, e);
@@ -223,7 +236,20 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         }
     });
 
-    return { cmv: totalCmv, partialCosts: partials };
+    if (totalCmv > 0) {
+        impacts.forEach(impact => {
+            impact.percentage = (impact.cost / totalCmv) * 100;
+        });
+    }
+    
+    const sortedImpacts = [...impacts].sort((a,b) => b.cost - a.cost);
+
+    return { 
+        cmv: totalCmv,
+        partialCosts: partials,
+        itemImpacts: new Map(impacts.map(i => [i.index, i.percentage])),
+        top3Impacts: sortedImpacts.slice(0, 3)
+    };
   }, [watchedItems, baseProducts]);
 
 
@@ -297,6 +323,57 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       }
       setIsDeleteConfirmOpen(false);
   }
+
+  // --- What-if Simulator Logic ---
+
+  const handleSimulatedPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      if (value === '') {
+          setSimulatedPrice(null);
+          setSimulatedProfitGoal(null);
+          return;
+      }
+      const price = parseFloat(value);
+      setSimulatedPrice(price);
+      if (!isNaN(price) && price > 0 && grossCost > 0) {
+          const profit = price - grossCost;
+          const newMargin = (profit / price) * 100;
+          setSimulatedProfitGoal(newMargin);
+      } else {
+          setSimulatedProfitGoal(null);
+      }
+  };
+
+  const handleSimulatedGoalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      if (value === '') {
+          setSimulatedPrice(null);
+          setSimulatedProfitGoal(null);
+          return;
+      }
+      const goal = parseFloat(value);
+      setSimulatedProfitGoal(goal);
+      if (!isNaN(goal) && goal < 100 && grossCost > 0) {
+          const newPrice = grossCost / (1 - (goal / 100));
+          setSimulatedPrice(newPrice);
+      } else {
+          setSimulatedPrice(null);
+      }
+  };
+
+  const applySimulation = () => {
+    if (simulatedPrice !== null) {
+      form.setValue('salePrice', simulatedPrice, { shouldValidate: true });
+    }
+    if (simulatedProfitGoal !== null) {
+        form.setValue('profitGoal', simulatedProfitGoal, { shouldValidate: true });
+    }
+    toast({ title: "Valores simulados aplicados!", description: "Não se esqueça de salvar a análise." });
+  };
+  
+  const effectiveSimulatedPrice = simulatedPrice ?? watchedSalePrice ?? 0;
+  const simulatedProfitValue = effectiveSimulatedPrice - grossCost;
+  const simulatedProfitPercentage = effectiveSimulatedPrice > 0 ? (simulatedProfitValue / effectiveSimulatedPrice) * 100 : 0;
 
   return (
     <>
@@ -407,11 +484,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                       <SectionTitle>Composição (CMV)</SectionTitle>
                       
                       <div className="rounded-md border p-2 space-y-2">
-                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)_minmax(0,8rem)_minmax(0,6rem)_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                            <span className="col-span-1">Insumo base</span>
+                        <div className="grid grid-cols-[1fr_8rem_8rem_6rem_5rem_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
+                            <span>Insumo base</span>
                             <span className="text-center">Qtd.</span>
                             <span className="text-right">Custo/unid.</span>
                             <span className="text-right">Custo total</span>
+                            <span className="text-center">Impacto</span>
                             <span className="w-8"></span>
                         </div>
                         {fields.map((item, index) => {
@@ -421,6 +499,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             
                             const effectiveCost = baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
                             const hasDefaultCost = effectiveCost > 0;
+                            const impactPercentage = itemImpacts.get(index) ?? 0;
 
                             return (
                                 <div key={item.id} className="grid grid-cols-[1fr_auto] items-start gap-x-2 rounded bg-muted/50 p-2">
@@ -447,7 +526,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                         />
                                     </div>
                                     </div>
-                                    <div className="grid grid-cols-[minmax(0,8rem)_minmax(0,8rem)_minmax(0,6rem)_auto] items-start gap-x-2">
+                                    <div className="grid grid-cols-[8rem_8rem_6rem_5rem_auto] items-start gap-x-2">
                                         <div className="flex items-start gap-1">
                                             <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                             <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
@@ -500,6 +579,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                         <div className="font-semibold text-primary text-sm w-full text-right self-center">
                                             {formatCurrency(partialCosts[index])}
                                         </div>
+                                        <div className="font-medium text-xs w-full text-center self-center text-muted-foreground">
+                                            {impactPercentage.toFixed(1)}%
+                                        </div>
                                         <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
                                         <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -519,6 +601,20 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                             ))}
                           </SelectContent>
                         </Select>
+
+                        {top3Impacts.length > 0 && (
+                            <div className="p-3 border rounded-lg space-y-1">
+                                <h4 className="font-semibold text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary"/>Top 3 Insumos por Impacto</h4>
+                                <ul className="text-xs text-muted-foreground space-y-0.5">
+                                    {top3Impacts.map(item => (
+                                        <li key={item.index} className="flex justify-between">
+                                            <span>{item.name}</span>
+                                            <span className="font-medium">{item.percentage.toFixed(1)}%</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </div>
 
                     {/* Analysis Section */}
@@ -576,6 +672,33 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                   <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
                               </div>
                           </div>
+                       </div>
+                       
+                       {/* What-if Simulator */}
+                       <div className="rounded-lg border bg-blue-500/5 p-4 space-y-4">
+                           <h4 className="font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300"><Wand2/> Simulador "What-If"</h4>
+                           <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                   <Label htmlFor="sim-price">Simular Preço (R$)</Label>
+                                   <Input id="sim-price" type="number" placeholder="Ex: 19.90" value={simulatedPrice ?? ''} onChange={handleSimulatedPriceChange} />
+                               </div>
+                                <div className="space-y-1">
+                                   <Label htmlFor="sim-goal">Simular Meta (%)</Label>
+                                   <Input id="sim-goal" type="number" placeholder="Ex: 65" value={simulatedProfitGoal ?? ''} onChange={handleSimulatedGoalChange} />
+                               </div>
+                           </div>
+                           <div className="p-3 bg-background/50 rounded-md space-y-2">
+                               <p className="text-sm font-semibold">Resultados da Simulação:</p>
+                               <div className="flex justify-between items-center">
+                                   <span className="text-sm">Novo Lucro (R$):</span>
+                                   <span className="font-bold">{formatCurrency(simulatedProfitValue)}</span>
+                               </div>
+                               <div className="flex justify-between items-center">
+                                   <span className="text-sm">Nova Margem (%):</span>
+                                   <span className="font-bold">{simulatedProfitPercentage.toFixed(2)}%</span>
+                               </div>
+                           </div>
+                           <Button type="button" className="w-full" onClick={applySimulation} disabled={simulatedPrice === null}>Aplicar valores simulados</Button>
                        </div>
                        
                        <SectionTitle>Observações</SectionTitle>
