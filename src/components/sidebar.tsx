@@ -289,15 +289,18 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         )}
       </nav>
       
-      <div className="mt-auto p-4 border-t flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <ThemeToggle />
-            {!isCollapsed && <span className="text-xs text-muted-foreground">v1.0.0</span>}
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsCollapsed(!isCollapsed)}>
-                {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-                <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
-            </Button>
+      <div className="p-2 border-t">
+        <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+          <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>
+             <ThemeToggle />
+             <span className="text-xs text-muted-foreground">v1.0.0</span>
           </div>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsCollapsed(!isCollapsed)}>
+            {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
+            <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
+          </Button>
+        </div>
+        {isCollapsed && <ThemeToggle />}
       </div>
     </div>
   )
