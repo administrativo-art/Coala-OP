@@ -151,7 +151,7 @@ export function PricingSimulator() {
             yPos += 8;
         };
     
-        addTitle("Relatório de Análise de Custo");
+        addTitle("Ficha Técnica Completa");
         doc.setFontSize(10);
         doc.text(`Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`, 14, yPos);
         yPos += 10;
@@ -159,32 +159,37 @@ export function PricingSimulator() {
         simulationsByCategory.forEach(sim => {
             if (yPos > 220) { doc.addPage(); yPos = 15; }
     
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text(sim.name, 14, yPos);
-            yPos += 6;
-    
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-    
-            const summaryInfo = `SKU: ${sim.ppo?.sku || 'N/A'} | Preço Venda: ${formatCurrency(sim.salePrice)} | Custo Bruto: ${formatCurrency(sim.grossCost)} | Lucro: ${sim.profitPercentage.toFixed(2)}% | Markup: ${sim.markup.toFixed(2)}x | Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`;
-            const infoLines = doc.splitTextToSize(summaryInfo, 130);
-            
             const imageSize = 30;
             const hasImage = sim.ppo?.referenceImageUrl;
-    
+            let initialYForText = yPos;
+            
             if (hasImage) {
                 try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 150, yPos - 4, imageSize, imageSize);
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
+                    initialYForText = yPos;
+                    yPos += imageSize + 5; 
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
             }
             
-            doc.text(infoLines, 14, yPos);
-            yPos += (infoLines.length * 5) + (hasImage ? imageSize - (infoLines.length * 5) : 3);
-            
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text(sim.name, hasImage ? 14 + imageSize + 5 : 14, initialYForText + 5);
+
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
     
+            const summaryInfo = `SKU: ${sim.ppo?.sku || 'N/A'} | Preço Venda: ${formatCurrency(sim.salePrice)} | Custo Bruto: ${formatCurrency(sim.grossCost)} | Lucro: ${sim.profitPercentage.toFixed(2)}% | Markup: ${sim.markup.toFixed(2)}x | Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`;
+            const infoLines = doc.splitTextToSize(summaryInfo, hasImage ? 198 - (14 + imageSize + 5) : 182);
+            doc.text(infoLines, hasImage ? 14 + imageSize + 5 : 14, initialYForText + 12);
+            
+            if (!hasImage) {
+                yPos += (infoLines.length * 5) + 3;
+            } else {
+                 yPos = Math.max(yPos, initialYForText + 12 + (infoLines.length * 5));
+            }
+
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -213,49 +218,25 @@ export function PricingSimulator() {
     
             if (sim.ppo) {
                 if (yPos > 240) { doc.addPage(); yPos = 15; }
-                doc.setFontSize(12);
-                doc.setFont(undefined, 'bold');
-                doc.text('Ficha da Mercadoria', 14, yPos);
-                yPos += 7;
-                doc.setFontSize(9);
-                doc.setFont(undefined, 'normal');
-    
-                const ppoFields = [
-                    { label: 'Tempo de Preparo', value: sim.ppo.preparationTime ? `${sim.ppo.preparationTime} seg` : 'N/A' },
-                    { label: 'Peso da Porção', value: sim.ppo.portionWeight ? `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)` : 'N/A' },
-                ];
-    
-                ppoFields.forEach(field => {
-                    doc.setFont(undefined, 'bold');
-                    doc.text(`${field.label}:`, 16, yPos);
-                    doc.setFont(undefined, 'normal');
-                    doc.text(field.value, 55, yPos);
-                    yPos += 5;
-                });
-    
-                if (sim.ppo.qualityStandard) {
-                    doc.setFont(undefined, 'bold');
-                    doc.text('Padrão de Qualidade:', 16, yPos);
-                    yPos += 5;
-                    doc.setFont(undefined, 'normal');
-                    const qualityLines = doc.splitTextToSize(sim.ppo.qualityStandard, 170);
-                    doc.text(qualityLines, 20, yPos);
-                    yPos += qualityLines.length * 5 + 3;
-                }
-    
-                if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-                    doc.setFont(undefined, 'bold');
-                    doc.text('Modo de Montagem:', 16, yPos);
-                    yPos += 5;
-                    doc.setFont(undefined, 'normal');
-                    sim.ppo.assemblyInstructions.forEach((instr, i) => {
-                        const stepText = `${i + 1}. ${instr.text}`;
-                        const stepLines = doc.splitTextToSize(stepText, 165);
-                        doc.text(stepLines, 20, yPos);
-                        yPos += stepLines.length * 5;
+                
+                const ppoTableBody: any[][] = [];
+                 if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
+                 if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
+                 if(sim.ppo.qualityStandard) ppoTableBody.push(['Padrão de Qualidade', sim.ppo.qualityStandard]);
+                 if(sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                     ppoTableBody.push(['Modo de Montagem', sim.ppo.assemblyInstructions.map((instr, i) => `${i + 1}. ${instr.text}`).join('\n')]);
+                 }
+                
+                if (ppoTableBody.length > 0) {
+                     autoTable(doc, {
+                        startY: yPos,
+                        body: ppoTableBody,
+                        theme: 'plain',
+                        styles: { cellPadding: 2 },
+                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
                     });
+                     yPos = (doc as any).lastAutoTable.finalY + 10;
                 }
-                yPos += 5; // Extra space
             }
         });
     
