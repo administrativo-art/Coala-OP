@@ -30,6 +30,7 @@ interface SimulationData {
     profitValue: number;
     profitPercentage: number;
     markup: number;
+    ppo?: ProductSimulation['ppo']; // Added PPO
 }
 
 export interface ProductSimulationContextType {
@@ -109,6 +110,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             status: 'draft',
             createdAt: now,
             updatedAt: now,
+            updatedBy: { userId: user.id, username: user.username },
+            ppo: data.ppo || {},
         };
 
         try {
@@ -157,7 +160,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const { createdAt, userId, status, ...restOfData } = simulationData;
             const updatePayload = {
               ...restOfData,
-              updatedAt: now
+              updatedAt: now,
+              updatedBy: { userId: user.id, username: user.username },
+              ppo: data.ppo || existingSimulation.ppo || {},
             };
             batch.update(simulationRef, updatePayload as any);
             
@@ -252,6 +257,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     profitPercentage: newProfitPercentage,
                     markup: newMarkup,
                     updatedAt: now,
+                    updatedBy: { userId: user.id, username: user.username },
                 });
                 
                 const historyRef = doc(collection(db, "simulationPriceHistory"));

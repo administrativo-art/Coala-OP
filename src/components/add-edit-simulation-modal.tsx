@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { type ProductSimulation, type SimulationCategory, type PriceHistoryEntry } from '@/types';
+import { type ProductSimulation, type SimulationCategory, type PriceHistoryEntry, type PPO } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 
@@ -44,6 +44,17 @@ const simulationItemSchema = z.object({
   overrideUnit: z.string().optional(),
 });
 
+const ppoSchema = z.object({
+    sku: z.string().optional(),
+    assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
+    qualityStandard: z.string().optional(),
+    allergens: z.string().optional(),
+    preparationTime: z.coerce.number().optional(),
+    portionWeight: z.coerce.number().optional(),
+    portionTolerance: z.coerce.number().optional(),
+    referenceImageUrl: z.string().optional(),
+}).optional();
+
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   categoryIds: z.array(z.string()),
@@ -53,6 +64,7 @@ const simulationSchema = z.object({
   salePrice: z.coerce.number().min(0).optional(),
   profitGoal: z.coerce.number().nullable().optional(),
   notes: z.string().optional(),
+  ppo: ppoSchema,
 }).superRefine((data, ctx) => {
     data.items.forEach((item, index) => {
         if (!item.useDefault) {
@@ -116,7 +128,26 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
   const form = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationSchema),
-    defaultValues: { name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: 0, notes: '' },
+    defaultValues: { 
+        name: '', 
+        categoryIds: [], 
+        lineId: null, 
+        items: [], 
+        operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
+        salePrice: 0, 
+        profitGoal: 0, 
+        notes: '',
+        ppo: {
+            sku: '',
+            assemblyInstructions: [],
+            qualityStandard: '',
+            allergens: '',
+            preparationTime: 0,
+            portionWeight: 0,
+            portionTolerance: 0,
+            referenceImageUrl: '',
+        }
+    },
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
@@ -158,11 +189,31 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 salePrice: simulationToEdit.salePrice,
                 profitGoal: simulationToEdit.profitGoal,
                 notes: simulationToEdit.notes,
+                ppo: simulationToEdit.ppo || {},
             });
             setSimulatedPrice(simulationToEdit.salePrice);
             setSimulatedProfitGoal(simulationToEdit.profitGoal);
         } else {
-            form.reset({ name: '', categoryIds: [], lineId: null, items: [], operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, salePrice: 0, profitGoal: null, notes: '' });
+            form.reset({ 
+                name: '', 
+                categoryIds: [], 
+                lineId: null, 
+                items: [], 
+                operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
+                salePrice: 0, 
+                profitGoal: null, 
+                notes: '',
+                ppo: {
+                    sku: '',
+                    assemblyInstructions: [],
+                    qualityStandard: '',
+                    allergens: '',
+                    preparationTime: 0,
+                    portionWeight: 0,
+                    portionTolerance: 0,
+                    referenceImageUrl: '',
+                }
+            });
         }
     }
   }, [open, simulationToEdit, simulationItems, form, pricingParameters]);
@@ -192,6 +243,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         salePrice: sourceSimulation.salePrice,
         profitGoal: sourceSimulation.profitGoal,
         notes: sourceSimulation.notes,
+        ppo: sourceSimulation.ppo,
     });
   };
   

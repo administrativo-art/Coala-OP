@@ -213,6 +213,18 @@ export type ProductSimulationItem = {
   overrideUnit?: string;
 };
 
+export type PPO = {
+  sku: string;
+  assemblyInstructions: { id: string; text: string }[];
+  qualityStandard: string;
+  allergens: string;
+  preparationTime: number; // in seconds
+  portionWeight: number; // in grams or mL
+  portionTolerance: number;
+  referenceImageUrl?: string;
+};
+
+
 export type ProductSimulation = {
   id: string;
   name: string;
@@ -229,8 +241,13 @@ export type ProductSimulation = {
   profitPercentage: number;
   markup: number;
   notes?: string;
+  ppo?: Partial<PPO>;
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
+  updatedBy?: {
+    userId: string;
+    username: string;
+  };
 };
 
 // Manager's Diary Types
