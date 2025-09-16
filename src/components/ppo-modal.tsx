@@ -25,7 +25,7 @@ const ppoSchema = z.object({
   sku: z.string().min(1, 'SKU é obrigatório.'),
   assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string().min(1, "A instrução não pode ser vazia.") })),
   qualityStandard: z.string().optional(),
-  allergens: z.array(z.object({ id: z.string(), text: z.string().min(1, "O alergênico não pode ser vazio.") })),
+  allergens: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
   preparationTime: z.coerce.number().optional(),
   portionWeight: z.coerce.number().optional(),
   portionTolerance: z.coerce.number().optional(),
@@ -93,9 +93,11 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     if (!simulation) return;
 
     setIsLoading(true);
+    const cleanedAllergens = values.allergens?.filter(a => a.text.trim() !== '') || [];
+    
     await updateSimulation({
       ...simulation,
-      ppo: values,
+      ppo: {...values, allergens: cleanedAllergens },
     });
     setIsLoading(false);
     toast({ title: 'Ficha da Mercadoria salva com sucesso!' });
@@ -124,30 +126,32 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Ficha da Mercadoria</DialogTitle>
-          <DialogDescription className="flex items-center gap-2">
-            <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                    <Info className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="space-y-1 p-2 text-sm">
-                    <div className="font-bold mb-2">Ingredientes</div>
-                    {ingredientsList.length > 0 ? (
-                      ingredientsList.map(ing => (
-                        <p key={ing.name}>{ing.name}: {ing.quantity} {ing.unit}</p>
-                      ))
-                    ) : (
-                      <p>Nenhum ingrediente na composição.</p>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </DialogDescription>
+           <div className="flex items-center gap-2">
+                <DialogDescription asChild>
+                    <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
+                </DialogDescription>
+                 <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                            <Info className="h-4 w-4" />
+                        </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                        <div className="font-bold mb-2">Ingredientes</div>
+                        <div className="space-y-1 p-2 text-sm">
+                            {ingredientsList.length > 0 ? (
+                            ingredientsList.map(ing => (
+                                <p key={ing.name}>{ing.name}: {ing.quantity} {ing.unit}</p>
+                            ))
+                            ) : (
+                            <p>Nenhum ingrediente na composição.</p>
+                            )}
+                        </div>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+           </div>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
