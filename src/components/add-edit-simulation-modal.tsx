@@ -46,7 +46,7 @@ const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
-  groupId: z.string().nullable().optional(),
+  groupIds: z.array(z.string()),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -106,7 +106,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         name: '', 
         categoryIds: [], 
         lineId: null, 
-        groupId: null,
+        groupIds: [],
         items: [], 
         operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
         salePrice: 0, 
@@ -149,7 +149,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 name: simulationToEdit.name,
                 categoryIds: simulationToEdit.categoryIds || [],
                 lineId: simulationToEdit.lineId,
-                groupId: simulationToEdit.groupId,
+                groupIds: simulationToEdit.groupIds || [],
                 items: itemsForForm,
                 operationPercentage: simulationToEdit.operationPercentage,
                 salePrice: simulationToEdit.salePrice,
@@ -163,7 +163,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 name: '', 
                 categoryIds: [], 
                 lineId: null, 
-                groupId: null,
+                groupIds: [],
                 items: [], 
                 operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
                 salePrice: 0, 
@@ -194,7 +194,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         name: `${sourceSimulation.name} (cópia)`,
         categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
-        groupId: sourceSimulation.groupId,
+        groupIds: sourceSimulation.groupIds || [],
         items: sourceItems,
         operationPercentage: sourceSimulation.operationPercentage,
         salePrice: sourceSimulation.salePrice,
@@ -314,7 +314,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
        const finalData = {
         ...values,
         lineId: values.lineId || null,
-        groupId: values.groupId || null,
+        groupIds: values.groupIds || [],
         categoryIds: values.categoryIds || [],
         totalCmv: cmv,
         grossCost,
@@ -425,7 +425,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 )}
                 
                 <div className="space-y-4">
-                  <div className="flex items-center gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                       <FormField
                           control={form.control}
                           name="categoryIds"
@@ -480,21 +480,43 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                               <FormMessage />
                           </FormItem>
                       )}/>
-                       <FormField control={form.control} name="groupId" render={({ field }) => (
-                          <FormItem className="flex-1">
-                              <FormLabel>Grupo por Insumo</FormLabel>
-                               <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={String(field.value ?? 'none')}>
-                                  <FormControl>
-                                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                      <SelectItem value="none">Nenhum</SelectItem>
-                                      {groups.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                  </SelectContent>
-                              </Select>
-                              <FormMessage />
-                          </FormItem>
-                      )}/>
+                       <FormField
+                          control={form.control}
+                          name="groupIds"
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                                <FormLabel>Grupo por Insumo</FormLabel>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="w-full justify-between font-normal">
+                                            {field.value?.length > 0 ? `${field.value.length} selecionado(s)` : "Selecione grupos"}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                        <DropdownMenuLabel>Grupos disponíveis</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {groups.map(group => (
+                                            <DropdownMenuCheckboxItem
+                                                key={group.id}
+                                                checked={field.value?.includes(group.id)}
+                                                onCheckedChange={(checked) => {
+                                                    const currentSelection = field.value || [];
+                                                    return checked
+                                                        ? field.onChange([...currentSelection, group.id])
+                                                        : field.onChange(currentSelection.filter(id => id !== group.id));
+                                                }}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {group.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                   </div>
                 </div>
 

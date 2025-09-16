@@ -209,7 +209,7 @@ export type SimulationChangeHistory = {
   username: string;
   action: 'batch_edit';
   details: {
-    field: 'lineId' | 'categoryIds' | 'groupId';
+    field: 'lineId' | 'categoryIds' | 'groupIds';
     from: string | string[] | null;
     to: string | string[] | null;
   }[];
@@ -247,7 +247,7 @@ export type ProductSimulation = {
   name: string;
   categoryIds: string[];
   lineId: string | null;
-  groupId?: string | null;
+  groupIds: string[];
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -27,7 +26,7 @@ const batchEditSchema = z.object({
   lineId: z.string().optional(),
   categoryAction: z.enum(['keep', 'set', 'clear']),
   categoryId: z.string().optional(),
-  groupAction: z.enum(['keep', 'set', 'clear']),
+  groupAction: z.enum(['keep', 'add', 'remove', 'set']),
   groupId: z.string().optional(),
   priceAction: z.enum(['keep', 'change']),
   priceAdjustmentType: z.enum(['percentage', 'fixed']),
@@ -48,7 +47,7 @@ const batchEditSchema = z.object({
     message: "Selecione uma categoria.",
     path: ["categoryId"],
 }).refine(data => {
-    return data.groupAction !== 'set' || !!data.groupId;
+    return (data.groupAction === 'keep' || !!data.groupId);
 }, {
     message: "Selecione um grupo.",
     path: ["groupId"],
@@ -234,13 +233,14 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="set">Definir como:</SelectItem>
-                                                        <SelectItem value="clear">Limpar valor</SelectItem>
+                                                        <SelectItem value="add">Adicionar grupo</SelectItem>
+                                                        <SelectItem value="remove">Remover grupo</SelectItem>
+                                                        <SelectItem value="set">Substituir por:</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </FormControl></FormItem>
                                         )}/>
-                                        {groupAction === 'set' && (
+                                        {groupAction !== 'keep' && (
                                             <FormField control={form.control} name="groupId" render={({ field }) => (
                                                 <FormItem><FormControl>
                                                     <Select onValueChange={field.onChange} value={field.value}>
@@ -278,7 +278,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     </FormControl></FormItem>
                                                 )}/>
                                                 <FormField control={form.control} name="priceValue" render={({ field }) => (
-                                                    <FormItem className="w-24"><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} placeholder="Valor" /></FormControl><FormMessage /></FormItem>
+                                                    <FormItem className="w-32"><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} placeholder="Valor" /></FormControl><FormMessage /></FormItem>
                                                 )}/>
                                             </div>
                                         )}
@@ -299,5 +299,3 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         </Dialog>
     );
 }
-
-    
