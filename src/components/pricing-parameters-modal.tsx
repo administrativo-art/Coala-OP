@@ -28,19 +28,12 @@ const profitRangeSchema = z.object({
   color: z.string().min(1, 'Selecione uma cor'),
 });
 
-const ruleSchema = z.object({
-    field: z.enum(['lineId', 'volume', 'tags']),
-    operator: z.enum(['equals', 'contains', 'gte', 'lte']),
-    value: z.any()
-});
-
 const priceCategorySchema = z.object({
   id: z.string(),
   name: z.string().min(1, 'O nome é obrigatório'),
   min: z.coerce.number(),
   max: z.coerce.number(),
   priority: z.coerce.number().min(0, "A prioridade deve ser positiva."),
-  rules: z.array(ruleSchema),
   status: z.enum(['active', 'inactive'])
 });
 
@@ -70,7 +63,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   });
 
   const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: form.control, name: 'priceCategories' });
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory, update: updateCategory } = useFieldArray({ control: form.control, name: 'priceCategories' });
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
   useEffect(() => {
@@ -100,7 +93,6 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
       min: 0,
       max: 0,
       priority: (categoryFields.length + 1) * 10,
-      rules: [],
       status: 'active',
     });
   };
@@ -300,6 +292,13 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label
         setNewItemName('');
     };
 
+    const handleDeleteConfirm = () => {
+        if (itemToDelete) {
+            deleteCategory(itemToDelete.id);
+            setItemToDelete(null);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex gap-2">
@@ -329,10 +328,10 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label
                 ))}
             </div>
             {itemToDelete && (
-                <DeleteConfirmationDialog 
+                <DeleteConfirmationDialog
                     open={!!itemToDelete}
                     onOpenChange={() => setItemToDelete(null)}
-                    onConfirm={() => { deleteCategory(itemToDelete!.id); setItemToDelete(null); }}
+                    onConfirm={handleDeleteConfirm}
                     itemName={`o item "${itemToDelete.name}"`}
                 />
             )}
