@@ -10,14 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2 } from 'lucide-react';
-import { type PricingParameters, type PriceBand, type PriceCategory, type PriceCategoryRule, type ProfitRange } from '@/types';
-import { useEffect, useState } from 'react';
+import { PlusCircle, Trash2, Edit } from 'lucide-react';
+import { type PricingParameters, type PriceBand, type PriceCategory, type PriceCategoryRule, type ProfitRange, type SimulationCategory } from '@/types';
+import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const profitRangeSchema = z.object({
   id: z.string(),
@@ -66,6 +68,8 @@ interface PricingParametersModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+const defaultColors = ['#F87171', '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#F472B6', '#FCA5A5', '#818CF8'];
 
 export function PricingParametersModal({ open, onOpenChange }: PricingParametersModalProps) {
   const { pricingParameters, updatePricingParameters } = useCompanySettings();
@@ -140,10 +144,12 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="general">Geral e Lucro</TabsTrigger>
                     <TabsTrigger value="bands">Faixas de Preço</TabsTrigger>
-                    <TabsTrigger value="categories">Categorias de Preço</TabsTrigger>
+                    <TabsTrigger value="categories">Categorias</TabsTrigger>
+                    <TabsTrigger value="lines">Linhas</TabsTrigger>
+                    <TabsTrigger value="groups">Grupos</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="general" className="flex-1 overflow-y-auto pr-2">
@@ -265,6 +271,16 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                       <CategorySubForm form={form} />
                     </div>
                  </TabsContent>
+                 <TabsContent value="lines" className="flex-1 overflow-y-auto pr-2">
+                    <div className="space-y-4 py-4">
+                        <GenericCategoryManager type="line" label="Linha" />
+                    </div>
+                </TabsContent>
+                <TabsContent value="groups" className="flex-1 overflow-y-auto pr-2">
+                    <div className="space-y-4 py-4">
+                        <GenericCategoryManager type="group" label="Grupo por Insumo" />
+                    </div>
+                </TabsContent>
             </Tabs>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -327,4 +343,76 @@ function CategorySubForm({ form }: { form: any }) {
       ))}
     </div>
   );
+}
+
+
+function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label: string }) {
+    const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
+    const [editingItem, setEditingItem] = useState<SimulationCategory | null>(null);
+    const [newItemName, setNewItemName] = useState('');
+    const [itemToDelete, setItemToDelete] = useState<SimulationCategory | null>(null);
+
+    const items = useMemo(() => categories.filter(c => c.type === type), [categories, type]);
+
+    const handleAdd = async () => {
+        if (!newItemName.trim()) return;
+        await addCategory({ name: newItemName.trim(), type: type });
+        setNewItemName('');
+    };
+    
+    const handleSaveEdit = async () => {
+        if (!editingItem || !newItemName.trim()) return;
+        await updateCategory({ ...editingItem, name: newItemName.trim() });
+        setEditingItem(null);
+        setNewItemName('');
+    };
+    
+    const handleStartEdit = (item: SimulationCategory) => {
+        setEditingItem(item);
+        setNewItemName(item.name);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingItem(null);
+        setNewItemName('');
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex gap-2">
+                <Input
+                    placeholder={`Nome da nova ${label.toLowerCase()}`}
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                />
+                {editingItem ? (
+                    <div className="flex gap-2">
+                        <Button onClick={handleSaveEdit}>Salvar</Button>
+                        <Button variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
+                    </div>
+                ) : (
+                    <Button onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
+                )}
+            </div>
+             <div className="rounded-md border p-2 space-y-2">
+                {items.map(item => (
+                    <div key={item.id} className="flex items-center justify-between rounded-md border p-3">
+                        <span className="font-medium">{item.name}</span>
+                        <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            {itemToDelete && (
+                <DeleteConfirmationDialog 
+                    open={!!itemToDelete}
+                    onOpenChange={() => setItemToDelete(null)}
+                    onConfirm={() => { deleteCategory(itemToDelete!.id); setItemToDelete(null); }}
+                    itemName={`o item "${itemToDelete.name}"`}
+                />
+            )}
+        </div>
+    );
 }

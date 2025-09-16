@@ -22,7 +22,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
-import { CategoryManagementModal } from './category-management-modal';
 import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
 import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
@@ -97,7 +96,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const { categories } = useProductSimulationCategories();
   const { pricingParameters } = useCompanySettings();
   
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   const { toast } = useToast();
@@ -497,9 +495,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                               <FormMessage />
                           </FormItem>
                       )}/>
-                       <div className="pt-8">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-5 w-5" /></Button>
-                      </div>
                   </div>
                 </div>
 
@@ -761,10 +756,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       </DialogContent>
     </Dialog>
     
-    <CategoryManagementModal 
-        open={isCategoryModalOpen}
-        onOpenChange={setIsCategoryModalOpen}
-    />
     {simulationToEdit && (
         <DeleteConfirmationDialog
             open={isDeleteConfirmOpen}
@@ -776,5 +767,3 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
-
-    
