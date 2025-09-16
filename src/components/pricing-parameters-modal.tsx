@@ -140,9 +140,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="general">Geral</TabsTrigger>
-                    <TabsTrigger value="profit">Lucratividade</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="general">Geral e Lucro</TabsTrigger>
                     <TabsTrigger value="bands">Faixas de Preço</TabsTrigger>
                     <TabsTrigger value="categories">Categorias de Preço</TabsTrigger>
                 </TabsList>
@@ -178,11 +177,9 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendGoal(50)}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta</Button>
                         </div>
                       </div>
-                   </div>
-                </TabsContent>
-                
-                <TabsContent value="profit" className="flex-1 overflow-y-auto pr-2">
-                    <div className="space-y-4 py-4">
+
+                      <div className="space-y-4">
+                        <h3 className="font-medium">Faixas de Cor da Lucratividade</h3>
                         <Button type="button" onClick={handleAddProfitRange}><PlusCircle className="mr-2" /> Nova Faixa de Lucro</Button>
                         <div className="rounded-md border">
                             <Table>
@@ -221,8 +218,9 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                             </Table>
                         </div>
                     </div>
+                   </div>
                 </TabsContent>
-
+                
                  <TabsContent value="bands" className="flex-1 overflow-y-auto pr-2">
                     <div className="space-y-4 py-4">
                         <Button type="button" onClick={handleAddBand}><PlusCircle className="mr-2" /> Nova Faixa de Preço</Button>
@@ -301,7 +299,7 @@ function CategorySubForm({ form }: { form: any }) {
   return (
     <div className="space-y-3">
        <Button type="button" variant="outline" className="w-full" onClick={handleAddCategory}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Categoria de Preço</Button>
-      {fields.map((field, index) => (
+      {fields.map((field: any, index: number) => (
         <div key={field.id} className="p-3 border rounded-md bg-background space-y-2">
             <div className="flex justify-between items-center">
                  <FormField control={form.control} name={`priceCategories.${index}.name`} render={({field: inputField}) => (
