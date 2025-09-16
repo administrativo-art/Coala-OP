@@ -136,7 +136,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
                 <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="general">Geral e Lucratividade</TabsTrigger>
+                    <TabsTrigger value="general">Geral e Lucro</TabsTrigger>
                     <TabsTrigger value="categories">Categorias e Faixas</TabsTrigger>
                     <TabsTrigger value="lines">Linhas</TabsTrigger>
                     <TabsTrigger value="groups">Grupos</TabsTrigger>
@@ -310,11 +310,11 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label
                 />
                 {editingItem ? (
                     <div className="flex gap-2">
-                        <Button onClick={handleSaveEdit}>Salvar</Button>
-                        <Button variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
+                        <Button type="button" onClick={handleSaveEdit}>Salvar</Button>
+                        <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
                     </div>
                 ) : (
-                    <Button onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
+                    <Button type="button" onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
                 )}
             </div>
              <div className="rounded-md border p-2 space-y-2">
