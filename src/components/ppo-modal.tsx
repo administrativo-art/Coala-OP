@@ -22,6 +22,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { resizeImage } from '@/lib/image-utils';
 import dynamic from 'next/dynamic';
+import { Separator } from './ui/separator';
 
 
 const PhotoCaptureModal = dynamic(
@@ -32,6 +33,9 @@ const PhotoCaptureModal = dynamic(
 
 const ppoSchema = z.object({
   sku: z.string().min(1, 'SKU é obrigatório.'),
+  ncm: z.string().optional(),
+  cest: z.string().optional(),
+  cfop: z.string().optional(),
   assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string().min(1, "A instrução não pode ser vazia.") })),
   qualityStandard: z.string().optional(),
   allergens: z.array(z.object({ id: z.string(), text: z.string().min(1, "O alergênico não pode ser vazio.") })),
@@ -62,6 +66,9 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     resolver: zodResolver(ppoSchema),
     defaultValues: {
       sku: '',
+      ncm: '',
+      cest: '',
+      cfop: '',
       assemblyInstructions: [],
       qualityStandard: '',
       allergens: [],
@@ -88,6 +95,9 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       const ppoData = simulation.ppo || {};
       form.reset({
         sku: ppoData.sku || '',
+        ncm: ppoData.ncm || '',
+        cest: ppoData.cest || '',
+        cfop: ppoData.cfop || '',
         assemblyInstructions: ppoData.assemblyInstructions || [],
         qualityStandard: ppoData.qualityStandard || '',
         allergens: ppoData.allergens || [],
@@ -166,55 +176,68 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
           <DialogHeader>
-            <div className="flex items-center gap-2">
-              <DialogTitle>Ficha da Mercadoria</DialogTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                      <Info className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="p-0 max-w-sm" side="top">
-                    <div className="p-4">
-                        <div className="font-bold mb-2">Ingredientes</div>
-                        {ingredientsList.length > 0 ? (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Ingrediente</TableHead>
-                                        <TableHead className="text-right">Qtd.</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {ingredientsList.map(ing => (
-                                        <TableRow key={ing.name}>
-                                            <TableCell>{ing.name}</TableCell>
-                                            <TableCell className="text-right">{ing.quantity} {ing.unit}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">Nenhum ingrediente na composição.</p>
-                        )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <DialogTitle>Ficha da Mercadoria</DialogTitle>
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
+                <TooltipProvider>
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                        <Info className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="p-0 max-w-sm" side="top">
+                         <div className="p-4">
+                            <div className="font-bold mb-2">Ingredientes</div>
+                                {ingredientsList.length > 0 ? (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Ingrediente</TableHead>
+                                                <TableHead className="text-right">Qtd.</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {ingredientsList.map(ing => (
+                                                <TableRow key={ing.name}>
+                                                    <TableCell>{ing.name}</TableCell>
+                                                    <TableCell className="text-right">{ing.quantity} {ing.unit}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">Nenhum ingrediente na composição.</p>
+                                )}
+                            </div>
+                    </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
               <ScrollArea className="flex-1 pr-6">
                 <div className="space-y-6 py-4">
-                  <FormField control={form.control} name="sku" render={({ field }) => (
-                      <FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} /></FormControl><FormMessage /></FormItem>
-                  )}/>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="sku" render={({ field }) => (
+                        <FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                  </div>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     <FormField control={form.control} name="ncm" render={({ field }) => (
+                        <FormItem><FormLabel>Código NCM</FormLabel><FormControl><Input placeholder="0000.00.00" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                     <FormField control={form.control} name="cest" render={({ field }) => (
+                        <FormItem><FormLabel>Código CEST</FormLabel><FormControl><Input placeholder="00.000.00" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                     <FormField control={form.control} name="cfop" render={({ field }) => (
+                        <FormItem><FormLabel>CFOP Padrão</FormLabel><FormControl><Input placeholder="0000" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                  </div>
                   
+                  <Separator />
+
                    <div className="space-y-2">
                     <FormLabel>Foto de Referência</FormLabel>
                     <div className="flex items-center gap-4">

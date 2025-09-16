@@ -215,6 +215,9 @@ export type ProductSimulationItem = {
 
 export type PPO = {
   sku: string;
+  ncm?: string;
+  cest?: string;
+  cfop?: string;
   assemblyInstructions: { id: string; text: string }[];
   qualityStandard: string;
   allergens: { id: string; text: string }[];
@@ -300,7 +303,7 @@ export type PermissionSet = {
   kiosks: { add: boolean; delete: boolean; };
   predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
   consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-  itemRequests: { add: boolean; approve: boolean; };
+  itemRequests: { add: true, approve: false; };
   tasks: { view: boolean, manage: boolean; };
   reposition: { cancel: boolean; };
   help: { view: boolean; };
