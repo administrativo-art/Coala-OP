@@ -6,7 +6,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download, FileText } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
@@ -457,15 +457,13 @@ export function PricingSimulator() {
                                             )
                                         ) : <div className="h-5 w-5" />}
                                     </div>
-                                    <div className="flex items-center gap-1 pl-2 border-l">
-                                      <div className="flex flex-col gap-0.5 h-full justify-around">
+                                    <div className="flex flex-col gap-0.5 pl-2 border-l h-full justify-around">
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePpoClick(sim)}>
-                                            <span className="font-bold text-xs">PPO</span>
+                                            <FileText className="h-4 w-4"/>
                                         </Button>
-                                      </div>
                                     </div>
                                 </div>
                                 <AccordionContent className="pl-8 pr-4 pb-4 bg-background">

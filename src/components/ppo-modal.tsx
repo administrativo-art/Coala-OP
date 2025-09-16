@@ -104,7 +104,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Procedimento Padrão Operacional (PPO)</DialogTitle>
+          <DialogTitle>Ficha da Mercadoria</DialogTitle>
           <DialogDescription>
             Defina os padrões de produção para: {simulation.name}
           </DialogDescription>
