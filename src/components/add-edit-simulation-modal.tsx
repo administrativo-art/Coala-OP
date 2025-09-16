@@ -378,7 +378,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
@@ -478,238 +478,231 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     )}/>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-12">
-                    {/* Composition Column */}
-                    <div className="space-y-4">
-                      <SectionTitle>Composição (CMV)</SectionTitle>
-                      
-                      <div className="rounded-md border p-2 space-y-2">
-                        <div className="grid grid-cols-[1fr_8rem_8rem_6rem_5rem_auto] items-center gap-x-2 px-1 text-xs text-muted-foreground font-semibold">
-                            <span>Insumo base</span>
-                            <span className="text-center">Qtd.</span>
-                            <span className="text-right">Custo/unid.</span>
-                            <span className="text-right">Custo total</span>
-                            <span className="text-center">Impacto</span>
-                            <span className="w-8"></span>
-                        </div>
-                        {fields.map((item, index) => {
-                            if (!watchedItems || !watchedItems[index]) return null;
-                            const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
-                            const useDefault = watchedItems[index].useDefault;
-                            
-                            const effectiveCost = baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
-                            const hasDefaultCost = effectiveCost > 0;
-                            const impactPercentage = itemImpacts.get(index) ?? 0;
+                <SectionTitle>Composição (CMV)</SectionTitle>
+                <div className="rounded-md border">
+                    <div className="grid grid-cols-[1fr_8rem_8rem_6rem_5rem_auto] items-center gap-x-2 px-3 py-2 text-xs text-muted-foreground font-semibold border-b">
+                        <span>Insumo base</span>
+                        <span className="text-center">Qtd.</span>
+                        <span className="text-right">Custo/unid.</span>
+                        <span className="text-right">Custo total</span>
+                        <span className="text-center">Impacto</span>
+                        <span className="w-8"></span>
+                    </div>
+                    {fields.map((item, index) => {
+                        if (!watchedItems || !watchedItems[index]) return null;
+                        const baseProduct = baseProducts.find(bp => bp.id === watchedItems[index].baseProductId);
+                        const useDefault = watchedItems[index].useDefault;
+                        
+                        const effectiveCost = baseProduct?.lastEffectivePrice?.pricePerUnit ?? baseProduct?.initialCostPerUnit ?? 0;
+                        const hasDefaultCost = effectiveCost > 0;
+                        const impactPercentage = itemImpacts.get(index) ?? 0;
 
-                            return (
-                                <div key={item.id} className="grid grid-cols-[1fr_auto] items-start gap-x-2 rounded bg-muted/50 p-2">
-                                    <div className="space-y-1 self-center">
-                                      <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
-                                      <div className="flex justify-start">
-                                        <FormField
-                                            control={form.control}
-                                            name={`items.${index}.useDefault`}
-                                            render={({ field: switchField }) => (
-                                                <FormItem className="flex items-center gap-2">
-                                                    <FormControl>
-                                                        <Switch 
-                                                            checked={switchField.value} 
-                                                            onCheckedChange={switchField.onChange} 
-                                                            disabled={!hasDefaultCost}
-                                                        />
-                                                    </FormControl>
-                                                    <FormLabel className="text-xs text-muted-foreground">
-                                                        {hasDefaultCost ? 'Usar custo padrão' : 'Sem custo padrão'}
-                                                    </FormLabel>
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
-                                    </div>
-                                    <div className="grid grid-cols-[8rem_8rem_6rem_5rem_auto] items-start gap-x-2">
-                                        <div className="flex items-start gap-1">
-                                            <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                                            <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                            
-                                            <FormField
-                                                control={form.control}
-                                                name={`items.${index}.overrideUnit`}
-                                                render={({ field: unitField }) => (
-                                                    <FormItem className="w-24">
-                                                        <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
-                                                            <FormControl>
-                                                                <SelectTrigger className={cn("bg-background/0 text-xs", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                {unitCategories.map(cat => (
-                                                                    <React.Fragment key={cat}>
-                                                                        {getUnitsForCategory(cat as UnitCategory).map(unit => (
-                                                                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                                                                        ))}
-                                                                    </React.Fragment>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <FormMessage/>
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </div>
-                                        <FormField
-                                            control={form.control}
-                                            name={`items.${index}.overrideCostPerUnit`}
-                                            render={({ field: costField }) => (
-                                                <FormItem>
-                                                    <Input
-                                                        type="number"
-                                                        step="any"
-                                                        value={useDefault ? effectiveCost.toFixed(4) : costField.value ?? ''}
-                                                        onChange={costField.onChange}
-                                                        disabled={useDefault}
-                                                        className={cn("text-right bg-background/0", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
+                        return (
+                            <div key={item.id} className="grid grid-cols-[1fr_auto] items-start gap-x-2 p-2 border-b last:border-b-0">
+                                <div className="space-y-1 self-center">
+                                    <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
+                                    <div className="flex justify-start">
+                                    <FormField
+                                        control={form.control}
+                                        name={`items.${index}.useDefault`}
+                                        render={({ field: switchField }) => (
+                                            <FormItem className="flex items-center gap-2">
+                                                <FormControl>
+                                                    <Switch 
+                                                        checked={switchField.value} 
+                                                        onCheckedChange={switchField.onChange} 
+                                                        disabled={!hasDefaultCost}
                                                     />
+                                                </FormControl>
+                                                <FormLabel className="text-xs text-muted-foreground">
+                                                    {hasDefaultCost ? 'Usar custo padrão' : 'Sem custo padrão'}
+                                                </FormLabel>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                </div>
+                                <div className="grid grid-cols-[8rem_8rem_6rem_5rem_auto] items-start gap-x-2">
+                                    <div className="flex items-start gap-1">
+                                        <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
+                                        <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        
+                                        <FormField
+                                            control={form.control}
+                                            name={`items.${index}.overrideUnit`}
+                                            render={({ field: unitField }) => (
+                                                <FormItem className="w-24">
+                                                    <Select onValueChange={unitField.onChange} value={useDefault ? baseProduct?.unit : unitField.value} disabled={useDefault}>
+                                                        <FormControl>
+                                                            <SelectTrigger className={cn("bg-background/0 text-xs", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {unitCategories.map(cat => (
+                                                                <React.Fragment key={cat}>
+                                                                    {getUnitsForCategory(cat as UnitCategory).map(unit => (
+                                                                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                                    ))}
+                                                                </React.Fragment>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                     <FormMessage/>
                                                 </FormItem>
                                             )}
                                         />
-
-                                        <div className="font-semibold text-primary text-sm w-full text-right self-center">
-                                            {formatCurrency(partialCosts[index])}
-                                        </div>
-                                        <div className="font-medium text-xs w-full text-center self-center text-muted-foreground">
-                                            {impactPercentage.toFixed(1)}%
-                                        </div>
-                                        <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
-                                        <Trash2 className="h-4 w-4" />
-                                        </Button>
                                     </div>
+                                    <FormField
+                                        control={form.control}
+                                        name={`items.${index}.overrideCostPerUnit`}
+                                        render={({ field: costField }) => (
+                                            <FormItem>
+                                                <Input
+                                                    type="number"
+                                                    step="any"
+                                                    value={useDefault ? effectiveCost.toFixed(4) : costField.value ?? ''}
+                                                    onChange={costField.onChange}
+                                                    disabled={useDefault}
+                                                    className={cn("text-right bg-background/0", useDefault && "border-none ring-0 focus-visible:ring-0 text-muted-foreground font-semibold")}
+                                                />
+                                                <FormMessage/>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <div className="font-semibold text-primary text-sm w-full text-right self-center">
+                                        {formatCurrency(partialCosts[index])}
+                                    </div>
+                                    <div className="font-medium text-xs w-full text-center self-center text-muted-foreground">
+                                        {impactPercentage.toFixed(1)}%
+                                    </div>
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
+                                    <Trash2 className="h-4 w-4" />
+                                    </Button>
                                 </div>
-                            )
-                        })}
-                      </div>
+                            </div>
+                        )
+                    })}
+                </div>
 
-                      <Select onValueChange={handleAddItem}>
-                          <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
-                          <SelectContent>
-                            {baseProducts.map(bp => (
-                              <SelectItem key={bp.id} value={bp.id}>
-                                {bp.name}
-                              </SelectItem>
+                <Select onValueChange={handleAddItem}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um insumo para adicionar..." /></SelectTrigger>
+                    <SelectContent>
+                    {baseProducts.map(bp => (
+                        <SelectItem key={bp.id} value={bp.id}>
+                        {bp.name}
+                        </SelectItem>
+                    ))}
+                    </SelectContent>
+                </Select>
+
+                {top3Impacts.length > 0 && (
+                    <div className="p-3 border rounded-lg space-y-1">
+                        <h4 className="font-semibold text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary"/>Top 3 Insumos por Impacto</h4>
+                        <ul className="text-xs text-muted-foreground space-y-0.5">
+                            {top3Impacts.map(item => (
+                                <li key={item.index} className="flex justify-between">
+                                    <span>{item.name}</span>
+                                    <span className="font-medium">{item.percentage.toFixed(1)}%</span>
+                                </li>
                             ))}
-                          </SelectContent>
-                        </Select>
-
-                        {top3Impacts.length > 0 && (
-                            <div className="p-3 border rounded-lg space-y-1">
-                                <h4 className="font-semibold text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary"/>Top 3 Insumos por Impacto</h4>
-                                <ul className="text-xs text-muted-foreground space-y-0.5">
-                                    {top3Impacts.map(item => (
-                                        <li key={item.index} className="flex justify-between">
-                                            <span>{item.name}</span>
-                                            <span className="font-medium">{item.percentage.toFixed(1)}%</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+                        </ul>
                     </div>
-
-                    {/* Analysis Section */}
-                    <div className="space-y-4">
-                       <SectionTitle>Resultados da análise</SectionTitle>
-                       <div className="rounded-lg border p-4 space-y-4">
-                           <FormField control={form.control} name="operationPercentage" render={({ field }) => (
-                            <div className="flex justify-between items-center">
-                                <FormLabel>Operacional (%)</FormLabel>
-                                <FormControl>
-                                    <div className="relative w-32">
-                                        <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''}/>
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                                    </div>
-                                </FormControl>
+                )}
+                
+                <SectionTitle>Resultados da análise</SectionTitle>
+                <div className="rounded-lg border p-4 space-y-4">
+                    <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                    <div className="flex justify-between items-center">
+                        <FormLabel>Operacional (%)</FormLabel>
+                        <FormControl>
+                            <div className="relative w-32">
+                                <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''}/>
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                             </div>
-                           )}/>
-                            <div className="flex justify-between items-center">
-                                <FormLabel className="text-destructive font-bold">= Custo bruto</FormLabel>
-                                <span className="text-xl font-bold text-destructive">{formatCurrency(grossCost)}</span>
+                        </FormControl>
+                    </div>
+                    )}/>
+                    <div className="flex justify-between items-center">
+                        <FormLabel className="text-destructive font-bold">= Custo bruto</FormLabel>
+                        <span className="text-xl font-bold text-destructive">{formatCurrency(grossCost)}</span>
+                    </div>
+                    <FormField control={form.control} name="salePrice" render={({ field }) => (
+                    <div className="flex justify-between items-center">
+                        <FormLabel>Preço de venda</FormLabel>
+                        <FormControl>
+                            <div className="relative w-32">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
+                                <Input type="number" step="0.01" className="pl-8 font-semibold text-right" {...field} value={field.value ?? ''} />
                             </div>
-                            <FormField control={form.control} name="salePrice" render={({ field }) => (
-                            <div className="flex justify-between items-center">
-                                <FormLabel>Preço de venda</FormLabel>
-                                <FormControl>
-                                    <div className="relative w-32">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                                        <Input type="number" step="0.01" className="pl-8 font-semibold text-right" {...field} value={field.value ?? ''} />
-                                    </div>
-                                </FormControl>
-                            </div>
-                            )}/>
-                            <FormField control={form.control} name="profitGoal" render={({ field }) => (
-                              <div className="flex justify-between items-center">
-                                  <FormLabel>Meta de Lucro</FormLabel>
-                                   <FormControl>
-                                       <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
-                                          <SelectTrigger className="w-32">
-                                              <SelectValue placeholder="Meta..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="none">Nenhuma</SelectItem>
-                                              {(pricingParameters?.profitGoals || []).map(goal => (
-                                                  <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
-                                              ))}
-                                          </SelectContent>
-                                      </Select>
-                                  </FormControl>
-                              </div>
-                            )}/>
-                            <div className="flex justify-between items-center text-green-600 font-bold">
-                              <span>= Lucro bruto</span>
-                              <div className="text-right">
-                                  <p className="text-xl">{formatCurrency(profitValue)}</p>
-                                  <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
-                              </div>
-                          </div>
-                       </div>
-                       
-                       {/* What-if Simulator */}
-                       <div className="rounded-lg border bg-blue-500/5 p-4 space-y-4">
-                           <h4 className="font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300"><Wand2/> Simulador "What-If"</h4>
-                           <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                   <Label htmlFor="sim-price">Simular Preço (R$)</Label>
-                                   <Input id="sim-price" type="number" placeholder="Ex: 19.90" value={simulatedPrice ?? ''} onChange={handleSimulatedPriceChange} />
-                               </div>
-                                <div className="space-y-1">
-                                   <Label htmlFor="sim-goal">Simular Meta (%)</Label>
-                                   <Input id="sim-goal" type="number" placeholder="Ex: 65" value={simulatedProfitGoal ?? ''} onChange={handleSimulatedGoalChange} />
-                               </div>
-                           </div>
-                           <div className="p-3 bg-background/50 rounded-md space-y-2">
-                               <p className="text-sm font-semibold">Resultados da Simulação:</p>
-                               <div className="flex justify-between items-center">
-                                   <span className="text-sm">Novo Lucro (R$):</span>
-                                   <span className="font-bold">{formatCurrency(simulatedProfitValue)}</span>
-                               </div>
-                               <div className="flex justify-between items-center">
-                                   <span className="text-sm">Nova Margem (%):</span>
-                                   <span className="font-bold">{simulatedProfitPercentage.toFixed(2)}%</span>
-                               </div>
-                           </div>
-                           <Button type="button" className="w-full" onClick={applySimulation} disabled={simulatedPrice === null}>Aplicar valores simulados</Button>
-                       </div>
-                       
-                       <SectionTitle>Observações</SectionTitle>
-
-                       <FormField control={form.control} name="notes" render={({ field }) => (
-                          <FormItem>
-                            <FormControl><Textarea placeholder="Adicione notas sobre esta simulação (opcional)" {...field} value={field.value ?? ''} /></FormControl>
-                          </FormItem>
-                       )}/>
+                        </FormControl>
+                    </div>
+                    )}/>
+                    <FormField control={form.control} name="profitGoal" render={({ field }) => (
+                        <div className="flex justify-between items-center">
+                            <FormLabel>Meta de Lucro</FormLabel>
+                            <FormControl>
+                                <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
+                                    <SelectTrigger className="w-32">
+                                        <SelectValue placeholder="Meta..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Nenhuma</SelectItem>
+                                        {(pricingParameters?.profitGoals || []).map(goal => (
+                                            <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </FormControl>
+                        </div>
+                    )}/>
+                    <div className="flex justify-between items-center text-green-600 font-bold">
+                    <span>= Lucro bruto</span>
+                    <div className="text-right">
+                        <p className="text-xl">{formatCurrency(profitValue)}</p>
+                        <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
                     </div>
                 </div>
+                </div>
+                
+                <SectionTitle>Ferramentas</SectionTitle>
+
+                {/* What-if Simulator */}
+                <div className="rounded-lg border bg-blue-500/5 p-4 space-y-4">
+                    <h4 className="font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300"><Wand2/> Simulador "What-If"</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <Label htmlFor="sim-price">Simular Preço (R$)</Label>
+                            <Input id="sim-price" type="number" placeholder="Ex: 19.90" value={simulatedPrice ?? ''} onChange={handleSimulatedPriceChange} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="sim-goal">Simular Meta (%)</Label>
+                            <Input id="sim-goal" type="number" placeholder="Ex: 65" value={simulatedProfitGoal ?? ''} onChange={handleSimulatedGoalChange} />
+                        </div>
+                    </div>
+                    <div className="p-3 bg-background/50 rounded-md space-y-2">
+                        <p className="text-sm font-semibold">Resultados da Simulação:</p>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm">Novo Lucro (R$):</span>
+                            <span className="font-bold">{formatCurrency(simulatedProfitValue)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm">Nova Margem (%):</span>
+                            <span className="font-bold">{simulatedProfitPercentage.toFixed(2)}%</span>
+                        </div>
+                    </div>
+                    <Button type="button" className="w-full" onClick={applySimulation} disabled={simulatedPrice === null}>Aplicar valores simulados</Button>
+                </div>
+                
+                <SectionTitle>Observações</SectionTitle>
+
+                <FormField control={form.control} name="notes" render={({ field }) => (
+                    <FormItem>
+                    <FormControl><Textarea placeholder="Adicione notas sobre esta simulação (opcional)" {...field} value={field.value ?? ''} /></FormControl>
+                    </FormItem>
+                )}/>
               </div>
             </ScrollArea>
             <DialogFooter className="pt-4 border-t mt-auto flex justify-between w-full">
