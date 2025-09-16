@@ -27,6 +27,11 @@ const defaultPricingParameters: PricingParameters = {
   profitGoals: [45, 50, 55, 60, 65],
   priceBands: [],
   priceCategories: [],
+  profitRanges: [
+    { id: '1', from: 50, to: Infinity, color: 'text-green-600' },
+    { id: '2', from: 45, to: 50, color: 'text-yellow-600' },
+    { id: '3', from: 0, to: 45, color: 'text-destructive' },
+  ],
 };
 
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
@@ -46,6 +51,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             const validatedParams: PricingParameters = {
                 ...defaultPricingParameters,
                 ...params,
+                profitRanges: params.profitRanges && params.profitRanges.length > 0 ? params.profitRanges : defaultPricingParameters.profitRanges,
             };
             setPricingParameters(validatedParams);
         } else {

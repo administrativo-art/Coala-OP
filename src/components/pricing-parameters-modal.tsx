@@ -12,12 +12,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlusCircle, Trash2 } from 'lucide-react';
-import { type PricingParameters, type PriceBand, type PriceCategory, type PriceCategoryRule } from '@/types';
+import { type PricingParameters, type PriceBand, type PriceCategory, type PriceCategoryRule, type ProfitRange } from '@/types';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+
+const profitRangeSchema = z.object({
+  id: z.string(),
+  from: z.coerce.number(),
+  to: z.coerce.number(),
+  color: z.string().min(1, 'Selecione uma cor'),
+});
 
 const priceBandSchema = z.object({
   id: z.string(),
@@ -48,7 +55,8 @@ const parametersSchema = z.object({
   defaultOperationPercentage: z.coerce.number().min(0, "Deve ser um valor positivo."),
   profitGoals: z.array(z.coerce.number().min(0).max(100)),
   priceBands: z.array(priceBandSchema),
-  priceCategories: z.array(priceCategorySchema)
+  priceCategories: z.array(priceCategorySchema),
+  profitRanges: z.array(profitRangeSchema),
 });
 
 type ParametersFormValues = z.infer<typeof parametersSchema>;
@@ -61,16 +69,15 @@ interface PricingParametersModalProps {
 
 export function PricingParametersModal({ open, onOpenChange }: PricingParametersModalProps) {
   const { pricingParameters, updatePricingParameters } = useCompanySettings();
-  const [editingBand, setEditingBand] = useState<Partial<PriceBand> | null>(null);
-  const [editingCategory, setEditingCategory] = useState<Partial<PriceCategory> | null>(null);
   
   const form = useForm<ParametersFormValues>({
     resolver: zodResolver(parametersSchema),
   });
 
   const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
-  const { fields: bandFields, append: appendBand, remove: removeBand, update: updateBand } = useFieldArray({ control: form.control, name: 'priceBands' });
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory, update: updateCategory } = useFieldArray({ control: form.control, name: 'priceCategories' });
+  const { fields: bandFields, append: appendBand, remove: removeBand } = useFieldArray({ control: form.control, name: 'priceBands' });
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: form.control, name: 'priceCategories' });
+  const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
 
   useEffect(() => {
@@ -80,6 +87,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         profitGoals: pricingParameters.profitGoals || [45, 50, 55, 60],
         priceBands: pricingParameters.priceBands || [],
         priceCategories: pricingParameters.priceCategories || [],
+        profitRanges: pricingParameters.profitRanges || [],
       });
     }
   }, [open, pricingParameters, form]);
@@ -112,6 +120,24 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
     });
   };
 
+  const handleAddProfitRange = () => {
+    appendProfitRange({
+      id: `range-${Date.now()}`,
+      from: 0,
+      to: 0,
+      color: 'text-primary'
+    });
+  };
+
+  const colorOptions = [
+    { value: 'text-green-600', label: 'Verde' },
+    { value: 'text-yellow-600', label: 'Amarelo' },
+    { value: 'text-orange-500', label: 'Laranja' },
+    { value: 'text-destructive', label: 'Vermelho' },
+    { value: 'text-blue-600', label: 'Azul' },
+    { value: 'text-primary', label: 'Padrão (Rosa)' },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
@@ -124,8 +150,9 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="general">Geral</TabsTrigger>
+                    <TabsTrigger value="profit">Lucratividade</TabsTrigger>
                     <TabsTrigger value="bands">Faixas de Preço</TabsTrigger>
                     <TabsTrigger value="categories">Categorias de Preço</TabsTrigger>
                 </TabsList>
@@ -164,6 +191,48 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                    </div>
                 </TabsContent>
                 
+                <TabsContent value="profit" className="flex-1 overflow-y-auto pr-2">
+                    <div className="space-y-4 py-4">
+                        <Button type="button" onClick={handleAddProfitRange}><PlusCircle className="mr-2" /> Nova Faixa de Lucro</Button>
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader><TableRow><TableHead>De (%)</TableHead><TableHead>Até (%)</TableHead><TableHead>Cor</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {profitRangeFields.map((field, index) => (
+                                        <TableRow key={field.id}>
+                                            <TableCell><FormField control={form.control} name={`profitRanges.${index}.from`} render={({field}) => <Input type="number" {...field} />} /></TableCell>
+                                            <TableCell><FormField control={form.control} name={`profitRanges.${index}.to`} render={({field}) => <Input type="number" placeholder="infinito" {...field} />} /></TableCell>
+                                            <TableCell>
+                                                 <FormField control={form.control} name={`profitRanges.${index}.color`} render={({field}) => (
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger>
+                                                          <div className="flex items-center gap-2">
+                                                            <div className={cn("h-3 w-3 rounded-full", field.value)} />
+                                                            <SelectValue />
+                                                          </div>
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {colorOptions.map(opt => (
+                                                                <SelectItem key={opt.value} value={opt.value}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={cn("h-3 w-3 rounded-full", opt.value)} />
+                                                                        {opt.label}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )} />
+                                            </TableCell>
+                                            <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeProfitRange(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                </TabsContent>
+
                  <TabsContent value="bands" className="flex-1 overflow-y-auto pr-2">
                     <div className="space-y-4 py-4">
                         <Button type="button" onClick={handleAddBand}><PlusCircle className="mr-2" /> Nova Faixa de Preço</Button>
@@ -177,8 +246,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                             <TableCell><FormField control={form.control} name={`priceBands.${index}.min`} render={({field}) => <Input type="number" {...field} />} /></TableCell>
                                             <TableCell><FormField control={form.control} name={`priceBands.${index}.max`} render={({field}) => <Input type="number" {...field} />} /></TableCell>
                                             <TableCell>
-                                                <FormField control={form.control} name={`priceBands.${index}.defaultCategoryId`} render={({field}) => (
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormField control={form.control} name={`priceBands.${index}.defaultCategoryId`} render={({field: selectField}) => (
+                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
                                                         <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                                         <SelectContent>
                                                             {categoryFields.filter(c => c.priceBandId === field.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -187,8 +256,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                                 )} />
                                             </TableCell>
                                             <TableCell>
-                                                <FormField control={form.control} name={`priceBands.${index}.status`} render={({field}) => (
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormField control={form.control} name={`priceBands.${index}.status`} render={({field: selectField}) => (
+                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
                                                         <SelectTrigger><SelectValue/></SelectTrigger>
                                                         <SelectContent><SelectItem value="active">Ativa</SelectItem><SelectItem value="inactive">Inativa</SelectItem></SelectContent>
                                                     </Select>
@@ -212,10 +281,10 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                 <TableBody>
                                     {categoryFields.map((field, index) => (
                                         <TableRow key={field.id}>
-                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.name`} render={({field}) => <Input {...field} />} /></TableCell>
+                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.name`} render={({field: inputField}) => <Input {...inputField} />} /></TableCell>
                                             <TableCell>
-                                                 <FormField control={form.control} name={`priceCategories.${index}.priceBandId`} render={({field}) => (
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                 <FormField control={form.control} name={`priceCategories.${index}.priceBandId`} render={({field: selectField}) => (
+                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
                                                         <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                                         <SelectContent>
                                                             {bandFields.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -223,10 +292,10 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                                     </Select>
                                                 )} />
                                             </TableCell>
-                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.priority`} render={({field}) => <Input type="number" {...field} />} /></TableCell>
+                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.priority`} render={({field: inputField}) => <Input type="number" {...inputField} />} /></TableCell>
                                             <TableCell>
-                                                 <FormField control={form.control} name={`priceCategories.${index}.status`} render={({field}) => (
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                 <FormField control={form.control} name={`priceCategories.${index}.status`} render={({field: selectField}) => (
+                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
                                                         <SelectTrigger><SelectValue/></SelectTrigger>
                                                         <SelectContent><SelectItem value="active">Ativa</SelectItem><SelectItem value="inactive">Inativa</SelectItem></SelectContent>
                                                     </Select>

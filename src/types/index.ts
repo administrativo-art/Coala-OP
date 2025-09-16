@@ -656,7 +656,7 @@ export const defaultGuestPermissions: PermissionSet = {
         conversions: { view: true },
     },
     team: { view: true, manage: false },
-    pricing: { view: false, simulate: false, manageParameters: false },
+    pricing: { view: true, simulate: true, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
