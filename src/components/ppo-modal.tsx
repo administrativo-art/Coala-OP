@@ -99,7 +99,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Procedimento Padrão Operacional (PPO)</DialogTitle>
           <DialogDescription>
