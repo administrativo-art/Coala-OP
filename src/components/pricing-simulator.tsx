@@ -27,6 +27,7 @@ import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
+import { Checkbox } from "./ui/checkbox";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -226,12 +227,12 @@ export function PricingSimulator() {
                 if (yPos > 240) { doc.addPage(); yPos = 15; }
                 
                 const ppoTableBody: any[][] = [];
-                 if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
-                 if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
-                 if(sim.ppo.qualityStandard) ppoTableBody.push(['Padrão de Qualidade', sim.ppo.qualityStandard]);
                  if(sim.ppo.ncm) ppoTableBody.push(['NCM', sim.ppo.ncm]);
                  if(sim.ppo.cest) ppoTableBody.push(['CEST', sim.ppo.cest]);
                  if(sim.ppo.cfop) ppoTableBody.push(['CFOP', sim.ppo.cfop]);
+                 if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
+                 if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
+                 if(sim.ppo.qualityStandard) ppoTableBody.push(['Padrão de Qualidade', sim.ppo.qualityStandard]);
                  if(sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                      ppoTableBody.push(['Modo de Montagem', sim.ppo.assemblyInstructions.map((instr, i) => `${i + 1}. ${instr.text}`).join('\n')]);
                  }
