@@ -222,6 +222,7 @@ export type PPO = {
   portionWeight: number; // in grams or mL
   portionTolerance: number;
   referenceImageUrl?: string;
+  assemblyVideoUrl?: string;
 };
 
 

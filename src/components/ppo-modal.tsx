@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2, Loader2, Upload, Camera } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Upload, Camera, Video } from 'lucide-react';
 import Image from 'next/image';
 
 const ppoSchema = z.object({
@@ -27,6 +27,7 @@ const ppoSchema = z.object({
   portionWeight: z.coerce.number().optional(),
   portionTolerance: z.coerce.number().optional(),
   referenceImageUrl: z.string().optional(),
+  assemblyVideoUrl: z.string().optional(),
 });
 
 type PpoFormValues = z.infer<typeof ppoSchema>;
@@ -53,6 +54,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       portionWeight: 0,
       portionTolerance: 0,
       referenceImageUrl: '',
+      assemblyVideoUrl: '',
     },
   });
 
@@ -77,6 +79,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
         portionWeight: simulation.ppo?.portionWeight || 0,
         portionTolerance: simulation.ppo?.portionTolerance || 0,
         referenceImageUrl: simulation.ppo?.referenceImageUrl || '',
+        assemblyVideoUrl: simulation.ppo?.assemblyVideoUrl || '',
       });
     }
   }, [simulation, form]);
@@ -143,6 +146,14 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                       <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
                   </Button>
                 </div>
+                
+                 <FormField control={form.control} name="assemblyVideoUrl" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-2"><Video className="h-4 w-4" /> URL do Vídeo de Montagem (opcional)</FormLabel>
+                        <FormControl><Input placeholder="https://exemplo.com/video.mp4" {...field} value={field.value ?? ''} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                 )}/>
 
                  <div className="space-y-2">
                   <FormLabel>Alergênicos</FormLabel>
