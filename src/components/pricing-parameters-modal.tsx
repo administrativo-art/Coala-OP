@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -18,21 +17,13 @@ import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 const profitRangeSchema = z.object({
   id: z.string(),
   from: z.coerce.number(),
   to: z.coerce.number(),
   color: z.string().min(1, 'Selecione uma cor'),
-});
-
-const priceBandSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, 'O nome é obrigatório'),
-  min: z.coerce.number(),
-  max: z.coerce.number(),
-  defaultCategoryId: z.string().min(1, 'Selecione uma categoria padrão'),
-  status: z.enum(['active', 'inactive'])
 });
 
 const ruleSchema = z.object({
@@ -48,6 +39,15 @@ const priceCategorySchema = z.object({
   priority: z.coerce.number().min(0, "A prioridade deve ser positiva."),
   rules: z.array(ruleSchema),
   status: z.enum(['active', 'inactive'])
+});
+
+const priceBandSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'O nome é obrigatório'),
+  min: z.coerce.number(),
+  max: z.coerce.number(),
+  defaultCategoryId: z.string().min(1, 'Selecione uma categoria padrão'),
+  status: z.enum(['active', 'inactive']),
 });
 
 
@@ -76,9 +76,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
   const { fields: bandFields, append: appendBand, remove: removeBand } = useFieldArray({ control: form.control, name: 'priceBands' });
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: form.control, name: 'priceCategories' });
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
-
 
   useEffect(() => {
     if (open && pricingParameters) {
@@ -94,7 +92,10 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const onSubmit = (values: ParametersFormValues) => {
     const sortedGoals = [...values.profitGoals].sort((a,b) => a - b);
-    updatePricingParameters({...values, profitGoals: sortedGoals });
+    updatePricingParameters({
+        ...values, 
+        profitGoals: sortedGoals,
+    });
     onOpenChange(false);
   };
   
@@ -105,17 +106,6 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
       min: 0,
       max: 0,
       defaultCategoryId: '',
-      status: 'active',
-    });
-  };
-  
-   const handleAddCategory = () => {
-    appendCategory({
-      id: `cat-${Date.now()}`,
-      name: 'Nova Categoria',
-      priceBandId: '',
-      priority: 10,
-      rules: [],
       status: 'active',
     });
   };
@@ -237,8 +227,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                     <div className="space-y-4 py-4">
                         <Button type="button" onClick={handleAddBand}><PlusCircle className="mr-2" /> Nova Faixa de Preço</Button>
                         <div className="rounded-md border">
-                            <Table>
-                                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Mín (R$)</TableHead><TableHead>Máx (R$)</TableHead><TableHead>Cat. Padrão</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                             <Table>
+                                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Mín (R$)</TableHead><TableHead>Máx (R$)</TableHead><TableHead>Categoria Padrão</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {bandFields.map((field, index) => (
                                         <TableRow key={field.id}>
@@ -248,17 +238,17 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                             <TableCell>
                                                 <FormField control={form.control} name={`priceBands.${index}.defaultCategoryId`} render={({field: selectField}) => (
                                                     <Select onValueChange={selectField.onChange} value={selectField.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl>
                                                         <SelectContent>
-                                                            {categoryFields.filter(c => c.priceBandId === field.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                          {form.getValues('priceCategories').filter(c => c.priceBandId === field.id).map((cat: any) => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
                                                         </SelectContent>
                                                     </Select>
                                                 )} />
                                             </TableCell>
-                                            <TableCell>
+                                             <TableCell>
                                                 <FormField control={form.control} name={`priceBands.${index}.status`} render={({field: selectField}) => (
                                                     <Select onValueChange={selectField.onChange} value={selectField.value}>
-                                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                                         <SelectContent><SelectItem value="active">Ativa</SelectItem><SelectItem value="inactive">Inativa</SelectItem></SelectContent>
                                                     </Select>
                                                 )} />
@@ -271,45 +261,12 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                         </div>
                     </div>
                  </TabsContent>
-
+                 
                  <TabsContent value="categories" className="flex-1 overflow-y-auto pr-2">
                     <div className="space-y-4 py-4">
-                        <Button type="button" onClick={handleAddCategory}><PlusCircle className="mr-2" /> Nova Categoria de Preço</Button>
-                         <div className="rounded-md border">
-                            <Table>
-                                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Faixa de Preço</TableHead><TableHead>Prioridade</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {categoryFields.map((field, index) => (
-                                        <TableRow key={field.id}>
-                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.name`} render={({field: inputField}) => <Input {...inputField} />} /></TableCell>
-                                            <TableCell>
-                                                 <FormField control={form.control} name={`priceCategories.${index}.priceBandId`} render={({field: selectField}) => (
-                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {bandFields.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                )} />
-                                            </TableCell>
-                                            <TableCell><FormField control={form.control} name={`priceCategories.${index}.priority`} render={({field: inputField}) => <Input type="number" {...inputField} />} /></TableCell>
-                                            <TableCell>
-                                                 <FormField control={form.control} name={`priceCategories.${index}.status`} render={({field: selectField}) => (
-                                                    <Select onValueChange={selectField.onChange} value={selectField.value}>
-                                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                                        <SelectContent><SelectItem value="active">Ativa</SelectItem><SelectItem value="inactive">Inativa</SelectItem></SelectContent>
-                                                    </Select>
-                                                )} />
-                                            </TableCell>
-                                            <TableCell><Button type="button" variant="ghost" size="icon" onClick={() => removeCategory(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
+                      <CategorySubForm form={form} />
                     </div>
                  </TabsContent>
-
             </Tabs>
             <DialogFooter className="pt-4 border-t mt-auto">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -319,5 +276,57 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CategorySubForm({ form }: { form: any }) {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: `priceCategories`
+  });
+
+  const priceBands = form.watch('priceBands');
+
+  const handleAddCategory = () => {
+    append({
+      id: `cat-${Date.now()}`,
+      name: 'Nova Categoria',
+      priceBandId: priceBands.length > 0 ? priceBands[0].id : '',
+      priority: (fields.length + 1) * 10,
+      rules: [],
+      status: 'active',
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+       <Button type="button" variant="outline" className="w-full" onClick={handleAddCategory}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Categoria de Preço</Button>
+      {fields.map((field, index) => (
+        <div key={field.id} className="p-3 border rounded-md bg-background space-y-2">
+            <div className="flex justify-between items-center">
+                 <FormField control={form.control} name={`priceCategories.${index}.name`} render={({field: inputField}) => (
+                    <FormItem className="flex-grow pr-4">
+                        <FormControl><Input {...inputField} className="text-md font-semibold" /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                 )} />
+                 <Button type="button" variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
+            </div>
+          <div className="grid grid-cols-3 gap-4">
+              <FormField control={form.control} name={`priceCategories.${index}.priceBandId`} render={({field: selectField}) => (
+                  <FormItem><FormLabel>Faixa de Preço</FormLabel>
+                      <Select onValueChange={selectField.onChange} value={selectField.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl>
+                          <SelectContent>{priceBands.map((band: any) => <SelectItem key={band.id} value={band.id}>{band.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                  <FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name={`priceCategories.${index}.priority`} render={({field: inputField}) => (<FormItem><FormLabel>Prioridade</FormLabel><FormControl><Input type="number" {...inputField} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name={`priceCategories.${index}.status`} render={({field: selectField}) => (<FormItem><FormLabel>Status</FormLabel><Select onValueChange={selectField.onChange} value={selectField.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="active">Ativa</SelectItem><SelectItem value="inactive">Inativa</SelectItem></SelectContent></Select></FormItem>)} />
+          </div>
+          {/* Rules will be added here in a future step */}
+        </div>
+      ))}
+    </div>
   );
 }
