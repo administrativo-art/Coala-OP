@@ -246,8 +246,6 @@ export type ProductSimulation = {
   id: string;
   name: string;
   categoryIds: string[];
-  linha?: string | null; // Canonical field for line
-  categoria?: string | null; // Canonical field for category
   lineId: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';

@@ -7,7 +7,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, Edit, Save, Loader2, Info } from 'lucide-react';
+import { Trash2, Edit, Save, Loader2, Info, AlertTriangle } from 'lucide-react';
 import { type Classification } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Input } from './ui/input';
@@ -35,11 +35,6 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
     const [itemToDelete, setItemToDelete] = useState<Classification | null>(null);
     
     const [isLoading, setIsLoading] = useState(false);
-
-    const getProductsByClassification = (classificationName: string) => {
-        const key = normalizeName(classificationName);
-        return baseProducts.filter(p => normalizeName(p.classification || "") === key);
-    };
 
     const handleAdd = async () => {
         const cleanName = normalizeName(newClassificationName);
@@ -69,12 +64,16 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
 
         setIsLoading(true);
         try {
+            // First, rename the classification document itself
             await renameClassification(editingClassificationId, editValue);
             
-            const productsToUpdate = getProductsByClassification(originalClassification.name).map(p => ({
-                ...p,
-                classification: normalizeName(editValue)
-            }));
+            // Then, find all base products using the old classification name and update them
+            const productsToUpdate = baseProducts
+                .filter(p => p.classification === originalClassification.id)
+                .map(p => ({
+                    ...p,
+                    classification: editingClassificationId // The ID remains the same, only name changes
+                }));
             
             if (productsToUpdate.length > 0) {
                 await updateMultipleBaseProducts(productsToUpdate);
@@ -99,10 +98,9 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
         
         setIsLoading(true);
         try {
-            const productsToClear = getProductsByClassification(itemToDelete.name).map(p => ({
-                ...p,
-                classification: ''
-            }));
+            const productsToClear = baseProducts
+                .filter(p => p.classification === itemToDelete.id)
+                .map(p => ({ ...p, classification: '' }));
             
             if (productsToClear.length > 0) {
                 await updateMultipleBaseProducts(productsToClear);
@@ -121,7 +119,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
     const usageCount = useMemo(() => {
         const counts = new Map<string, number>();
         baseProducts.forEach(p => {
-            const key = normalizeName(p.classification || "");
+            const key = p.classification;
             if (key) {
                 counts.set(key, (counts.get(key) || 0) + 1);
             }
@@ -160,7 +158,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
                             <div className="space-y-2 pr-4">
                                 {loading ? <Loader2 className="mx-auto my-10 animate-spin"/> :
                                 classifications.map(classification => {
-                                    const count = usageCount.get(normalizeName(classification.name)) || 0;
+                                    const count = usageCount.get(classification.id) || 0;
                                     return (
                                         <div key={classification.id} className="flex items-center justify-between rounded-md border p-3">
                                             {editingClassificationId === classification.id ? (
@@ -219,7 +217,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
                     description={
                         <div>
                             <p>Você tem certeza que quer excluir a classificação <strong>"{itemToDelete.name}"</strong>?</p>
-                            <p className="mt-2 text-sm text-muted-foreground">Esta ação irá remover a classificação de <strong>{usageCount.get(normalizeName(itemToDelete.name)) || 0}</strong> produto(s) base.</p>
+                            <p className="mt-2 text-sm text-muted-foreground">Esta ação irá remover a classificação de <strong>{usageCount.get(itemToDelete.id) || 0}</strong> produto(s) base.</p>
                             <Alert variant="destructive" className="mt-4">
                                 <AlertTriangle className="h-4 w-4" />
                                 <AlertTitle>Ação Irreversível</AlertTitle>

@@ -118,7 +118,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     form.reset({
       name: productToEdit?.name ?? '',
-      classification: productToEdit?.classification ? String(productToEdit.classification) : 'none',
+      classification: productToEdit?.classification || 'none',
       category: productToEdit?.category ?? 'Massa',
       unit: productToEdit?.unit ?? 'g',
       initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
@@ -336,3 +336,4 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
+
