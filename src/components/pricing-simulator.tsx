@@ -143,47 +143,48 @@ export function PricingSimulator() {
     const handleExportFichaTecnicaCompletaPdf = () => {
         const doc = new jsPDF();
         let yPos = 15;
-
+    
         const addTitle = (title: string) => {
-            if (yPos > 260) {
-                doc.addPage();
-                yPos = 15;
-            }
+            if (yPos > 260) { doc.addPage(); yPos = 15; }
             doc.setFontSize(16);
             doc.text(title, 14, yPos);
             yPos += 8;
         };
-        
+    
         addTitle("Relatório de Análise de Custo");
         doc.setFontSize(10);
         doc.text(`Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`, 14, yPos);
         yPos += 10;
-        
+    
         simulationsByCategory.forEach(sim => {
-            if (yPos > 220) {
-                doc.addPage();
-                yPos = 15;
-            }
-            
-            doc.setFontSize(12);
+            if (yPos > 220) { doc.addPage(); yPos = 15; }
+    
+            doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
             doc.text(sim.name, 14, yPos);
             yPos += 6;
-            
+    
             doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
-
-            const summaryInfo = [
-                `SKU: ${sim.ppo?.sku || 'N/A'}`,
-                `Preço Venda: ${formatCurrency(sim.salePrice)}`,
-                `Custo Bruto: ${formatCurrency(sim.grossCost)}`,
-                `Lucro: ${sim.profitPercentage.toFixed(2)}%`,
-                `Markup: ${sim.markup.toFixed(2)}x`,
-                `Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`
-            ];
-            doc.text(summaryInfo.join('  |  '), 14, yPos);
-            yPos += 8;
-
+    
+            const summaryInfo = `SKU: ${sim.ppo?.sku || 'N/A'} | Preço Venda: ${formatCurrency(sim.salePrice)} | Custo Bruto: ${formatCurrency(sim.grossCost)} | Lucro: ${sim.profitPercentage.toFixed(2)}% | Markup: ${sim.markup.toFixed(2)}x | Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`;
+            const infoLines = doc.splitTextToSize(summaryInfo, 130);
+            
+            const imageSize = 30;
+            const hasImage = sim.ppo?.referenceImageUrl;
+    
+            if (hasImage) {
+                try {
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 150, yPos - 4, imageSize, imageSize);
+                } catch (e) {
+                    console.error("Failed to add image to PDF", e);
+                }
+            }
+            
+            doc.text(infoLines, 14, yPos);
+            yPos += (infoLines.length * 5) + (hasImage ? imageSize - (infoLines.length * 5) : 3);
+            
+    
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -197,7 +198,7 @@ export function PricingSimulator() {
                     formatCurrency(cost)
                 ];
             });
-
+    
             autoTable(doc, {
                 startY: yPos,
                 head: [['Insumo Base', 'Quantidade', 'Custo/unid.', 'Impacto', 'Total']],
@@ -207,36 +208,57 @@ export function PricingSimulator() {
                 footStyles: { fillColor: '#F3F4F6', textColor: '#000000' },
                 foot: [['Total CMV', '', '', '', formatCurrency(sim.totalCmv)]]
             });
-
+    
             yPos = (doc as any).lastAutoTable.finalY + 10;
-            
+    
             if (sim.ppo) {
-                 if (yPos > 260) { doc.addPage(); yPos = 15; }
-                 doc.setFontSize(10);
-                 doc.setFont(undefined, 'bold');
-                 doc.text('Ficha da Mercadoria (PPO)', 14, yPos);
-                 yPos += 5;
-                 doc.setFont(undefined, 'normal');
-                 doc.text(`- Tempo de Preparo: ${sim.ppo.preparationTime || 'N/A'} seg`, 16, yPos); yPos += 5;
-                 doc.text(`- Peso da Porção: ${sim.ppo.portionWeight || 'N/A'}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`, 16, yPos); yPos += 5;
-                 if (sim.ppo.qualityStandard) {
-                     doc.text(`- Padrão de Qualidade:`, 16, yPos); yPos += 5;
-                     const qualityLines = doc.splitTextToSize(sim.ppo.qualityStandard, 170);
-                     doc.text(qualityLines, 20, yPos); yPos += qualityLines.length * 5;
-                 }
-                 if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-                     doc.text(`- Modo de Montagem:`, 16, yPos); yPos += 5;
-                     sim.ppo.assemblyInstructions.forEach((instr, i) => {
-                         const stepText = `${i + 1}. ${instr.text}`;
-                         const stepLines = doc.splitTextToSize(stepText, 165);
-                         doc.text(stepLines, 20, yPos);
-                         yPos += stepLines.length * 5;
-                     });
-                 }
-                 yPos += 5;
+                if (yPos > 240) { doc.addPage(); yPos = 15; }
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text('Ficha da Mercadoria', 14, yPos);
+                yPos += 7;
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'normal');
+    
+                const ppoFields = [
+                    { label: 'Tempo de Preparo', value: sim.ppo.preparationTime ? `${sim.ppo.preparationTime} seg` : 'N/A' },
+                    { label: 'Peso da Porção', value: sim.ppo.portionWeight ? `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)` : 'N/A' },
+                ];
+    
+                ppoFields.forEach(field => {
+                    doc.setFont(undefined, 'bold');
+                    doc.text(`${field.label}:`, 16, yPos);
+                    doc.setFont(undefined, 'normal');
+                    doc.text(field.value, 55, yPos);
+                    yPos += 5;
+                });
+    
+                if (sim.ppo.qualityStandard) {
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Padrão de Qualidade:', 16, yPos);
+                    yPos += 5;
+                    doc.setFont(undefined, 'normal');
+                    const qualityLines = doc.splitTextToSize(sim.ppo.qualityStandard, 170);
+                    doc.text(qualityLines, 20, yPos);
+                    yPos += qualityLines.length * 5 + 3;
+                }
+    
+                if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Modo de Montagem:', 16, yPos);
+                    yPos += 5;
+                    doc.setFont(undefined, 'normal');
+                    sim.ppo.assemblyInstructions.forEach((instr, i) => {
+                        const stepText = `${i + 1}. ${instr.text}`;
+                        const stepLines = doc.splitTextToSize(stepText, 165);
+                        doc.text(stepLines, 20, yPos);
+                        yPos += stepLines.length * 5;
+                    });
+                }
+                yPos += 5; // Extra space
             }
         });
-
+    
         doc.save(`ficha_tecnica_completa_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
@@ -289,7 +311,7 @@ export function PricingSimulator() {
                     "Mercadoria": sim.name,
                     "SKU": sim.ppo?.sku || '',
                     "Categorias": sim.categoryIds.map(id => categoryMap.get(id)?.name).join(', '),
-                    "Linha": sim.lineId ? categoryMap.get(id)?.name : '',
+                    "Linha": sim.lineId ? categoryMap.get(sim.lineId)?.name : '',
                     "Preço de Venda": sim.salePrice,
                     "Custo Bruto": sim.grossCost,
                     "Lucro %": sim.profitPercentage,
@@ -476,7 +498,11 @@ export function PricingSimulator() {
                                             {line && <Badge variant="secondary">{line.name}</Badge>}
                                         </div>
                                     </div>
-                                    <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2" />
+                                    <AccordionTrigger className="p-0 hover:no-underline [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">
+                                        <div className="flex items-center gap-3 flex-grow">
+                                            
+                                        </div>
+                                    </AccordionTrigger>
                                     <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
                                     <div className="text-right">{formatCurrency(sim.grossCost)}</div>
                                     <div className="text-right">{sim.markup.toFixed(1)}x</div>
