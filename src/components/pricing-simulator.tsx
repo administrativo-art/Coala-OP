@@ -26,6 +26,7 @@ import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
+import { useCompanySettings } from "@/hooks/use-company-settings";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -686,3 +687,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
