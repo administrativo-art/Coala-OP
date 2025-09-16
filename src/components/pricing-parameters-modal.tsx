@@ -321,8 +321,18 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label
                     <div key={item.id} className="flex items-center justify-between rounded-md border p-3">
                         <span className="font-medium">{item.name}</span>
                         <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}><Trash2 className="h-4 w-4" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
+                            <DeleteConfirmationDialog 
+                                open={false}
+                                onOpenChange={()=>{}}
+                                onConfirm={handleDeleteConfirm}
+                                itemName={`o item "${itemToDelete?.name}"`}
+                                triggerButton={
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                }
+                            />
                         </div>
                     </div>
                 ))}
