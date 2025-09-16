@@ -146,14 +146,16 @@ export function PricingSimulator() {
     
         const addTitle = (title: string) => {
             if (yPos > 260) { doc.addPage(); yPos = 15; }
-            doc.setFontSize(16);
+            doc.setFontSize(18);
             doc.text(title, 14, yPos);
             yPos += 8;
         };
     
         addTitle("Ficha técnica completa");
-        doc.setFontSize(10);
-        doc.text(`Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`, 14, yPos);
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        const filterText = `Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`;
+        doc.text(filterText, 14, yPos);
         yPos += 10;
     
         simulationsByCategory.forEach(sim => {
@@ -176,14 +178,25 @@ export function PricingSimulator() {
             doc.setFont(undefined, 'bold');
             doc.text(sim.name, textX, yPos + 5);
 
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-    
-            const summaryInfo = `SKU: ${sim.ppo?.sku || 'N/A'} | Preço Venda: ${formatCurrency(sim.salePrice)} | Custo Bruto: ${formatCurrency(sim.grossCost)} | Lucro: ${sim.profitPercentage.toFixed(2)}% | Markup: ${sim.markup.toFixed(2)}x | Meta: ${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`;
-            const infoLines = doc.splitTextToSize(summaryInfo, 198 - textX);
-            doc.text(infoLines, textX, yPos + 12);
-            
             yPos += imageSize + 5;
+
+            const summaryBody = [[
+              { content: `SKU\n${sim.ppo?.sku || 'N/A'}`, styles: { halign: 'center' } },
+              { content: `Preço Venda\n${formatCurrency(sim.salePrice)}`, styles: { halign: 'center' } },
+              { content: `Custo Bruto\n${formatCurrency(sim.grossCost)}`, styles: { halign: 'center' } },
+              { content: `Lucro\n${sim.profitPercentage.toFixed(2)}%`, styles: { halign: 'center' } },
+              { content: `Markup\n${sim.markup.toFixed(2)}x`, styles: { halign: 'center' } },
+              { content: `Meta\n${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}`, styles: { halign: 'center' } },
+            ]];
+
+            autoTable(doc, {
+                startY: yPos,
+                body: summaryBody,
+                theme: 'plain',
+                styles: { fontSize: 9, cellPadding: 2, lineWidth: 0.1, lineColor: '#ddd' },
+                headStyles: { fillColor: false, textColor: 'black', fontSize: 8 },
+            });
+            yPos = (doc as any).lastAutoTable.finalY + 5;
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
@@ -205,7 +218,7 @@ export function PricingSimulator() {
                 body: bodyData,
                 theme: 'striped',
                 headStyles: { fillColor: '#273344' },
-                footStyles: { fillColor: '#F3F4F6', textColor: '#000000' },
+                footStyles: { fillColor: '#F3F4F6', textColor: '#000000', fontStyle: 'bold' },
                 foot: [['Total CMV', '', '', '', formatCurrency(sim.totalCmv)]]
             });
     
@@ -229,10 +242,10 @@ export function PricingSimulator() {
                 if (ppoTableBody.length > 0) {
                      autoTable(doc, {
                         startY: yPos,
-                        head: [['Detalhe da Ficha', 'Informação']],
+                        head: [['Detalhe', 'Informação']],
                         body: ppoTableBody,
                         theme: 'striped',
-                        headStyles: { fillColor: '#273344' },
+                        headStyles: { fillColor: '#6B7280' },
                         styles: { cellPadding: 2 },
                         columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
                     });
