@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,8 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2, Loader2, Upload, Camera, Video } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info } from 'lucide-react';
 import Image from 'next/image';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBaseProducts } from '@/hooks/use-base-products';
+
 
 const ppoSchema = z.object({
   sku: z.string().min(1, 'SKU é obrigatório.'),
@@ -39,7 +42,8 @@ interface PpoModalProps {
 }
 
 export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
-  const { updateSimulation } = useProductSimulation();
+  const { updateSimulation, simulationItems } = useProductSimulation();
+  const { baseProducts } = useBaseProducts();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -70,16 +74,17 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
 
   useEffect(() => {
     if (simulation) {
+      const ppoData = simulation.ppo || {};
       form.reset({
-        sku: simulation.ppo?.sku || '',
-        assemblyInstructions: simulation.ppo?.assemblyInstructions || [],
-        qualityStandard: simulation.ppo?.qualityStandard || '',
-        allergens: simulation.ppo?.allergens || [],
-        preparationTime: simulation.ppo?.preparationTime || 0,
-        portionWeight: simulation.ppo?.portionWeight || 0,
-        portionTolerance: simulation.ppo?.portionTolerance || 0,
-        referenceImageUrl: simulation.ppo?.referenceImageUrl || '',
-        assemblyVideoUrl: simulation.ppo?.assemblyVideoUrl || '',
+        sku: ppoData.sku || '',
+        assemblyInstructions: ppoData.assemblyInstructions || [],
+        qualityStandard: ppoData.qualityStandard || '',
+        allergens: ppoData.allergens || [],
+        preparationTime: ppoData.preparationTime || 0,
+        portionWeight: ppoData.portionWeight || 0,
+        portionTolerance: ppoData.portionTolerance || 0,
+        referenceImageUrl: ppoData.referenceImageUrl || '',
+        assemblyVideoUrl: ppoData.assemblyVideoUrl || '',
       });
     }
   }, [simulation, form]);
@@ -88,15 +93,29 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     if (!simulation) return;
 
     setIsLoading(true);
-    // Directly update the 'ppo' field of the simulation
     await updateSimulation({
       ...simulation,
       ppo: values,
     });
     setIsLoading(false);
-    toast({ title: 'PPO salvo com sucesso!' });
+    toast({ title: 'Ficha da Mercadoria salva com sucesso!' });
     onOpenChange(false);
   };
+  
+  const ingredientsList = useMemo(() => {
+    if (!simulation) return [];
+    return simulationItems
+        .filter(item => item.simulationId === simulation.id)
+        .map(item => {
+            const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+            return {
+                name: baseProduct?.name || 'Insumo não encontrado',
+                quantity: item.quantity,
+                unit: item.overrideUnit || baseProduct?.unit || 'un'
+            }
+        });
+  }, [simulation, simulationItems, baseProducts]);
+
 
   if (!simulation) return null;
 
@@ -105,8 +124,29 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Ficha da Mercadoria</DialogTitle>
-          <DialogDescription>
-            Defina os padrões de produção para: {simulation.name}
+          <DialogDescription className="flex items-center gap-2">
+            <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-1 p-2 text-sm">
+                    <h4 className="font-bold mb-2">Ingredientes</h4>
+                    {ingredientsList.length > 0 ? (
+                      ingredientsList.map(ing => (
+                        <p key={ing.name}>{ing.name}: {ing.quantity} {ing.unit}</p>
+                      ))
+                    ) : (
+                      <p>Nenhum ingrediente na composição.</p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -192,7 +232,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button type="submit" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar PPO
+                Salvar Ficha
               </Button>
             </DialogFooter>
           </form>
