@@ -176,10 +176,10 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + 5);
+            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 : 5));
 
-            yPos += imageSize + 5;
-
+            yPos += (hasImage ? imageSize : 10) + 5;
+            
             const summaryBody = [[
               { content: `SKU\n${sim.ppo?.sku || 'N/A'}`, styles: { halign: 'center' } },
               { content: `Preço Venda\n${formatCurrency(sim.salePrice)}`, styles: { halign: 'center' } },
@@ -234,10 +234,10 @@ export function PricingSimulator() {
                  if(sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                      ppoTableBody.push(['Modo de Montagem', sim.ppo.assemblyInstructions.map((instr, i) => `${i + 1}. ${instr.text}`).join('\n')]);
                  }
+                 if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
                  if(sim.ppo.allergens && sim.ppo.allergens.length > 0) {
                     ppoTableBody.push(['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]);
                  }
-                 if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
                 
                 if (ppoTableBody.length > 0) {
                      autoTable(doc, {
@@ -254,7 +254,7 @@ export function PricingSimulator() {
             }
         });
     
-        doc.save(`ficha_tecnica_completa_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`fichas_tecnicas_completas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
     const handleExportFichaTecnicaSimplificadaPdf = () => {
