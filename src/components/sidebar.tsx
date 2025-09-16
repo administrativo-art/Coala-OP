@@ -247,6 +247,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             </div>
           </div>
         )}
+        
+        <div className="p-2 border-b">
+            <Button variant="ghost" className="w-full justify-center" size="icon" onClick={() => setIsCollapsed(!isCollapsed)}>
+                {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
+                <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
+            </Button>
+        </div>
 
        <nav ref={navRef} className={cn("flex-1 flex flex-col overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
         <ul>
@@ -287,12 +294,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 })}
             </Accordion>
         )}
-        <div className="mt-auto p-2">
-            <Button variant="ghost" className="w-full justify-center" size="icon" onClick={() => setIsCollapsed(!isCollapsed)}>
-                {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-                <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
-            </Button>
-        </div>
       </nav>
       
       <div className="p-2 border-t">
