@@ -18,7 +18,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
-import { AlertDialog, AlertDialogTrigger } from './ui/alert-dialog';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const profitRangeSchema = z.object({
@@ -102,7 +101,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
                 <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="general">Geral e Lucro</TabsTrigger>
+                    <TabsTrigger value="general">Geral</TabsTrigger>
                     <TabsTrigger value="categories">Categorias</TabsTrigger>
                     <TabsTrigger value="lines">Linhas</TabsTrigger>
                     <TabsTrigger value="groups">Grupos</TabsTrigger>
@@ -142,7 +141,6 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
                       <div className="space-y-4">
                         <h3 className="font-medium">Faixas de Cor da Lucratividade</h3>
-                        <Button type="button" onClick={handleAddProfitRange}><PlusCircle className="mr-2" /> Nova Faixa de Lucro</Button>
                         <div className="rounded-md border">
                             <Table>
                                 <TableHeader><TableRow><TableHead>De (%)</TableHead><TableHead>Até (%)</TableHead><TableHead>Cor</TableHead><TableHead></TableHead></TableRow></TableHeader>
@@ -179,6 +177,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                 </TableBody>
                             </Table>
                         </div>
+                         <Button type="button" variant="outline" size="sm" onClick={handleAddProfitRange}><PlusCircle className="mr-2 h-4 w-4" /> Nova Faixa</Button>
                     </div>
                    </div>
                 </TabsContent>
@@ -272,19 +271,19 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                         <span className="font-medium">{item.name}</span>
                         <div className="flex gap-1">
                             <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
-                            <AlertDialog>
-                               <AlertDialogTrigger asChild>
-                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8">
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <DeleteConfirmationDialog 
-                                    open={true} // The trigger controls this
-                                    onOpenChange={() => {}}
-                                    onConfirm={handleDeleteConfirm}
-                                    itemName={`o item "${item.name}"`}
-                                />
-                            </AlertDialog>
+                            <DeleteConfirmationDialog
+                                open={itemToDelete?.id === item.id}
+                                onOpenChange={(isOpen) => {
+                                  if (!isOpen) setItemToDelete(null);
+                                }}
+                                onConfirm={handleDeleteConfirm}
+                                itemName={`o item "${item.name}"`}
+                                triggerButton={
+                                  <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                }
+                            />
                         </div>
                     </div>
                 ))}
