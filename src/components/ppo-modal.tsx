@@ -15,13 +15,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Upload, Camera } from 'lucide-react';
+import Image from 'next/image';
 
 const ppoSchema = z.object({
   sku: z.string().min(1, 'SKU é obrigatório.'),
   assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string().min(1, "A instrução não pode ser vazia.") })),
   qualityStandard: z.string().optional(),
-  allergens: z.string().optional(),
+  allergens: z.array(z.object({ id: z.string(), text: z.string().min(1, "O alergênico não pode ser vazio.") })),
   preparationTime: z.coerce.number().optional(),
   portionWeight: z.coerce.number().optional(),
   portionTolerance: z.coerce.number().optional(),
@@ -37,7 +38,7 @@ interface PpoModalProps {
 }
 
 export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
-  const { updateSimulation, simulationItems } = useProductSimulation();
+  const { updateSimulation } = useProductSimulation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -47,7 +48,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       sku: '',
       assemblyInstructions: [],
       qualityStandard: '',
-      allergens: '',
+      allergens: [],
       preparationTime: 0,
       portionWeight: 0,
       portionTolerance: 0,
@@ -55,9 +56,14 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     },
   });
 
-  const { fields: instructionFields, append, remove } = useFieldArray({
+  const { fields: instructionFields, append: appendInstruction, remove: removeInstruction } = useFieldArray({
     control: form.control,
     name: 'assemblyInstructions',
+  });
+  
+  const { fields: allergenFields, append: appendAllergen, remove: removeAllergen } = useFieldArray({
+    control: form.control,
+    name: 'allergens',
   });
 
   useEffect(() => {
@@ -66,7 +72,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
         sku: simulation.ppo?.sku || '',
         assemblyInstructions: simulation.ppo?.assemblyInstructions || [],
         qualityStandard: simulation.ppo?.qualityStandard || '',
-        allergens: simulation.ppo?.allergens || '',
+        allergens: simulation.ppo?.allergens || [],
         preparationTime: simulation.ppo?.preparationTime || 0,
         portionWeight: simulation.ppo?.portionWeight || 0,
         portionTolerance: simulation.ppo?.portionTolerance || 0,
@@ -79,14 +85,11 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     if (!simulation) return;
 
     setIsLoading(true);
-    const updatedSimulationData = {
+    // Directly update the 'ppo' field of the simulation
+    await updateSimulation({
       ...simulation,
       ppo: values,
-      // We need to pass the items again, although they are not being edited here
-      items: simulationItems.filter(item => item.simulationId === simulation.id),
-    };
-    
-    await updateSimulation(updatedSimulationData);
+    });
     setIsLoading(false);
     toast({ title: 'PPO salvo com sucesso!' });
     onOpenChange(false);
@@ -111,6 +114,20 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                     <FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} /></FormControl><FormMessage /></FormItem>
                 )}/>
                 
+                 <div className="space-y-2">
+                  <FormLabel>Foto de Referência</FormLabel>
+                  <div className="flex items-center gap-4">
+                      <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                          {form.watch('referenceImageUrl') ? <Image src={form.watch('referenceImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                          <Button type="button" variant="outline"><Camera className="mr-2" /> Tirar foto</Button>
+                          <Button type="button" variant="outline"><Upload className="mr-2" /> Upload</Button>
+                          {form.watch('referenceImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('referenceImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                      </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <FormLabel>Modo de Montagem</FormLabel>
                   {instructionFields.map((field, index) => (
@@ -119,31 +136,43 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                         <FormField control={form.control} name={`assemblyInstructions.${index}.text`} render={({ field: stepField }) => (
                             <FormItem className="flex-grow"><FormControl><Input {...stepField} /></FormControl><FormMessage /></FormItem>
                         )}/>
-                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
+                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeInstruction(index)}><Trash2 className="h-4 w-4"/></Button>
                     </div>
                   ))}
-                    <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => append({ id: `instr-${Date.now()}`, text: '' })}>
+                    <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => appendInstruction({ id: `instr-${Date.now()}`, text: '' })}>
                       <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
                   </Button>
                 </div>
 
+                 <div className="space-y-2">
+                  <FormLabel>Alergênicos</FormLabel>
+                  {allergenFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                        <FormField control={form.control} name={`allergens.${index}.text`} render={({ field: stepField }) => (
+                            <FormItem className="flex-grow"><FormControl><Input placeholder="Ex: Leite" {...stepField} /></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeAllergen(index)}><Trash2 className="h-4 w-4"/></Button>
+                    </div>
+                  ))}
+                    <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => appendAllergen({ id: `allergen-${Date.now()}`, text: '' })}>
+                      <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Alergênico
+                  </Button>
+                </div>
+
+
                 <FormField control={form.control} name="qualityStandard" render={({ field }) => (
-                    <FormItem><FormLabel>Padrão de Qualidade</FormLabel><FormControl><Textarea placeholder="Ex: Borda do copo limpa, cobertura uniforme..." {...field} /></FormControl><FormMessage /></FormItem>
-                )}/>
-                
-                <FormField control={form.control} name="allergens" render={({ field }) => (
-                    <FormItem><FormLabel>Alergênicos</FormLabel><FormControl><Textarea placeholder="Ex: Contém lactose, glúten." {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Padrão de Qualidade</FormLabel><FormControl><Textarea placeholder="Ex: Borda do copo limpa, cobertura uniforme..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                 )}/>
 
                 <div className="grid grid-cols-3 gap-4">
                     <FormField control={form.control} name="preparationTime" render={({ field }) => (
-                        <FormItem><FormLabel>Tempo de Preparo (segundos)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Tempo de Preparo (segundos)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                     <FormField control={form.control} name="portionWeight" render={({ field }) => (
-                        <FormItem><FormLabel>Peso da Porção (g)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Peso da Porção (g)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                     <FormField control={form.control} name="portionTolerance" render={({ field }) => (
-                        <FormItem><FormLabel>Tolerância (±g)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Tolerância (±g)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                 </div>
               </div>

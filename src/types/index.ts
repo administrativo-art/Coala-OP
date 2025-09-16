@@ -217,7 +217,7 @@ export type PPO = {
   sku: string;
   assemblyInstructions: { id: string; text: string }[];
   qualityStandard: string;
-  allergens: string;
+  allergens: { id: string; text: string }[];
   preparationTime: number; // in seconds
   portionWeight: number; // in grams or mL
   portionTolerance: number;

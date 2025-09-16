@@ -38,7 +38,7 @@ export interface ProductSimulationContextType {
   priceHistory: SimulationPriceHistory[];
   loading: boolean;
   addSimulation: (data: SimulationData) => Promise<void>;
-  updateSimulation: (data: ProductSimulation & { items: SimulationData['items'] }) => Promise<void>;
+  updateSimulation: (data: Partial<ProductSimulation> & { id: string }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
 }
@@ -137,7 +137,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }
     }, [user]);
     
-    const updateSimulation = useCallback(async (data: ProductSimulation & { items: SimulationData['items'] }) => {
+    const updateSimulation = useCallback(async (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => {
         if (!user) return;
         
         const now = new Date().toISOString();
@@ -161,11 +161,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
               ...restOfData,
               updatedAt: now,
               updatedBy: { userId: user.id, username: user.username },
-              ppo: data.ppo || existingSimulation.ppo || {},
             };
             batch.update(simulationRef, updatePayload as any);
             
-            if (oldPrice !== newPrice) {
+            if (newPrice !== undefined && oldPrice !== newPrice) {
                 const historyRef = doc(collection(db, "simulationPriceHistory"));
                 const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
                     simulationId,
@@ -177,22 +176,24 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 batch.set(historyRef, historyEntry);
             }
 
-            const oldItemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
-            const oldItemsSnapshot = await getDocs(oldItemsQuery);
-            oldItemsSnapshot.forEach(doc => batch.delete(doc.ref));
+            if (items) {
+              const oldItemsQuery = query(collection(db, "productSimulationItems"), where("simulationId", "==", simulationId));
+              const oldItemsSnapshot = await getDocs(oldItemsQuery);
+              oldItemsSnapshot.forEach(doc => batch.delete(doc.ref));
 
-            items.forEach(item => {
-                const itemRef = doc(collection(db, "productSimulationItems"));
-                 const newItem: Omit<ProductSimulationItem, 'id'> = {
-                    simulationId: simulationId,
-                    baseProductId: item.baseProductId,
-                    quantity: item.quantity,
-                    useDefault: item.useDefault,
-                    overrideCostPerUnit: item.overrideCostPerUnit,
-                    overrideUnit: item.overrideUnit
-                };
-                batch.set(itemRef, newItem);
-            });
+              items.forEach(item => {
+                  const itemRef = doc(collection(db, "productSimulationItems"));
+                  const newItem: Omit<ProductSimulationItem, 'id'> = {
+                      simulationId: simulationId,
+                      baseProductId: item.baseProductId,
+                      quantity: item.quantity,
+                      useDefault: item.useDefault,
+                      overrideCostPerUnit: item.overrideCostPerUnit,
+                      overrideUnit: item.overrideUnit
+                  };
+                  batch.set(itemRef, newItem);
+              });
+            }
 
             await batch.commit();
         } catch (error) {
