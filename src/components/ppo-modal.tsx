@@ -19,6 +19,7 @@ import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info } from 'lucide
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 
 
 const ppoSchema = z.object({
@@ -130,24 +131,37 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                 <DialogDescription asChild>
                     <span className="font-semibold text-lg text-foreground">{simulation.name}</span>
                 </DialogDescription>
-                 <TooltipProvider>
+                <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
                             <Info className="h-4 w-4" />
                         </Button>
                         </TooltipTrigger>
-                        <TooltipContent>
-                        <div className="font-bold mb-2">Ingredientes</div>
-                        <div className="space-y-1 p-2 text-sm">
-                            {ingredientsList.length > 0 ? (
-                            ingredientsList.map(ing => (
-                                <p key={ing.name}>{ing.name}: {ing.quantity} {ing.unit}</p>
-                            ))
-                            ) : (
-                            <p>Nenhum ingrediente na composição.</p>
-                            )}
-                        </div>
+                        <TooltipContent className="p-0">
+                           <div className="p-4">
+                            <div className="font-bold mb-2">Ingredientes</div>
+                                {ingredientsList.length > 0 ? (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Ingrediente</TableHead>
+                                                <TableHead className="text-right">Qtd.</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {ingredientsList.map(ing => (
+                                                <TableRow key={ing.name}>
+                                                    <TableCell>{ing.name}</TableCell>
+                                                    <TableCell className="text-right">{ing.quantity} {ing.unit}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">Nenhum ingrediente na composição.</p>
+                                )}
+                            </div>
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
