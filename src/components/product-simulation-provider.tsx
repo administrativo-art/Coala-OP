@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,6 +12,7 @@ interface SimulationData {
     name: string;
     categoryIds: string[];
     lineId?: string | null;
+    groupId?: string | null;
     items: {
         id?: string;
         baseProductId: string;
@@ -33,6 +33,13 @@ interface SimulationData {
     ppo?: ProductSimulation['ppo'];
 }
 
+interface BulkUpdatePayload {
+    line: { action: 'keep' | 'set' | 'clear', id?: string };
+    category: { action: 'keep' | 'set' | 'clear', id?: string };
+    group: { action: 'keep' | 'set' | 'clear', id?: string };
+    price: { action: 'keep' | 'increase' | 'decrease', type: 'percentage' | 'fixed', value: number };
+}
+
 export interface ProductSimulationContextType {
   simulations: ProductSimulation[];
   simulationItems: ProductSimulationItem[];
@@ -41,8 +48,7 @@ export interface ProductSimulationContextType {
   addSimulation: (data: SimulationData) => Promise<void>;
   updateSimulation: (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
-  bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
-  bulkUpdateSimulations: (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'lineId' | 'categoryIds'>>) => Promise<void>;
+  bulkUpdateSimulations: (simulations: ProductSimulation[], updates: BulkUpdatePayload) => Promise<void>;
 }
 
 export const ProductSimulationContext = createContext<ProductSimulationContextType | undefined>(undefined);
@@ -226,99 +232,93 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }
     }, []);
     
-    const bulkUpdatePrices = useCallback(async (
+    const bulkUpdateSimulations = useCallback(async (
         simulationsToUpdate: ProductSimulation[],
-        adjustmentType: 'increase' | 'decrease',
-        valueType: 'percentage' | 'fixed',
-        value: number
+        updates: BulkUpdatePayload
     ) => {
-        if (!user || value <= 0) return;
+        if (!user || simulationsToUpdate.length === 0) return;
 
         const batch = writeBatch(db);
         const now = new Date().toISOString();
 
-        simulationsToUpdate.forEach(sim => {
-            const oldPrice = sim.salePrice;
-            let newSalePrice = sim.salePrice;
-            const multiplier = adjustmentType === 'increase' ? 1 : -1;
-
-            if (valueType === 'percentage') {
-                newSalePrice = sim.salePrice * (1 + (value / 100) * multiplier);
-            } else { // fixed
-                newSalePrice = sim.salePrice + (value * multiplier);
-            }
-            
-            newSalePrice = Math.max(0, newSalePrice); 
-
-            if (oldPrice !== newSalePrice) {
-                const newProfitValue = newSalePrice - sim.grossCost;
-                const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
-                const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
-                
-                const simRef = doc(db, "productSimulations", sim.id);
-                batch.update(simRef, {
-                    salePrice: newSalePrice,
-                    profitValue: newProfitValue,
-                    profitPercentage: newProfitPercentage,
-                    markup: newMarkup,
-                    updatedAt: now,
-                    updatedBy: { userId: user.id, username: user.username },
-                });
-                
-                const historyRef = doc(collection(db, "simulationPriceHistory"));
-                const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
-                    simulationId: sim.id,
-                    oldPrice,
-                    newPrice: newSalePrice,
-                    changedAt: now,
-                    changedBy: { userId: user.id, username: user.username },
-                };
-                batch.set(historyRef, historyEntry);
-            }
-        });
-
-        try {
-            await batch.commit();
-        } catch (error) {
-            console.error("Error performing bulk price update:", error);
-        }
-    }, [user]);
-
-    const bulkUpdateSimulations = useCallback(async (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'lineId' | 'categoryIds'>>) => {
-        if (!user) throw new Error("Usuário não autenticado.");
-        if (simulationIds.length === 0) return;
-
-        const batch = writeBatch(db);
-        const now = new Date().toISOString();
-        
-        for (const simId of simulationIds) {
-            const simRef = doc(db, "productSimulations", simId);
-            const currentSim = simulations.find(s => s.id === simId);
-            if (!currentSim) continue;
-            
-            const historyDetails: SimulationChangeHistory['details'] = [];
-            
-            if (updates.hasOwnProperty('lineId')) {
-                historyDetails.push({ field: 'lineId', from: currentSim.lineId || null, to: updates.lineId! });
-            }
-            if (updates.hasOwnProperty('categoryIds')) {
-                historyDetails.push({ field: 'categoria', from: (currentSim.categoryIds || []).join(','), to: updates.categoryIds!.join(',') });
-            }
-            
-            const historyEntry: SimulationChangeHistory = {
-                timestamp: now,
-                userId: user.id,
-                username: user.username,
-                action: 'batch_edit',
-                details: historyDetails,
-            };
-            
-            batch.update(simRef, { 
-                ...updates,
+        for (const sim of simulationsToUpdate) {
+            const simRef = doc(db, "productSimulations", sim.id);
+            const updatePayload: Partial<ProductSimulation> & { historicoAlteracoes?: any } = {
                 updatedAt: now,
                 updatedBy: { userId: user.id, username: user.username },
-                historicoAlteracoes: arrayUnion(historyEntry)
-            });
+            };
+            const historyDetails: SimulationChangeHistory['details'] = [];
+
+            // Handle Line
+            if (updates.line.action === 'set' && updates.line.id) {
+                updatePayload.lineId = updates.line.id;
+                historyDetails.push({ field: 'lineId', from: sim.lineId || null, to: updates.line.id });
+            } else if (updates.line.action === 'clear') {
+                updatePayload.lineId = null;
+                historyDetails.push({ field: 'lineId', from: sim.lineId || null, to: null });
+            }
+            
+            // Handle Category
+             if (updates.category.action === 'set' && updates.category.id) {
+                updatePayload.categoryIds = [updates.category.id];
+                 historyDetails.push({ field: 'categoryIds', from: sim.categoryIds || [], to: [updates.category.id] });
+            } else if (updates.category.action === 'clear') {
+                updatePayload.categoryIds = [];
+                 historyDetails.push({ field: 'categoryIds', from: sim.categoryIds || [], to: [] });
+            }
+
+            // Handle Group
+            if (updates.group.action === 'set' && updates.group.id) {
+                updatePayload.groupId = updates.group.id;
+                historyDetails.push({ field: 'groupId', from: sim.groupId || null, to: updates.group.id });
+            } else if (updates.group.action === 'clear') {
+                updatePayload.groupId = null;
+                historyDetails.push({ field: 'groupId', from: sim.groupId || null, to: null });
+            }
+            
+            // Handle Price
+            if (updates.price.action !== 'keep' && updates.price.value > 0) {
+                 const oldPrice = sim.salePrice;
+                 let newSalePrice = oldPrice;
+                 const multiplier = updates.price.action === 'increase' ? 1 : -1;
+
+                 if (updates.price.type === 'percentage') {
+                     newSalePrice = oldPrice * (1 + (updates.price.value / 100) * multiplier);
+                 } else { // fixed
+                     newSalePrice = oldPrice + (updates.price.value * multiplier);
+                 }
+                 
+                 newSalePrice = Math.max(0, newSalePrice); 
+
+                 if (oldPrice !== newSalePrice) {
+                    const newProfitValue = newSalePrice - sim.grossCost;
+                    const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
+                    const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
+                    
+                    updatePayload.salePrice = newSalePrice;
+                    updatePayload.profitValue = newProfitValue;
+                    updatePayload.profitPercentage = newProfitPercentage;
+                    updatePayload.markup = newMarkup;
+                    
+                    const historyRef = doc(collection(db, "simulationPriceHistory"));
+                    const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
+                        simulationId: sim.id, oldPrice, newPrice: newSalePrice,
+                        changedAt: now, changedBy: { userId: user.id, username: user.username },
+                    };
+                    batch.set(historyRef, historyEntry);
+                 }
+            }
+
+
+            if (historyDetails.length > 0) {
+                const historyEntry: SimulationChangeHistory = {
+                    timestamp: now, userId: user.id, username: user.username,
+                    action: 'batch_edit', details: historyDetails
+                };
+                updatePayload.historicoAlteracoes = arrayUnion(historyEntry);
+            }
+            
+            batch.update(simRef, updatePayload);
         }
 
         try {
@@ -327,7 +327,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error performing bulk simulation update:", error);
             throw error;
         }
-    }, [user, simulations]);
+    }, [user]);
 
 
     const value = useMemo(() => {
@@ -339,10 +339,9 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             addSimulation,
             updateSimulation,
             deleteSimulation,
-            bulkUpdatePrices,
             bulkUpdateSimulations,
         }
-    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdatePrices, bulkUpdateSimulations, baseProducts]);
+    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdateSimulations, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
