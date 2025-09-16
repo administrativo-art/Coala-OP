@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -45,8 +44,8 @@ const simulationItemSchema = z.object({
 });
 
 const ppoSchema = z.object({
-    sku: z.string().optional(),
-    assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string() })).optional(),
+    sku: z.string().min(1, 'SKU é obrigatório').optional(),
+    assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string().min(1, "A instrução não pode ser vazia.") })).optional(),
     qualityStandard: z.string().optional(),
     allergens: z.string().optional(),
     preparationTime: z.coerce.number().optional(),
@@ -151,6 +150,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   });
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
+  const { fields: ppoInstructionFields, append: appendPpoInstruction, remove: removePpoInstruction } = useFieldArray({ control: form.control, name: 'ppo.assemblyInstructions' });
+  
   const watchedItems = useWatch({ control: form.control, name: 'items' });
   const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
@@ -160,7 +161,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   useEffect(() => {
     if(open) {
-      // Reset simulators when modal opens
       setSimulatedPrice(null);
       setSimulatedProfitGoal(null);
     }
@@ -189,7 +189,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 salePrice: simulationToEdit.salePrice,
                 profitGoal: simulationToEdit.profitGoal,
                 notes: simulationToEdit.notes,
-                ppo: simulationToEdit.ppo || {},
+                ppo: simulationToEdit.ppo || { assemblyInstructions: [] },
             });
             setSimulatedPrice(simulationToEdit.salePrice);
             setSimulatedProfitGoal(simulationToEdit.profitGoal);
@@ -375,8 +375,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       }
       setIsDeleteConfirmOpen(false);
   }
-
-  // --- What-if Simulator Logic ---
 
   const handleSimulatedPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
@@ -719,9 +717,35 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 </div>
                 </div>
                 
-                <SectionTitle>Ferramentas</SectionTitle>
+                <SectionTitle>PPO - Procedimento Padrão Operacional</SectionTitle>
+                <div className="rounded-lg border p-4 space-y-4">
+                  <FormField control={form.control} name="ppo.sku" render={({ field }) => (<FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                  
+                  <div className="space-y-2">
+                    <Label>Modo de Montagem</Label>
+                    {ppoInstructionFields.map((field, index) => (
+                      <div key={field.id} className="flex items-center gap-2">
+                         <span className="font-semibold text-muted-foreground">{index + 1}.</span>
+                         <FormField control={form.control} name={`ppo.assemblyInstructions.${index}.text`} render={({ field: stepField }) => (<FormItem className="flex-grow"><FormControl><Input {...stepField} /></FormControl><FormMessage /></FormItem>)}/>
+                         <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removePpoInstruction(index)}><Trash2 className="h-4 w-4"/></Button>
+                      </div>
+                    ))}
+                     <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => appendPpoInstruction({ id: `instr-${Date.now()}`, text: '' })}>
+                        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
+                    </Button>
+                  </div>
 
-                {/* What-if Simulator */}
+                   <FormField control={form.control} name="ppo.qualityStandard" render={({ field }) => (<FormItem><FormLabel>Padrão de Qualidade</FormLabel><FormControl><Textarea placeholder="Ex: Borda do copo limpa, cobertura uniforme..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                   <FormField control={form.control} name="ppo.allergens" render={({ field }) => (<FormItem><FormLabel>Alergênicos</FormLabel><FormControl><Textarea placeholder="Ex: Contém lactose, glúten." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+
+                   <div className="grid grid-cols-3 gap-4">
+                     <FormField control={form.control} name="ppo.preparationTime" render={({ field }) => (<FormItem><FormLabel>Tempo de Preparo (segundos)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                     <FormField control={form.control} name="ppo.portionWeight" render={({ field }) => (<FormItem><FormLabel>Peso da Porção (g)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                     <FormField control={form.control} name="ppo.portionTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerância (±g)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                   </div>
+                </div>
+
+                <SectionTitle>Ferramentas</SectionTitle>
                 <div className="rounded-lg border bg-blue-500/5 p-4 space-y-4">
                     <h4 className="font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300"><Wand2/> Simulador "What-If"</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -793,5 +817,3 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
-
-    
