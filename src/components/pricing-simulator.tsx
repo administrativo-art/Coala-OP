@@ -18,7 +18,6 @@ import { useBaseProducts } from "@/hooks/use-base-products";
 import { CategoryManagementModal } from "./category-management-modal";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
-import { BatchPriceUpdateModal } from "./batch-price-update-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
@@ -49,7 +48,6 @@ export function PricingSimulator() {
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
-    const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
@@ -544,9 +542,6 @@ export function PricingSimulator() {
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Mercadoria
                             </Button>
-                            <Button variant="outline" onClick={() => setIsBatchUpdateModalOpen(true)} disabled={simulationsByCategory.length === 0}>
-                                <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                            </Button>
                             <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
                                 <History className="mr-2 h-4 w-4" /> Histórico de ajustes
                             </Button>
@@ -656,13 +651,6 @@ export function PricingSimulator() {
                 onOpenChange={setIsParamsModalOpen}
             />
 
-            <BatchPriceUpdateModal
-                open={isBatchUpdateModalOpen}
-                onOpenChange={setIsBatchUpdateModalOpen}
-                simulationsToUpdate={simulationsByCategory}
-                onConfirm={bulkUpdatePrices}
-                activeFilters={activeFilters}
-            />
             
             <PriceHistoryModal
                 open={isHistoryModalOpen}
