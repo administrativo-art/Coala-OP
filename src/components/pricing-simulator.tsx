@@ -140,11 +140,7 @@ export function PricingSimulator() {
         return 'text-primary'; 
     };
 
-    const handleExportFichaTecnicaSimplificadaCsv = () => {
-        window.open('/api/mercadorias/export', '_blank');
-    };
-
-    const handleExportPdf = () => {
+    const handleExportFichaTecnicaCompletaPdf = () => {
         const doc = new jsPDF();
         let yPos = 15;
 
@@ -178,6 +174,7 @@ export function PricingSimulator() {
             doc.setFont(undefined, 'normal');
 
             const summaryInfo = [
+                `SKU: ${sim.ppo?.sku || 'N/A'}`,
                 `Preço Venda: ${formatCurrency(sim.salePrice)}`,
                 `Custo Bruto: ${formatCurrency(sim.grossCost)}`,
                 `Lucro: ${sim.profitPercentage.toFixed(2)}%`,
@@ -191,31 +188,59 @@ export function PricingSimulator() {
             const bodyData = items.map(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
                 const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
                 return [
                     baseProductInfo?.name || 'N/A',
                     `${item.quantity} ${item.overrideUnit || baseProductInfo?.unit}`,
                     formatCurrency(item.overrideCostPerUnit || 0),
+                    `${impact.toFixed(1)}%`,
                     formatCurrency(cost)
                 ];
             });
 
             autoTable(doc, {
                 startY: yPos,
-                head: [['Insumo Base', 'Quantidade', 'Custo/unid.', 'Total']],
+                head: [['Insumo Base', 'Quantidade', 'Custo/unid.', 'Impacto', 'Total']],
                 body: bodyData,
                 theme: 'striped',
                 headStyles: { fillColor: '#273344' },
                 footStyles: { fillColor: '#F3F4F6', textColor: '#000000' },
-                foot: [['Total CMV', '', '', formatCurrency(sim.totalCmv)]]
+                foot: [['Total CMV', '', '', '', formatCurrency(sim.totalCmv)]]
             });
 
             yPos = (doc as any).lastAutoTable.finalY + 10;
+            
+            if (sim.ppo) {
+                 if (yPos > 260) { doc.addPage(); yPos = 15; }
+                 doc.setFontSize(10);
+                 doc.setFont(undefined, 'bold');
+                 doc.text('Ficha da Mercadoria (PPO)', 14, yPos);
+                 yPos += 5;
+                 doc.setFont(undefined, 'normal');
+                 doc.text(`- Tempo de Preparo: ${sim.ppo.preparationTime || 'N/A'} seg`, 16, yPos); yPos += 5;
+                 doc.text(`- Peso da Porção: ${sim.ppo.portionWeight || 'N/A'}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`, 16, yPos); yPos += 5;
+                 if (sim.ppo.qualityStandard) {
+                     doc.text(`- Padrão de Qualidade:`, 16, yPos); yPos += 5;
+                     const qualityLines = doc.splitTextToSize(sim.ppo.qualityStandard, 170);
+                     doc.text(qualityLines, 20, yPos); yPos += qualityLines.length * 5;
+                 }
+                 if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                     doc.text(`- Modo de Montagem:`, 16, yPos); yPos += 5;
+                     sim.ppo.assemblyInstructions.forEach((instr, i) => {
+                         const stepText = `${i + 1}. ${instr.text}`;
+                         const stepLines = doc.splitTextToSize(stepText, 165);
+                         doc.text(stepLines, 20, yPos);
+                         yPos += stepLines.length * 5;
+                     });
+                 }
+                 yPos += 5;
+            }
         });
 
-        doc.save(`analise_custo_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`ficha_tecnica_completa_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
-    const handleExportFichaTecnicaPdf = () => {
+    const handleExportFichaTecnicaSimplificadaPdf = () => {
         const doc = new jsPDF();
         let yPos = 15;
 
@@ -248,19 +273,23 @@ export function PricingSimulator() {
             yPos = (doc as any).lastAutoTable.finalY + 10;
         });
 
-        doc.save(`fichas_tecnicas_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`fichas_tecnicas_simplificadas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
-    const handleExportCsv = () => {
+    const handleExportFichaTecnicaCompletaCsv = () => {
         const dataForCsv: any[] = [];
         simulationsByCategory.forEach(sim => {
             const simItems = simulationItems.filter(item => item.simulationId === sim.id);
             simItems.forEach(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
+                const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
+                
                 dataForCsv.push({
                     "Mercadoria": sim.name,
+                    "SKU": sim.ppo?.sku || '',
                     "Categorias": sim.categoryIds.map(id => categoryMap.get(id)?.name).join(', '),
-                    "Linha": sim.lineId ? categoryMap.get(sim.lineId)?.name : '',
+                    "Linha": sim.lineId ? categoryMap.get(id)?.name : '',
                     "Preço de Venda": sim.salePrice,
                     "Custo Bruto": sim.grossCost,
                     "Lucro %": sim.profitPercentage,
@@ -270,7 +299,12 @@ export function PricingSimulator() {
                     "Qtd na Receita": item.quantity,
                     "Unidade na Receita": item.overrideUnit || baseProductInfo?.unit,
                     "Custo do Insumo (p/ unid.)": item.overrideCostPerUnit || 0,
-                    "Custo Total do Insumo": (item.overrideCostPerUnit || 0) * item.quantity
+                    "Custo Total do Insumo": cost,
+                    "Impacto %": impact,
+                    "Tempo de Preparo (seg)": sim.ppo?.preparationTime,
+                    "Peso da Porção (g)": sim.ppo?.portionWeight,
+                    "Tolerância (g)": sim.ppo?.portionTolerance,
+                    "Padrão de Qualidade": sim.ppo?.qualityStandard,
                 });
             });
         });
@@ -285,13 +319,13 @@ export function PricingSimulator() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `analise_de_custo_dados_${new Date().toISOString().slice(0,10)}.csv`);
+        link.setAttribute("download", `ficha_tecnica_completa_${new Date().toISOString().slice(0,10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    const handleExportFichaTecnicaCsv = () => {
+    const handleExportFichaTecnicaSimplificadaCsv = () => {
         const dataForCsv: any[] = [];
         simulationsByCategory.forEach((sim, simIndex) => {
             const simItems = simulationItems.filter(item => item.simulationId === sim.id);
@@ -323,7 +357,7 @@ export function PricingSimulator() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `fichas_tecnicas_${new Date().toISOString().slice(0,10)}.csv`);
+        link.setAttribute("download", `fichas_tecnicas_simplificadas_${new Date().toISOString().slice(0,10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -542,11 +576,10 @@ export function PricingSimulator() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuItem onSelect={handleExportPdf}>Relatório Completo (PDF)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaPdf}>Ficha Técnica (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaPdf}>Ficha Técnica Completa (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha Técnica Simplificada (PDF)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={handleExportCsv}>Dados Completos (CSV)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCsv}>Ficha Técnica (CSV)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaCsv}>Ficha Técnica Completa (CSV)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha Técnica Simplificada (CSV)</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
