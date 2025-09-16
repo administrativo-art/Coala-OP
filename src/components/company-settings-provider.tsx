@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -25,7 +24,6 @@ export const CompanySettingsContext = createContext<CompanySettingsContextType |
 const defaultPricingParameters: PricingParameters = {
   defaultOperationPercentage: 15,
   profitGoals: [45, 50, 55, 60, 65],
-  priceBands: [],
   priceCategories: [],
   profitRanges: [
     { id: '1', from: 50, to: Infinity, color: 'text-green-600' },

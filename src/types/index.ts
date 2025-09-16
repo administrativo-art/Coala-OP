@@ -268,7 +268,6 @@ export type ProductSimulation = {
     username: string;
   };
   // Derived fields
-  priceBandId?: string | null;
   priceCategoryId?: string | null;
 };
 
@@ -473,14 +472,6 @@ export type ReturnRequest = {
     };
 };
 
-export interface ReturnRequestContextType {
-  requests: ReturnRequest[];
-  loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
-  updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
-  deleteReturnRequest: (requestId: string) => Promise<void>;
-}
-
 export type Entity = {
   id: string;
   type: 'pessoa_fisica' | 'pessoa_juridica';
@@ -616,25 +607,16 @@ export type PriceCategoryRule = {
 export type PriceCategory = {
     id: string;
     name: string;
-    priceBandId: string;
-    priority: number;
-    rules: PriceCategoryRule[];
-    status: 'active' | 'inactive';
-};
-
-export type PriceBand = {
-    id: string;
-    name: string;
     min: number;
     max: number;
-    defaultCategoryId: string;
+    priority: number;
+    rules: PriceCategoryRule[];
     status: 'active' | 'inactive';
 };
 
 export type PricingParameters = {
   defaultOperationPercentage: number;
   profitGoals: number[];
-  priceBands: PriceBand[];
   priceCategories: PriceCategory[];
   profitRanges: ProfitRange[];
 };

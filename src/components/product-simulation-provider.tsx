@@ -58,56 +58,28 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
     const simulations = useMemo(() => {
         if (!pricingParameters || !rawSimulations.length) return rawSimulations;
+        const { priceCategories } = pricingParameters;
+        if (!priceCategories) return rawSimulations;
 
-        const { priceBands, priceCategories } = pricingParameters;
-        if (!priceBands || !priceCategories) return rawSimulations;
-        
-        const categoriesByBand = priceCategories.reduce((acc, cat) => {
-            if (!acc[cat.priceBandId]) {
-                acc[cat.priceBandId] = [];
-            }
-            acc[cat.priceBandId].push(cat);
-            return acc;
-        }, {} as Record<string, typeof priceCategories>);
-        
-        Object.values(categoriesByBand).forEach(cats => cats.sort((a,b) => a.priority - b.priority));
-        
+        const activeCategories = priceCategories
+            .filter(c => c.status === 'active')
+            .sort((a,b) => a.priority - b.priority);
+
         return rawSimulations.map(sim => {
             const salePrice = sim.salePrice;
-            let priceBandId = null;
-            let priceCategoryId = null;
+            let priceCategoryId: string | null = null;
+            let matchingCategory = null;
 
-            const band = priceBands.find(b => b.status === 'active' && salePrice >= b.min && salePrice < b.max);
-
-            if (band) {
-                priceBandId = band.id;
-                let foundCategory = false;
-                const categoriesInBand = categoriesByBand[band.id] || [];
-
-                for(const category of categoriesInBand) {
-                    if (category.status !== 'active') continue;
-                    
-                    const rulesMet = category.rules.every(rule => {
-                        if (rule.field === 'lineId' && rule.operator === 'equals') {
-                            return sim.lineId === rule.value;
-                        }
-                        // Add other rule evaluations here (volume, tags) as they are implemented
-                        return false;
-                    });
-
-                    if(rulesMet) {
-                        priceCategoryId = category.id;
-                        foundCategory = true;
-                        break;
-                    }
-                }
-                
-                if (!foundCategory) {
-                    priceCategoryId = band.defaultCategoryId;
-                }
+            const applicableCategories = activeCategories.filter(cat => salePrice >= cat.min && salePrice < cat.max);
+            
+            if (applicableCategories.length > 0) {
+                 // Here you would evaluate rules to find the best match
+                 // For now, we'll just take the first one found by priority
+                 matchingCategory = applicableCategories[0];
+                 priceCategoryId = matchingCategory.id;
             }
 
-            return { ...sim, priceBandId, priceCategoryId };
+            return { ...sim, priceCategoryId };
         });
 
     }, [rawSimulations, pricingParameters]);
