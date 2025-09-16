@@ -26,6 +26,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
+import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -50,6 +51,7 @@ export function PricingSimulator() {
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
+    const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
@@ -174,7 +176,8 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + 5);
+            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            yPos += (hasImage ? imageSize : 0) + 10;
 
             autoTable(doc, {
                 startY: yPos + 10,
@@ -273,7 +276,7 @@ export function PricingSimulator() {
 
             if (hasImage) {
                 try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imagePos);
                     textX = 14 + imageSize + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
@@ -542,6 +545,9 @@ export function PricingSimulator() {
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Mercadoria
                             </Button>
+                            <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)}>
+                                Alterar em lote
+                            </Button>
                             <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
                                 <History className="mr-2 h-4 w-4" /> Histórico de ajustes
                             </Button>
@@ -650,13 +656,17 @@ export function PricingSimulator() {
                 open={isParamsModalOpen}
                 onOpenChange={setIsParamsModalOpen}
             />
-
             
             <PriceHistoryModal
                 open={isHistoryModalOpen}
                 onOpenChange={setIsHistoryModalOpen}
                 history={priceHistory}
                 simulations={simulations}
+            />
+            
+            <BatchEditSimulationModal
+                open={isBatchEditModalOpen}
+                onOpenChange={setIsBatchEditModalOpen}
             />
         </div>
     );
