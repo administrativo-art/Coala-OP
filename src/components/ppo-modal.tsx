@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { type ProductSimulation, type PPO } from '@/types';
@@ -135,7 +135,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="space-y-1 p-2 text-sm">
-                    <h4 className="font-bold mb-2">Ingredientes</h4>
+                    <div className="font-bold mb-2">Ingredientes</div>
                     {ingredientsList.length > 0 ? (
                       ingredientsList.map(ing => (
                         <p key={ing.name}>{ing.name}: {ing.quantity} {ing.unit}</p>
