@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { AlertDialog, AlertDialogTrigger } from './ui/alert-dialog';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const profitRangeSchema = z.object({
@@ -100,8 +101,9 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="general">Geral e Lucro</TabsTrigger>
+                    <TabsTrigger value="categories">Categorias</TabsTrigger>
                     <TabsTrigger value="lines">Linhas</TabsTrigger>
                     <TabsTrigger value="groups">Grupos</TabsTrigger>
                 </TabsList>
@@ -180,6 +182,12 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                     </div>
                    </div>
                 </TabsContent>
+
+                <TabsContent value="categories" className="flex-1 overflow-y-auto pr-2">
+                  <div className="space-y-4 py-4">
+                      <GenericCategoryManager type="category" label="Categoria de Simulação" />
+                  </div>
+                </TabsContent>
                 
                  <TabsContent value="lines" className="flex-1 overflow-y-auto pr-2">
                     <div className="space-y-4 py-4">
@@ -203,7 +211,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   );
 }
 
-function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label: string }) {
+function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'category', label: string }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
     const [editingItem, setEditingItem] = useState<SimulationCategory | null>(null);
     const [newItemName, setNewItemName] = useState('');
@@ -264,29 +272,23 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group', label
                         <span className="font-medium">{item.name}</span>
                         <div className="flex gap-1">
                             <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
-                            <DeleteConfirmationDialog 
-                                open={false}
-                                onOpenChange={()=>{}}
-                                onConfirm={handleDeleteConfirm}
-                                itemName={`o item "${itemToDelete?.name}"`}
-                                triggerButton={
-                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}>
+                            <AlertDialog>
+                               <AlertDialogTrigger asChild>
+                                    <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8">
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
-                                }
-                            />
+                                </AlertDialogTrigger>
+                                <DeleteConfirmationDialog 
+                                    open={true} // The trigger controls this
+                                    onOpenChange={() => {}}
+                                    onConfirm={handleDeleteConfirm}
+                                    itemName={`o item "${item.name}"`}
+                                />
+                            </AlertDialog>
                         </div>
                     </div>
                 ))}
             </div>
-            {itemToDelete && (
-                <DeleteConfirmationDialog
-                    open={!!itemToDelete}
-                    onOpenChange={() => setItemToDelete(null)}
-                    onConfirm={handleDeleteConfirm}
-                    itemName={`o item "${itemToDelete.name}"`}
-                />
-            )}
         </div>
     );
 }

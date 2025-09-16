@@ -15,8 +15,6 @@ import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { useBaseProducts } from "@/hooks/use-base-products";
-import { CategoryManagementModal } from "./category-management-modal";
-import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PricingParametersModal } from "./pricing-parameters-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { PriceHistoryModal } from "./price-history-modal";
@@ -49,7 +47,6 @@ export function PricingSimulator() {
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
-    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
@@ -667,11 +664,6 @@ export function PricingSimulator() {
                 simulation={simulationToEdit}
             />
             
-            <CategoryManagementModal
-                open={isCategoryModalOpen}
-                onOpenChange={setIsCategoryModalOpen}
-            />
-
             <PricingParametersModal
                 open={isParamsModalOpen}
                 onOpenChange={setIsParamsModalOpen}
