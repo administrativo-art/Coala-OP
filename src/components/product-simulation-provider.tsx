@@ -50,39 +50,14 @@ export const ProductSimulationContext = createContext<ProductSimulationContextTy
 export function ProductSimulationProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const { baseProducts } = useBaseProducts();
-    const { pricingParameters } = useCompanySettings();
     const [rawSimulations, setRawSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<SimulationPriceHistory[]>([]);
     const [loading, setLoading] = useState(true);
 
     const simulations = useMemo(() => {
-        if (!pricingParameters || !rawSimulations.length) return rawSimulations;
-        const { priceCategories } = pricingParameters;
-        if (!priceCategories) return rawSimulations;
-
-        const activeCategories = priceCategories
-            .filter(c => c.status === 'active')
-            .sort((a,b) => a.priority - b.priority);
-
-        return rawSimulations.map(sim => {
-            const salePrice = sim.salePrice;
-            let priceCategoryId: string | null = null;
-            let matchingCategory = null;
-
-            const applicableCategories = activeCategories.filter(cat => salePrice >= cat.min && salePrice < cat.max);
-            
-            if (applicableCategories.length > 0) {
-                 // Here you would evaluate rules to find the best match
-                 // For now, we'll just take the first one found by priority
-                 matchingCategory = applicableCategories[0];
-                 priceCategoryId = matchingCategory.id;
-            }
-
-            return { ...sim, priceCategoryId };
-        });
-
-    }, [rawSimulations, pricingParameters]);
+        return rawSimulations;
+    }, [rawSimulations]);
 
     useEffect(() => {
         const qSims = query(collection(db, "productSimulations"));

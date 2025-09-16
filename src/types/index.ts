@@ -267,8 +267,6 @@ export type ProductSimulation = {
     userId: string;
     username: string;
   };
-  // Derived fields
-  priceCategoryId?: string | null;
 };
 
 // Manager's Diary Types
@@ -320,7 +318,7 @@ export type PermissionSet = {
   kiosks: { add: boolean; delete: boolean; };
   predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
   consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-  itemRequests: { add: true, approve: false; };
+  itemRequests: { add: true, approve: false },
   tasks: { view: boolean, manage: boolean; };
   reposition: { cancel: boolean; };
   help: { view: boolean; };
@@ -598,26 +596,9 @@ export type ProfitRange = {
   color: string;
 };
 
-export type PriceCategoryRule = {
-    field: 'lineId' | 'volume' | 'tags';
-    operator: 'equals' | 'contains' | 'gte' | 'lte';
-    value: string | number;
-};
-
-export type PriceCategory = {
-    id: string;
-    name: string;
-    min: number;
-    max: number;
-    priority: number;
-    rules: PriceCategoryRule[];
-    status: 'active' | 'inactive';
-};
-
 export type PricingParameters = {
   defaultOperationPercentage: number;
   profitGoals: number[];
-  priceCategories: PriceCategory[];
   profitRanges: ProfitRange[];
 };
 
