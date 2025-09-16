@@ -433,7 +433,7 @@ export function LotCard({
                                 </div>
                                 </>
                             )}
-                            <div className="flex flex-col gap-0.5 border-l pl-1 h-full justify-around">
+                             <div className="flex flex-col gap-0.5 border-l pl-1 h-full justify-around">
                                 {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
                                 {renderActionButton(lot, QrCode, "Imprimir Etiqueta", () => handlePrintLabel(lot, product), true)}
                                 {renderActionButton(lot, Trash2, "Excluir", () => onDelete(lot.id), canDelete, true)}
