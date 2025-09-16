@@ -209,9 +209,9 @@ export type SimulationChangeHistory = {
   username: string;
   action: 'batch_edit';
   details: {
-    field: 'linha' | 'categoria';
-    from: string | null;
-    to: string | null;
+    field: 'lineId' | 'categoryIds';
+    from: string | string[] | null;
+    to: string | string[] | null;
   }[];
 };
 
@@ -603,10 +603,35 @@ export type ProfitRange = {
   color: string;
 };
 
+export type PriceCategoryRule = {
+    field: 'lineId' | 'volume' | 'tags';
+    operator: 'equals' | 'contains' | 'gte' | 'lte';
+    value: string | number;
+};
+
+export type PriceCategory = {
+    id: string;
+    name: string;
+    priceBandId: string;
+    priority: number;
+    rules: PriceCategoryRule[];
+    status: 'active' | 'inactive';
+};
+
+export type PriceBand = {
+    id: string;
+    name: string;
+    min: number;
+    max: number;
+    defaultCategoryId: string;
+    status: 'active' | 'inactive';
+};
+
 export type PricingParameters = {
   defaultOperationPercentage: number;
-  profitRanges: ProfitRange[];
   profitGoals: number[];
+  priceBands: PriceBand[];
+  priceCategories: PriceCategory[];
 };
 
 export const defaultGuestPermissions: PermissionSet = {

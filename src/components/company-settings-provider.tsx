@@ -5,7 +5,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { type PricingParameters, type ProfitRange } from '@/types';
+import { type PricingParameters } from '@/types';
 
 interface CompanySettings {
     labelSizeId?: string | null;
@@ -24,13 +24,9 @@ export const CompanySettingsContext = createContext<CompanySettingsContextType |
 
 const defaultPricingParameters: PricingParameters = {
   defaultOperationPercentage: 15,
-  profitRanges: [
-    { id: '1', from: -Infinity, to: 0, color: 'text-destructive' },
-    { id: '2', from: 0, to: 30, color: 'text-orange-500' },
-    { id: '3', from: 30, to: 50, color: 'text-yellow-500' },
-    { id: '4', from: 50, to: Infinity, color: 'text-green-600' },
-  ],
-  profitGoals: [45, 50, 55, 60, 65]
+  profitGoals: [45, 50, 55, 60, 65],
+  priceBands: [],
+  priceCategories: [],
 };
 
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
@@ -44,7 +40,14 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
         if (docSnap.exists()) {
             const data = docSnap.data() as CompanySettings;
             setLabelSizeId(data.labelSizeId || '6080');
-            setPricingParameters(data.pricingParameters || defaultPricingParameters);
+            
+            const params = data.pricingParameters || {};
+            // Ensure defaults for new fields if they don't exist
+            const validatedParams: PricingParameters = {
+                ...defaultPricingParameters,
+                ...params,
+            };
+            setPricingParameters(validatedParams);
         } else {
             // If doc doesn't exist, create it with defaults
             setDoc(settingsRef, {
