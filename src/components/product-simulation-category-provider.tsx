@@ -3,28 +3,28 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ProductSimulationCategory } from '@/types';
+import { type SimulationCategory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
 
 export interface ProductSimulationCategoryContextType {
-  categories: ProductSimulationCategory[];
+  categories: SimulationCategory[];
   loading: boolean;
-  addCategory: (category: Omit<ProductSimulationCategory, 'id'>) => Promise<string | null>;
-  updateCategory: (category: ProductSimulationCategory) => Promise<void>;
+  addCategory: (category: Omit<SimulationCategory, 'id'>) => Promise<string | null>;
+  updateCategory: (category: SimulationCategory) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
 }
 
 export const ProductSimulationCategoryContext = createContext<ProductSimulationCategoryContextType | undefined>(undefined);
 
 export function ProductSimulationCategoryProvider({ children }: { children: React.ReactNode }) {
-    const [categories, setCategories] = useState<ProductSimulationCategory[]>([]);
+    const [categories, setCategories] = useState<SimulationCategory[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const q = query(collection(db, "productSimulationCategories"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductSimulationCategory));
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimulationCategory));
             setCategories(data.sort((a,b) => a.name.localeCompare(b.name)));
             setLoading(false);
         }, (error) => {
@@ -34,7 +34,7 @@ export function ProductSimulationCategoryProvider({ children }: { children: Reac
         return () => unsubscribe();
     }, []);
 
-    const addCategory = useCallback(async (category: Omit<ProductSimulationCategory, 'id'>): Promise<string | null> => {
+    const addCategory = useCallback(async (category: Omit<SimulationCategory, 'id'>): Promise<string | null> => {
         try {
             const docRef = await addDoc(collection(db, "productSimulationCategories"), category);
             return docRef.id;
@@ -44,10 +44,12 @@ export function ProductSimulationCategoryProvider({ children }: { children: Reac
         }
     }, []);
 
-    const updateCategory = useCallback(async (category: ProductSimulationCategory) => {
+    const updateCategory = useCallback(async (category: SimulationCategory) => {
         const { id, ...data } = category;
         try {
-            await updateDoc(doc(db, "productSimulationCategories", id), data);
+            // Ensure color is not undefined
+            const dataToUpdate = { ...data, color: data.color || '' };
+            await updateDoc(doc(db, "productSimulationCategories", id), dataToUpdate);
         } catch (error) {
             console.error("Error updating category:", error);
         }
@@ -75,3 +77,5 @@ export function ProductSimulationCategoryProvider({ children }: { children: Reac
         </ProductSimulationCategoryContext.Provider>
     );
 }
+
+    

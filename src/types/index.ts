@@ -187,8 +187,8 @@ export interface MonthlyScheduleContextType {
 export type SimulationCategory = {
   id: string;
   name: string;
-  color: string;
-  type: 'category' | 'line';
+  color?: string;
+  type: 'category' | 'line' | 'group';
 };
 
 export type SimulationPriceHistory = {
@@ -209,7 +209,7 @@ export type SimulationChangeHistory = {
   username: string;
   action: 'batch_edit';
   details: {
-    field: 'lineId' | 'categoryIds';
+    field: 'lineId' | 'categoryIds' | 'groupId';
     from: string | string[] | null;
     to: string | string[] | null;
   }[];
@@ -247,6 +247,7 @@ export type ProductSimulation = {
   name: string;
   categoryIds: string[];
   lineId: string | null;
+  groupId?: string | null;
   userId: string;
   status: 'draft' | 'finalized' | 'archived';
   salePrice: number;
@@ -748,6 +749,8 @@ export type Task = {
     legacyLink?: string;
     legacyIcon?: React.FC<any>;
 };
+    
+
     
 
     

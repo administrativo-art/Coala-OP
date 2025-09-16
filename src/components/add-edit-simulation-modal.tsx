@@ -47,6 +47,7 @@ const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
+  groupId: z.string().nullable().optional(),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
   operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
@@ -107,6 +108,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         name: '', 
         categoryIds: [], 
         lineId: null, 
+        groupId: null,
         items: [], 
         operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
         salePrice: 0, 
@@ -149,6 +151,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 name: simulationToEdit.name,
                 categoryIds: simulationToEdit.categoryIds || [],
                 lineId: simulationToEdit.lineId,
+                groupId: simulationToEdit.groupId,
                 items: itemsForForm,
                 operationPercentage: simulationToEdit.operationPercentage,
                 salePrice: simulationToEdit.salePrice,
@@ -162,6 +165,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 name: '', 
                 categoryIds: [], 
                 lineId: null, 
+                groupId: null,
                 items: [], 
                 operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
                 salePrice: 0, 
@@ -192,6 +196,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         name: `${sourceSimulation.name} (cópia)`,
         categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
+        groupId: sourceSimulation.groupId,
         items: sourceItems,
         operationPercentage: sourceSimulation.operationPercentage,
         salePrice: sourceSimulation.salePrice,
@@ -202,6 +207,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   
   const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
   const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
+  const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
   
    const { cmv, partialCosts, itemImpacts, top3Impacts } = useMemo(() => {
     let totalCmv = 0;
@@ -310,6 +316,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
        const finalData = {
         ...values,
         lineId: values.lineId || null,
+        groupId: values.groupId || null,
         categoryIds: values.categoryIds || [],
         totalCmv: cmv,
         grossCost,
@@ -470,6 +477,21 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                                   <SelectContent>
                                       <SelectItem value="none">Nenhuma</SelectItem>
                                       {lines.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                  </SelectContent>
+                              </Select>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                       <FormField control={form.control} name="groupId" render={({ field }) => (
+                          <FormItem className="flex-1">
+                              <FormLabel>Grupo por Insumo</FormLabel>
+                               <Select onValueChange={(v) => field.onChange(v === 'none' ? null : v)} value={String(field.value ?? 'none')}>
+                                  <FormControl>
+                                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                      <SelectItem value="none">Nenhum</SelectItem>
+                                      {groups.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                   </SelectContent>
                               </Select>
                               <FormMessage />
@@ -754,3 +776,5 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     </>
   );
 }
+
+    
