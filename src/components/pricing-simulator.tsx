@@ -17,6 +17,7 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { PricingParametersModal } from "./pricing-parameters-modal";
 import { useAuth } from "@/hooks/use-auth";
+import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PriceHistoryModal } from "./price-history-modal";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
@@ -26,7 +27,6 @@ import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
-import { useCompanySettings } from "@/hooks/use-company-settings";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -455,7 +455,7 @@ export function PricingSimulator() {
                 {simulationsByCategory.map(sim => {
                         const simCategories = sim.categoryIds.map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
-                        const simGroups = sim.groupIds.map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
+                        const simGroups = (sim.groupIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
 
@@ -689,5 +689,7 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
 
     
