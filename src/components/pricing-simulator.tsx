@@ -396,7 +396,7 @@ export function PricingSimulator() {
         
         return (
             <div className="space-y-4">
-                 <div className="grid grid-cols-[minmax(0,2.5fr)_repeat(7,minmax(0,1fr))] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
+                 <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
                     <Button variant="ghost" onClick={() => handleSort('name')} className="justify-start w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
                         Mercadoria
                         {sortConfig.key === 'name' && <ArrowUpDown className="ml-2 h-4 w-4" />}
@@ -408,6 +408,7 @@ export function PricingSimulator() {
                     {renderSortableHeader("Meta lucro", "profitGoal")}
                     {renderSortableHeader("Lucro %", "profitPercentage")}
                     <div className="text-center">Status</div>
+                    <div className="text-right">Ações</div>
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
@@ -427,19 +428,11 @@ export function PricingSimulator() {
                                         <div className="flex-1 bg-border"></div>
                                     )}
                                 </div>
-                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))] items-center gap-4 pl-8 pr-4 py-2 group">
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-8 pr-4 py-2 group">
                                      <div
                                         className="font-semibold text-left"
                                     >
-                                        <div className="flex items-center gap-2">
-                                            <div
-                                            className="hover:underline cursor-pointer"
-                                            onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}
-                                            >
-                                                {sim.name}
-                                            </div>
-                                            <Edit className="h-4 w-4 text-muted-foreground invisible group-hover:visible cursor-pointer" onClick={(e) => { e.stopPropagation(); handleEdit(sim); }}/>
-                                        </div>
+                                        <p>{sim.name}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => <Badge key={cat.id} style={{backgroundColor: `${cat.color}20`, color: cat.color, borderColor: `${cat.color}80`}} variant="outline">{cat.name}</Badge>)}
                                             {line && <Badge variant="secondary">{line.name}</Badge>}
@@ -460,6 +453,14 @@ export function PricingSimulator() {
                                             )
                                         ) : <div className="h-5 w-5" />}
                                     </div>
+                                    <div className="flex justify-end items-center gap-1">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                         <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <span className="font-bold text-xs">PPO</span>
+                                        </Button>
+                                    </div>
                                 </div>
                                 <AccordionContent className="pl-8 pr-4 pb-4 bg-background">
                                     <div className="overflow-x-auto pt-2">
@@ -469,6 +470,7 @@ export function PricingSimulator() {
                                                     <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
                                                     <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
                                                     <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
+                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Impacto</th>
                                                     <th className="p-2 text-right text-sm font-medium text-muted-foreground">Total</th>
                                                 </tr>
                                             </thead>
@@ -476,11 +478,13 @@ export function PricingSimulator() {
                                                 {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                                                     const baseProductInfo = baseProductMap.get(item.baseProductId);
                                                     const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                                                    const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
                                                     return (
                                                         <tr key={item.id} className="border-b">
                                                             <td className="p-2">{baseProductInfo?.name || 'Insumo não encontrado'}</td>
                                                             <td className="p-2 text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</td>
                                                             <td className="p-2 text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</td>
+                                                            <td className="p-2 text-right">{impact.toFixed(1)}%</td>
                                                             <td className="p-2 text-right font-semibold text-primary">{formatCurrency(cost)}</td>
                                                         </tr>
                                                     )
@@ -488,7 +492,7 @@ export function PricingSimulator() {
                                             </tbody>
                                             <tfoot>
                                                 <tr className="border-t font-bold">
-                                                    <td colSpan={3} className="p-2 text-right">Total</td>
+                                                    <td colSpan={4} className="p-2 text-right">Total</td>
                                                     <td className="p-2 text-right text-primary">{formatCurrency(sim.totalCmv)}</td>
                                                 </tr>
                                             </tfoot>
