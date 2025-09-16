@@ -429,9 +429,7 @@ export function PricingSimulator() {
                                     )}
                                 </div>
                                 <div className="grid grid-cols-[minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-8 pr-4 py-2 group">
-                                     <div
-                                        className="font-semibold text-left"
-                                    >
+                                     <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => <Badge key={cat.id} style={{backgroundColor: `${cat.color}20`, color: cat.color, borderColor: `${cat.color}80`}} variant="outline">{cat.name}</Badge>)}
@@ -453,13 +451,15 @@ export function PricingSimulator() {
                                             )
                                         ) : <div className="h-5 w-5" />}
                                     </div>
-                                    <div className="flex justify-end items-center gap-1">
+                                    <div className="flex items-center gap-1 pl-2 border-l">
+                                      <div className="flex flex-col gap-0.5 h-full justify-around">
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                          <Button variant="ghost" size="icon" className="h-8 w-8">
                                             <span className="font-bold text-xs">PPO</span>
                                         </Button>
+                                      </div>
                                     </div>
                                 </div>
                                 <AccordionContent className="pl-8 pr-4 pb-4 bg-background">
