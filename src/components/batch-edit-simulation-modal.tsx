@@ -87,18 +87,18 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         }
 
         const simulationIds = targetSimulations.map(sim => sim.id);
-        const updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>> = {};
+        const updates: Partial<Pick<ProductSimulation, 'lineId' | 'categoryIds'>> = {};
         
         if (values.lineAction === 'set' && values.lineId) {
-            updates.linha = values.lineId;
+            updates.lineId = values.lineId;
         } else if (values.lineAction === 'clear') {
-            updates.linha = null;
+            updates.lineId = null;
         }
         
         if (values.categoryAction === 'set' && values.categoryId) {
-            updates.categoria = values.categoryId;
+            updates.categoryIds = [values.categoryId];
         } else if (values.categoryAction === 'clear') {
-            updates.categoria = null;
+            updates.categoryIds = [];
         }
         
         try {

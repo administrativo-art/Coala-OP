@@ -41,7 +41,7 @@ export interface ProductSimulationContextType {
   updateSimulation: (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdatePrices: (simulations: ProductSimulation[], adjustmentType: 'increase' | 'decrease', valueType: 'percentage' | 'fixed', value: number) => Promise<void>;
-  bulkUpdateSimulations: (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>>) => Promise<void>;
+  bulkUpdateSimulations: (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'lineId' | 'categoryIds'>>) => Promise<void>;
 }
 
 export const ProductSimulationContext = createContext<ProductSimulationContextType | undefined>(undefined);
@@ -280,24 +280,26 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }
     }, [user]);
 
-    const bulkUpdateSimulations = useCallback(async (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'linha' | 'categoria'>>) => {
+    const bulkUpdateSimulations = useCallback(async (simulationIds: string[], updates: Partial<Pick<ProductSimulation, 'lineId' | 'categoryIds'>>) => {
         if (!user) throw new Error("Usuário não autenticado.");
         if (simulationIds.length === 0) return;
 
         const batch = writeBatch(db);
         const now = new Date().toISOString();
-        const historyDetails: SimulationChangeHistory['details'] = [];
-
+        
         for (const simId of simulationIds) {
             const simRef = doc(db, "productSimulations", simId);
             const currentSim = simulations.find(s => s.id === simId);
             if (!currentSim) continue;
             
-            if (updates.hasOwnProperty('linha')) {
-                historyDetails.push({ field: 'linha', from: currentSim.linha || null, to: updates.linha! });
+            const historyDetails: SimulationChangeHistory['details'] = [];
+            
+            if (updates.hasOwnProperty('lineId')) {
+                historyDetails.push({ field: 'linha', from: currentSim.lineId || null, to: updates.lineId! });
             }
-            if (updates.hasOwnProperty('categoria')) {
-                historyDetails.push({ field: 'categoria', from: currentSim.categoria || null, to: updates.categoria! });
+            if (updates.hasOwnProperty('categoryIds')) {
+                // For simplicity, we'll log the whole array. More complex logic could diff the arrays.
+                 historyDetails.push({ field: 'categoria', from: (currentSim.categoryIds || []).join(','), to: updates.categoryIds!.join(',') });
             }
             
             const historyEntry: SimulationChangeHistory = {
