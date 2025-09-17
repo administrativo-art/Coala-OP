@@ -81,12 +81,12 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   };
 
   const colorOptions = [
-    { value: 'text-green-600', label: 'Verde' },
-    { value: 'text-yellow-600', label: 'Amarelo' },
-    { value: 'text-orange-500', label: 'Laranja' },
-    { value: 'text-destructive', label: 'Vermelho' },
-    { value: 'text-blue-600', label: 'Azul' },
-    { value: 'text-primary', label: 'Padrão (Rosa)' },
+    { value: 'text-green-600', label: 'Verde', hex: '#16A34A' },
+    { value: 'text-yellow-600', label: 'Amarelo', hex: '#D97706' },
+    { value: 'text-orange-500', label: 'Laranja', hex: '#F97316' },
+    { value: 'text-destructive', label: 'Vermelho', hex: '#EF4444' },
+    { value: 'text-blue-600', label: 'Azul', hex: '#2563EB' },
+    { value: 'text-primary', label: 'Padrão (Rosa)', hex: '#F43F5E' },
   ];
 
   return (
@@ -155,7 +155,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                                     <Select onValueChange={field.onChange} value={field.value}>
                                                         <SelectTrigger>
                                                           <div className="flex items-center gap-2">
-                                                            <div className={cn("h-3 w-3 rounded-full", field.value)} />
+                                                            <div className={cn("h-3 w-3 rounded-full")} style={{backgroundColor: colorOptions.find(c => c.value === field.value)?.hex}} />
                                                             <SelectValue />
                                                           </div>
                                                         </SelectTrigger>
@@ -163,7 +163,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                                             {colorOptions.map(opt => (
                                                                 <SelectItem key={opt.value} value={opt.value}>
                                                                     <div className="flex items-center gap-2">
-                                                                        <div className={cn("h-3 w-3 rounded-full", opt.value)} />
+                                                                        <div className={cn("h-3 w-3 rounded-full")} style={{backgroundColor: opt.hex}} />
                                                                         {opt.label}
                                                                     </div>
                                                                 </SelectItem>
@@ -211,7 +211,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   );
 }
 
-const CATEGORY_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+const CATEGORY_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#64748B'];
 
 function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'category', label: string }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
@@ -266,7 +266,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                                 <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: newItemColor }} />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="grid grid-cols-3 gap-1 p-1">
+                        <DropdownMenuContent className="grid grid-cols-4 gap-1 p-1">
                             {CATEGORY_COLORS.map(color => (
                                 <button key={color} className="h-8 w-8 rounded-md border" style={{ backgroundColor: color }} onClick={() => setNewItemColor(color)} />
                             ))}
@@ -283,7 +283,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                             <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
                         </div>
                     ) : (
-                        <Button type="button" onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
+                        <Button type="button" onClick={handleAdd}><PlusCircle className="mr-2 h-4 w-4"/> Adicionar</Button>
                     )}
                 </div>
             </div>

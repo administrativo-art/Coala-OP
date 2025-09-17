@@ -27,6 +27,7 @@ import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
+import { PriceComparisonTable } from "./price-comparison-table";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -653,6 +654,8 @@ export function PricingSimulator() {
                 </div>
             </div>
 
+            <PriceComparisonTable />
+
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
@@ -692,4 +695,3 @@ export function PricingSimulator() {
     
 
     
-
