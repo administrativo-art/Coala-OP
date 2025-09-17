@@ -6,5 +6,7 @@
 import './flows/analyze-consumption-flow';
 import './flows/pricing-analysis-flow';
 import './flows/fetch-product-info-flow';
+import './flows/price-comparison-flow';
+
 
 

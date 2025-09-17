@@ -19,6 +19,7 @@ import { CompetitorSelectionModal } from '@/components/competitor-selection-moda
 import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { analyzePrices, type PriceAnalysisInput } from '@/ai/flows/price-comparison-flow';
 
 
 interface AIAnalysis {
@@ -38,21 +39,24 @@ export default function PriceComparisonPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const handleAnalyze = async (data: any) => {
-      // This is a placeholder for the actual AI flow call.
       setIsAnalyzing(true);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const newAnalysis: AIAnalysis = {
-          id: `analise-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          competitorsAnalyzed: selectedCompetitorIds.map(id => competitors.find(c => c.id === id)?.name || ''),
-          content: `Análise simulada com base nos dados fornecidos. O competidor ${selectedCompetitorIds[0]} parece ter preços mais agressivos em milkshakes, enquanto você tem vantagem em sucos. Recomenda-se ajustar a margem do produto X em 5% para se manter competitivo.\n\nDados analisados:\n${JSON.stringify(data, null, 2)}`
-      };
-      
-      setAiAnalyses(prev => [newAnalysis, ...prev]);
-      setIsAnalyzing(false);
+      try {
+        const analysisResult = await analyzePrices(data as PriceAnalysisInput);
+
+        const newAnalysis: AIAnalysis = {
+            id: `analise-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            competitorsAnalyzed: selectedCompetitorIds.map(id => competitors.find(c => c.id === id)?.name || ''),
+            content: analysisResult.analysis,
+        };
+        setAiAnalyses(prev => [newAnalysis, ...prev]);
+
+      } catch (error) {
+          console.error("Failed to analyze prices:", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
   };
   
    const handleExportAnalysisPdf = (analysis: AIAnalysis) => {
