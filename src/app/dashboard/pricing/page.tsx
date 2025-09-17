@@ -1,68 +1,54 @@
 "use client";
 
-import { useState } from 'react';
-import { PricingSimulator } from '@/components/pricing-simulator';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, LineChart, Users, PlusCircle } from 'lucide-react';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PriceComparisonTable } from '@/components/price-comparison-table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CompetitorManagementModal } from '@/components/competitor-management-modal';
-import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
+import { ArrowRight, DollarSign, LineChart } from 'lucide-react';
 
 export default function PricingPage() {
-  const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   return (
     <div className="space-y-6">
-        <div className="mb-6">
-            <h1 className="text-3xl font-bold">Custo e Preço</h1>
-            <p className="text-muted-foreground">Analise a lucratividade das suas mercadorias e compare seus preços com os da concorrência.</p>
+        <div className="text-center mb-10">
+            <h1 className="text-4xl font-bold tracking-tight">Custo e Preço</h1>
+            <p className="text-lg text-muted-foreground mt-2">Analise a lucratividade das suas mercadorias e compare seus preços com os da concorrência.</p>
         </div>
 
-        <Tabs defaultValue="cost-analysis" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="cost-analysis"><DollarSign className="mr-2 h-4 w-4" /> Análise de Custo</TabsTrigger>
-                <TabsTrigger value="comparison"><LineChart className="mr-2 h-4 w-4" /> Comparação de Preços</TabsTrigger>
-            </TabsList>
-            <TabsContent value="cost-analysis" className="mt-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <DollarSign />
-                            Análise de custo
-                        </CardTitle>
-                        <CardDescription>
-                            Crie composições, analise o CMV e simule preços de venda para entender a lucratividade. Use a tabela abaixo para uma visão detalhada e ações.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <PricingSimulator />
-                    </CardContent>
-                </Card>
-            </TabsContent>
-            <TabsContent value="comparison" className="mt-6 space-y-6">
-                 <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Mercadorias dos concorrentes
-                    </Button>
-                    <Button onClick={() => setIsCompetitorModalOpen(true)}>
-                        <Users className="mr-2 h-4 w-4" /> Gerenciar Concorrentes
-                    </Button>
-                </div>
-                <PriceComparisonTable />
-            </TabsContent>
-        </Tabs>
-        
-        <CompetitorManagementModal
-            isOpen={isCompetitorModalOpen}
-            onClose={() => setIsCompetitorModalOpen(false)}
-        />
-         <CompetitorProductManagementModal
-            isOpen={isProductModalOpen}
-            onClose={() => setIsProductModalOpen(false)}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-center">
+            <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                <CardHeader className="p-0 items-center">
+                    <div className="p-4 bg-primary/10 rounded-full mb-4">
+                        <DollarSign className="h-10 w-10 text-primary" />
+                    </div>
+                    <CardTitle className="text-2xl mb-2">Análise de Custo</CardTitle>
+                    <CardDescription>Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <Link href="/dashboard/pricing/cost-analysis" className="w-full">
+                        <Button className="w-full text-lg py-6">
+                            Acessar análise <ArrowRight className="ml-2" />
+                        </Button>
+                    </Link>
+                </CardContent>
+            </Card>
+
+            <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                <CardHeader className="p-0 items-center">
+                    <div className="p-4 bg-primary/10 rounded-full mb-4">
+                        <LineChart className="h-10 w-10 text-primary" />
+                    </div>
+                    <CardTitle className="text-2xl mb-2">Comparação de Preços</CardTitle>
+                    <CardDescription>Cadastre concorrentes, correlacione suas mercadorias e compare os preços de venda.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <Link href="/dashboard/pricing/price-comparison" className="w-full">
+                        <Button className="w-full text-lg py-6">
+                            Acessar comparação <ArrowRight className="ml-2" />
+                        </Button>
+                    </Link>
+                </CardContent>
+            </Card>
+        </div>
     </div>
   );
 }
