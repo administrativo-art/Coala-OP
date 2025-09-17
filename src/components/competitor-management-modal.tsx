@@ -84,7 +84,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Produto do Concorrente</TableHead>
-                                <TableHead>Produto KS Correlacionado</TableHead>
+                                <TableHead>Mercadoria KS Correlacionada</TableHead>
                                 <TableHead className="text-right">Último Preço (R$)</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
@@ -109,7 +109,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
                                 )
                             }) : (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">Nenhum produto cadastrado para este concorrente.</TableCell>
+                                    <TableCell colSpan={4} className="h-24 text-center">Nenhuma mercadoria cadastrada para este concorrente.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
@@ -119,7 +119,6 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
              <CompetitorProductModal
                 isOpen={isProductModalOpen}
                 onClose={() => setIsProductModalOpen(false)}
-                competitorId={competitor.id}
                 productToEdit={selectedProduct}
             />
             {productForPriceHistory && (
