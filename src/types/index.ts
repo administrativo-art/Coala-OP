@@ -717,6 +717,9 @@ export type Task = {
 export type Competitor = {
     id: string;
     name: string;
+    address?: string;
+    city?: string;
+    state?: string;
     active: boolean;
 };
 
@@ -751,3 +754,4 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
