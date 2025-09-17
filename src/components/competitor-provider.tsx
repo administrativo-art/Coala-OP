@@ -244,3 +244,4 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
         </CompetitorContext.Provider>
     );
 }
+

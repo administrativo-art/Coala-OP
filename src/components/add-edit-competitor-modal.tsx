@@ -126,3 +126,4 @@ export function AddEditCompetitorModal({ isOpen, onClose, competitorToEdit }: Ad
     </Dialog>
   );
 }
+

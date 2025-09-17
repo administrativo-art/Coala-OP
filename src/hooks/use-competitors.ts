@@ -11,3 +11,4 @@ export const useCompetitors = (): CompetitorContextType => {
   }
   return context;
 };
+
