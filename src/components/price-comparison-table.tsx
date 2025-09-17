@@ -82,7 +82,20 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
                 const competitorProds = competitorProductMap.get(c.id) || [];
                 const correlatedProd = competitorProds.find(p => p.ksProductId === sim.id);
                 const latestPrice = correlatedProd ? priceMap.get(correlatedProd.id) : undefined;
-                row.push(latestPrice ? formatCurrency(latestPrice.price) : '-');
+                
+                let cellText = '-';
+                if (latestPrice) {
+                    cellText = formatCurrency(latestPrice.price);
+                    if (sim.salePrice > 0) {
+                        const impact = ((sim.salePrice / latestPrice.price) - 1) * 100;
+                        if (impact > 5) {
+                            cellText += `\n(+${impact.toFixed(0)}% Acima)`;
+                        } else if (impact < -5) {
+                            cellText += `\n(${impact.toFixed(0)}% Abaixo)`;
+                        }
+                    }
+                }
+                row.push(cellText);
              });
              return row;
         });
@@ -109,7 +122,7 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
                     competitorName: competitor?.name,
                     price: latestPrice?.price
                 }
-            }).filter(p => p.price !== undefined);
+            }).filter(p => p.price !== undefined) as { competitorName: string; price: number }[];
 
             return {
                 ksItemName: sim.name,
