@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DollarSign, BarChart, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { PriceComparisonTable } from '@/components/price-comparison-table';
 
 export default function PricingPage() {
   return (
@@ -25,6 +26,8 @@ export default function PricingPage() {
             <PricingSimulator />
         </CardContent>
       </Card>
+
+      <PriceComparisonTable />
 
       <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
           <CardHeader className="p-0 items-center">
@@ -45,3 +48,4 @@ export default function PricingPage() {
     </div>
   );
 }
+
