@@ -40,7 +40,7 @@ export interface CompetitorContextType {
   deleteCompetitor: (id: string) => Promise<void>;
   
   // Products
-  addProduct: (product: Omit<CompetitorProduct, 'id'>) => Promise<string | null>;
+  addProduct: (product: Partial<Omit<CompetitorProduct, 'id'>> & { price?: number }) => Promise<string | null>;
   updateProduct: (id: string, data: Partial<CompetitorProduct>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   
@@ -168,10 +168,27 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     }, []);
 
     // Competitor Products
-    const addProduct = useCallback(async (product: Omit<CompetitorProduct, 'id'>) => {
+    const addProduct = useCallback(async (productData: Partial<Omit<CompetitorProduct, 'id'>> & { price?: number }) => {
+        const { price, ...product } = productData;
+        const batch = writeBatch(db);
         try {
-            const docRef = await addDoc(collection(db, "concorrente_produtos"), product);
-            return docRef.id;
+            const productRef = doc(collection(db, "concorrente_produtos"));
+            batch.set(productRef, product);
+
+            if(price) {
+                const priceRef = doc(collection(db, "concorrente_precos"));
+                const newPrice: Omit<CompetitorPrice, 'id'> = {
+                    competitorProductId: productRef.id,
+                    price,
+                    data_coleta: new Date().toISOString(),
+                    fonte: 'Cadastro inicial',
+                    promocional: false,
+                };
+                batch.set(priceRef, newPrice);
+            }
+            
+            await batch.commit();
+            return productRef.id;
         } catch (error) {
             console.error("Error adding competitor product:", error);
             return null;

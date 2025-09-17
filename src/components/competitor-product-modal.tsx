@@ -23,6 +23,7 @@ const productSchema = z.object({
   competitorId: z.string().min(1, 'Selecione um concorrente.'),
   itemName: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   unit: z.string().min(1, 'A unidade de venda é obrigatória (ex: 300ml, 1un).'),
+  price: z.coerce.number().min(0.01, "O preço deve ser maior que zero.").optional(),
   ksProductId: z.string().nullable().optional(),
   active: z.boolean(),
 });
@@ -49,6 +50,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
       competitorId: '',
       itemName: '',
       unit: '',
+      price: undefined,
       ksProductId: null,
       active: true,
     }
@@ -78,6 +80,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
           competitorId: productToEdit.competitorId,
           itemName: productToEdit.itemName,
           unit: productToEdit.unit,
+          price: undefined, // Price is for new items only
           ksProductId: productToEdit.ksProductId,
           active: productToEdit.active,
         });
@@ -87,6 +90,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
           competitorId: '',
           itemName: '',
           unit: '',
+          price: undefined,
           ksProductId: null,
           active: true,
         });
@@ -98,9 +102,15 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     setIsSubmitting(true);
     try {
         if (productToEdit) {
-          await updateProduct(productToEdit.id, values);
+          const { price, ...updateValues } = values; // Price is not edited here
+          await updateProduct(productToEdit.id, updateValues);
           toast({ title: 'Mercadoria atualizada com sucesso!' });
         } else {
+          if (!values.price) {
+             toast({ variant: 'destructive', title: 'Erro', description: 'O preço inicial é obrigatório.' });
+             setIsSubmitting(false);
+             return false;
+          }
           await addProduct(values);
           toast({ title: 'Mercadoria adicionada com sucesso!' });
         }
@@ -127,6 +137,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
             ...values,
             itemName: '',
             unit: '',
+            price: undefined,
             ksProductId: null,
             active: true,
         });
@@ -174,7 +185,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                         <Select 
                             onValueChange={field.onChange} 
                             value={field.value} 
-                            disabled={!selectedGroupId || productToEdit}
+                            disabled={!selectedGroupId || !!productToEdit}
                         >
                             <FormControl>
                                 <SelectTrigger>
@@ -200,17 +211,32 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="unit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Unidade de venda</FormLabel>
-                      <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                 <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="unit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade de venda</FormLabel>
+                          <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     {!productToEdit && (
+                       <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Preço (R$)</FormLabel>
+                              <FormControl><Input type="number" step="0.01" placeholder="Ex: 19.90" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                     )}
+                </div>
                 <FormField
                   control={form.control}
                   name="ksProductId"
@@ -277,7 +303,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar e fechar
               </Button>
-               <Button type="button" onClick={form.handleSubmit(handleSaveAndAddAnother)} disabled={isSubmitting}>
+               <Button type="button" onClick={form.handleSubmit(handleSaveAndAddAnother)} disabled={isSubmitting || !!productToEdit}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar e adicionar outra
               </Button>
