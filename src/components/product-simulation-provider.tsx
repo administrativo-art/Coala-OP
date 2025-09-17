@@ -13,7 +13,7 @@ interface SimulationData {
     name: string;
     categoryIds: string[];
     lineId?: string | null;
-    groupId?: string | null;
+    groupIds: string[];
     items: {
         id?: string;
         baseProductId: string;
@@ -37,7 +37,7 @@ interface SimulationData {
 interface BulkUpdatePayload {
     line: { action: 'keep' | 'set' | 'clear', id?: string };
     category: { action: 'keep' | 'set' | 'clear', id?: string };
-    group: { action: 'keep' | 'set' | 'clear', id?: string };
+    group: { action: 'keep' | 'add' | 'remove' | 'set', id?: string };
     price: { action: 'keep' | 'change', type: 'percentage' | 'fixed', value: number };
 }
 
@@ -248,33 +248,28 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 updatedAt: now,
                 updatedBy: { userId: user.id, username: user.username },
             };
-            const historyDetails: SimulationChangeHistory['details'] = [];
-
+            
             // Handle Line
             if (updates.line.action === 'set' && updates.line.id) {
                 updatePayload.lineId = updates.line.id;
-                historyDetails.push({ field: 'lineId', from: sim.lineId || null, to: updates.line.id });
             } else if (updates.line.action === 'clear') {
                 updatePayload.lineId = null;
-                historyDetails.push({ field: 'lineId', from: sim.lineId || null, to: null });
             }
             
             // Handle Category
              if (updates.category.action === 'set' && updates.category.id) {
                 updatePayload.categoryIds = [updates.category.id];
-                 historyDetails.push({ field: 'categoryIds', from: sim.categoryIds || [], to: [updates.category.id] });
             } else if (updates.category.action === 'clear') {
                 updatePayload.categoryIds = [];
-                 historyDetails.push({ field: 'categoryIds', from: sim.categoryIds || [], to: [] });
             }
 
             // Handle Group
             if (updates.group.action === 'set' && updates.group.id) {
-                updatePayload.groupId = updates.group.id;
-                historyDetails.push({ field: 'groupId', from: sim.groupId || null, to: updates.group.id });
-            } else if (updates.group.action === 'clear') {
-                updatePayload.groupId = null;
-                historyDetails.push({ field: 'groupId', from: sim.groupId || null, to: null });
+                updatePayload.groupIds = [updates.group.id];
+            } else if (updates.group.action === 'add' && updates.group.id) {
+                updatePayload.groupIds = Array.from(new Set([...(sim.groupIds || []), updates.group.id]));
+            } else if (updates.group.action === 'remove' && updates.group.id) {
+                updatePayload.groupIds = (sim.groupIds || []).filter(id => id !== updates.group.id);
             }
             
             // Handle Price
@@ -307,15 +302,6 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     };
                     batch.set(historyRef, historyEntry);
                  }
-            }
-
-
-            if (historyDetails.length > 0) {
-                const historyEntry: SimulationChangeHistory = {
-                    timestamp: now, userId: user.id, username: user.username,
-                    action: 'batch_edit', details: historyDetails
-                };
-                updatePayload.historicoAlteracoes = arrayUnion(historyEntry);
             }
             
             batch.update(simRef, updatePayload);
