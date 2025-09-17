@@ -95,7 +95,7 @@ export function PricingSimulator() {
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = searchTerm ? sim.name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
-            const categoryMatch = categoryFilters.size === 0 || sim.categoryIds.some(catId => categoryFilters.has(catId));
+            const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             
             return searchMatch && categoryMatch && lineMatch;
@@ -471,9 +471,12 @@ export function PricingSimulator() {
                                      <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                            {line && <Badge variant="secondary">{line.name}</Badge>}
+                                            {simCategories.map(cat => (
+                                                <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
+                                            ))}
+                                            {line && <Badge variant="outline">{line.name}</Badge>}
                                             {simGroups.map(group => (
-                                                <Badge key={group.id} variant="outline">{group.name}</Badge>
+                                                <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>{group.name}</Badge>
                                             ))}
                                         </div>
                                     </div>
@@ -689,3 +692,4 @@ export function PricingSimulator() {
     
 
     
+
