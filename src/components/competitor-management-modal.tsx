@@ -61,12 +61,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
         });
         return priceMap;
     }, [competitorPrices]);
-
-    const handleAddProduct = () => {
-        setSelectedProduct(null);
-        setIsProductModalOpen(true);
-    };
-
+    
     const handleEditProduct = (product: CompetitorProduct) => {
         setSelectedProduct(product);
         setIsProductModalOpen(true);
@@ -84,7 +79,6 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
     return (
         <>
             <div className="space-y-2">
-                <Button variant="outline" size="sm" onClick={handleAddProduct}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar produto para {competitor.name}</Button>
                 <div className="rounded-md border">
                     <Table>
                         <TableHeader>
@@ -212,7 +206,7 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
                                 control={form.control}
                                 name="address"
                                 render={({ field }) => (
-                                    <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input {...field} placeholder="Rua, Número, Bairro" /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="Rua, Número, Bairro" /></FormControl><FormMessage /></FormItem>
                                 )}
                             />
                         </div>
@@ -221,14 +215,14 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
                                 control={form.control}
                                 name="city"
                                 render={({ field }) => (
-                                    <FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} placeholder="São Luís" /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="São Luís" /></FormControl><FormMessage /></FormItem>
                                 )}
                             />
                              <FormField
                                 control={form.control}
                                 name="state"
                                 render={({ field }) => (
-                                    <FormItem><FormLabel>Estado</FormLabel><FormControl><Input {...field} placeholder="MA" /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Estado</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="MA" /></FormControl><FormMessage /></FormItem>
                                 )}
                             />
                             <div className="flex gap-2">

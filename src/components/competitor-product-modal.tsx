@@ -23,6 +23,7 @@ import { Switch } from './ui/switch';
 
 
 const productSchema = z.object({
+  competitorId: z.string().min(1, 'Selecione um concorrente.'),
   itemName: z.string().min(1, 'O nome é obrigatório.'),
   unit: z.string().min(1, 'A unidade é obrigatória (ex: 300ml, 1un).'),
   ksProductId: z.string().nullable().optional(),
@@ -34,12 +35,12 @@ type FormValues = z.infer<typeof productSchema>;
 interface CompetitorProductModalProps {
   isOpen: boolean;
   onClose: () => void;
-  competitorId: string;
   productToEdit: CompetitorProduct | null;
+  competitorId?: string;
 }
 
-export function CompetitorProductModal({ isOpen, onClose, competitorId, productToEdit }: CompetitorProductModalProps) {
-  const { addProduct, updateProduct } = useCompetitors();
+export function CompetitorProductModal({ isOpen, onClose, productToEdit, competitorId }: CompetitorProductModalProps) {
+  const { competitors, addProduct, updateProduct } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -47,6 +48,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
   const form = useForm<FormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
+      competitorId: competitorId || '',
       itemName: '',
       unit: '',
       ksProductId: null,
@@ -58,6 +60,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
     if (isOpen) {
       if (productToEdit) {
         form.reset({
+          competitorId: productToEdit.competitorId,
           itemName: productToEdit.itemName,
           unit: productToEdit.unit,
           ksProductId: productToEdit.ksProductId,
@@ -65,6 +68,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
         });
       } else {
         form.reset({
+          competitorId: competitorId || '',
           itemName: '',
           unit: '',
           ksProductId: null,
@@ -72,12 +76,11 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
         });
       }
     }
-  }, [isOpen, productToEdit, form]);
+  }, [isOpen, productToEdit, form, competitorId]);
 
   const onSubmit = async (values: FormValues) => {
     const dataToSave = {
         ...values,
-        competitorId,
     };
     if (productToEdit) {
       await updateProduct(productToEdit.id, dataToSave);
@@ -100,6 +103,28 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+             {!productToEdit && (
+                 <FormField
+                    control={form.control}
+                    name="competitorId"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Concorrente</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o concorrente" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                 />
+             )}
             <FormField
               control={form.control}
               name="itemName"

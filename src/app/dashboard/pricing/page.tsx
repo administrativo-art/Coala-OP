@@ -1,17 +1,18 @@
-
 "use client";
 
 import { useState } from 'react';
 import { PricingSimulator } from '@/components/pricing-simulator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, LineChart, Users } from 'lucide-react';
+import { DollarSign, LineChart, Users, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
+import { CompetitorProductModal } from '@/components/competitor-product-modal';
 
 export default function PricingPage() {
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -42,7 +43,10 @@ export default function PricingPage() {
                 </Card>
             </TabsContent>
             <TabsContent value="comparison" className="mt-6 space-y-6">
-                 <div className="flex justify-end">
+                 <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Mercadoria do Concorrente
+                    </Button>
                     <Button onClick={() => setIsCompetitorModalOpen(true)}>
                         <Users className="mr-2 h-4 w-4" /> Gerenciar Concorrentes
                     </Button>
@@ -54,6 +58,11 @@ export default function PricingPage() {
         <CompetitorManagementModal
             isOpen={isCompetitorModalOpen}
             onClose={() => setIsCompetitorModalOpen(false)}
+        />
+         <CompetitorProductModal
+            isOpen={isProductModalOpen}
+            onClose={() => setIsProductModalOpen(false)}
+            productToEdit={null}
         />
     </div>
   );
