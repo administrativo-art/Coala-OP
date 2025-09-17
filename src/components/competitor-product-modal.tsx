@@ -264,7 +264,17 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Preço (R$)</FormLabel>
-                          <FormControl><Input type="number" step="0.01" placeholder="Ex: 19.90" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} value={field.value ?? ''} /></FormControl>
+                          <FormControl>
+                            <Input
+                                type="text"
+                                placeholder="Ex: 19,90"
+                                value={field.value !== undefined ? String(field.value).replace('.', ',') : ''}
+                                onChange={e => {
+                                    const value = e.target.value.replace(',', '.');
+                                    field.onChange(value === '' ? undefined : parseFloat(value));
+                                }}
+                            />
+                            </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
