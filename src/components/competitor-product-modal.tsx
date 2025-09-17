@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Switch } from './ui/switch';
 
@@ -36,19 +36,19 @@ interface CompetitorProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   productToEdit: CompetitorProduct | null;
-  competitorId?: string;
 }
 
-export function CompetitorProductModal({ isOpen, onClose, productToEdit, competitorId }: CompetitorProductModalProps) {
+export function CompetitorProductModal({ isOpen, onClose, productToEdit }: CompetitorProductModalProps) {
   const { competitors, addProduct, updateProduct } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      competitorId: competitorId || '',
+      competitorId: '',
       itemName: '',
       unit: '',
       ksProductId: null,
@@ -68,7 +68,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit, competi
         });
       } else {
         form.reset({
-          competitorId: competitorId || '',
+          competitorId: '',
           itemName: '',
           unit: '',
           ksProductId: null,
@@ -76,20 +76,45 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit, competi
         });
       }
     }
-  }, [isOpen, productToEdit, form, competitorId]);
+  }, [isOpen, productToEdit, form]);
 
-  const onSubmit = async (values: FormValues) => {
-    const dataToSave = {
-        ...values,
-    };
-    if (productToEdit) {
-      await updateProduct(productToEdit.id, dataToSave);
-      toast({ title: 'Produto atualizado com sucesso!' });
-    } else {
-      await addProduct(dataToSave);
-      toast({ title: 'Produto adicionado com sucesso!' });
+  const processSubmit = async (values: FormValues) => {
+    setIsSubmitting(true);
+    try {
+        if (productToEdit) {
+          await updateProduct(productToEdit.id, values);
+          toast({ title: 'Produto atualizado com sucesso!' });
+        } else {
+          await addProduct(values);
+          toast({ title: 'Produto adicionado com sucesso!' });
+        }
+        return true;
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Erro ao salvar', description: 'Não foi possível salvar o produto.' });
+        return false;
+    } finally {
+        setIsSubmitting(false);
     }
-    onClose();
+  };
+  
+  const handleSaveAndClose = async (values: FormValues) => {
+    const success = await processSubmit(values);
+    if(success) {
+        onClose();
+    }
+  };
+
+  const handleSaveAndAddAnother = async (values: FormValues) => {
+    const success = await processSubmit(values);
+    if(success) {
+        form.reset({
+            ...values, // Mantém o concorrente selecionado
+            itemName: '',
+            unit: '',
+            ksProductId: null,
+            active: true,
+        });
+    }
   };
 
   return (
@@ -102,29 +127,27 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit, competi
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-             {!productToEdit && (
-                 <FormField
-                    control={form.control}
-                    name="competitorId"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Concorrente</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o concorrente" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                 />
-             )}
+          <form className="space-y-4">
+             <FormField
+                control={form.control}
+                name="competitorId"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Concorrente</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!!productToEdit}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione o concorrente" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+             />
             <FormField
               control={form.control}
               name="itemName"
@@ -236,9 +259,16 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit, competi
                 </FormItem>
               )}
             />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit">Salvar Produto</Button>
+             <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
+              <Button type="button" variant="secondary" onClick={form.handleSubmit(handleSaveAndClose)} disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar e Fechar
+              </Button>
+               <Button type="button" onClick={form.handleSubmit(handleSaveAndAddAnother)} disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar e Adicionar Outro
+              </Button>
             </DialogFooter>
           </form>
         </Form>
