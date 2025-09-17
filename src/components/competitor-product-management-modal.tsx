@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
-import { 
+import {
     Dialog,
     DialogContent,
     DialogHeader,
@@ -84,8 +84,8 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
 
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="space-y-3 mb-4">
-                <div className="flex items-center gap-2">
-                    <div className="relative flex-grow">
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <div className="relative flex-grow w-full">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             placeholder="Buscar por mercadoria, concorrente ou vínculo..."
@@ -94,7 +94,7 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
                             className="pl-10 w-full"
                         />
                     </div>
-                    <Button onClick={handleAddNew}>
+                    <Button onClick={handleAddNew} className="w-full sm:w-auto">
                         <PlusCircle className="mr-2 h-4 w-4" /> Adicionar nova mercadoria
                     </Button>
                 </div>
