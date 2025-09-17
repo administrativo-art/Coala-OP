@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -61,6 +62,7 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
   
   const handleStartEdit = (competitor: Competitor) => {
     setEditingCompetitor(competitor);
+    form.reset(competitor);
   };
 
   const handleCancelEdit = () => {
@@ -168,7 +170,8 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
         open={!!competitorToDelete}
         onOpenChange={() => setCompetitorToDelete(null)}
         onConfirm={handleDeleteConfirm}
-        itemName={`o concorrente "${competitorToDelete?.name}" e todos os seus produtos e preços`}
+        itemName={`o concorrente "${competitorToDelete?.name}"`}
+        description="Esta ação também excluirá permanentemente todos os produtos e preços associados a este concorrente."
     />
     </>
   );
