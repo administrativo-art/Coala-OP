@@ -21,6 +21,8 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { Checkbox } from './ui/checkbox';
+import { Separator } from './ui/separator';
+import { Badge } from './ui/badge';
 
 
 const priceSchema = z.object({
@@ -45,7 +47,7 @@ export function CompetitorPriceModal({ isOpen, onClose, product }: CompetitorPri
   const form = useForm<FormValues>({
     resolver: zodResolver(priceSchema),
     defaultValues: {
-      price: 0,
+      price: undefined,
       data_coleta: new Date(),
       fonte: '',
       promocional: false,
@@ -64,7 +66,7 @@ export function CompetitorPriceModal({ isOpen, onClose, product }: CompetitorPri
     };
     await addPrice(dataToSave);
     toast({ title: 'Preço adicionado com sucesso!' });
-    form.reset({ price: 0, data_coleta: new Date(), fonte: '', promocional: false });
+    form.reset({ price: undefined, data_coleta: new Date(), fonte: '', promocional: false });
   };
 
   return (
@@ -85,7 +87,7 @@ export function CompetitorPriceModal({ isOpen, onClose, product }: CompetitorPri
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Novo Preço (R$)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                      <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
