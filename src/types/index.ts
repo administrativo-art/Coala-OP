@@ -733,7 +733,8 @@ export type CompetitorProduct = {
     id: string;
     competitorId: string;
     itemName: string;
-    unit: string;
+    packageSize?: string;
+    unit?: string;
     ksProductId?: string | null; // Correlates to our ProductSimulation id
     active: boolean;
 };

@@ -9,6 +9,7 @@ import { useCompetitors } from '@/hooks/use-competitors';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useToast } from '@/hooks/use-toast';
 import { type CompetitorProduct } from '@/types';
+import { units, unitCategories } from '@/lib/conversion';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,8 @@ import { ScrollArea } from './ui/scroll-area';
 const productSchema = z.object({
   competitorId: z.string().min(1, 'Selecione um concorrente.'),
   itemName: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  unit: z.string().min(1, 'A unidade de venda é obrigatória (ex: 300ml, 1un).'),
+  packageSize: z.string().optional(),
+  unit: z.string().optional(),
   price: z.coerce.number().min(0.01, "O preço deve ser maior que zero.").optional(),
   ksProductId: z.string().nullable().optional(),
   active: z.boolean(),
@@ -49,12 +51,18 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     defaultValues: {
       competitorId: '',
       itemName: '',
+      packageSize: '',
       unit: '',
       price: undefined,
       ksProductId: null,
       active: true,
     }
   });
+  
+  const allUnits = useMemo(() => {
+    return unitCategories.flatMap(category => Object.keys(units[category]));
+  }, []);
+
 
   const filteredSimulations = useMemo(() => {
     if (!searchTerm) return simulations;
@@ -79,7 +87,8 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
         form.reset({
           competitorId: productToEdit.competitorId,
           itemName: productToEdit.itemName,
-          unit: productToEdit.unit,
+          packageSize: productToEdit.packageSize || '',
+          unit: productToEdit.unit || '',
           price: undefined, // Price is for new items only
           ksProductId: productToEdit.ksProductId,
           active: productToEdit.active,
@@ -89,6 +98,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
         form.reset({
           competitorId: '',
           itemName: '',
+          packageSize: '',
           unit: '',
           price: undefined,
           ksProductId: null,
@@ -136,6 +146,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
         form.reset({
             ...values,
             itemName: '',
+            packageSize: '',
             unit: '',
             price: undefined,
             ksProductId: null,
@@ -206,7 +217,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nome da mercadoria</FormLabel>
-                      <FormControl><Input placeholder="Ex: Milkshake Morango P" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Ex: Milkshake Morango" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -214,29 +225,51 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="unit"
+                      name="packageSize"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unidade de venda</FormLabel>
-                          <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
+                          <FormLabel>Tamanho (opcional)</FormLabel>
+                          <FormControl><Input placeholder="Ex: 300, P, G" {...field} value={field.value || ''} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                     {!productToEdit && (
-                       <FormField
-                          control={form.control}
-                          name="price"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Preço (R$)</FormLabel>
-                              <FormControl><Input type="number" step="0.01" placeholder="Ex: 19.90" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                     )}
+                    <FormField
+                      control={form.control}
+                      name="unit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade de medida (opcional)</FormLabel>
+                           <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    {allUnits.map(unit => (
+                                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                 </div>
+                 {!productToEdit && (
+                   <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Preço (R$)</FormLabel>
+                          <FormControl><Input type="number" step="0.01" placeholder="Ex: 19.90" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} value={field.value ?? ''} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                 )}
                 <FormField
                   control={form.control}
                   name="ksProductId"
