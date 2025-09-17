@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { ArrowLeft, LineChart, Wand2, Group, Users, History, Menu, Trash2 } from 'lucide-react';
+import { ArrowLeft, LineChart, SlidersHorizontal, Group, Users, History, Menu, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -113,7 +113,7 @@ export default function PriceComparisonPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
-                    <Wand2 className="mr-2 h-4 w-4" />
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
                     Realizar análise
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
