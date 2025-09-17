@@ -197,18 +197,22 @@ export function CompetitorManagement() {
         <Accordion type="single" collapsible className="w-full">
             {competitors.map(c => (
                 <AccordionItem value={c.id} key={c.id}>
-                    <AccordionTrigger>
-                        <div className='flex justify-between items-center w-full'>
+                    <div className="flex items-center">
+                        <AccordionTrigger className="flex-1">
                             <div className="flex items-center gap-2">
                                 <Building className="h-5 w-5 text-muted-foreground" />
                                 <span className="font-medium">{c.name}</span>
                             </div>
-                             <div className="flex gap-1 pr-2" onClick={e => e.stopPropagation()}>
-                                <Button variant="ghost" size="icon" onClick={(e) => handleStartEdit(e, c)}><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteCompetitor(c.id)}><Trash2 className="h-4 w-4" /></Button>
-                            </div>
+                        </AccordionTrigger>
+                        <div className="flex gap-1 pr-2">
+                            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleStartEdit(e, c); }}>
+                                <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={(e) => { e.stopPropagation(); deleteCompetitor(c.id); }}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
                         </div>
-                    </AccordionTrigger>
+                    </div>
                     <AccordionContent className="p-4">
                         <CompetitorProducts competitor={c} />
                     </AccordionContent>
