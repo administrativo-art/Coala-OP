@@ -36,31 +36,24 @@ export async function analyzePrices(input: PriceAnalysisInput): Promise<PriceAna
 
 const analysisPrompt = `
 Você é um especialista em estratégia de preços para o setor de varejo de alimentos, especificamente quiosques de shopping. Sua tarefa é analisar os dados de preços comparativos fornecidos e gerar um relatório estratégico para o gestor.
-
 O formato de entrada é uma lista de mercadorias, cada uma com o seu preço ("ksItemPrice") e uma lista de preços dos concorrentes.
-
-Sua análise deve ser clara, objetiva e acionável. Organize sua resposta nas seguintes seções, usando os títulos em negrito e listas quando apropriado. Use uma linguagem profissional e direta, evitando jargões excessivos. O objetivo é fornecer ao gestor insights que ele possa usar para tomar decisões imediatas.
-
-**Resumo Estratégico**
-Um parágrafo conciso que resume a sua competitividade geral. Destaque se você está posicionado como uma marca premium (mais cara), de valor (mais barata) ou mista.
-
-**Pontos Fortes (Vantagens Competitivas)**
-Liste de 3 a 5 produtos onde seu preço é significativamente mais competitivo (mais baixo) que a média dos concorrentes. Para cada item, mencione o produto e qual concorrente tem o preço mais alto. Use este formato:
-*   **[Nome do Produto]:** Preço competitivo de [Seu Preço], especialmente em comparação com [Nome do Concorrente] que cobra [Preço do Concorrente].
-
-**Pontos de Atenção (Desvantagens Competitivas)**
-Liste de 3 a 5 produtos onde seu preço está significativamente menos competitivo (mais alto). Identifique o concorrente mais agressivo (mais barato) para cada item. Use este formato:
-*   **[Nome do Produto]:** Seu preço de [Seu Preço] está acima de [Nome do Concorrente], que vende a [Preço do Concorrente].
-
-**Análise dos Concorrentes**
-Forneça um breve perfil de cada concorrente com base nos dados. Por exemplo: "[Nome do Concorrente] parece focar em preços agressivos para [categoria de produto], mas tem preços mais altos em [outra categoria]."
-
-**Recomendações Estratégicas**
-Com base em sua análise, forneça de 2 a 3 recomendações claras e acionáveis. As recomendações devem ser específicas. Por exemplo:
-*   "Considere criar um combo promocional com [Seu Produto Competitivo] para atrair clientes."
-*   "Avalie reduzir a margem de lucro de [Seu Produto Caro] em 5% para se alinhar com [Concorrente Mais Barato] e evitar perder vendas."
-*   "Mantenha os preços de [Seu Outro Produto Competitivo], pois você tem uma clara vantagem de custo."
-
+Sua análise deve ser clara, objetiva e acionável. Organize sua resposta nas seguintes seções, usando os títulos em negrito e listas quando apropriado. Use uma linguagem profissional e direta, evitando jargões excessivos. Não repita informações entre seções.
+Resumo Estratégico
+Um parágrafo conciso que resume a competitividade geral. Classifique a empresa como marca premium (mais cara), de valor (mais barata) ou mista. Não inclua recomendações aqui.
+Pontos Fortes (Vantagens Competitivas)
+Liste todos os produtos em que o preço esteja mais competitivo (mais baixo) em relação aos concorrentes. Para cada mercadoria analisada, use este formato:
+[Nome do Produto]: Preço de [Seu Preço], especialmente em comparação com [Concorrente Mais Caro] que cobra [Preço].
+Pontos de Atenção (Desvantagens Competitivas)
+Liste todos os produtos em que o preço esteja menos competitivo (mais alto) em relação aos concorrentes. Para cada mercadoria analisada, use este formato:
+[Nome do Produto]: Seu preço de [Seu Preço] está acima de [Concorrente Mais Barato], que vende a [Preço].
+Análise dos Concorrentes
+Descreva cada concorrente em até 3 frases, destacando:
+Categorias/produtos onde pratica preços mais agressivos (baratos).
+Categorias/produtos onde está acima da média.
+Recomendações Estratégicas
+Forneça 2 a 3 recomendações práticas e específicas, baseadas no conjunto completo de mercadorias analisadas. Sempre cite os produtos ou categorias afetadas e, se aplicável, o percentual sugerido de ajuste ou a ação promocional.
+📌 Forma de saída esperada:
+O resultado final deve ser um relatório em texto estruturado com as seções acima, escrito em português, cobrindo todas as mercadorias do JSON de entrada, em formato didático para leitura direta pelo gestor. Não use JSON na saída.
 Dados para análise:
 {{{json input}}}
 `;
@@ -75,7 +68,7 @@ const priceComparisonFlow = ai.defineFlow(
   async (input) => {
     const { text } = await ai.generate({
       prompt: analysisPrompt,
-      input: { input: input },
+      input: { input },
     });
 
     return { analysis: text || 'Não foi possível gerar a análise.' };
