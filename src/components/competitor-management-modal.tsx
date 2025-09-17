@@ -1,12 +1,9 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import React, { useState, useMemo } from 'react';
 import { useCompetitors } from '@/hooks/use-competitors';
-import { 
+import {
     Dialog,
     DialogContent,
     DialogHeader,
@@ -14,60 +11,28 @@ import {
     DialogDescription,
     DialogFooter
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PlusCircle, Edit, Trash2, Building } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { type Competitor } from '@/types';
-
-const competitorSchema = z.object({
-  name: z.string().min(1, 'O nome é obrigatório.'),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-});
-
-type CompetitorFormValues = z.infer<typeof competitorSchema>;
+import { AddEditCompetitorModal } from './add-edit-competitor-modal';
 
 export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const { competitors, loading, addCompetitor, updateCompetitor, deleteCompetitor } = useCompetitors();
+  const { competitors, loading, deleteCompetitor } = useCompetitors();
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [competitorToDelete, setCompetitorToDelete] = useState<Competitor | null>(null);
 
-  const form = useForm<CompetitorFormValues>({
-    resolver: zodResolver(competitorSchema),
-    defaultValues: { name: '', address: '', city: '', state: '' },
-  });
-
-  useEffect(() => {
-    if (editingCompetitor) {
-      form.reset(editingCompetitor);
-    } else {
-      form.reset({ name: '', address: '', city: '', state: '' });
-    }
-  }, [editingCompetitor, form]);
-
-  const onSubmit = async (values: CompetitorFormValues) => {
-    if (editingCompetitor) {
-      await updateCompetitor(editingCompetitor.id, { ...editingCompetitor, ...values });
-    } else {
-      await addCompetitor({ ...values, active: true });
-    }
+  const handleAddNew = () => {
     setEditingCompetitor(null);
-    form.reset({ name: '', address: '', city: '', state: '' });
+    setIsFormModalOpen(true);
   };
   
   const handleStartEdit = (competitor: Competitor) => {
     setEditingCompetitor(competitor);
-    form.reset(competitor);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingCompetitor(null);
-    form.reset({ name: '', address: '', city: '', state: '' });
+    setIsFormModalOpen(true);
   };
 
   const handleDeleteConfirm = () => {
@@ -84,61 +49,19 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+        <DialogContent className="max-w-xl h-[90vh] flex flex-col">
             <DialogHeader>
                 <DialogTitle>Gerenciamento de Concorrência</DialogTitle>
                 <DialogDescription>Adicione, edite e gerencie seus concorrentes.</DialogDescription>
             </DialogHeader>
 
             <div className="flex-1 flex flex-col overflow-hidden">
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem><FormLabel>Nome do Concorrente</FormLabel><FormControl><Input {...field} placeholder="Nome do concorrente" /></FormControl><FormMessage /></FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="address"
-                                render={({ field }) => (
-                                    <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="Rua, Número, Bairro" /></FormControl><FormMessage /></FormItem>
-                                )}
-                            />
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                            <FormField
-                                control={form.control}
-                                name="city"
-                                render={({ field }) => (
-                                    <FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="São Luís" /></FormControl><FormMessage /></FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="state"
-                                render={({ field }) => (
-                                    <FormItem><FormLabel>Estado</FormLabel><FormControl><Input {...field} value={field.value || ''} placeholder="MA" /></FormControl><FormMessage /></FormItem>
-                                )}
-                            />
-                            <div className="flex gap-2">
-                                {editingCompetitor ? (
-                                    <>
-                                        <Button type="submit" className="flex-1">Salvar</Button>
-                                        <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
-                                    </>
-                                ) : (
-                                    <Button type="submit" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</Button>
-                                )}
-                            </div>
-                        </div>
-                    </form>
-                </Form>
-            
-                <div className="flex-1 overflow-auto mt-6">
+                <div className="mb-4">
+                    <Button onClick={handleAddNew} className="w-full">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo concorrente
+                    </Button>
+                </div>
+                <div className="flex-1 overflow-auto mt-2">
                     <ScrollArea className="h-full pr-4">
                         <div className="space-y-2">
                             {competitors.map(c => (
@@ -165,6 +88,14 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
             </DialogFooter>
         </DialogContent>
     </Dialog>
+
+    {isFormModalOpen && (
+        <AddEditCompetitorModal
+            isOpen={isFormModalOpen}
+            onClose={() => setIsFormModalOpen(false)}
+            competitorToEdit={editingCompetitor}
+        />
+    )}
 
     <DeleteConfirmationDialog 
         open={!!competitorToDelete}
