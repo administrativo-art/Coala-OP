@@ -206,18 +206,18 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                     <CommandItem
                                         onSelect={() => {
                                             form.setValue("ksProductId", null);
-                                            setPopoverOpen(false)
+                                            setPopoverOpen(false);
                                         }}
                                     >
+                                        <Check className={cn("mr-2 h-4 w-4", !field.value ? "opacity-100" : "opacity-0")} />
                                         Nenhum
                                     </CommandItem>
                                     {simulations.map((sim) => (
                                         <CommandItem
-                                        value={sim.name}
                                         key={sim.id}
                                         onSelect={() => {
-                                            form.setValue("ksProductId", sim.id)
-                                            setPopoverOpen(false)
+                                            form.setValue("ksProductId", sim.id);
+                                            setPopoverOpen(false);
                                         }}
                                         >
                                         <Check
