@@ -83,21 +83,26 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {filteredCompetitors.map(c => (
-                                    <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <Building className="h-5 w-5 text-muted-foreground" />
-                                            <div>
-                                                <p className="font-semibold">{c.name}</p>
-                                                <p className="text-sm text-muted-foreground">{c.address}, {c.city} - {c.state}</p>
+                                {filteredCompetitors.map(c => {
+                                    const addressParts = [c.address, c.city, c.state].filter(Boolean);
+                                    const fullAddress = addressParts.length > 0 ? `${c.address ? c.address + ', ' : ''}${c.city ? c.city + ' - ' : ''}${c.state || ''}` : '';
+                                    
+                                    return (
+                                        <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <Building className="h-5 w-5 text-muted-foreground" />
+                                                <div>
+                                                    <p className="font-semibold">{c.name}</p>
+                                                    {fullAddress && <p className="text-sm text-muted-foreground">{fullAddress}</p>}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <Button variant="ghost" size="icon" onClick={() => handleStartEdit(c)}><Edit className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setCompetitorToDelete(c)}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                         </div>
-                                        <div className="flex gap-1">
-                                            <Button variant="ghost" size="icon" onClick={() => handleStartEdit(c)}><Edit className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setCompetitorToDelete(c)}><Trash2 className="h-4 w-4" /></Button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </ScrollArea>
