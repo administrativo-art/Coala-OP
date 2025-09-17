@@ -91,19 +91,19 @@ export function CompetitorSelectionModal({ isOpen, onClose, selectedCompetitorId
 
                         return (
                             <AccordionItem value={group.id} key={group.id} className="border rounded-lg">
-                                <AccordionTrigger className="p-3 hover:no-underline">
-                                    <div className="flex items-center space-x-3 flex-1">
+                                <div className="flex items-center p-3">
+                                    <div className="flex items-center space-x-3 flex-shrink-0 pr-2">
                                         <Checkbox
                                             id={`group-${group.id}`}
                                             checked={allInGroupSelected || (someInGroupSelected ? 'indeterminate' : false)}
                                             onCheckedChange={(checked) => handleSelectGroup(group.id, !!checked)}
-                                            onClick={(e) => e.stopPropagation()}
                                         />
                                         <Label htmlFor={`group-${group.id}`} className="font-semibold text-base cursor-pointer">
                                             {group.name}
                                         </Label>
                                     </div>
-                                </AccordionTrigger>
+                                    <AccordionTrigger className="p-0 hover:no-underline flex-1 justify-end" />
+                                </div>
                                 <AccordionContent className="p-3 pt-0">
                                     <div className="space-y-2 pl-8">
                                         {group.competitors.map(competitor => (
