@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCompetitors } from '@/hooks/use-competitors';
-import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { 
     Dialog,
     DialogContent,
@@ -17,18 +16,11 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Edit, Trash2, Building, History } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Building } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Badge } from './ui/badge';
-import { CompetitorProductModal } from './competitor-product-modal';
-import { type Competitor, type CompetitorProduct } from '@/types';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { CompetitorPriceModal } from './competitor-price-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
+import { type Competitor } from '@/types';
 
 const competitorSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
@@ -38,99 +30,6 @@ const competitorSchema = z.object({
 });
 
 type CompetitorFormValues = z.infer<typeof competitorSchema>;
-
-function CompetitorProducts({ competitor }: { competitor: Competitor }) {
-    const { competitorProducts, competitorPrices, loading, deleteProduct } = useCompetitors();
-    const { simulations, loading: loadingSimulations } = useProductSimulation();
-    const [selectedProduct, setSelectedProduct] = useState<CompetitorProduct | null>(null);
-    const [productForPriceHistory, setProductForPriceHistory] = useState<CompetitorProduct | null>(null);
-    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-    const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
-
-    const products = useMemo(() => {
-        return competitorProducts.filter(p => p.competitorId === competitor.id);
-    }, [competitorProducts, competitor.id]);
-
-    const latestPrices = useMemo(() => {
-        const priceMap = new Map<string, { price: number; date: string }>();
-        competitorPrices.forEach(price => {
-            if (!priceMap.has(price.competitorProductId) || new Date(price.data_coleta) > new Date(priceMap.get(price.competitorProductId)!.date)) {
-                priceMap.set(price.competitorProductId, { price: price.price, date: price.data_coleta });
-            }
-        });
-        return priceMap;
-    }, [competitorPrices]);
-    
-    const handleEditProduct = (product: CompetitorProduct) => {
-        setSelectedProduct(product);
-        setIsProductModalOpen(true);
-    };
-    
-    const handlePriceHistory = (product: CompetitorProduct) => {
-        setProductForPriceHistory(product);
-        setIsPriceModalOpen(true);
-    };
-
-    if (loading || loadingSimulations) {
-        return <Skeleton className="h-24 w-full" />;
-    }
-
-    return (
-        <>
-            <div className="space-y-2">
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Mercadoria do Concorrente</TableHead>
-                                <TableHead>Mercadoria KS Correlacionada</TableHead>
-                                <TableHead className="text-right">Último Preço (R$)</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {products.length > 0 ? products.map(p => {
-                                const correlatedSim = simulations.find(s => s.id === p.ksProductId);
-                                const latestPrice = latestPrices.get(p.id);
-                                return (
-                                    <TableRow key={p.id}>
-                                        <TableCell className="font-medium">{p.itemName} ({p.unit})</TableCell>
-                                        <TableCell>{correlatedSim ? correlatedSim.name : <Badge variant="outline">Não correlacionado</Badge>}</TableCell>
-                                        <TableCell className="text-right">
-                                            {latestPrice ? `${latestPrice.price.toFixed(2)} (${format(parseISO(latestPrice.date), 'dd/MM/yy')})` : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" onClick={() => handlePriceHistory(p)}><History className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleEditProduct(p)}><Edit className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProduct(p.id)}><Trash2 className="h-4 w-4" /></Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                            }) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">Nenhuma mercadoria cadastrada para este concorrente.</TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </div>
-             <CompetitorProductModal
-                isOpen={isProductModalOpen}
-                onClose={() => setIsProductModalOpen(false)}
-                productToEdit={selectedProduct}
-            />
-            {productForPriceHistory && (
-                <CompetitorPriceModal
-                    isOpen={isPriceModalOpen}
-                    onClose={() => setIsPriceModalOpen(false)}
-                    product={productForPriceHistory}
-                />
-            )}
-        </>
-    );
-}
-
 
 export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const { competitors, loading, addCompetitor, updateCompetitor, deleteCompetitor } = useCompetitors();
@@ -186,7 +85,7 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
             <DialogHeader>
                 <DialogTitle>Gerenciamento de Concorrência</DialogTitle>
-                <DialogDescription>Adicione, edite e gerencie seus concorrentes e os produtos deles.</DialogDescription>
+                <DialogDescription>Adicione, edite e gerencie seus concorrentes.</DialogDescription>
             </DialogHeader>
 
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -239,27 +138,23 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
             
                 <div className="flex-1 overflow-auto mt-6">
                     <ScrollArea className="h-full pr-4">
-                        <Accordion type="single" collapsible className="w-full">
+                        <div className="space-y-2">
                             {competitors.map(c => (
-                                <AccordionItem value={c.id} key={c.id}>
-                                    <div className="flex items-center">
-                                        <AccordionTrigger className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <Building className="h-5 w-5 text-muted-foreground" />
-                                                <span className="font-medium">{c.name}</span>
-                                            </div>
-                                        </AccordionTrigger>
-                                        <div className="flex gap-1 pr-2">
-                                            <Button variant="ghost" size="icon" onClick={() => handleStartEdit(c)}><Edit className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setCompetitorToDelete(c)}><Trash2 className="h-4 w-4" /></Button>
+                                <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <Building className="h-5 w-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="font-semibold">{c.name}</p>
+                                            <p className="text-sm text-muted-foreground">{c.address}, {c.city} - {c.state}</p>
                                         </div>
                                     </div>
-                                    <AccordionContent className="p-4">
-                                        <CompetitorProducts competitor={c} />
-                                    </AccordionContent>
-                                </AccordionItem>
+                                    <div className="flex gap-1">
+                                        <Button variant="ghost" size="icon" onClick={() => handleStartEdit(c)}><Edit className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setCompetitorToDelete(c)}><Trash2 className="h-4 w-4" /></Button>
+                                    </div>
+                                </div>
                             ))}
-                        </Accordion>
+                        </div>
                     </ScrollArea>
                 </div>
             </div>
