@@ -19,17 +19,7 @@ import { CompetitorSelectionModal } from '@/components/competitor-selection-moda
 import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { analyzePrices, type PriceAnalysisInput } from '@/ai/flows/price-comparison-flow';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useLocalStorage } from '@/hooks/use-local-storage';
 
-
-interface AIAnalysis {
-    id: string;
-    createdAt: string;
-    competitorsAnalyzed: string[];
-    content: string;
-}
 
 export default function PriceComparisonPage() {
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
@@ -37,49 +27,7 @@ export default function PriceComparisonPage() {
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const { competitors, loading: loadingCompetitors } = useCompetitors();
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
-  const [aiAnalyses, setAiAnalyses] = useLocalStorage<AIAnalysis[]>('aiPriceAnalyses', []);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
-  const handleAnalyze = async (data: any) => {
-      setIsAnalyzing(true);
-      
-      try {
-        const analysisResult = await analyzePrices(data as PriceAnalysisInput);
-
-        const newAnalysis: AIAnalysis = {
-            id: `analise-${Date.now()}`,
-            createdAt: new Date().toISOString(),
-            competitorsAnalyzed: selectedCompetitorIds.map(id => competitors.find(c => c.id === id)?.name || ''),
-            content: analysisResult.analysis,
-        };
-        setAiAnalyses(prev => [newAnalysis, ...prev]);
-
-      } catch (error) {
-          console.error("Failed to analyze prices:", error);
-      } finally {
-        setIsAnalyzing(false);
-      }
-  };
-
-  const handleDeleteAnalysis = (analysisId: string) => {
-    setAiAnalyses(prev => prev.filter(a => a.id !== analysisId));
-  };
-  
-   const handleExportAnalysisPdf = (analysis: AIAnalysis) => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text(`Análise de IA - ${format(parseISO(analysis.createdAt), "dd/MM/yyyy")}`, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Concorrentes: ${analysis.competitorsAnalyzed.join(', ')}`, 14, 29);
-    
-    // Split text manually to respect markdown-like formatting from AI
-    const splitContent = doc.splitTextToSize(analysis.content.replace(/\*/g, '  •'), 180);
-    doc.text(splitContent, 14, 40);
-    
-    doc.save(`analise_ia_${analysis.id}.pdf`);
-  };
-
   const selectedCompetitors = useMemo(() => {
     return competitors.filter(c => selectedCompetitorIds.includes(c.id));
   }, [selectedCompetitorIds, competitors]);
@@ -117,7 +65,7 @@ export default function PriceComparisonPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
                     <SlidersHorizontal className="mr-2 h-4 w-4" />
-                    Realizar análise
+                    Selecionar concorrentes
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
                     <Group className="mr-2 h-4 w-4" />
@@ -132,56 +80,9 @@ export default function PriceComparisonPage() {
             </div>
         </CardHeader>
         <CardContent className="space-y-4">
-            <Tabs defaultValue="comparison">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="comparison">Análise Comparativa</TabsTrigger>
-                    <TabsTrigger value="history">Histórico de Análises</TabsTrigger>
-                </TabsList>
-                <TabsContent value="comparison" className="mt-4">
-                    <PriceComparisonTable 
-                      selectedCompetitorIds={selectedCompetitorIds} 
-                      onAnalyze={handleAnalyze}
-                      isAnalyzing={isAnalyzing}
-                    />
-                </TabsContent>
-                <TabsContent value="history" className="mt-4">
-                    {aiAnalyses.length > 0 ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <History /> Histórico de Análises de IA
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Accordion type="single" collapsible className="w-full">
-                                    {aiAnalyses.map(analysis => (
-                                        <AccordionItem key={analysis.id} value={analysis.id}>
-                                            <AccordionTrigger>
-                                                Análise de {format(parseISO(analysis.createdAt), "dd/MM/yyyy 'às' HH:mm")}
-                                            </AccordionTrigger>
-                                            <AccordionContent className="space-y-4">
-                                                <pre className="p-4 bg-muted rounded-md text-sm whitespace-pre-wrap font-sans">{analysis.content}</pre>
-                                                <div className="flex gap-2">
-                                                    <Button variant="outline" size="sm" onClick={() => handleExportAnalysisPdf(analysis)}>
-                                                      Exportar Análise em PDF
-                                                    </Button>
-                                                     <Button variant="destructive" size="sm" onClick={() => handleDeleteAnalysis(analysis.id)}>
-                                                      <Trash2 className="mr-2 h-4 w-4" /> Excluir Análise
-                                                    </Button>
-                                                </div>
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    ))}
-                                </Accordion>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                           <p>Nenhuma análise de IA foi realizada ainda.</p>
-                        </div>
-                    )}
-                </TabsContent>
-            </Tabs>
+            <PriceComparisonTable 
+              selectedCompetitorIds={selectedCompetitorIds} 
+            />
         </CardContent>
       </Card>
         

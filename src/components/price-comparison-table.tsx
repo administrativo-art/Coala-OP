@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { Wand2, Download, Inbox } from "lucide-react";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { type PriceAnalysisInput } from "@/ai/flows/price-comparison-flow";
 
 const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -21,11 +20,9 @@ const formatCurrency = (value: number) => {
 
 interface PriceComparisonTableProps {
     selectedCompetitorIds: string[];
-    onAnalyze: (data: PriceAnalysisInput) => void;
-    isAnalyzing: boolean;
 }
 
-export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnalyzing }: PriceComparisonTableProps) {
+export function PriceComparisonTable({ selectedCompetitorIds }: PriceComparisonTableProps) {
     const { simulations, loading: loadingSimulations } = useProductSimulation();
     const { competitors, competitorProducts, competitorPrices, loading: loadingCompetitors } = useCompetitors();
 
@@ -112,28 +109,6 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
         doc.save(`analise_precos_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
-    const handleAnalysisClick = () => {
-         const analysisData: PriceAnalysisInput = correlatedSimulations.map(sim => {
-            const competitorPrices = selectedCompetitorIds.map(id => {
-                const competitor = competitors.find(c => c.id === id);
-                const competitorProds = competitorProductMap.get(id) || [];
-                const correlatedProd = competitorProds.find(p => p.ksProductId === sim.id);
-                const latestPrice = correlatedProd ? priceMap.get(correlatedProd.id) : undefined;
-                return {
-                    competitorName: competitor?.name,
-                    price: latestPrice?.price
-                }
-            }).filter(p => p.price !== undefined && p.competitorName !== undefined) as { competitorName: string; price: number }[];
-
-            return {
-                ksItemName: sim.name,
-                ksItemPrice: sim.salePrice,
-                competitors: competitorPrices
-            }
-        });
-        onAnalyze(analysisData);
-    };
-
     if (loading) {
         return <Skeleton className="h-64 w-full" />;
     }
@@ -163,9 +138,6 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
              <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={handleExportPdf}>
                     <Download className="mr-2" /> Exportar Análise em PDF
-                </Button>
-                <Button onClick={handleAnalysisClick} disabled={isAnalyzing}>
-                    <Wand2 className="mr-2" /> {isAnalyzing ? "Analisando..." : "Solicitar Análise com IA"}
                 </Button>
             </div>
             <div className="rounded-md border">
@@ -221,4 +193,3 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
         </div>
     );
 }
-
