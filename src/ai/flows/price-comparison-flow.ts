@@ -72,7 +72,7 @@ const priceComparisonFlow = ai.defineFlow(
   async (input) => {
     const { output } = await ai.generate({
         prompt: analysisPrompt,
-        context: [{ data: { input } }],
+        input: input,
     });
 
     return { analysis: output?.text || 'Não foi possível gerar a análise.' };
