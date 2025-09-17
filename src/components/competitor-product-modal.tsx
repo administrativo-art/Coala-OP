@@ -107,6 +107,24 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
       }
     }
   }, [isOpen, productToEdit, form, competitors]);
+  
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+    const value = e.target.value;
+    const digitsOnly = value.replace(/\D/g, '');
+    if (digitsOnly === '') {
+        field.onChange(undefined);
+        return;
+    }
+
+    const numericValue = parseInt(digitsOnly, 10) / 100;
+    field.onChange(numericValue);
+  };
+
+  const formatPrice = (value: number | undefined) => {
+      if (value === undefined || value === null) return '';
+      return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
 
   const processSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -240,7 +258,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Unidade de medida (opcional)</FormLabel>
-                           <Select onValueChange={field.onChange} value={field.value}>
+                           <Select onValueChange={field.onChange} value={field.value || ''}>
                                 <FormControl>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Selecione..." />
@@ -268,11 +286,8 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                             <Input
                                 type="text"
                                 placeholder="Ex: 19,90"
-                                value={field.value !== undefined ? String(field.value).replace('.', ',') : ''}
-                                onChange={e => {
-                                    const value = e.target.value.replace(',', '.');
-                                    field.onChange(value === '' ? undefined : parseFloat(value));
-                                }}
+                                value={formatPrice(field.value)}
+                                onChange={e => handlePriceChange(e, field)}
                             />
                             </FormControl>
                           <FormMessage />
