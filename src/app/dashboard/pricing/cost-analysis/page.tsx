@@ -19,7 +19,7 @@ export default function CostAnalysisPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <DollarSign />
-            Análise de custo
+            Análise de mercadoria
           </CardTitle>
           <CardDescription>
             Crie composições, analise o CMV e simule preços de venda para entender a lucratividade. Use a tabela abaixo para uma visão detalhada e ações.

@@ -20,7 +20,7 @@ export default function PricingPage() {
                     <div className="p-4 bg-primary/10 rounded-full mb-4">
                         <DollarSign className="h-10 w-10 text-primary" />
                     </div>
-                    <CardTitle className="text-2xl mb-2">Análise de Custo</CardTitle>
+                    <CardTitle className="text-2xl mb-2">Análise de mercadoria</CardTitle>
                     <CardDescription>Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
@@ -37,13 +37,13 @@ export default function PricingPage() {
                     <div className="p-4 bg-primary/10 rounded-full mb-4">
                         <LineChart className="h-10 w-10 text-primary" />
                     </div>
-                    <CardTitle className="text-2xl mb-2">Comparação de Preços</CardTitle>
+                    <CardTitle className="text-2xl mb-2">Estudo de preço</CardTitle>
                     <CardDescription>Cadastre concorrentes, correlacione suas mercadorias e compare os preços de venda.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                     <Link href="/dashboard/pricing/price-comparison" className="w-full">
                         <Button className="w-full text-lg py-6">
-                            Acessar comparação <ArrowRight className="ml-2" />
+                            Acessar estudo <ArrowRight className="ml-2" />
                         </Button>
                     </Link>
                 </CardContent>

@@ -25,7 +25,7 @@ export default function PriceComparisonPage() {
         <CardHeader>
             <CardTitle className="flex items-center gap-2">
                 <LineChart />
-                Comparação de Preços
+                Estudo de preço
             </CardTitle>
             <CardDescription>
                 Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
