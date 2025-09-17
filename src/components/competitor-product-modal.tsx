@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
@@ -122,7 +121,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{productToEdit ? 'Editar mercadoria do concorrente' : 'Adicionar mercadoria do concorrente'}</DialogTitle>
+          <DialogTitle>Adicionar mercadoria do concorrente</DialogTitle>
           <DialogDescription>
             Preencha os detalhes da mercadoria como ela é vendida pelo concorrente.
           </DialogDescription>
@@ -207,8 +206,8 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                     <CommandList>
                                     <CommandItem
                                         onSelect={() => {
-                                            field.onChange(null);
-                                            setPopoverOpen(false);
+                                            form.setValue("ksProductId", null);
+                                            setPopoverOpen(false)
                                         }}
                                     >
                                         Nenhum
@@ -217,9 +216,9 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                         <CommandItem
                                         value={sim.name}
                                         key={sim.id}
-                                        onSelect={() => {
-                                            field.onChange(sim.id);
-                                            setPopoverOpen(false);
+                                        onSelect={(currentValue) => {
+                                            form.setValue("ksProductId", sim.id)
+                                            setPopoverOpen(false)
                                         }}
                                         >
                                         <Check
