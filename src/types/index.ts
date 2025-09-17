@@ -714,9 +714,15 @@ export type Task = {
 };
     
 // Competition Analysis Types
-export type Competitor = {
+export type CompetitorGroup = {
     id: string;
     name: string;
+};
+
+export type Competitor = {
+    id: string;
+    name: string; // Name of the specific unit, e.g., "Shopping São Luís"
+    competitorGroupId: string; // ID of the macro group, e.g., "McDonald's"
     address?: string;
     city?: string;
     state?: string;
@@ -754,4 +760,3 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
-

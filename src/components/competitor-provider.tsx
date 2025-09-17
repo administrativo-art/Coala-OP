@@ -5,7 +5,8 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { 
     type Competitor, 
     type CompetitorProduct, 
-    type CompetitorPrice 
+    type CompetitorPrice,
+    type CompetitorGroup
 } from '@/types';
 import { db } from '@/lib/firebase';
 import { 
@@ -23,15 +24,27 @@ import {
 
 export interface CompetitorContextType {
   competitors: Competitor[];
+  competitorGroups: CompetitorGroup[];
   competitorProducts: CompetitorProduct[];
   competitorPrices: CompetitorPrice[];
   loading: boolean;
+  
+  // Groups
+  addCompetitorGroup: (data: Omit<CompetitorGroup, 'id'>) => Promise<string | null>;
+  updateCompetitorGroup: (id: string, data: Partial<CompetitorGroup>) => Promise<void>;
+  deleteCompetitorGroup: (id: string) => Promise<void>;
+
+  // Competitors
   addCompetitor: (data: Omit<Competitor, 'id'>) => Promise<string | null>;
   updateCompetitor: (id: string, data: Partial<Competitor>) => Promise<void>;
   deleteCompetitor: (id: string) => Promise<void>;
+  
+  // Products
   addProduct: (product: Omit<CompetitorProduct, 'id'>) => Promise<string | null>;
   updateProduct: (id: string, data: Partial<CompetitorProduct>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  
+  // Prices
   addPrice: (price: Omit<CompetitorPrice, 'id'>) => Promise<string | null>;
   updatePrice: (id: string, data: Partial<CompetitorPrice>) => Promise<void>;
   deletePrice: (id: string) => Promise<void>;
@@ -41,6 +54,7 @@ export const CompetitorContext = createContext<CompetitorContextType | undefined
 
 export function CompetitorProvider({ children }: { children: React.ReactNode }) {
     const [competitors, setCompetitors] = useState<Competitor[]>([]);
+    const [competitorGroups, setCompetitorGroups] = useState<CompetitorGroup[]>([]);
     const [competitorProducts, setCompetitorProducts] = useState<CompetitorProduct[]>([]);
     const [competitorPrices, setCompetitorPrices] = useState<CompetitorPrice[]>([]);
     const [loading, setLoading] = useState(true);
@@ -50,6 +64,11 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Competitor));
             setCompetitors(data);
         }, (error) => console.error("Error fetching competitors:", error));
+
+        const unsubGroups = onSnapshot(query(collection(db, "competitorGroups")), (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorGroup));
+            setCompetitorGroups(data);
+        }, (error) => console.error("Error fetching competitor groups:", error));
 
         const unsubProducts = onSnapshot(query(collection(db, "concorrente_produtos")), (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorProduct));
@@ -65,9 +84,55 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
 
         return () => {
             unsubCompetitors();
+            unsubGroups();
             unsubProducts();
             unsubPrices();
         };
+    }, []);
+
+    // Competitor Groups
+    const addCompetitorGroup = useCallback(async (data: Omit<CompetitorGroup, 'id'>) => {
+        try {
+            const docRef = await addDoc(collection(db, "competitorGroups"), data);
+            return docRef.id;
+        } catch (error) {
+            console.error("Error adding competitor group:", error);
+            return null;
+        }
+    }, []);
+
+    const updateCompetitorGroup = useCallback(async (id: string, data: Partial<CompetitorGroup>) => {
+        await updateDoc(doc(db, "competitorGroups", id), data);
+    }, []);
+
+    const deleteCompetitorGroup = useCallback(async (id: string) => {
+        const batch = writeBatch(db);
+        
+        // Delete the group itself
+        batch.delete(doc(db, "competitorGroups", id));
+        
+        // Find all competitors in this group and delete them and their related items
+        const competitorsQuery = query(collection(db, "concorrentes"), where("competitorGroupId", "==", id));
+        const competitorsSnapshot = await getDocs(competitorsQuery);
+
+        for (const competitorDoc of competitorsSnapshot.docs) {
+            batch.delete(competitorDoc.ref); // Delete competitor
+            
+            // Delete products of this competitor
+            const productsQuery = query(collection(db, "concorrente_produtos"), where("competitorId", "==", competitorDoc.id));
+            const productsSnapshot = await getDocs(productsQuery);
+            
+            for (const productDoc of productsSnapshot.docs) {
+                batch.delete(productDoc.ref); // Delete product
+                
+                // Delete prices of this product
+                const pricesQuery = query(collection(db, "concorrente_precos"), where("competitorProductId", "==", productDoc.id));
+                const pricesSnapshot = await getDocs(pricesQuery);
+                pricesSnapshot.forEach(priceDoc => batch.delete(priceDoc.ref));
+            }
+        }
+
+        await batch.commit();
     }, []);
 
     // Competitors
@@ -149,9 +214,13 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
 
     const value = useMemo(() => ({
         competitors,
+        competitorGroups,
         competitorProducts,
         competitorPrices,
         loading,
+        addCompetitorGroup,
+        updateCompetitorGroup,
+        deleteCompetitorGroup,
         addCompetitor,
         updateCompetitor,
         deleteCompetitor,
@@ -162,7 +231,8 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
         updatePrice,
         deletePrice
     }), [
-        competitors, competitorProducts, competitorPrices, loading, 
+        competitors, competitorGroups, competitorProducts, competitorPrices, loading, 
+        addCompetitorGroup, updateCompetitorGroup, deleteCompetitorGroup,
         addCompetitor, updateCompetitor, deleteCompetitor,
         addProduct, updateProduct, deleteProduct,
         addPrice, updatePrice, deletePrice

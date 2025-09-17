@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { ArrowLeft, LineChart, PlusCircle, Users, History, Wand2 } from 'lucide-react';
+import { ArrowLeft, LineChart, PlusCircle, Users, History, Wand2, Group } from 'lucide-react';
 import Link from 'next/link';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -15,6 +15,10 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
+import { Badge } from '@/components/ui/badge';
+import { X } from 'lucide-react';
+
 
 interface AIAnalysis {
     id: string;
@@ -26,18 +30,11 @@ interface AIAnalysis {
 export default function PriceComparisonPage() {
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const { competitors, loading: loadingCompetitors } = useCompetitors();
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
   const [aiAnalyses, setAiAnalyses] = useState<AIAnalysis[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
-  const handleCompetitorSelection = (competitorId: string) => {
-    setSelectedCompetitorIds(prev => 
-        prev.includes(competitorId) 
-        ? prev.filter(id => id !== competitorId)
-        : [...prev, competitorId]
-    );
-  };
   
   const handleAnalyze = async (data: any) => {
       // This is a placeholder for the actual AI flow call.
@@ -71,6 +68,14 @@ export default function PriceComparisonPage() {
     doc.save(`analise_ia_${analysis.id}.pdf`);
   };
 
+  const selectedCompetitors = useMemo(() => {
+    return competitors.filter(c => selectedCompetitorIds.includes(c.id));
+  }, [selectedCompetitorIds, competitors]);
+
+  const handleRemoveCompetitor = (competitorId: string) => {
+      setSelectedCompetitorIds(prev => prev.filter(id => id !== competitorId));
+  };
+
   return (
     <div className="space-y-6">
        <Link href="/dashboard/pricing" className="inline-block">
@@ -89,24 +94,22 @@ export default function PriceComparisonPage() {
                 Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
             </CardDescription>
              <div className="flex justify-between items-center gap-2 pt-4">
-                 <div className="flex flex-wrap gap-2">
-                    {loadingCompetitors ? (
-                        <Skeleton className="h-10 w-48" />
-                    ) : (
-                        competitors.map(c => (
-                            <Button
-                                key={c.id}
-                                variant={selectedCompetitorIds.includes(c.id) ? "default" : "outline"}
-                                onClick={() => handleCompetitorSelection(c.id)}
-                            >
-                                {c.name}
-                            </Button>
-                        ))
-                    )}
+                 <div className="flex flex-wrap gap-2 items-center">
+                    <Button onClick={() => setIsSelectionModalOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Concorrentes
+                    </Button>
+                     {selectedCompetitors.map(c => (
+                        <Badge key={c.id} variant="secondary" className="text-sm p-2">
+                            {c.name}
+                             <button onClick={() => handleRemoveCompetitor(c.id)} className="ml-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Badge>
+                    ))}
                  </div>
                  <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Mercadorias dos concorrentes
+                        <Group className="mr-2 h-4 w-4" /> Mercadorias dos concorrentes
                     </Button>
                     <Button onClick={() => setIsCompetitorModalOpen(true)}>
                         <Users className="mr-2 h-4 w-4" /> Gerenciar concorrentes
@@ -157,6 +160,12 @@ export default function PriceComparisonPage() {
          <CompetitorProductManagementModal
             isOpen={isProductModalOpen}
             onClose={() => setIsProductModalOpen(false)}
+        />
+        <CompetitorSelectionModal
+            isOpen={isSelectionModalOpen}
+            onClose={() => setIsSelectionModalOpen(false)}
+            selectedCompetitorIds={selectedCompetitorIds}
+            setSelectedCompetitorIds={setSelectedCompetitorIds}
         />
     </div>
   );

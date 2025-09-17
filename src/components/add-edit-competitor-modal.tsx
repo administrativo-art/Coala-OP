@@ -17,11 +17,12 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PlusCircle } from 'lucide-react';
-import { type Competitor } from '@/types';
+import { type Competitor, type CompetitorGroup } from '@/types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const competitorSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
+  competitorGroupId: z.string().min(1, 'O grupo é obrigatório'),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
@@ -36,18 +37,18 @@ interface AddEditCompetitorModalProps {
 }
 
 export function AddEditCompetitorModal({ isOpen, onClose, competitorToEdit }: AddEditCompetitorModalProps) {
-  const { addCompetitor, updateCompetitor } = useCompetitors();
+  const { addCompetitor, updateCompetitor, competitorGroups } = useCompetitors();
 
   const form = useForm<CompetitorFormValues>({
     resolver: zodResolver(competitorSchema),
-    defaultValues: { name: '', address: '', city: '', state: '' },
+    defaultValues: { name: '', competitorGroupId: '', address: '', city: '', state: '' },
   });
 
   useEffect(() => {
     if (competitorToEdit) {
       form.reset(competitorToEdit);
     } else {
-      form.reset({ name: '', address: '', city: '', state: '' });
+      form.reset({ name: '', competitorGroupId: '', address: '', city: '', state: '' });
     }
   }, [competitorToEdit, form, isOpen]);
 
@@ -71,11 +72,25 @@ export function AddEditCompetitorModal({ isOpen, onClose, competitorToEdit }: Ad
             </DialogHeader>
              <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+                     <FormField
+                        control={form.control}
+                        name="competitorGroupId"
+                        render={({ field }) => (
+                            <FormItem><FormLabel>Grupo de Concorrentes</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione um grupo..." /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {competitorGroups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage /></FormItem>
+                        )}
+                    />
                     <FormField
                         control={form.control}
                         name="name"
                         render={({ field }) => (
-                            <FormItem><FormLabel>Nome do Concorrente</FormLabel><FormControl><Input {...field} placeholder="Nome do concorrente" /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Nome da Unidade</FormLabel><FormControl><Input {...field} placeholder="Ex: Shopping São Luís" /></FormControl><FormMessage /></FormItem>
                         )}
                     />
                      <FormField
