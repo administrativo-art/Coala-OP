@@ -73,15 +73,11 @@ const priceComparisonFlow = ai.defineFlow(
     outputSchema: PriceAnalysisOutputSchema,
   },
   async (input) => {
-    const { output } = await ai.generate({
+    const { text } = await ai.generate({
       prompt: analysisPrompt,
       input: { input: input },
-      output: {
-        format: 'json',
-        schema: z.object({ analysis: z.string() })
-      },
     });
 
-    return { analysis: output?.analysis || 'Não foi possível gerar a análise.' };
+    return { analysis: text() || 'Não foi possível gerar a análise.' };
   }
 );

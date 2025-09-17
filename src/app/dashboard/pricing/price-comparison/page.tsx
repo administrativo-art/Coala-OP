@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -71,7 +72,8 @@ export default function PriceComparisonPage() {
     doc.setTextColor(100);
     doc.text(`Concorrentes: ${analysis.competitorsAnalyzed.join(', ')}`, 14, 29);
     
-    const splitContent = doc.splitTextToSize(analysis.content, 180);
+    // Split text manually to respect markdown-like formatting from AI
+    const splitContent = doc.splitTextToSize(analysis.content.replace(/\*/g, '  •'), 180);
     doc.text(splitContent, 14, 40);
     
     doc.save(`analise_ia_${analysis.id}.pdf`);
