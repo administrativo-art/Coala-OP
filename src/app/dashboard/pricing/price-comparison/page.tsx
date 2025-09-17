@@ -21,6 +21,7 @@ import { X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { analyzePrices, type PriceAnalysisInput } from '@/ai/flows/price-comparison-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useLocalStorage } from '@/hooks/use-local-storage';
 
 
 interface AIAnalysis {
@@ -36,7 +37,7 @@ export default function PriceComparisonPage() {
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const { competitors, loading: loadingCompetitors } = useCompetitors();
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
-  const [aiAnalyses, setAiAnalyses] = useState<AIAnalysis[]>([]);
+  const [aiAnalyses, setAiAnalyses] = useLocalStorage<AIAnalysis[]>('aiPriceAnalyses', []);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const handleAnalyze = async (data: any) => {
