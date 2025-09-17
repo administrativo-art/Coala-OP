@@ -20,6 +20,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Switch } from './ui/switch';
+import { ScrollArea } from './ui/scroll-area';
 
 
 const productSchema = z.object({
@@ -128,137 +129,141 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
         </DialogHeader>
         <Form {...form}>
           <form className="space-y-4">
-             <FormField
-                control={form.control}
-                name="competitorId"
-                render={({ field }) => (
+            <ScrollArea className="h-[60vh] -mx-6 px-6">
+             <div className="space-y-4 py-4">
+                 <FormField
+                    control={form.control}
+                    name="competitorId"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Concorrente</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={!!productToEdit}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o concorrente" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                 />
+                <FormField
+                  control={form.control}
+                  name="itemName"
+                  render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Concorrente</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={!!productToEdit}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione o concorrente" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
+                      <FormLabel>Nome da mercadoria</FormLabel>
+                      <FormControl><Input placeholder="Ex: Milkshake Morango P" {...field} /></FormControl>
+                      <FormMessage />
                     </FormItem>
-                )}
-             />
-            <FormField
-              control={form.control}
-              name="itemName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome do item</FormLabel>
-                  <FormControl><Input placeholder="Ex: Milkshake Morango P" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="unit"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Unidade de venda</FormLabel>
-                  <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-                control={form.control}
-                name="ksProductId"
-                render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                    <FormLabel>Correlacionar com mercadoria KS (opcional)</FormLabel>
-                    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                        <PopoverTrigger asChild>
-                        <FormControl>
-                            <Button
-                            variant="outline"
-                            role="combobox"
-                            className={cn(
-                                "w-full justify-between",
-                                !field.value && "text-muted-foreground"
-                            )}
-                            >
-                            {field.value
-                                ? simulations.find(
-                                    (sim) => sim.id === field.value
-                                )?.name
-                                : "Selecione uma mercadoria sua..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                        </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                        <Command>
-                            <CommandInput placeholder="Buscar mercadoria..." />
-                            <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
-                            <CommandGroup>
-                                <CommandList>
-                                <CommandItem
-                                    onSelect={() => {
-                                        field.onChange(null);
-                                        setPopoverOpen(false);
-                                    }}
-                                >
-                                    Nenhum
-                                </CommandItem>
-                                {simulations.map((sim) => (
-                                    <CommandItem
-                                    value={sim.name}
-                                    key={sim.id}
-                                    onSelect={() => {
-                                        field.onChange(sim.id);
-                                        setPopoverOpen(false);
-                                    }}
-                                    >
-                                    <Check
-                                        className={cn(
-                                        "mr-2 h-4 w-4",
-                                        sim.id === field.value
-                                            ? "opacity-100"
-                                            : "opacity-0"
-                                        )}
-                                    />
-                                    {sim.name}
-                                    </CommandItem>
-                                ))}
-                                </CommandList>
-                            </CommandGroup>
-                        </Command>
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                    </FormItem>
-                )}
+                  )}
                 />
-             <FormField
-              control={form.control}
-              name="active"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                  <div className="space-y-0.5">
-                    <FormLabel>Ativo</FormLabel>
-                     <DialogDescription className="text-xs">
-                        Desmarque para ocultar esta mercadoria das análises.
-                    </DialogDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
+                <FormField
+                  control={form.control}
+                  name="unit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Unidade de venda</FormLabel>
+                      <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                    control={form.control}
+                    name="ksProductId"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                        <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
+                        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                            <PopoverTrigger asChild>
+                            <FormControl>
+                                <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                    "w-full justify-between",
+                                    !field.value && "text-muted-foreground"
+                                )}
+                                >
+                                {field.value
+                                    ? simulations.find(
+                                        (sim) => sim.id === field.value
+                                    )?.name
+                                    : "Selecione uma mercadoria..."}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                            <Command>
+                                <CommandInput placeholder="Buscar mercadoria..." />
+                                <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
+                                <CommandGroup>
+                                    <CommandList>
+                                    <CommandItem
+                                        onSelect={() => {
+                                            field.onChange(null);
+                                            setPopoverOpen(false);
+                                        }}
+                                    >
+                                        Nenhum
+                                    </CommandItem>
+                                    {simulations.map((sim) => (
+                                        <CommandItem
+                                        value={sim.name}
+                                        key={sim.id}
+                                        onSelect={() => {
+                                            field.onChange(sim.id);
+                                            setPopoverOpen(false);
+                                        }}
+                                        >
+                                        <Check
+                                            className={cn(
+                                            "mr-2 h-4 w-4",
+                                            sim.id === field.value
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                        />
+                                        {sim.name}
+                                        </CommandItem>
+                                    ))}
+                                    </CommandList>
+                                </CommandGroup>
+                            </Command>
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                        </FormItem>
+                    )}
                     />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+                 <FormField
+                  control={form.control}
+                  name="active"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel>Mercadoria Ativa</FormLabel>
+                         <DialogDescription className="text-xs">
+                            Desmarque para ocultar esta mercadoria das análises.
+                        </DialogDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+             </div>
+            </ScrollArea>
              <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
               <Button type="button" variant="secondary" onClick={form.handleSubmit(handleSaveAndClose)} disabled={isSubmitting}>
@@ -267,7 +272,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
               </Button>
                <Button type="button" onClick={form.handleSubmit(handleSaveAndAddAnother)} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar e adicionar outro
+                Salvar e adicionar outra
               </Button>
             </DialogFooter>
           </form>
