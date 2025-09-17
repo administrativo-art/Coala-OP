@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -7,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { ArrowLeft, LineChart, Wand2, Group, Users, History, Menu } from 'lucide-react';
+import { ArrowLeft, LineChart, Wand2, Group, Users, History, Menu, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -20,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { analyzePrices, type PriceAnalysisInput } from '@/ai/flows/price-comparison-flow';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 interface AIAnalysis {
@@ -57,6 +57,10 @@ export default function PriceComparisonPage() {
       } finally {
         setIsAnalyzing(false);
       }
+  };
+
+  const handleDeleteAnalysis = (analysisId: string) => {
+    setAiAnalyses(prev => prev.filter(a => a.id !== analysisId));
   };
   
    const handleExportAnalysisPdf = (analysis: AIAnalysis) => {
@@ -125,40 +129,58 @@ export default function PriceComparisonPage() {
             </div>
         </CardHeader>
         <CardContent className="space-y-4">
-            <PriceComparisonTable 
-              selectedCompetitorIds={selectedCompetitorIds} 
-              onAnalyze={handleAnalyze}
-              isAnalyzing={isAnalyzing}
-            />
+            <Tabs defaultValue="comparison">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="comparison">Análise Comparativa</TabsTrigger>
+                    <TabsTrigger value="history">Histórico de Análises</TabsTrigger>
+                </TabsList>
+                <TabsContent value="comparison" className="mt-4">
+                    <PriceComparisonTable 
+                      selectedCompetitorIds={selectedCompetitorIds} 
+                      onAnalyze={handleAnalyze}
+                      isAnalyzing={isAnalyzing}
+                    />
+                </TabsContent>
+                <TabsContent value="history" className="mt-4">
+                    {aiAnalyses.length > 0 ? (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <History /> Histórico de Análises de IA
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Accordion type="single" collapsible className="w-full">
+                                    {aiAnalyses.map(analysis => (
+                                        <AccordionItem key={analysis.id} value={analysis.id}>
+                                            <AccordionTrigger>
+                                                Análise de {format(parseISO(analysis.createdAt), "dd/MM/yyyy 'às' HH:mm")}
+                                            </AccordionTrigger>
+                                            <AccordionContent className="space-y-4">
+                                                <pre className="p-4 bg-muted rounded-md text-sm whitespace-pre-wrap font-sans">{analysis.content}</pre>
+                                                <div className="flex gap-2">
+                                                    <Button variant="outline" size="sm" onClick={() => handleExportAnalysisPdf(analysis)}>
+                                                      Exportar Análise em PDF
+                                                    </Button>
+                                                     <Button variant="destructive" size="sm" onClick={() => handleDeleteAnalysis(analysis.id)}>
+                                                      <Trash2 className="mr-2 h-4 w-4" /> Excluir Análise
+                                                    </Button>
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                           <p>Nenhuma análise de IA foi realizada ainda.</p>
+                        </div>
+                    )}
+                </TabsContent>
+            </Tabs>
         </CardContent>
       </Card>
-      
-        {aiAnalyses.length > 0 && (
-             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <History /> Histórico de Análises de IA
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                        {aiAnalyses.map(analysis => (
-                             <AccordionItem key={analysis.id} value={analysis.id}>
-                                <AccordionTrigger>
-                                    Análise de {format(parseISO(analysis.createdAt), "dd/MM/yyyy 'às' HH:mm")}
-                                </AccordionTrigger>
-                                <AccordionContent className="space-y-4">
-                                    <pre className="p-4 bg-muted rounded-md text-sm whitespace-pre-wrap font-sans">{analysis.content}</pre>
-                                    <Button variant="outline" size="sm" onClick={() => handleExportAnalysisPdf(analysis)}>
-                                      Exportar Análise em PDF
-                                    </Button>
-                                </AccordionContent>
-                            </AccordionItem>
-                        ))}
-                    </Accordion>
-                </CardContent>
-            </Card>
-        )}
         
         <CompetitorManagementModal
             isOpen={isCompetitorModalOpen}
