@@ -30,6 +30,7 @@ import { StockAuditProvider } from '@/components/stock-audit-provider';
 import { TaskProvider } from '@/components/task-provider';
 import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provider';
 import { ClassificationsProvider } from '@/components/classifications-provider';
+import { CompetitorProvider } from '@/components/competitor-provider';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -84,7 +85,9 @@ export default function RootLayout({
                                                           <AuthorBoardDiaryProvider>
                                                             <ConsumptionAnalysisProvider>
                                                               <MovementHistoryProvider>
-                                                                {children}
+                                                                <CompetitorProvider>
+                                                                  {children}
+                                                                </CompetitorProvider>
                                                               </MovementHistoryProvider>
                                                             </ConsumptionAnalysisProvider>
                                                           </AuthorBoardDiaryProvider>
@@ -117,4 +120,5 @@ export default function RootLayout({
     </html>
   );
 }
+
 
