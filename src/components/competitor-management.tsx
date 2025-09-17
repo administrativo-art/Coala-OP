@@ -22,12 +22,15 @@ import { CompetitorProductModal } from './competitor-product-modal';
 import { type Competitor, type CompetitorProduct } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { CompetitorPriceModal } from './competitor-price-modal';
 
 function CompetitorProducts({ competitor }: { competitor: Competitor }) {
     const { competitorProducts, competitorPrices, loading, deleteProduct } = useCompetitors();
     const { simulations, loading: loadingSimulations } = useProductSimulation();
     const [selectedProduct, setSelectedProduct] = useState<CompetitorProduct | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [productForPriceHistory, setProductForPriceHistory] = useState<CompetitorProduct | null>(null);
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
 
     const products = useMemo(() => {
         return competitorProducts.filter(p => p.competitorId === competitor.id);
@@ -45,12 +48,17 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
 
     const handleAddProduct = () => {
         setSelectedProduct(null);
-        setIsModalOpen(true);
+        setIsProductModalOpen(true);
     };
 
     const handleEditProduct = (product: CompetitorProduct) => {
         setSelectedProduct(product);
-        setIsModalOpen(true);
+        setIsProductModalOpen(true);
+    };
+    
+    const handlePriceHistory = (product: CompetitorProduct) => {
+        setProductForPriceHistory(product);
+        setIsPriceModalOpen(true);
     };
 
     if (loading || loadingSimulations) {
@@ -83,6 +91,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
                                             {latestPrice ? `${latestPrice.price.toFixed(2)} (${format(parseISO(latestPrice.date), 'dd/MM/yy')})` : '-'}
                                         </TableCell>
                                         <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handlePriceHistory(p)}><History className="h-4 w-4" /></Button>
                                             <Button variant="ghost" size="icon" onClick={() => handleEditProduct(p)}><Edit className="h-4 w-4" /></Button>
                                             <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProduct(p.id)}><Trash2 className="h-4 w-4" /></Button>
                                         </TableCell>
@@ -98,11 +107,18 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
                 </div>
             </div>
              <CompetitorProductModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
+                isOpen={isProductModalOpen}
+                onClose={() => setIsProductModalOpen(false)}
                 competitorId={competitor.id}
                 productToEdit={selectedProduct}
             />
+            {productForPriceHistory && (
+                <CompetitorPriceModal
+                    isOpen={isPriceModalOpen}
+                    onClose={() => setIsPriceModalOpen(false)}
+                    product={productForPriceHistory}
+                />
+            )}
         </>
     );
 }
