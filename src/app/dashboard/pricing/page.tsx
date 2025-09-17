@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
-import { CompetitorProductModal } from '@/components/competitor-product-modal';
+import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
 
 export default function PricingPage() {
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
@@ -45,7 +45,7 @@ export default function PricingPage() {
             <TabsContent value="comparison" className="mt-6 space-y-6">
                  <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Mercadoria do Concorrente
+                        <PlusCircle className="mr-2 h-4 w-4" /> Gerenciar Mercadorias dos Concorrentes
                     </Button>
                     <Button onClick={() => setIsCompetitorModalOpen(true)}>
                         <Users className="mr-2 h-4 w-4" /> Gerenciar Concorrentes
@@ -59,10 +59,9 @@ export default function PricingPage() {
             isOpen={isCompetitorModalOpen}
             onClose={() => setIsCompetitorModalOpen(false)}
         />
-         <CompetitorProductModal
+         <CompetitorProductManagementModal
             isOpen={isProductModalOpen}
             onClose={() => setIsProductModalOpen(false)}
-            productToEdit={null}
         />
     </div>
   );

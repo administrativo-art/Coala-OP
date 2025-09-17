@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -83,7 +82,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Produto do Concorrente</TableHead>
+                                <TableHead>Mercadoria do Concorrente</TableHead>
                                 <TableHead>Mercadoria KS Correlacionada</TableHead>
                                 <TableHead className="text-right">Último Preço (R$)</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>

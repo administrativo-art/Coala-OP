@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useForm } from 'react-hook-form';
@@ -75,7 +74,7 @@ export function CompetitorPriceModal({ isOpen, onClose, product }: CompetitorPri
         <DialogHeader>
           <DialogTitle>Histórico de Preços</DialogTitle>
           <DialogDescription>
-            Gerencie o histórico de preços para o produto: <strong>{product.itemName} ({product.unit})</strong>
+            Gerencie o histórico de preços para a mercadoria: <strong>{product.itemName} ({product.unit})</strong>
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

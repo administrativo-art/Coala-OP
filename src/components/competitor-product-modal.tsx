@@ -51,7 +51,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
       active: true,
     }
   });
-  
+
   const filteredSimulations = useMemo(() => {
     if (!searchTerm) return simulations;
     return simulations.filter(sim =>
@@ -125,7 +125,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Adicionar mercadoria do concorrente</DialogTitle>
+          <DialogTitle>{productToEdit ? 'Editar' : 'Adicionar'} mercadoria do concorrente</DialogTitle>
           <DialogDescription>
             Preencha os detalhes da mercadoria como ela é vendida pelo concorrente.
           </DialogDescription>
@@ -182,7 +182,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
-                      <Select
+                       <Select
                         onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
                         value={field.value || 'none'}
                       >
@@ -193,15 +193,12 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                         </FormControl>
                         <SelectContent>
                            <div className="p-2">
-                             <div className="relative">
-                               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                               <Input
-                                 placeholder="Buscar mercadoria..."
-                                 className="pl-8"
-                                 value={searchTerm}
-                                 onChange={(e) => setSearchTerm(e.target.value)}
-                               />
-                             </div>
+                             <Input
+                               placeholder="Buscar mercadoria..."
+                               className="w-full"
+                               value={searchTerm}
+                               onChange={(e) => setSearchTerm(e.target.value)}
+                             />
                            </div>
                           <SelectItem value="none">Nenhuma</SelectItem>
                           <ScrollArea className="h-48">
