@@ -98,14 +98,6 @@ export default function PriceComparisonPage() {
                     <Button onClick={() => setIsSelectionModalOpen(true)}>
                         <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Concorrentes
                     </Button>
-                     {selectedCompetitors.map(c => (
-                        <Badge key={c.id} variant="secondary" className="text-sm p-2">
-                            {c.name}
-                             <button onClick={() => handleRemoveCompetitor(c.id)} className="ml-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5">
-                                <X className="h-3 w-3" />
-                            </button>
-                        </Badge>
-                    ))}
                  </div>
                  <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
