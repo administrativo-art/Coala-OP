@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Palette } from 'lucide-react';
 import { type PricingParameters, type ProfitRange, type SimulationCategory } from '@/types';
 import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from './ui/dropdown-menu';
 
 const profitRangeSchema = z.object({
   id: z.string(),
@@ -210,35 +211,41 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   );
 }
 
+const CATEGORY_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+
 function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'category', label: string }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
     const [editingItem, setEditingItem] = useState<SimulationCategory | null>(null);
     const [newItemName, setNewItemName] = useState('');
+    const [newItemColor, setNewItemColor] = useState(CATEGORY_COLORS[0]);
     const [itemToDelete, setItemToDelete] = useState<SimulationCategory | null>(null);
 
     const items = useMemo(() => categories.filter(c => c.type === type), [categories, type]);
 
     const handleAdd = async () => {
         if (!newItemName.trim()) return;
-        await addCategory({ name: newItemName.trim(), type: type });
+        await addCategory({ name: newItemName.trim(), type: type, color: newItemColor });
         setNewItemName('');
     };
     
     const handleSaveEdit = async () => {
         if (!editingItem || !newItemName.trim()) return;
-        await updateCategory({ ...editingItem, name: newItemName.trim() });
+        await updateCategory({ ...editingItem, name: newItemName.trim(), color: newItemColor });
         setEditingItem(null);
         setNewItemName('');
+        setNewItemColor(CATEGORY_COLORS[0]);
     };
     
     const handleStartEdit = (item: SimulationCategory) => {
         setEditingItem(item);
         setNewItemName(item.name);
+        setNewItemColor(item.color || CATEGORY_COLORS[0]);
     };
 
     const handleCancelEdit = () => {
         setEditingItem(null);
         setNewItemName('');
+        setNewItemColor(CATEGORY_COLORS[0]);
     };
 
     const handleDeleteConfirm = () => {
@@ -250,34 +257,50 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2">
-                <Input
-                    placeholder={`Nome da nova ${label.toLowerCase()}`}
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                />
-                {editingItem ? (
-                    <div className="flex gap-2">
-                        <Button type="button" onClick={handleSaveEdit}>Salvar</Button>
-                        <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
-                    </div>
-                ) : (
-                    <Button type="button" onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
-                )}
+            <div className="p-4 border rounded-lg space-y-3">
+                 <h3 className="font-semibold">{editingItem ? 'Editando...' : `Adicionar ${label}`}</h3>
+                <div className="flex gap-2">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="outline" size="icon">
+                                <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: newItemColor }} />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="grid grid-cols-3 gap-1 p-1">
+                            {CATEGORY_COLORS.map(color => (
+                                <button key={color} className="h-8 w-8 rounded-md border" style={{ backgroundColor: color }} onClick={() => setNewItemColor(color)} />
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Input
+                        placeholder={`Nome da nova ${label.toLowerCase()}`}
+                        value={newItemName}
+                        onChange={(e) => setNewItemName(e.target.value)}
+                    />
+                    {editingItem ? (
+                        <div className="flex gap-2">
+                            <Button type="button" onClick={handleSaveEdit}>Salvar</Button>
+                            <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
+                        </div>
+                    ) : (
+                        <Button type="button" onClick={handleAdd}><PlusCircle className="mr-2" /> Adicionar</Button>
+                    )}
+                </div>
             </div>
              <div className="rounded-md border p-2 space-y-2">
                 {items.map(item => (
                     <div key={item.id} className="flex items-center justify-between rounded-md border p-3">
-                        <span className="font-medium">{item.name}</span>
+                        <div className="font-medium flex items-center gap-2">
+                            <div className="h-4 w-4 rounded-full" style={{backgroundColor: item.color}}/>
+                            {item.name}
+                        </div>
                         <div className="flex gap-1">
                             <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(item)}><Edit className="h-4 w-4" /></Button>
                             <DeleteConfirmationDialog
-                                open={itemToDelete?.id === item.id}
-                                onOpenChange={(isOpen) => {
-                                  if (!isOpen) setItemToDelete(null);
-                                }}
+                                open={false}
+                                onOpenChange={()=>{}}
                                 onConfirm={handleDeleteConfirm}
-                                itemName={`o item "${item.name}"`}
+                                itemName={`o item "${itemToDelete?.name}"`}
                                 triggerButton={
                                   <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete(item)}>
                                     <Trash2 className="h-4 w-4" />
