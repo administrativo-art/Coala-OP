@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Wand2, Download, Inbox } from "lucide-react";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { type PriceAnalysisInput } from "@/ai/flows/price-comparison-flow";
 
 const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -20,7 +21,7 @@ const formatCurrency = (value: number) => {
 
 interface PriceComparisonTableProps {
     selectedCompetitorIds: string[];
-    onAnalyze: (data: any) => void;
+    onAnalyze: (data: PriceAnalysisInput) => void;
     isAnalyzing: boolean;
 }
 
@@ -112,7 +113,7 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
     };
 
     const handleAnalysisClick = () => {
-         const analysisData = correlatedSimulations.map(sim => {
+         const analysisData: PriceAnalysisInput = correlatedSimulations.map(sim => {
             const competitorPrices = selectedCompetitorIds.map(id => {
                 const competitor = competitors.find(c => c.id === id);
                 const competitorProds = competitorProductMap.get(id) || [];
@@ -122,7 +123,7 @@ export function PriceComparisonTable({ selectedCompetitorIds, onAnalyze, isAnaly
                     competitorName: competitor?.name,
                     price: latestPrice?.price
                 }
-            }).filter(p => p.price !== undefined) as { competitorName: string; price: number }[];
+            }).filter(p => p.price !== undefined && p.competitorName !== undefined) as { competitorName: string; price: number }[];
 
             return {
                 ksItemName: sim.name,
