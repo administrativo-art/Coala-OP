@@ -16,7 +16,9 @@ import {
     deleteDoc, 
     doc, 
     query,
-    writeBatch
+    writeBatch,
+    where,
+    getDocs
 } from 'firebase/firestore';
 
 export interface CompetitorContextType {
@@ -24,7 +26,7 @@ export interface CompetitorContextType {
   competitorProducts: CompetitorProduct[];
   competitorPrices: CompetitorPrice[];
   loading: boolean;
-  addCompetitor: (name: string) => Promise<string | null>;
+  addCompetitor: (data: Omit<Competitor, 'id'>) => Promise<string | null>;
   updateCompetitor: (id: string, data: Partial<Competitor>) => Promise<void>;
   deleteCompetitor: (id: string) => Promise<void>;
   addProduct: (product: Omit<CompetitorProduct, 'id'>) => Promise<string | null>;
@@ -69,9 +71,9 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     }, []);
 
     // Competitors
-    const addCompetitor = useCallback(async (name: string) => {
+    const addCompetitor = useCallback(async (data: Omit<Competitor, 'id'>) => {
         try {
-            const docRef = await addDoc(collection(db, "concorrentes"), { name, active: true });
+            const docRef = await addDoc(collection(db, "concorrentes"), data);
             return docRef.id;
         } catch (error) {
             console.error("Error adding competitor:", error);
@@ -84,10 +86,19 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     }, []);
 
     const deleteCompetitor = useCallback(async (id: string) => {
-        // This is a cascading delete and should be handled with care, maybe via a cloud function in production
         const batch = writeBatch(db);
         batch.delete(doc(db, "concorrentes", id));
-        // Also delete related products and prices if necessary
+        
+        const productsQuery = query(collection(db, "concorrente_produtos"), where("competitorId", "==", id));
+        const productsSnapshot = await getDocs(productsQuery);
+        
+        for (const productDoc of productsSnapshot.docs) {
+            batch.delete(productDoc.ref);
+            const pricesQuery = query(collection(db, "concorrente_precos"), where("competitorProductId", "==", productDoc.id));
+            const pricesSnapshot = await getDocs(pricesQuery);
+            pricesSnapshot.forEach(priceDoc => batch.delete(priceDoc.ref));
+        }
+
         await batch.commit();
     }, []);
 
@@ -107,7 +118,14 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     }, []);
 
     const deleteProduct = useCallback(async (id: string) => {
-        await deleteDoc(doc(db, "concorrente_produtos", id));
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "concorrente_produtos", id));
+
+        const pricesQuery = query(collection(db, "concorrente_precos"), where("competitorProductId", "==", id));
+        const pricesSnapshot = await getDocs(pricesQuery);
+        pricesSnapshot.forEach(priceDoc => batch.delete(priceDoc.ref));
+
+        await batch.commit();
     }, []);
 
     // Competitor Prices

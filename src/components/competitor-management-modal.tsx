@@ -55,7 +55,7 @@ function CompetitorProducts({ competitor }: { competitor: Competitor }) {
     const latestPrices = useMemo(() => {
         const priceMap = new Map<string, { price: number; date: string }>();
         competitorPrices.forEach(price => {
-            if (!map.has(price.competitorProductId) || new Date(price.data_coleta) > new Date(map.get(price.competitorProductId)!.date)) {
+            if (!priceMap.has(price.competitorProductId) || new Date(price.data_coleta) > new Date(priceMap.get(price.competitorProductId)!.date)) {
                 priceMap.set(price.competitorProductId, { price: price.price, date: price.data_coleta });
             }
         });
