@@ -7,7 +7,7 @@ import { useCompetitors } from "@/hooks/use-competitors";
 import { type ProductSimulation, type Competitor, type CompetitorProduct, type CompetitorPrice } from "@/types";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select";
+import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
