@@ -216,7 +216,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                         <CommandItem
                                         value={sim.name}
                                         key={sim.id}
-                                        onSelect={(currentValue) => {
+                                        onSelect={() => {
                                             form.setValue("ksProductId", sim.id)
                                             setPopoverOpen(false)
                                         }}
