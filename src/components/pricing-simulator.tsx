@@ -453,7 +453,7 @@ export function PricingSimulator() {
                 </div>
                 <Accordion type="multiple" className="w-full space-y-3">
                 {simulationsByCategory.map(sim => {
-                        const simCategories = sim.categoryIds.map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
+                        const simCategories = (sim.categoryIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const simGroups = (sim.groupIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
@@ -462,13 +462,9 @@ export function PricingSimulator() {
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-l-0 rounded-lg overflow-hidden bg-muted/40 relative">
                                 <div className="absolute left-0 top-0 bottom-0 w-1.5 flex flex-col">
-                                    {simCategories.length > 0 ? (
-                                        simCategories.map(cat => (
-                                            <div key={cat.id} className="flex-1" style={{ backgroundColor: cat.color || 'hsl(var(--border))' }}></div>
-                                        ))
-                                    ) : (
-                                        <div className="flex-1 bg-border"></div>
-                                    )}
+                                    {(simCategories.length > 0 ? simCategories : [{id: 'default', name: 'default', color: 'hsl(var(--border))', type: 'category'}]).map((cat, index) => (
+                                        <div key={cat.id} className="flex-1" style={{ backgroundColor: cat.color || 'hsl(var(--border))' }}></div>
+                                    ))}
                                 </div>
                                 <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-4 pr-4 py-2 group">
                                      <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
