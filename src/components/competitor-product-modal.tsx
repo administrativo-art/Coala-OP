@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
@@ -35,11 +36,12 @@ interface CompetitorProductModalProps {
 }
 
 export function CompetitorProductModal({ isOpen, onClose, productToEdit }: CompetitorProductModalProps) {
-  const { competitors, addProduct, updateProduct } = useCompetitors();
+  const { competitors, competitorGroups, addProduct, updateProduct } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(productSchema),
@@ -59,10 +61,19 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     );
   }, [simulations, searchTerm]);
 
+  const competitorsInGroup = useMemo(() => {
+    if (!selectedGroupId) return [];
+    return competitors.filter(c => c.competitorGroupId === selectedGroupId);
+  }, [competitors, selectedGroupId]);
+
 
   useEffect(() => {
     if (isOpen) {
       if (productToEdit) {
+        const competitor = competitors.find(c => c.id === productToEdit.competitorId);
+        if (competitor) {
+          setSelectedGroupId(competitor.competitorGroupId);
+        }
         form.reset({
           competitorId: productToEdit.competitorId,
           itemName: productToEdit.itemName,
@@ -71,6 +82,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
           active: productToEdit.active,
         });
       } else {
+        setSelectedGroupId(null);
         form.reset({
           competitorId: '',
           itemName: '',
@@ -80,7 +92,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
         });
       }
     }
-  }, [isOpen, productToEdit, form]);
+  }, [isOpen, productToEdit, form, competitors]);
 
   const processSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -134,20 +146,43 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
           <form className="space-y-4">
             <ScrollArea className="h-[60vh] -mx-6 px-6">
              <div className="space-y-4 py-4">
+                <FormItem>
+                    <FormLabel>Grupo de Concorrentes</FormLabel>
+                    <Select 
+                        onValueChange={(groupId) => {
+                            setSelectedGroupId(groupId);
+                            form.setValue('competitorId', ''); // Reset competitor selection
+                        }} 
+                        value={selectedGroupId || ''}
+                    >
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione o grupo primeiro..." />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {competitorGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </FormItem>
                  <FormField
                     control={form.control}
                     name="competitorId"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Concorrente</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!!productToEdit}>
+                        <FormLabel>Concorrente (Unidade)</FormLabel>
+                        <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value} 
+                            disabled={!selectedGroupId || productToEdit}
+                        >
                             <FormControl>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o concorrente" />
+                                    <SelectValue placeholder="Selecione a unidade do concorrente" />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                {competitorsInGroup.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
