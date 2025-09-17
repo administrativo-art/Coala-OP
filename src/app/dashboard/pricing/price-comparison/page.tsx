@@ -105,8 +105,8 @@ export default function PriceComparisonPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Adicionar Concorrentes
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Realizar análise
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
                     <Group className="mr-2 h-4 w-4" />
