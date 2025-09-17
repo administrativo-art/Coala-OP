@@ -217,4 +217,3 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
     </>
   );
 }
-

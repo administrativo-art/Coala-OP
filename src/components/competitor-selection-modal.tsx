@@ -135,4 +135,3 @@ export function CompetitorSelectionModal({ isOpen, onClose, selectedCompetitorId
     </Dialog>
   );
 }
-
