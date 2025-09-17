@@ -182,7 +182,10 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                        value={field.value || 'none'}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione uma mercadoria..." />
@@ -200,7 +203,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                />
                              </div>
                            </div>
-                          <SelectItem value="">Nenhuma</SelectItem>
+                          <SelectItem value="none">Nenhuma</SelectItem>
                           <ScrollArea className="h-48">
                             {filteredSimulations.map((sim) => (
                               <SelectItem key={sim.id} value={sim.id}>
