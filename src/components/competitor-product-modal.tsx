@@ -14,18 +14,14 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Loader2, Search } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { ScrollArea } from './ui/scroll-area';
 
-
 const productSchema = z.object({
   competitorId: z.string().min(1, 'Selecione um concorrente.'),
-  itemName: z.string().min(1, 'O nome é obrigatório.'),
-  unit: z.string().min(1, 'A unidade é obrigatória (ex: 300ml, 1un).'),
+  itemName: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
+  unit: z.string().min(1, 'A unidade de venda é obrigatória (ex: 300ml, 1un).'),
   ksProductId: z.string().nullable().optional(),
   active: z.boolean(),
 });
@@ -42,9 +38,9 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
   const { competitors, addProduct, updateProduct } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
-  const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [searchTerm, setSearchTerm] = useState('');
+
   const form = useForm<FormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
@@ -55,6 +51,14 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
       active: true,
     }
   });
+  
+  const filteredSimulations = useMemo(() => {
+    if (!searchTerm) return simulations;
+    return simulations.filter(sim =>
+      sim.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [simulations, searchTerm]);
+
 
   useEffect(() => {
     if (isOpen) {
@@ -108,7 +112,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     const success = await processSubmit(values);
     if(success) {
         form.reset({
-            ...values, // Mantém o concorrente selecionado
+            ...values,
             itemName: '',
             unit: '',
             ksProductId: null,
@@ -173,73 +177,43 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   )}
                 />
                 <FormField
-                    control={form.control}
-                    name="ksProductId"
-                    render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                        <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
-                        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                            <PopoverTrigger asChild>
-                            <FormControl>
-                                <Button
-                                variant="outline"
-                                role="combobox"
-                                className={cn(
-                                    "w-full justify-between",
-                                    !field.value && "text-muted-foreground"
-                                )}
-                                >
-                                {field.value
-                                    ? simulations.find(
-                                        (sim) => sim.id === field.value
-                                    )?.name
-                                    : "Selecione uma mercadoria..."}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                            <Command>
-                                <CommandList>
-                                <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
-                                <CommandGroup>
-                                    <CommandItem
-                                        onSelect={() => {
-                                            form.setValue("ksProductId", null);
-                                            setPopoverOpen(false);
-                                        }}
-                                    >
-                                        <Check className={cn("mr-2 h-4 w-4", !field.value ? "opacity-100" : "opacity-0")} />
-                                        Nenhum
-                                    </CommandItem>
-                                    {simulations.map((sim) => (
-                                        <CommandItem
-                                        key={sim.id}
-                                        onSelect={() => {
-                                            form.setValue("ksProductId", sim.id);
-                                            setPopoverOpen(false);
-                                        }}
-                                        >
-                                        <Check
-                                            className={cn(
-                                            "mr-2 h-4 w-4",
-                                            sim.id === field.value
-                                                ? "opacity-100"
-                                                : "opacity-0"
-                                            )}
-                                        />
-                                        {sim.name}
-                                        </CommandItem>
-                                    ))}
-                                    </CommandGroup>
-                                </CommandList>
-                            </Command>
-                            </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
+                  control={form.control}
+                  name="ksProductId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione uma mercadoria..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                           <div className="p-2">
+                             <div className="relative">
+                               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                               <Input
+                                 placeholder="Buscar mercadoria..."
+                                 className="pl-8"
+                                 value={searchTerm}
+                                 onChange={(e) => setSearchTerm(e.target.value)}
+                               />
+                             </div>
+                           </div>
+                          <SelectItem value="">Nenhuma</SelectItem>
+                          <ScrollArea className="h-48">
+                            {filteredSimulations.map((sim) => (
+                              <SelectItem key={sim.id} value={sim.id}>
+                                {sim.name}
+                              </SelectItem>
+                            ))}
+                          </ScrollArea>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                  <FormField
                   control={form.control}
                   name="active"
@@ -247,7 +221,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                       <div className="space-y-0.5">
                         <FormLabel>Mercadoria ativa</FormLabel>
-                         <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs">
                             Desmarque para ocultar esta mercadoria das análises.
                         </DialogDescription>
                       </div>
