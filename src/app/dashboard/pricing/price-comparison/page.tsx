@@ -18,7 +18,7 @@ export default function PriceComparisonPage() {
        <Link href="/dashboard/pricing" className="inline-block">
         <Button variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar para Custo e Preço
+          Voltar para custo e preço
         </Button>
       </Link>
       <Card>
@@ -30,16 +30,16 @@ export default function PriceComparisonPage() {
             <CardDescription>
                 Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
             </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <div className="flex justify-end gap-2">
+             <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Mercadorias dos concorrentes
                 </Button>
                 <Button onClick={() => setIsCompetitorModalOpen(true)}>
-                    <Users className="mr-2 h-4 w-4" /> Gerenciar Concorrentes
+                    <Users className="mr-2 h-4 w-4" /> Gerenciar concorrentes
                 </Button>
             </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
             <PriceComparisonTable />
         </CardContent>
       </Card>

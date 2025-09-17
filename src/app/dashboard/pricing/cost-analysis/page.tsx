@@ -12,7 +12,7 @@ export default function CostAnalysisPage() {
       <Link href="/dashboard/pricing" className="inline-block">
         <Button variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar para Custo e Preço
+          Voltar para custo e preço
         </Button>
       </Link>
       <Card>
