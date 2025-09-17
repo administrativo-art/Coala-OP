@@ -32,7 +32,36 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "concorrente_produtos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "concorrente_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ks_produto_id",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "concorrente_precos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "concorrente_produto_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "data_coleta",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
 }
+

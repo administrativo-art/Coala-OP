@@ -713,7 +713,41 @@ export type Task = {
     legacyIcon?: React.FC<any>;
 };
     
+// Competition Analysis Types
+export type Competitor = {
+    id: string;
+    name: string;
+    active: boolean;
+};
 
-    
+export type CompetitorProduct = {
+    id: string;
+    competitorId: string;
+    itemName: string;
+    unit: string;
+    ksProductId?: string | null; // Correlates to our ProductSimulation id
+    active: boolean;
+};
 
-    
+export type CompetitorPrice = {
+    id: string;
+    competitorProductId: string;
+    price: number;
+    data_coleta: string; // ISO String
+    fonte: string;
+    promocional?: boolean;
+};
+
+export type PriceDecision = {
+    id: string;
+    productSimulationId: string;
+    oldPrice: number;
+    newPrice: number;
+    oldCostData?: any;
+    newCostData?: any;
+    racional: string; // Rationale for the price change
+    userId: string;
+    username: string;
+    changedAt: string; // ISO String
+    origin: 'manual' | 'sugerido';
+};
