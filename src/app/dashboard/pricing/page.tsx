@@ -45,7 +45,7 @@ export default function PricingPage() {
             <TabsContent value="comparison" className="mt-6 space-y-6">
                  <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setIsProductModalOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Gerenciar Mercadorias dos Concorrentes
+                        <PlusCircle className="mr-2 h-4 w-4" /> Mercadorias dos concorrentes
                     </Button>
                     <Button onClick={() => setIsCompetitorModalOpen(true)}>
                         <Users className="mr-2 h-4 w-4" /> Gerenciar Concorrentes
