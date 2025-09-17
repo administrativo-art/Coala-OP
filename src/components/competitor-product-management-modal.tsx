@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Edit, Trash2, Search, Eraser } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Search, Eraser, Building, Link2 } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -21,6 +21,7 @@ import { CompetitorProductModal } from './competitor-product-modal';
 import { type CompetitorProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select';
 
 export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const { competitors, competitorProducts, loading, deleteProduct } = useCompetitors();
@@ -30,14 +31,22 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
   const [productToDelete, setProductToDelete] = useState<CompetitorProduct | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [competitorFilter, setCompetitorFilter] = useState('all');
+  const [linkedProductFilter, setLinkedProductFilter] = useState('all');
 
   const filteredProducts = useMemo(() => {
-    return competitorProducts.filter(p => 
-        p.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (simulations.find(s => s.id === p.ksProductId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (competitors.find(c => c.id === p.competitorId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [competitorProducts, searchTerm, simulations, competitors]);
+    return competitorProducts.filter(p => {
+        const searchMatch = searchTerm === '' ||
+            p.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (simulations.find(s => s.id === p.ksProductId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (competitors.find(c => c.id === p.competitorId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+            
+        const competitorMatch = competitorFilter === 'all' || p.competitorId === competitorFilter;
+        const linkedProductMatch = linkedProductFilter === 'all' || p.ksProductId === linkedProductFilter;
+
+        return searchMatch && competitorMatch && linkedProductMatch;
+    });
+  }, [competitorProducts, searchTerm, simulations, competitors, competitorFilter, linkedProductFilter]);
 
   const handleAddNew = () => {
     setSelectedProduct(null);
@@ -55,6 +64,12 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
         setProductToDelete(null);
     }
   };
+  
+  const clearFilters = () => {
+      setSearchTerm('');
+      setCompetitorFilter('all');
+      setLinkedProductFilter('all');
+  }
 
   return (
     <>
@@ -68,19 +83,51 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
           </DialogHeader>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2 mb-4">
-                <div className="relative flex-grow">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por mercadoria, concorrente ou vínculo..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-full"
-                    />
+            <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-grow">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por mercadoria, concorrente ou vínculo..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 w-full"
+                        />
+                    </div>
+                    <Button onClick={handleAddNew}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar nova mercadoria
+                    </Button>
                 </div>
-                 <Button onClick={handleAddNew}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar nova mercadoria
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                     <Select value={competitorFilter} onValueChange={setCompetitorFilter}>
+                        <SelectTrigger className="w-full">
+                           <div className="flex items-center gap-2 text-muted-foreground">
+                             <Building className="h-4 w-4" />
+                             <SelectValue placeholder="Filtrar por concorrente..." />
+                           </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os concorrentes</SelectItem>
+                            {competitors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                     <Select value={linkedProductFilter} onValueChange={setLinkedProductFilter}>
+                        <SelectTrigger className="w-full">
+                           <div className="flex items-center gap-2 text-muted-foreground">
+                            <Link2 className="h-4 w-4" />
+                            <SelectValue placeholder="Filtrar por vínculo..." />
+                           </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas as mercadorias vinculadas</SelectItem>
+                            {simulations.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Button variant="ghost" onClick={clearFilters}>
+                        <Eraser className="mr-2 h-4 w-4"/>
+                        Limpar
+                    </Button>
+                </div>
             </div>
             
             <div className="flex-1 overflow-auto rounded-md border">
