@@ -83,14 +83,14 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     try {
         if (productToEdit) {
           await updateProduct(productToEdit.id, values);
-          toast({ title: 'Produto atualizado com sucesso!' });
+          toast({ title: 'Mercadoria atualizada com sucesso!' });
         } else {
           await addProduct(values);
-          toast({ title: 'Produto adicionado com sucesso!' });
+          toast({ title: 'Mercadoria adicionada com sucesso!' });
         }
         return true;
     } catch (error) {
-        toast({ variant: 'destructive', title: 'Erro ao salvar', description: 'Não foi possível salvar o produto.' });
+        toast({ variant: 'destructive', title: 'Erro ao salvar', description: 'Não foi possível salvar a mercadoria.' });
         return false;
     } finally {
         setIsSubmitting(false);
@@ -121,9 +121,9 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{productToEdit ? 'Editar Produto do Concorrente' : 'Adicionar Produto do Concorrente'}</DialogTitle>
+          <DialogTitle>{productToEdit ? 'Editar mercadoria do concorrente' : 'Adicionar mercadoria do concorrente'}</DialogTitle>
           <DialogDescription>
-            Preencha os detalhes do produto como ele é vendido pelo concorrente.
+            Preencha os detalhes da mercadoria como ela é vendida pelo concorrente.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -153,7 +153,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
               name="itemName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome do Item</FormLabel>
+                  <FormLabel>Nome do item</FormLabel>
                   <FormControl><Input placeholder="Ex: Milkshake Morango P" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -164,7 +164,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
               name="unit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unidade de Venda</FormLabel>
+                  <FormLabel>Unidade de venda</FormLabel>
                   <FormControl><Input placeholder="Ex: 300ml, 500g, 1un" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -175,7 +175,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                 name="ksProductId"
                 render={({ field }) => (
                     <FormItem className="flex flex-col">
-                    <FormLabel>Correlacionar com Produto KS (Opcional)</FormLabel>
+                    <FormLabel>Correlacionar com mercadoria KS (opcional)</FormLabel>
                     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                         <PopoverTrigger asChild>
                         <FormControl>
@@ -191,15 +191,15 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                 ? simulations.find(
                                     (sim) => sim.id === field.value
                                 )?.name
-                                : "Selecione um produto seu..."}
+                                : "Selecione uma mercadoria sua..."}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                         </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                         <Command>
-                            <CommandInput placeholder="Buscar produto..." />
-                            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                            <CommandInput placeholder="Buscar mercadoria..." />
+                            <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
                             <CommandGroup>
                                 <CommandList>
                                 <CommandItem
@@ -247,7 +247,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   <div className="space-y-0.5">
                     <FormLabel>Ativo</FormLabel>
                      <DialogDescription className="text-xs">
-                        Desmarque para ocultar este produto das análises.
+                        Desmarque para ocultar esta mercadoria das análises.
                     </DialogDescription>
                   </div>
                   <FormControl>
@@ -263,11 +263,11 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
               <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
               <Button type="button" variant="secondary" onClick={form.handleSubmit(handleSaveAndClose)} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar e Fechar
+                Salvar e fechar
               </Button>
                <Button type="button" onClick={form.handleSubmit(handleSaveAndAddAnother)} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar e Adicionar Outro
+                Salvar e adicionar outro
               </Button>
             </DialogFooter>
           </form>
