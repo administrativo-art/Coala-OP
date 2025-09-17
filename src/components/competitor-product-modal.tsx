@@ -200,10 +200,9 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                             </PopoverTrigger>
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                             <Command>
-                                <CommandInput placeholder="Buscar mercadoria..." />
+                                <CommandList>
                                 <CommandEmpty>Nenhuma mercadoria encontrada.</CommandEmpty>
                                 <CommandGroup>
-                                    <CommandList>
                                     <CommandItem
                                         onSelect={() => {
                                             form.setValue("ksProductId", null);
@@ -232,8 +231,8 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                         {sim.name}
                                         </CommandItem>
                                     ))}
-                                    </CommandList>
-                                </CommandGroup>
+                                    </CommandGroup>
+                                </CommandList>
                             </Command>
                             </PopoverContent>
                         </Popover>
@@ -247,7 +246,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                       <div className="space-y-0.5">
-                        <FormLabel>Mercadoria Ativa</FormLabel>
+                        <FormLabel>Mercadoria ativa</FormLabel>
                          <DialogDescription className="text-xs">
                             Desmarque para ocultar esta mercadoria das análises.
                         </DialogDescription>
