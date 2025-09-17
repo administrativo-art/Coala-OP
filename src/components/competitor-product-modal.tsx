@@ -42,6 +42,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
   const { addProduct, updateProduct } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
+  const [popoverOpen, setPopoverOpen] = useState(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(productSchema),
@@ -127,7 +128,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
                 render={({ field }) => (
                     <FormItem className="flex flex-col">
                     <FormLabel>Correlacionar com Produto KS (Opcional)</FormLabel>
-                    <Popover>
+                    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                         <PopoverTrigger asChild>
                         <FormControl>
                             <Button
@@ -156,6 +157,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
                                 <CommandItem
                                     onSelect={() => {
                                         field.onChange(null);
+                                        setPopoverOpen(false);
                                     }}
                                 >
                                     Nenhum
@@ -166,6 +168,7 @@ export function CompetitorProductModal({ isOpen, onClose, competitorId, productT
                                     key={sim.id}
                                     onSelect={() => {
                                         field.onChange(sim.id);
+                                        setPopoverOpen(false);
                                     }}
                                     >
                                     <Check
