@@ -78,6 +78,6 @@ const priceComparisonFlow = ai.defineFlow(
       input: { input: input },
     });
 
-    return { analysis: text() || 'Não foi possível gerar a análise.' };
+    return { analysis: text || 'Não foi possível gerar a análise.' };
   }
 );
