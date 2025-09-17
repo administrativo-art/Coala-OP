@@ -60,7 +60,7 @@ function CompetitorGroupManager() {
                 </Button>
                 {editingGroup && <Button variant="outline" onClick={() => { setEditingGroup(null); setNewGroupName(''); }}>Cancelar</Button>}
             </div>
-             <ScrollArea className="h-[calc(70vh-150px)]">
+             <ScrollArea className="h-[calc(70vh-200px)]">
                 <div className="space-y-2 pr-4">
                     {competitorGroups.map(group => (
                         <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -120,7 +120,7 @@ function CompetitorUnitManager({ onEdit }: { onEdit: (competitor: Competitor) =>
                     className="pl-10"
                 />
             </div>
-            <ScrollArea className="h-[calc(70vh-150px)]">
+            <ScrollArea className="h-[calc(70vh-200px)]">
                 {loading ? (
                     <div className="space-y-2">
                         <Skeleton className="h-16 w-full" />
@@ -186,18 +186,18 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
                 <DialogDescription>Adicione, edite e gerencie seus concorrentes e grupos.</DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="units" className="flex-1 flex flex-col overflow-hidden">
+            <Tabs defaultValue="units" className="flex-grow overflow-hidden">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="units">Concorrentes (Unidades)</TabsTrigger>
                     <TabsTrigger value="groups">Grupos de Concorrentes</TabsTrigger>
                 </TabsList>
-                <TabsContent value="units" className="flex-1 flex flex-col overflow-hidden space-y-4 pt-4">
+                <TabsContent value="units" className="space-y-4 pt-4">
                      <Button onClick={handleAddNew} className="w-full">
                         <PlusCircle className="mr-2 h-4 w-4" /> Adicionar nova unidade concorrente
                     </Button>
                     <CompetitorUnitManager onEdit={handleStartEdit} />
                 </TabsContent>
-                 <TabsContent value="groups" className="flex-1 flex flex-col overflow-hidden pt-4">
+                 <TabsContent value="groups" className="pt-4">
                     <CompetitorGroupManager />
                 </TabsContent>
             </Tabs>
@@ -217,5 +217,3 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
     </>
   );
 }
-
-    
