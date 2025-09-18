@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -188,7 +189,7 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            doc.text(sim.name.toUpperCase(), textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
             yPos += (hasImage ? imageSize : 0) + 10;
 
             autoTable(doc, {
@@ -297,7 +298,7 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            doc.text(sim.name.toUpperCase(), textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
             yPos += (hasImage ? imageSize : 0) + 10;
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
@@ -329,7 +330,7 @@ export function PricingSimulator() {
             simItems.forEach(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
                 dataForCsv.push({
-                    "Mercadoria": sim.name,
+                    "Mercadoria": sim.name.toUpperCase(),
                     "Insumo": baseProductInfo?.name || 'N/A',
                     "Quantidade": item.quantity,
                     "Unidade": item.overrideUnit || baseProductInfo?.unit,
@@ -472,8 +473,8 @@ export function PricingSimulator() {
                                 <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-4 pr-4 py-2 group">
                                      <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
                                      <div className="font-semibold text-left">
-                                        <p>{sim.name}</p>
-                                        {sim.ppo?.sku && <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo.sku}</p>}
+                                        <p>{sim.name.toUpperCase()}</p>
+                                        <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => (
                                                 <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
@@ -715,3 +716,4 @@ export function PricingSimulator() {
     
 
     
+
