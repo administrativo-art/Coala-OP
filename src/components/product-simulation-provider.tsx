@@ -39,6 +39,9 @@ interface BulkUpdatePayload {
     category: { action: 'keep' | 'set' | 'clear', id?: string };
     group: { action: 'keep' | 'add' | 'remove' | 'set', id?: string };
     price: { action: 'keep' | 'change', type: 'percentage' | 'fixed', value: number };
+    ncm: { action: 'keep' | 'set', value?: string };
+    cest: { action: 'keep' | 'set', value?: string };
+    cfop: { action: 'keep' | 'set', value?: string };
 }
 
 export interface ProductSimulationContextType {
@@ -244,9 +247,11 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         for (const sim of simulationsToUpdate) {
             const simRef = doc(db, "productSimulations", sim.id);
-            const updatePayload: Partial<ProductSimulation> & { historicoAlteracoes?: any } = {
+            const ppo = sim.ppo || {};
+            const updatePayload: Partial<ProductSimulation> & { ppo?: Partial<ProductSimulation['ppo']> } = {
                 updatedAt: now,
                 updatedBy: { userId: user.id, username: user.username },
+                ppo: { ...ppo }
             };
             
             // Handle Line
@@ -271,6 +276,11 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             } else if (updates.group.action === 'remove' && updates.group.id) {
                 updatePayload.groupIds = (sim.groupIds || []).filter(id => id !== updates.group.id);
             }
+
+            // Handle Fiscal Info
+            if (updates.ncm.action === 'set' && updates.ncm.value) updatePayload.ppo!.ncm = updates.ncm.value;
+            if (updates.cest.action === 'set' && updates.cest.value) updatePayload.ppo!.cest = updates.cest.value;
+            if (updates.cfop.action === 'set' && updates.cfop.value) updatePayload.ppo!.cfop = updates.cfop.value;
             
             // Handle Price
             if (updates.price.action === 'change' && updates.price.value !== 0) {
@@ -304,7 +314,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                  }
             }
             
-            batch.update(simRef, updatePayload);
+            batch.update(simRef, updatePayload as any);
         }
 
         try {
@@ -331,5 +341,3 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
-
-    

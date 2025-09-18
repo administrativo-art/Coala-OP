@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -31,8 +32,20 @@ const batchEditSchema = z.object({
   priceAction: z.enum(['keep', 'change']),
   priceAdjustmentType: z.enum(['percentage', 'fixed']),
   priceValue: z.coerce.number().optional(),
+  ncmAction: z.enum(['keep', 'set']),
+  ncm: z.string().optional(),
+  cestAction: z.enum(['keep', 'set']),
+  cest: z.string().optional(),
+  cfopAction: z.enum(['keep', 'set']),
+  cfop: z.string().optional(),
 }).refine(data => {
-    return data.lineAction !== 'keep' || data.categoryAction !== 'keep' || data.groupAction !== 'keep' || data.priceAction !== 'keep';
+    return data.lineAction !== 'keep' || 
+           data.categoryAction !== 'keep' || 
+           data.groupAction !== 'keep' || 
+           data.priceAction !== 'keep' ||
+           data.ncmAction !== 'keep' ||
+           data.cestAction !== 'keep' ||
+           data.cfopAction !== 'keep';
 }, {
     message: "Selecione pelo menos uma alteração para aplicar.",
     path: ["target"], // Generic path
@@ -56,7 +69,23 @@ const batchEditSchema = z.object({
 }, {
     message: "O valor deve ser diferente de zero.",
     path: ["priceValue"],
+}).refine(data => {
+    return data.ncmAction !== 'set' || (data.ncm && data.ncm.trim() !== '');
+}, {
+    message: "O NCM é obrigatório.",
+    path: ["ncm"],
+}).refine(data => {
+    return data.cestAction !== 'set' || (data.cest && data.cest.trim() !== '');
+}, {
+    message: "O CEST é obrigatório.",
+    path: ["cest"],
+}).refine(data => {
+    return data.cfopAction !== 'set' || (data.cfop && data.cfop.trim() !== '');
+}, {
+    message: "O CFOP é obrigatório.",
+    path: ["cfop"],
 });
+
 
 type BatchEditFormValues = z.infer<typeof batchEditSchema>;
 
@@ -83,6 +112,9 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
             groupAction: 'keep',
             priceAction: 'keep',
             priceAdjustmentType: 'percentage',
+            ncmAction: 'keep',
+            cestAction: 'keep',
+            cfopAction: 'keep',
         }
     });
     
@@ -94,6 +126,9 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const categoryAction = form.watch('categoryAction');
     const groupAction = form.watch('groupAction');
     const priceAction = form.watch('priceAction');
+    const ncmAction = form.watch('ncmAction');
+    const cestAction = form.watch('cestAction');
+    const cfopAction = form.watch('cfopAction');
     const priceAdjustmentType = form.watch('priceAdjustmentType');
 
     const onSubmit = async (values: BatchEditFormValues) => {
@@ -114,7 +149,10 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                 line: { action: values.lineAction, id: values.lineId },
                 category: { action: values.categoryAction, id: values.categoryId },
                 group: { action: values.groupAction, id: values.groupId },
-                price: { action: values.priceAction, type: values.priceAdjustmentType, value: values.priceValue || 0 }
+                price: { action: values.priceAction, type: values.priceAdjustmentType, value: values.priceValue || 0 },
+                ncm: { action: values.ncmAction, value: values.ncm },
+                cest: { action: values.cestAction, value: values.cest },
+                cfop: { action: values.cfopAction, value: values.cfop },
             });
             toast({ title: "Sucesso!", description: `${targetSimulations.length} mercadorias foram atualizadas.` });
             onOpenChange(false);
@@ -253,6 +291,45 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                             )}/>
                                         )}
                                     </div>
+
+                                    {/* Fiscal Fields */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Informações Fiscais</FormLabel>
+                                        {/* NCM */}
+                                        <div className="flex gap-2 items-end">
+                                            <FormField control={form.control} name="ncmAction" render={({ field }) => (
+                                                <FormItem className="w-1/3"><FormLabel className="text-xs">NCM</FormLabel><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
+                                                </FormControl></FormItem>
+                                            )}/>
+                                            <FormField control={form.control} name="ncm" render={({ field }) => (
+                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo NCM" {...field} value={field.value ?? ''} disabled={ncmAction !== 'set'} /></FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        </div>
+                                        {/* CEST */}
+                                         <div className="flex gap-2 items-end">
+                                            <FormField control={form.control} name="cestAction" render={({ field }) => (
+                                                <FormItem className="w-1/3"><FormLabel className="text-xs">CEST</FormLabel><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
+                                                </FormControl></FormItem>
+                                            )}/>
+                                            <FormField control={form.control} name="cest" render={({ field }) => (
+                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo CEST" {...field} value={field.value ?? ''} disabled={cestAction !== 'set'} /></FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        </div>
+                                        {/* CFOP */}
+                                         <div className="flex gap-2 items-end">
+                                            <FormField control={form.control} name="cfopAction" render={({ field }) => (
+                                                <FormItem className="w-1/3"><FormLabel className="text-xs">CFOP</FormLabel><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
+                                                </FormControl></FormItem>
+                                            )}/>
+                                            <FormField control={form.control} name="cfop" render={({ field }) => (
+                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo CFOP" {...field} value={field.value ?? ''} disabled={cfopAction !== 'set'} /></FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        </div>
+                                    </div>
+                                    
                                     {/* Preço de Venda */}
                                     <div className="p-4 border rounded-lg space-y-4">
                                         <FormLabel>Preço de Venda</FormLabel>
