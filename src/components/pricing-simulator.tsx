@@ -60,7 +60,6 @@ export function PricingSimulator() {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
-    const [showSku, setShowSku] = useState(true);
 
 
     const handleAddNew = () => {
@@ -474,7 +473,7 @@ export function PricingSimulator() {
                                      <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
                                      <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
-                                        {showSku && sim.ppo?.sku && <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo.sku}</p>}
+                                        {sim.ppo?.sku && <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo.sku}</p>}
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => (
                                                 <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
@@ -653,10 +652,6 @@ export function PricingSimulator() {
                         </div>
                     </div>
                      <div className="flex flex-wrap items-center gap-4 pt-2">
-                        <div className="flex items-center space-x-2">
-                            <Switch id="show-sku" checked={showSku} onCheckedChange={setShowSku} />
-                            <Label htmlFor="show-sku">Exibir SKU</Label>
-                        </div>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm">
@@ -714,5 +709,7 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
 
     
