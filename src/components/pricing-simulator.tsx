@@ -28,6 +28,8 @@ import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
 import { PriceComparisonTable } from "./price-comparison-table";
+import { Label } from "./ui/label";
+import { Switch } from "./ui/switch";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -37,7 +39,7 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-type SortKey = keyof ProductSimulation | 'name';
+type SortKey = keyof ProductSimulation | 'name' | 'sku';
 type SortDirection = 'asc' | 'desc';
 
 export function PricingSimulator() {
@@ -58,6 +60,7 @@ export function PricingSimulator() {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
+    const [showSku, setShowSku] = useState(true);
 
 
     const handleAddNew = () => {
@@ -103,15 +106,24 @@ export function PricingSimulator() {
         });
         
         return filtered.sort((a, b) => {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
+            let aValue: any;
+            let bValue: any;
+
+            if (sortConfig.key === 'sku') {
+                aValue = a.ppo?.sku || '';
+                bValue = b.ppo?.sku || '';
+            } else {
+                aValue = a[sortConfig.key as keyof ProductSimulation];
+                bValue = b[sortConfig.key as keyof ProductSimulation];
+            }
+
 
             if (aValue === undefined || aValue === null) return 1;
             if (bValue === undefined || bValue === null) return -1;
 
             let comparison = 0;
             if (typeof aValue === 'string' && typeof bValue === 'string') {
-                comparison = aValue.localeCompare(bValue);
+                comparison = aValue.localeCompare(bValue, undefined, { numeric: true });
             } else if (typeof aValue === 'number' && typeof bValue === 'number') {
                 comparison = aValue - bValue;
             }
@@ -351,15 +363,6 @@ export function PricingSimulator() {
 
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
     
-    const activeFilters = useMemo(() => {
-      return {
-          categoryName: null,
-          lineName: null,
-          profitGoalFilter: 'all',
-          statusFilter: 'all'
-      };
-    }, []);
-
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
     const totalActiveFilters = categoryFilters.size + lineFilters.size;
@@ -471,6 +474,7 @@ export function PricingSimulator() {
                                      <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
                                      <div className="font-semibold text-left">
                                         <p>{sim.name}</p>
+                                        {showSku && sim.ppo?.sku && <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo.sku}</p>}
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => (
                                                 <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
@@ -648,6 +652,25 @@ export function PricingSimulator() {
                             )}
                         </div>
                     </div>
+                     <div className="flex flex-wrap items-center gap-4 pt-2">
+                        <div className="flex items-center space-x-2">
+                            <Switch id="show-sku" checked={showSku} onCheckedChange={setShowSku} />
+                            <Label htmlFor="show-sku">Exibir SKU</Label>
+                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                    <ArrowUpDown className="mr-2 h-4 w-4" /> Ordenar por: {sortConfig.key}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                 <DropdownMenuItem onSelect={() => handleSort('name')}>Nome</DropdownMenuItem>
+                                 <DropdownMenuItem onSelect={() => handleSort('sku')}>SKU</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handleSort('salePrice')}>Preço</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handleSort('profitPercentage')}>Lucro %</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
                 <div className="mt-4">
                     {renderTable()}
@@ -691,7 +714,5 @@ export function PricingSimulator() {
         </div>
     );
 }
-
-    
 
     
