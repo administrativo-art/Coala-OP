@@ -171,7 +171,7 @@ export function PricingSimulator() {
     
         const tableHead = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup', 'Meta', 'NCM', 'CEST', 'CFOP']];
         const tableBody = simulationsByCategory.map(sim => [
-            sim.name.toUpperCase(),
+            sim.name,
             sim.ppo?.sku || 'N/A',
             formatCurrency(sim.salePrice),
             formatCurrency(sim.grossCost),
@@ -193,6 +193,37 @@ export function PricingSimulator() {
         });
     
         doc.save(`relatorio_gerencial_mercadorias_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+    const handleExportGerencialCsv = () => {
+        const dataForCsv = simulationsByCategory.map(sim => ({
+            'Mercadoria': sim.name,
+            'SKU': sim.ppo?.sku || '',
+            'Preço Venda': sim.salePrice,
+            'Custo Bruto': sim.grossCost,
+            'Lucro %': sim.profitPercentage,
+            'Markup': sim.markup,
+            'Meta Lucro %': sim.profitGoal || '',
+            'NCM': sim.ppo?.ncm || '',
+            'CEST': sim.ppo?.cest || '',
+            'CFOP': sim.ppo?.cfop || '',
+        }));
+
+        const csv = Papa.unparse(dataForCsv, {
+            quotes: true,
+            delimiter: ",",
+            header: true,
+            decimalSeparator: '.'
+        });
+
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleExportFichaTecnicaCompletaPdf = () => {
@@ -231,7 +262,7 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name.toUpperCase(), textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
             yPos += (hasImage ? imageSize : 0) + 10;
 
             autoTable(doc, {
@@ -340,7 +371,7 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name.toUpperCase(), textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
+            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
             yPos += (hasImage ? imageSize : 0) + 10;
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
@@ -372,7 +403,7 @@ export function PricingSimulator() {
             simItems.forEach(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
                 dataForCsv.push({
-                    "Mercadoria": sim.name.toUpperCase(),
+                    "Mercadoria": sim.name,
                     "Insumo": baseProductInfo?.name || 'N/A',
                     "Quantidade": item.quantity,
                     "Unidade": item.overrideUnit || baseProductInfo?.unit,
@@ -514,7 +545,7 @@ export function PricingSimulator() {
                                 <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-4 pr-4 py-2 group">
                                      <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
                                      <div className="font-semibold text-left">
-                                        <p>{sim.name.toUpperCase()}</p>
+                                        <p>{sim.name}</p>
                                         <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
                                         <div className="flex items-center gap-1 mt-1 flex-wrap">
                                             {simCategories.map(cat => (
@@ -631,6 +662,7 @@ export function PricingSimulator() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
                                     <DropdownMenuItem onSelect={handleExportGerencialPdf}>Relatório Gerencial (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaPdf}>Ficha técnica completa (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
