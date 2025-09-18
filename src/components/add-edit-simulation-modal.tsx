@@ -321,9 +321,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     const ppoData: Partial<PPO> = {
         ...simulationToEdit?.ppo,
         sku: values.sku,
+        ncm: values.ncm,
+        cest: values.cest,
+        cfop: values.cfop,
     };
     
-    const { sku, ...restOfValues } = values;
+    const { sku, ncm, cest, cfop, ...restOfValues } = values as any;
 
     if (simulationToEdit) {
       const simulationData = { 
@@ -808,7 +811,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">Salvar análise</Button>
+                <Button type="submit">Salvar</Button>
               </div>
             </DialogFooter>
           </form>
