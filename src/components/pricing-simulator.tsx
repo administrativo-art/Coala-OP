@@ -654,7 +654,7 @@ export function PricingSimulator() {
                 </div>
             </div>
 
-            <PriceComparisonTable />
+            <PriceComparisonTable selectedCompetitorIds={[]} />
 
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}
@@ -695,4 +695,3 @@ export function PricingSimulator() {
     
 
     
-
