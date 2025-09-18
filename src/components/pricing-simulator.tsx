@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -30,6 +29,7 @@ import { Checkbox } from "./ui/checkbox";
 import { PriceComparisonTable } from "./price-comparison-table";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
+import { ScrollArea } from "./ui/scroll-area";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -616,31 +616,33 @@ export function PricingSimulator() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent className="w-56">
-                                    <DropdownMenuLabel>Categorias</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    {mainCategories.map(cat => (
-                                        <DropdownMenuCheckboxItem
-                                            key={cat.id}
-                                            checked={categoryFilters.has(cat.id)}
-                                            onCheckedChange={() => handleFilterChange(cat.id, 'category')}
-                                            onSelect={(e) => e.preventDefault()}
-                                        >
-                                            {cat.name}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
-                                    <DropdownMenuSeparator />
-                                     <DropdownMenuLabel>Linhas</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                     {lines.map(line => (
-                                        <DropdownMenuCheckboxItem
-                                            key={line.id}
-                                            checked={lineFilters.has(line.id)}
-                                            onCheckedChange={() => handleFilterChange(line.id, 'line')}
-                                            onSelect={(e) => e.preventDefault()}
-                                        >
-                                            {line.name}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
+                                    <ScrollArea className="h-64">
+                                        <DropdownMenuLabel>Categorias</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {mainCategories.map(cat => (
+                                            <DropdownMenuCheckboxItem
+                                                key={cat.id}
+                                                checked={categoryFilters.has(cat.id)}
+                                                onCheckedChange={() => handleFilterChange(cat.id, 'category')}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {cat.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuLabel>Linhas</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {lines.map(line => (
+                                            <DropdownMenuCheckboxItem
+                                                key={line.id}
+                                                checked={lineFilters.has(line.id)}
+                                                onCheckedChange={() => handleFilterChange(line.id, 'line')}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {line.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </ScrollArea>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                             {totalActiveFilters > 0 && (
