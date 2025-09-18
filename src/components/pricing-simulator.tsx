@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -27,7 +28,6 @@ import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
 import { ScrollArea } from "./ui/scroll-area";
 
 
@@ -152,83 +152,46 @@ export function PricingSimulator() {
     };
 
     const handleExportGerencialPdf = () => {
-        const doc = new jsPDF();
+        const doc = new jsPDF('landscape');
         let yPos = 15;
-
+    
         const addTitle = (title: string) => {
-            if (yPos > 260) { doc.addPage(); yPos = 15; }
+            if (yPos > 180) { doc.addPage(); yPos = 15; }
             doc.setFontSize(18);
             doc.text(title, 14, yPos);
             yPos += 8;
         };
-
+    
         addTitle("Relatório Gerencial de Mercadorias");
         doc.setFontSize(9);
         doc.setTextColor(100);
         const filterText = `Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`;
         doc.text(filterText, 14, yPos);
         yPos += 10;
-
-        simulationsByCategory.forEach(sim => {
-            if (yPos > 220) { doc.addPage(); yPos = 15; }
-
-            const imageSize = 30;
-            const hasImage = sim.ppo?.referenceImageUrl;
-            let textX = 14;
-
-            if (hasImage) {
-                try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
-                    textX = 14 + imageSize + 5;
-                } catch (e) { console.error("Failed to add image to PDF", e); }
-            }
-
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text(sim.name.toUpperCase(), textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
-            yPos += (hasImage ? imageSize : 0) + 10;
-
-            autoTable(doc, {
-                startY: yPos,
-                body: [[
-                    { content: `SKU\n${sim.ppo?.sku || 'N/A'}` },
-                    { content: `Preço Venda\n${formatCurrency(sim.salePrice)}` },
-                    { content: `Custo Bruto\n${formatCurrency(sim.grossCost)}` },
-                    { content: `Lucro\n${sim.profitPercentage.toFixed(2)}%` },
-                    { content: `Markup\n${sim.markup.toFixed(2)}x` },
-                    { content: `Meta\n${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}` },
-                ]],
-                theme: 'plain',
-                styles: { halign: 'center', cellPadding: 2, fontSize: 8 },
-            });
-            yPos = (doc as any).lastAutoTable.finalY + 5;
-            
-            if (sim.ppo) {
-                if (yPos > 240) { doc.addPage(); yPos = 15; }
-                const ppoTableBody: any[][] = [];
-                 if(sim.ppo.ncm) ppoTableBody.push(['NCM', sim.ppo.ncm]);
-                 if(sim.ppo.cest) ppoTableBody.push(['CEST', sim.ppo.cest]);
-                 if(sim.ppo.cfop) ppoTableBody.push(['CFOP', sim.ppo.cfop]);
-                 if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
-                 if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
-                 if(sim.ppo.allergens && sim.ppo.allergens.length > 0) ppoTableBody.push(['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]);
-                 if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
-                 if(sim.notes) ppoTableBody.push(['Observações', sim.notes]);
-                
-                if (ppoTableBody.length > 0) {
-                     autoTable(doc, {
-                        startY: yPos,
-                        body: ppoTableBody,
-                        theme: 'striped',
-                        headStyles: { fillColor: '#6B7280' },
-                        styles: { cellPadding: 2, fontSize: 10 },
-                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
-                    });
-                     yPos = (doc as any).lastAutoTable.finalY + 10;
-                }
-            }
+    
+        const tableHead = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup', 'Meta', 'NCM', 'CEST', 'CFOP']];
+        const tableBody = simulationsByCategory.map(sim => [
+            sim.name.toUpperCase(),
+            sim.ppo?.sku || 'N/A',
+            formatCurrency(sim.salePrice),
+            formatCurrency(sim.grossCost),
+            `${sim.profitPercentage.toFixed(2)}%`,
+            `${sim.markup.toFixed(2)}x`,
+            sim.profitGoal ? `${sim.profitGoal}%` : 'N/A',
+            sim.ppo?.ncm || 'N/A',
+            sim.ppo?.cest || 'N/A',
+            sim.ppo?.cfop || 'N/A',
+        ]);
+    
+        autoTable(doc, {
+            startY: yPos,
+            head: tableHead,
+            body: tableBody,
+            theme: 'grid',
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: '#273344' },
         });
-
+    
         doc.save(`relatorio_gerencial_mercadorias_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
@@ -789,5 +752,3 @@ export function PricingSimulator() {
         </div>
     );
 }
-
-    
