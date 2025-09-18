@@ -227,7 +227,7 @@ export type ProductSimulationItem = {
 };
 
 export type PPO = {
-  sku: string;
+  sku?: string;
   ncm?: string;
   cest?: string;
   cfop?: string;

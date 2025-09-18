@@ -24,6 +24,7 @@ import { Badge } from "./ui/badge";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
@@ -224,6 +225,49 @@ export function PricingSimulator() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+    
+    const handleExportXlsx = () => {
+        const dataForSheet = simulationsByCategory.map(sim => ({
+            'Mercadoria': sim.name,
+            'SKU': sim.ppo?.sku || '',
+            'Preço Venda': sim.salePrice,
+            'Custo Bruto': sim.grossCost,
+            'Lucro %': sim.profitPercentage,
+            'Markup': sim.markup,
+            'Meta Lucro %': sim.profitGoal || '',
+            'NCM': sim.ppo?.ncm || '',
+            'CEST': sim.ppo?.cest || '',
+            'CFOP': sim.ppo?.cfop || '',
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório Gerencial");
+
+        // Format numbers as currency/percentage in Excel
+        // This is a basic example; more complex formatting may require more work
+        for (const cellAddress in worksheet) {
+            if (cellAddress[0] === '!') continue; // skip sheet metadata
+            const col = cellAddress.replace(/[0-9]/g, '');
+            const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+            if (row > 1) { // Skip header
+                if (['C', 'D'].includes(col)) { // Preço Venda, Custo Bruto
+                    worksheet[cellAddress].z = 'R$ #,##0.00';
+                }
+                if (['E', 'G'].includes(col)) { // Lucro %, Meta Lucro %
+                     worksheet[cellAddress].t = 'n';
+                     worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
+                     worksheet[cellAddress].z = '0.00%';
+                }
+                 if (['F'].includes(col)) { // Markup
+                    worksheet[cellAddress].z = '0.00"x"';
+                }
+            }
+        }
+
+
+        XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
 
     const handleExportFichaTecnicaCompletaPdf = () => {
@@ -663,6 +707,7 @@ export function PricingSimulator() {
                                 <DropdownMenuContent>
                                     <DropdownMenuItem onSelect={handleExportGerencialPdf}>Relatório Gerencial (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaCompletaPdf}>Ficha técnica completa (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
