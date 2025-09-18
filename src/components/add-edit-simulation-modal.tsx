@@ -318,14 +318,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         }
     }
 
+    const currentPPO = simulationToEdit?.ppo || {};
     const ppoData: Partial<PPO> = {
-        ...simulationToEdit?.ppo,
+        ...currentPPO,
         sku: values.sku,
-        ncm: values.ncm,
-        cest: values.cest,
-        cfop: values.cfop,
     };
     
+    // We remove the fiscal fields from the main values object, as they are handled in a different modal.
     const { sku, ncm, cest, cfop, ...restOfValues } = values as any;
 
     if (simulationToEdit) {
@@ -420,7 +419,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{simulationToEdit ? 'Editar análise de custo' : 'Nova análise de custo'}</DialogTitle>
+          <DialogTitle>{simulationToEdit ? 'Editar' : 'Nova'} análise de custo</DialogTitle>
           <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
         </DialogHeader>
         <Form {...form}>

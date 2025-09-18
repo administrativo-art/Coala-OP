@@ -172,12 +172,36 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const batch = writeBatch(db);
             
             const { createdAt, userId, status, ...restOfData } = simulationData;
-            const updatePayload = {
+            const updatePayload: Record<string, any> = {
               ...restOfData,
               updatedAt: now,
               updatedBy: { userId: user.id, username: user.username },
             };
-            batch.update(simulationRef, updatePayload as any);
+
+            // Ensure PPO is merged, not overwritten
+            if (simulationData.ppo) {
+                updatePayload.ppo = {
+                    ...(existingSimulation.ppo || {}),
+                    ...simulationData.ppo
+                };
+            }
+            
+            // Clean undefined fields to prevent Firestore errors
+            Object.keys(updatePayload).forEach(key => {
+              if (updatePayload[key] === undefined) {
+                delete updatePayload[key];
+              }
+            });
+            if (updatePayload.ppo) {
+              Object.keys(updatePayload.ppo).forEach(key => {
+                if (updatePayload.ppo[key] === undefined) {
+                  delete updatePayload.ppo[key];
+                }
+              });
+            }
+
+
+            batch.update(simulationRef, updatePayload);
             
             if (newPrice !== undefined && oldPrice !== newPrice) {
                 const historyRef = doc(collection(db, "simulationPriceHistory"));
