@@ -44,6 +44,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
+  sku: z.string().optional(),
   categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
   groupIds: z.array(z.string()),
@@ -104,6 +105,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     resolver: zodResolver(simulationSchema),
     defaultValues: { 
         name: '', 
+        sku: '',
         categoryIds: [], 
         lineId: null, 
         groupIds: [],
@@ -147,6 +149,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
             form.reset({
                 name: simulationToEdit.name,
+                sku: simulationToEdit.ppo?.sku || '',
                 categoryIds: simulationToEdit.categoryIds || [],
                 lineId: simulationToEdit.lineId,
                 groupIds: simulationToEdit.groupIds || [],
@@ -161,6 +164,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         } else {
             form.reset({ 
                 name: '', 
+                sku: '',
                 categoryIds: [], 
                 lineId: null, 
                 groupIds: [],
@@ -192,6 +196,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
     form.reset({
         name: `${sourceSimulation.name} (cópia)`,
+        sku: '', // SKU is unique, should not be copied
         categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
         groupIds: sourceSimulation.groupIds || [],
@@ -298,21 +303,29 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   };
 
   const onSubmit = async (values: SimulationFormValues) => {
+    const ppoData: Partial<PPO> = {
+        ...simulationToEdit?.ppo,
+        sku: values.sku,
+    };
+    
+    const { sku, ...restOfValues } = values;
+
     if (simulationToEdit) {
       const simulationData = { 
         ...simulationToEdit, 
-        ...values,
+        ...restOfValues,
         totalCmv: cmv,
         grossCost,
         profitValue,
         profitPercentage,
-        markup
+        markup,
+        ppo: ppoData
       };
       const items = values.items;
       await updateSimulation(simulationData, items);
     } else {
        const finalData = {
-        ...values,
+        ...restOfValues,
         lineId: values.lineId || null,
         groupIds: values.groupIds || [],
         categoryIds: values.categoryIds || [],
@@ -321,6 +334,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         profitValue,
         profitPercentage,
         markup,
+        ppo: ppoData
       };
       await addSimulation(finalData);
     }
@@ -395,13 +409,22 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1 pr-6">
               <div className="space-y-4">
-                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Nome da mercadoria</FormLabel>
-                        <FormControl><Input placeholder="Ex: Milkshake de Morango (P)" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                 )}/>
+                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Nome da mercadoria</FormLabel>
+                            <FormControl><Input placeholder="Ex: Milkshake de Morango (P)" {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                    <FormField control={form.control} name="sku" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>SKU (opcional)</FormLabel>
+                            <FormControl><Input placeholder="Ex: MSK-M-P" {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                 </div>
 
                 {!simulationToEdit && (
                   <FormItem>

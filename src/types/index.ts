@@ -231,12 +231,12 @@ export type PPO = {
   ncm?: string;
   cest?: string;
   cfop?: string;
-  assemblyInstructions: { id: string; text: string }[];
-  qualityStandard: string;
-  allergens: { id: string; text: string }[];
-  preparationTime: number; // in seconds
-  portionWeight: number; // in grams or mL
-  portionTolerance: number;
+  assemblyInstructions?: { id: string; text: string }[];
+  qualityStandard?: string;
+  allergens?: { id: string; text: string }[];
+  preparationTime?: number; // in seconds
+  portionWeight?: number; // in grams or mL
+  portionTolerance?: number;
   referenceImageUrl?: string;
   assemblyVideoUrl?: string;
 };

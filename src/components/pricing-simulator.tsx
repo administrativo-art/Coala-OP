@@ -95,7 +95,7 @@ export function PricingSimulator() {
     
     const simulationsByCategory = useMemo(() => {
         const filtered = simulations.filter(sim => {
-            const searchMatch = searchTerm ? sim.name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
+            const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             
@@ -597,7 +597,7 @@ export function PricingSimulator() {
                          <div className="relative flex-grow w-full md:w-auto">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por mercadoria..."
+                                placeholder="Buscar por mercadoria ou SKU..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="pl-10 w-full"
@@ -695,3 +695,4 @@ export function PricingSimulator() {
     
 
     
+

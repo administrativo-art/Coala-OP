@@ -32,7 +32,7 @@ const PhotoCaptureModal = dynamic(
 
 
 const ppoSchema = z.object({
-  sku: z.string().min(1, 'SKU é obrigatório.'),
+  sku: z.string().optional(),
   ncm: z.string().optional(),
   cest: z.string().optional(),
   cfop: z.string().optional(),
@@ -221,7 +221,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                 <div className="space-y-6 py-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="sku" render={({ field }) => (
-                        <FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>SKU (Código do Produto)</FormLabel><FormControl><Input placeholder="Ex: MSK-MOR-P" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                   </div>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
