@@ -303,6 +303,21 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   };
 
   const onSubmit = async (values: SimulationFormValues) => {
+    if (values.sku) {
+        const isDuplicate = simulations.some(sim => 
+            sim.ppo?.sku === values.sku && sim.id !== simulationToEdit?.id
+        );
+
+        if (isDuplicate) {
+            toast({
+                variant: 'destructive',
+                title: 'SKU duplicado',
+                description: `O SKU "${values.sku}" já está em uso por outra mercadoria. Por favor, insira um identificador único.`,
+            });
+            return; // Stop the submission
+        }
+    }
+
     const ppoData: Partial<PPO> = {
         ...simulationToEdit?.ppo,
         sku: values.sku,
@@ -419,8 +434,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     )}/>
                     <FormField control={form.control} name="sku" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>SKU (opcional)</FormLabel>
-                            <FormControl><Input placeholder="Ex: MSK-M-P" {...field} /></FormControl>
+                            <FormLabel>SKU (Código do Produto)</FormLabel>
+                            <FormControl><Input placeholder="Ex: MSK-M-P" {...field} value={field.value || ''} /></FormControl>
                             <FormMessage />
                         </FormItem>
                     )}/>
