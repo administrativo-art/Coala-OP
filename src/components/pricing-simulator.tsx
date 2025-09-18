@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -27,7 +26,6 @@ import Papa from 'papaparse';
 import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
-import { PriceComparisonTable } from "./price-comparison-table";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { ScrollArea } from "./ui/scroll-area";
@@ -756,8 +754,6 @@ export function PricingSimulator() {
                 </div>
             </div>
 
-            <PriceComparisonTable selectedCompetitorIds={[]} />
-
             <AddEditSimulationModal 
                 open={isAddEditModalOpen}
                 onOpenChange={setIsAddEditModalOpen}
@@ -793,11 +789,5 @@ export function PricingSimulator() {
         </div>
     );
 }
-
-    
-
-    
-
-
 
     
