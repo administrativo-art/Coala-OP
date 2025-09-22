@@ -9,14 +9,13 @@ import { useAuth } from '@/hooks/use-auth';
 export function StockManagement() {
     const { permissions } = useAuth();
     
-    // Corrected permission logic for granular control
-    const canViewInventoryControl = permissions.stock.inventoryControl.view;
-    const canViewStockCount = permissions.stock.stockCount.view;
-    const canViewAudit = permissions.stock.audit.view;
-    const canViewAnalysis = permissions.stock.analysis.view;
-    const canViewPurchasing = permissions.stock.purchasing.view;
-    const canViewReturns = permissions.stock.returns.view;
-    const canViewConversions = permissions.stock.conversions.view;
+    const canViewInventoryControl = permissions.stock?.inventoryControl?.view;
+    const canViewStockCount = permissions.stock?.stockCount?.view;
+    const canViewAudit = permissions.stock?.audit?.view;
+    const canViewAnalysis = permissions.stock?.analysis?.view;
+    const canViewPurchasing = permissions.stock?.purchasing?.view;
+    const canViewReturns = permissions.stock?.returns?.view;
+    const canViewConversions = permissions.stock?.conversions?.view;
 
     return (
         <div className="w-full max-w-7xl mx-auto">
