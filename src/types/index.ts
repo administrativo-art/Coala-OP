@@ -315,15 +315,15 @@ export type PermissionSet = {
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
-  // Legado - para manter a compatibilidade
-  products?: { add: boolean; edit: boolean; delete: boolean; };
-  lots?: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
+  // Legado
+  products: { add: boolean; edit: boolean; delete: boolean; };
+  lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
   users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
-  kiosks?: { add: boolean; delete: boolean; };
-  predefinedLists?: { add: boolean; edit: boolean; delete: boolean; };
-  consumptionAnalysis?: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-  itemRequests?: { add: true, approve: false },
-  reposition?: { cancel: boolean; };
+  kiosks: { add: boolean; delete: boolean; };
+  predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
+  consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
+  itemRequests: { add: true, approve: false },
+  reposition: { cancel: boolean; };
 };
 
 export type Profile = {
@@ -605,7 +605,7 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
-    dashboard: { view: true, operational: true, pricing: false, audit: false, technicalSheets: false },
+    dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false },
     registration: {
         view: false,
         items: { add: false, edit: false, delete: false },
@@ -613,20 +613,20 @@ export const defaultGuestPermissions: PermissionSet = {
         entities: { add: false, edit: false, delete: false },
     },
     stock: {
-        view: true,
-        inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true },
-        stockCount: { view: true, perform: true, approve: false, requestItem: true },
+        view: false,
+        inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false },
+        stockCount: { view: false, perform: false, approve: false, requestItem: false },
         audit: { view: false, start: false, approve: false },
-        analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true },
+        analysis: { view: false, restock: false, consumption: false, projection: false, valuation: false },
         purchasing: { view: false, suggest: false, approve: false, deleteHistory: false },
-        returns: { view: true, add: true, updateStatus: false, delete: false },
-        conversions: { view: true },
+        returns: { view: false, add: false, updateStatus: false, delete: false },
+        conversions: { view: false },
     },
-    team: { view: true, manage: false },
-    pricing: { view: true, simulate: true, manageParameters: false },
+    team: { view: false, manage: false },
+    pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
-    tasks: { view: true, manage: false },
+    tasks: { view: false, manage: false },
     reposition: { cancel: false },
     help: { view: true },
     products: { add: false, edit: false, delete: false },
@@ -649,6 +649,12 @@ export const defaultAdminPermissions: PermissionSet = {
     tasks: { view: true, manage: true },
     reposition: { cancel: true },
     help: { view: true },
+    products: { add: true, edit: true, delete: true },
+    lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
+    kiosks: { add: true, delete: true },
+    predefinedLists: { add: true, edit: true, delete: true },
+    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
+    itemRequests: { add: true, approve: true },
 };
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };
@@ -759,5 +765,8 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
+export { unitCategories };
+    
 
     

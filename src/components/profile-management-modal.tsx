@@ -44,10 +44,10 @@ const permissionsSchema = z.object({
     inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
     audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
-    analysis: { view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() },
+    analysis: z.object({ view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() }),
     purchasing: z.object({ view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
-    conversions: { view: z.boolean() },
+    conversions: z.object({ view: z.boolean() }),
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
   pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
@@ -60,15 +60,15 @@ const permissionsSchema = z.object({
   }),
   help: z.object({ view: z.boolean() }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
-  // Legacy permissions that might still exist on the data object
-  products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
-  lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }).optional(),
+  // Legacy permissions
+  products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
+  lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
   users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
-  kiosks: z.object({ add: z.boolean(), delete: z.boolean() }).optional(),
-  predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
-  consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }).optional(),
-  itemRequests: z.object({ add: true, approve: false }).optional(),
-  reposition: z.object({ cancel: z.boolean() }).optional(),
+  kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
+  predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
+  consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
+  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
+  reposition: z.object({ cancel: z.boolean() }),
 });
 
 
@@ -412,3 +412,4 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   );
 }
 
+    
