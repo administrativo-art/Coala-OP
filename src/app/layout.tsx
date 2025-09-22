@@ -2,13 +2,12 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider, UserProvider } from '@/components/auth-provider';
+import { UserProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
 import { LocationsProvider } from '@/components/locations-provider';
 import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
-import { ProfilesProvider } from '@/components/profiles-provider';
 import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
@@ -120,5 +119,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-    
