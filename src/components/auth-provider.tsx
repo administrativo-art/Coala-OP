@@ -102,7 +102,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Iterate over each specific permission within the module
           for (const subKey in modulePerms) {
             const permissionKey = subKey as keyof typeof modulePerms;
-            // Directly assign the value from the profile, overwriting the default
             (draftState[key] as any)[permissionKey] = modulePerms[permissionKey];
           }
         }
@@ -263,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
     }
     const userToImpersonate = users.find(u => u.id === userId);
-    if (userToImpersonate) {
+    if (userToImpersonate && currentUser) {
         setOriginalUser(currentUser);
         setCurrentUser(userToImpersonate);
         window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
@@ -299,6 +298,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-    
 
     
