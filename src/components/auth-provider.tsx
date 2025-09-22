@@ -67,29 +67,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   useEffect(() => {
+    // Reset to guest permissions immediately if user or profiles are not ready
     if (!profilesContext || profilesContext.loading || !currentUser) {
       setPermissions(defaultGuestPermissions);
       return;
     }
   
+    // Handle master admin case
     if (currentUser.username === 'Tiago Brasil') {
       setPermissions(defaultAdminPermissions);
       return;
     }
   
+    // Find the user's profile
     const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
   
+    // If no profile is found, they get guest permissions
     if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
       return;
     }
   
+    // Deep merge permissions using Immer for a clean, immutable update
     const finalPermissions = produce(defaultGuestPermissions, draftState => {
       const profilePermissions = userProfile.permissions;
+      
+      // Iterate over each module in the profile's permissions
       for (const moduleKey in profilePermissions) {
         const key = moduleKey as keyof PermissionSet;
-        if (draftState[key] && typeof draftState[key] === 'object') {
-          Object.assign(draftState[key], profilePermissions[key]);
+        const modulePerms = profilePermissions[key];
+
+        // Ensure the module exists in the draft state before merging
+        if (draftState[key] && typeof modulePerms === 'object' && modulePerms !== null) {
+          // Iterate over each specific permission within the module
+          for (const subKey in modulePerms) {
+            const permissionKey = subKey as keyof typeof modulePerms;
+            // Directly assign the value from the profile, overwriting the default
+            (draftState[key] as any)[permissionKey] = modulePerms[permissionKey];
+          }
         }
       }
     });
@@ -284,4 +299,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+    
+
     

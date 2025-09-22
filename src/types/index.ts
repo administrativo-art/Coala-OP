@@ -321,7 +321,7 @@ export type PermissionSet = {
   };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
-  // Legado
+  // Legado - Will be removed
   products: { add: boolean; edit: boolean; delete: boolean; };
   lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
   users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
@@ -611,42 +611,22 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
-  dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false },
-  registration: {
-    view: false,
-    items: { add: false, edit: false, delete: false },
-    baseProducts: { add: false, edit: false, delete: false },
-    entities: { add: false, edit: false, delete: false },
-  },
-  stock: {
-    view: false,
-    inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false },
-    stockCount: { view: false, perform: false, approve: false, requestItem: false },
-    audit: { view: false, start: false, approve: false },
-    analysis: { view: false, restock: false, consumption: false, projection: false, valuation: false },
-    purchasing: { view: false, suggest: false, approve: false, deleteHistory: false },
-    returns: { view: false, add: false, updateStatus: false, delete: false },
-    conversions: { view: false },
-  },
-  team: { view: false, manage: false },
-  pricing: { view: false, simulate: false, manageParameters: false },
-  settings: {
-    view: false,
-    manageUsers: false,
-    manageKiosks: false,
-    manageProfiles: false,
-    manageLabels: false,
-  },
-  tasks: { view: false, manage: false },
-  help: { view: true },
-  products: { add: false, edit: false, delete: false },
-  lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
-  users: { add: false, edit: false, delete: false, impersonate: false },
-  kiosks: { add: false, delete: false },
-  predefinedLists: { add: false, edit: false, delete: false },
-  consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
-  itemRequests: { add: false, approve: false },
-  reposition: { cancel: false },
+    dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false },
+    registration: { view: false, items: { add: false, edit: false, delete: false }, baseProducts: { add: false, edit: false, delete: false }, entities: { add: false, edit: false, delete: false } },
+    stock: { view: false, inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, stockCount: { view: false, perform: false, approve: false, requestItem: false }, audit: { view: false, start: false, approve: false }, analysis: { view: false, restock: false, consumption: false, projection: false, valuation: false }, purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, returns: { view: false, add: false, updateStatus: false, delete: false }, conversions: { view: false } },
+    team: { view: false, manage: false },
+    pricing: { view: false, simulate: false, manageParameters: false },
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
+    tasks: { view: false, manage: false },
+    help: { view: true },
+    products: { add: false, edit: false, delete: false },
+    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    users: { add: false, edit: false, delete: false, impersonate: false },
+    kiosks: { add: false, delete: false },
+    predefinedLists: { add: false, edit: false, delete: false },
+    consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
+    itemRequests: { add: false, approve: false },
+    reposition: { cancel: false },
 };
 
 
@@ -779,6 +759,8 @@ export type PriceDecision = {
 };
 
 export { unitCategories };
+    
+
     
 
     
