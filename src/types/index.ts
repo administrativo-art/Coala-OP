@@ -328,7 +328,7 @@ export type PermissionSet = {
   kiosks: { add: boolean; delete: boolean; };
   predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
   consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-  itemRequests: { add: true, approve: false },
+  itemRequests: { add: boolean; approve: boolean; },
   reposition: { cancel: boolean; };
 };
 
@@ -639,7 +639,7 @@ export const defaultGuestPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
-    itemRequests: { add: true, approve: false },
+    itemRequests: { add: false, approve: false },
     reposition: { cancel: false },
 };
 

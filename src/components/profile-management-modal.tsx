@@ -67,8 +67,8 @@ const permissionsSchema = z.object({
   kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
-  itemRequests: z.object({ add: true, approve: false }),
-  reposition: { cancel: z.boolean() },
+  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
+  reposition: z.object({ cancel: z.boolean() }),
 });
 
 
@@ -411,4 +411,3 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     </>
   );
 }
-
