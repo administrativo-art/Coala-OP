@@ -41,13 +41,14 @@ const permissionsSchema = z.object({
     entities: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   }),
   stock: z.object({
+    view: z.boolean(),
     inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
     audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
-    analysis: z.object({ view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() }),
-    purchasing: z.object({ view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() }),
-    returns: z.object({ view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
-    conversions: z.object({ view: z.boolean() }),
+    analysis: { view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() },
+    purchasing: { view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() },
+    returns: { view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() },
+    conversions: { view: z.boolean() },
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
   pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
@@ -58,9 +59,9 @@ const permissionsSchema = z.object({
     manageProfiles: z.boolean(),
     manageLabels: z.boolean(),
   }),
-  help: z.object({ view: z.boolean() }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
-  // Legacy permissions
+  help: z.object({ view: z.boolean() }),
+  // Legado
   products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
   users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
@@ -68,7 +69,7 @@ const permissionsSchema = z.object({
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
   itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
-  reposition: z.object({ cancel: z.boolean() }),
+  reposition: { cancel: z.boolean() },
 });
 
 
@@ -179,7 +180,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
   
-   const renderModuleToggle = (label: string, name: `permissions.${keyof Omit<PermissionSet, 'stock'>}.view`, description?: string) => (
+   const renderModuleToggle = (label: string, name: `permissions.${keyof Omit<PermissionSet, 'stock'>}.view` | `permissions.stock.view`, description?: string) => (
     <FormField
       control={form.control}
       name={name}
@@ -198,6 +199,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   );
 
   const dashboardViewWatch = form.watch('permissions.dashboard.view');
+  const stockViewWatch = form.watch('permissions.stock.view');
 
   return (
     <>
@@ -260,9 +262,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="stock">
                                 <AccordionTrigger className="text-lg font-semibold"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
+                                     {renderModuleToggle("Ver Módulo de Estoque", "permissions.stock.view", "Permissão principal para acessar a seção de gestão de estoque.")}
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
-                                        {renderModuleToggle("Ver Controle de Estoque", "permissions.stock.inventoryControl.view")}
+                                        {renderPermissionSwitch("permissions.stock.inventoryControl.view", "Visualizar Controle de Estoque", "Permite ver a tela principal de controle de estoque.")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.addLot", "Adicionar Lotes", "Permite adicionar novos lotes de produtos ao estoque.")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.editLot", "Editar Lotes", "Permite editar informações de lotes existentes.")}
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.writeDown", "Dar Baixa em Lotes", "Permite registrar saídas por consumo ou descarte.")}
@@ -271,20 +274,20 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Contagem</h4>
-                                        {renderModuleToggle("Ver Contagem de Estoque", "permissions.stock.stockCount.view")}
+                                        {renderPermissionSwitch("permissions.stock.stockCount.view", "Visualizar Contagem de Estoque", "Permite ver a tela de contagem.")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.perform", "Realizar Contagem", "Permite registrar contagens parciais de estoque.")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.approve", "Aprovar Contagem", "Permite aprovar divergências, ajustando o estoque.")}
                                         {renderPermissionSwitch("permissions.stock.stockCount.requestItem", "Solicitar Novo Insumo", "Permite solicitar cadastro de um item não encontrado.")}
                                      </div>
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Auditoria</h4>
-                                         {renderModuleToggle("Ver Auditoria de Estoque", "permissions.stock.audit.view")}
+                                         {renderPermissionSwitch("permissions.stock.audit.view", "Visualizar Auditoria de Estoque", "Permite ver a tela de auditoria.")}
                                         {renderPermissionSwitch("permissions.stock.audit.start", "Iniciar Auditoria", "Permite iniciar uma auditoria completa de um quiosque.")}
                                         {renderPermissionSwitch("permissions.stock.audit.approve", "Aprovar Auditoria", "Permite finalizar uma auditoria, efetivando os ajustes.")}
                                      </div>
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Análise de Estoque</h4>
-                                         {renderModuleToggle("Ver Análises de Estoque", "permissions.stock.analysis.view")}
+                                         {renderPermissionSwitch("permissions.stock.analysis.view", "Visualizar Análises de Estoque", "Permite ver a tela de análises.")}
                                         {renderPermissionSwitch("permissions.stock.analysis.restock", "Analisar Reposição", "Permite ver a tela de análise de reposição.")}
                                         {renderPermissionSwitch("permissions.stock.analysis.consumption", "Analisar Consumo", "Permite ver a tela de consumo médio.")}
                                         {renderPermissionSwitch("permissions.stock.analysis.projection", "Analisar Projeção", "Permite ver o valor financeiro do estoque.")}
@@ -292,21 +295,21 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Compras</h4>
-                                         {renderModuleToggle("Ver Módulo de Compras", "permissions.stock.purchasing.view")}
+                                         {renderPermissionSwitch("permissions.stock.purchasing.view", "Visualizar Módulo de Compras", "Permite ver a tela de compras.")}
                                         {renderPermissionSwitch("permissions.stock.purchasing.suggest", "Sugerir Preços", "Permite criar sessões de compra e adicionar cotações.")}
                                         {renderPermissionSwitch("permissions.stock.purchasing.approve", "Efetivar Compra", "Permite confirmar um preço, atualizando o custo do insumo.")}
                                         {renderPermissionSwitch("permissions.stock.purchasing.deleteHistory", "Excluir Histórico de Preços", "Permite apagar registros de preços efetivados.")}
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Avarias</h4>
-                                         {renderModuleToggle("Ver Módulo de Avarias", "permissions.stock.returns.view")}
+                                         {renderPermissionSwitch("permissions.stock.returns.view", "Visualizar Módulo de Avarias", "Permite ver a tela de avarias.")}
                                         {renderPermissionSwitch("permissions.stock.returns.add", "Abrir Chamados", "Permite criar novos chamados de avaria/devolução.")}
                                         {renderPermissionSwitch("permissions.stock.returns.updateStatus", "Atualizar Status de Chamados", "Permite avançar o status de um chamado.")}
                                         {renderPermissionSwitch("permissions.stock.returns.delete", "Excluir Chamados", "Permite apagar chamados de avaria.")}
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Conversões</h4>
-                                        {renderModuleToggle("Ver Conversor de Medidas", "permissions.stock.conversions.view")}
+                                        {renderPermissionSwitch("permissions.stock.conversions.view", "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.")}
                                      </div>
                                       <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>

@@ -301,6 +301,7 @@ export type PermissionSet = {
     entities: { add: boolean; edit: boolean; delete: boolean; };
   };
   stock: {
+    view: boolean;
     inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
     stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
     audit: { view: boolean; start: boolean; approve: boolean; };
@@ -618,6 +619,7 @@ export const defaultGuestPermissions: PermissionSet = {
         entities: { add: false, edit: false, delete: false },
     },
     stock: {
+        view: false,
         inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false },
         stockCount: { view: false, perform: false, approve: false, requestItem: false },
         audit: { view: false, start: false, approve: false },
@@ -651,7 +653,7 @@ export const defaultGuestPermissions: PermissionSet = {
 export const defaultAdminPermissions: PermissionSet = {
     dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
-    stock: { inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
+    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
     team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },

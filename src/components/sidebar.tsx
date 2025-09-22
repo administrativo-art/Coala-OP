@@ -62,16 +62,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canRegister = !loading && permissions.registration.view;
   const canSimulatePricing = !loading && permissions.pricing.view;
   const canViewTasks = !loading && permissions.tasks.view;
-  
-  const canManageStock = !loading && (
-    permissions.stock.inventoryControl.view ||
-    permissions.stock.stockCount.view ||
-    permissions.stock.audit.view ||
-    permissions.stock.analysis.view ||
-    permissions.stock.purchasing.view ||
-    permissions.stock.returns.view ||
-    permissions.stock.conversions.view
-  );
+  const canManageStock = !loading && permissions.stock.view;
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
