@@ -21,11 +21,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 const permissionsSchema = z.object({
+  dashboard: z.object({
+    view: z.boolean(),
+    operational: z.boolean(),
+    pricing: z.boolean(),
+    audit: z.boolean(),
+    technicalSheets: z.boolean(),
+  }),
   registration: z.object({
     view: z.boolean(),
     items: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
@@ -37,16 +44,10 @@ const permissionsSchema = z.object({
     inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
     audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
-    analysis: z.object({
-      view: z.boolean(),
-      restock: z.boolean(),
-      consumption: z.boolean(),
-      projection: z.boolean(),
-      valuation: z.boolean(),
-    }),
+    analysis: { view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() },
     purchasing: z.object({ view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() }),
     returns: z.object({ view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
-    conversions: z.object({ view: z.boolean() }),
+    conversions: { view: z.boolean() },
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
   pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
@@ -66,7 +67,7 @@ const permissionsSchema = z.object({
   kiosks: z.object({ add: z.boolean(), delete: z.boolean() }).optional(),
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }).optional(),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }).optional(),
-  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }).optional(),
+  itemRequests: z.object({ add: true, approve: false }).optional(),
   reposition: z.object({ cancel: z.boolean() }).optional(),
 });
 
@@ -114,10 +115,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
-    // Deep merge with defaults to ensure all keys are present
     const mergedPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
     
-    // Custom deep merge function
     const deepMerge = (target: any, source: any) => {
         for (const key in source) {
             if (source.hasOwnProperty(key)) {
@@ -198,6 +197,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
 
+  const dashboardViewWatch = form.watch('permissions.dashboard.view');
 
   return (
     <>
@@ -226,8 +226,21 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['registration', 'stock', 'team', 'pricing', 'settings', 'help']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['dashboard', 'registration', 'stock', 'team', 'pricing', 'settings', 'help']} className="w-full">
                             
+                            <AccordionItem value="dashboard">
+                                <AccordionTrigger className="text-lg font-semibold"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</AccordionTrigger>
+                                <AccordionContent className="space-y-2 pt-4 p-1">
+                                    {renderModuleToggle("Visualizar Dashboard Principal", "permissions.dashboard.view", "Permite que o usuário veja a página inicial do dashboard.")}
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+
                             <AccordionItem value="registration">
                                 <AccordionTrigger className="text-lg font-semibold"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -399,4 +412,3 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   );
 }
 
-    

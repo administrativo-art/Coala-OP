@@ -85,6 +85,15 @@
   input[type=number] {
     -moz-appearance: textfield;
   }
+
+  /* Hide scrollbar but allow scrolling */
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .no-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+    }
 }
 
 @keyframes pulse-once {
@@ -99,4 +108,10 @@
   25% { transform: translateX(-3px); }
   50% { transform: translateX(3px); }
   75% { transform: translateX(-2px); }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
 }

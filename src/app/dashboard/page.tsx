@@ -12,7 +12,7 @@ import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus, ShoppingCart } from 'lucide-react'
+import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus, ShoppingCart, FileText } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
@@ -31,6 +31,7 @@ import { useProducts } from "@/hooks/use-products"
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PurchaseAlertCard } from "@/components/purchase-alert-card"
+import { TechnicalSheetDashboard } from "@/components/technical-sheet-dashboard"
 
 interface OnlineUser {
     id: string;
@@ -410,8 +411,31 @@ function PricingReportDashboard() {
 
 export default function DashboardPage() {
     const { user, permissions } = useAuth();
-    const canAuditStock = permissions.stock.audit.start || permissions.stock.audit.approve;
     
+    if (!permissions.dashboard.view) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <Card className="w-full max-w-md text-center">
+                    <CardHeader>
+                        <CardTitle>Acesso Negado</CardTitle>
+                        <CardDescription>
+                            Você não tem permissão para visualizar o dashboard. Entre em contato com um administrador.
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+            </div>
+        );
+    }
+    
+    // Determine the default tab based on permissions
+    const getDefaultTab = () => {
+        if (permissions.dashboard.operational) return 'operational';
+        if (permissions.dashboard.pricing) return 'pricing';
+        if (permissions.dashboard.technicalSheets) return 'technical-sheets';
+        if (permissions.dashboard.audit) return 'audit';
+        return 'operational'; // Fallback
+    }
+
     return (
         <div className="space-y-6">
             <div className="mb-6">
@@ -419,19 +443,30 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground">Aqui está um resumo das suas atividades e alertas.</p>
             </div>
             
-            <Tabs defaultValue="operational" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3">
-                    <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>
-                    <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>
-                    {canAuditStock && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>}
+            <Tabs defaultValue={getDefaultTab()} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+                    {permissions.dashboard.operational && <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>}
+                    {permissions.dashboard.pricing && <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>}
+                    {permissions.dashboard.technicalSheets && <TabsTrigger value="technical-sheets"><FileText className="mr-2" /> Fichas Técnicas</TabsTrigger>}
+                    {permissions.dashboard.audit && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>}
                 </TabsList>
-                <TabsContent value="operational" className="mt-6 space-y-6">
-                    <OperationalDashboard />
-                </TabsContent>
-                <TabsContent value="pricing" className="mt-6">
-                    <PricingReportDashboard />
-                </TabsContent>
-                {canAuditStock && (
+
+                {permissions.dashboard.operational && (
+                    <TabsContent value="operational" className="mt-6 space-y-6">
+                        <OperationalDashboard />
+                    </TabsContent>
+                )}
+                {permissions.dashboard.pricing && (
+                    <TabsContent value="pricing" className="mt-6">
+                        <PricingReportDashboard />
+                    </TabsContent>
+                )}
+                {permissions.dashboard.technicalSheets && (
+                    <TabsContent value="technical-sheets" className="mt-6">
+                        <TechnicalSheetDashboard />
+                    </TabsContent>
+                )}
+                {permissions.dashboard.audit && (
                      <TabsContent value="audit" className="mt-6">
                         <AuditDashboard />
                     </TabsContent>
@@ -440,3 +475,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

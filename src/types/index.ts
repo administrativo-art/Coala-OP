@@ -287,7 +287,6 @@ export type DailyLog = {
 
 
 export type PermissionSet = {
-  // Dashboard
   dashboard: {
     view: boolean;
     operational: boolean;
@@ -295,14 +294,12 @@ export type PermissionSet = {
     audit: boolean;
     technicalSheets: boolean;
   };
-  // Cadastros
   registration: {
     view: boolean;
     items: { add: boolean; edit: boolean; delete: boolean; };
     baseProducts: { add: boolean; edit: boolean; delete: boolean; };
     entities: { add: boolean; edit: boolean; delete: boolean; };
   };
-  // Estoque
   stock: {
     view: boolean;
     inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
@@ -313,23 +310,20 @@ export type PermissionSet = {
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; };
     conversions: { view: boolean; };
   };
-  // Equipe
   team: { view: boolean; manage: boolean; };
-  // Custo e Preço
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
-  // Admin
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
-  // Legado - para manter a compatibilidade
-  products: { add: boolean; edit: boolean; delete: boolean; };
-  lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-  users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
-  kiosks: { add: boolean; delete: boolean; };
-  predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
-  consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
-  itemRequests: { add: true, approve: false },
-  tasks: { view: boolean, manage: boolean; };
-  reposition: { cancel: boolean; };
+  tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
+  // Legado - para manter a compatibilidade
+  products?: { add: boolean; edit: boolean; delete: boolean; };
+  lots?: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
+  users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
+  kiosks?: { add: boolean; delete: boolean; };
+  predefinedLists?: { add: boolean; edit: boolean; delete: boolean; };
+  consumptionAnalysis?: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
+  itemRequests?: { add: true, approve: false },
+  reposition?: { cancel: boolean; };
 };
 
 export type Profile = {
@@ -631,13 +625,7 @@ export const defaultGuestPermissions: PermissionSet = {
     team: { view: true, manage: false },
     pricing: { view: true, simulate: true, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
-    products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
-    kiosks: { add: false, delete: false },
-    predefinedLists: { add: false, edit: false, delete: false },
-    consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
-    itemRequests: { add: true, approve: false },
     tasks: { view: true, manage: false },
     reposition: { cancel: false },
     help: { view: true },
@@ -651,13 +639,7 @@ export const defaultAdminPermissions: PermissionSet = {
     team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
-    products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
     users: { add: true, edit: true, delete: true, impersonate: true },
-    kiosks: { add: true, delete: true },
-    predefinedLists: { add: true, edit: true, delete: true },
-    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
-    itemRequests: { add: true, approve: true },
     tasks: { view: true, manage: true },
     reposition: { cancel: true },
     help: { view: true },
@@ -771,4 +753,5 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
 
