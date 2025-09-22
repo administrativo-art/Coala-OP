@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -19,13 +18,13 @@ export function StockManagement() {
       );
     }
     
-    const canViewInventoryControl = permissions.stock.view && permissions.stock.inventoryControl.view;
-    const canViewStockCount = permissions.stock.view && permissions.stock.stockCount.view;
-    const canViewAudit = permissions.stock.view && permissions.stock.audit.view;
-    const canViewAnalysis = permissions.stock.view && permissions.stock.analysis.view;
-    const canViewPurchasing = permissions.stock.view && permissions.stock.purchasing.view;
-    const canViewReturns = permissions.stock.view && permissions.stock.returns.view;
-    const canViewConversions = permissions.stock.view && permissions.stock.conversions.view;
+    const canViewInventoryControl = permissions.stock.inventoryControl.view;
+    const canViewStockCount = permissions.stock.stockCount.view;
+    const canViewAudit = permissions.stock.audit.view;
+    const canViewAnalysis = permissions.stock.analysis.view;
+    const canViewPurchasing = permissions.stock.purchasing.view;
+    const canViewReturns = permissions.stock.returns.view;
+    const canViewConversions = permissions.stock.conversions.view;
     
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -159,5 +158,3 @@ export function StockManagement() {
         </div>
     );
 }
-
-    
