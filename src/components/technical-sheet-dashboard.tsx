@@ -31,7 +31,7 @@ export function TechnicalSheetDashboard() {
             const searchMatch = searchTerm === '' || 
                                 sim.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase());
-            const categoryMatch = selectedCategories.size === 0 || sim.categoryIds.some(catId => selectedCategories.has(catId));
+            const categoryMatch = selectedCategories.size === 0 || (sim.categoryIds || []).some(catId => selectedCategories.has(catId));
 
             return lineMatch && searchMatch && categoryMatch;
         });
@@ -142,4 +142,3 @@ export function TechnicalSheetDashboard() {
         </div>
     );
 }
-
