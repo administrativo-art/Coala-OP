@@ -70,7 +70,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                     id: `count-${count.id}`,
                     type: 'Contagem',
                     title: `Contagem de ${count.kioskName}`,
-                    description: `Enviada por ${count.countedBy.username} com ${count.items.length} divergência(s).`,
+                    description: `Enviada por ${count.countedBy.username} com ${count.items.filter(i => i.difference !== 0).length} divergência(s).`,
                     link: '/dashboard/stock/count',
                     icon: ListOrdered
                 });
@@ -126,7 +126,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         });
     }
 
-    if (permissions.itemRequests.approve) {
+    if (permissions.itemRequests?.approve) {
       itemAdditionRequests.forEach(req => {
         if (req.status === 'pending') {
           allLegacyTasks.push({
