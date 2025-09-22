@@ -425,7 +425,17 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
             {showQuantity && (
                 <div className="grid grid-cols-2 gap-2">
                     <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantity`} render={({ field }) => (
-                        <FormItem><FormControl><Input type="number" placeholder="Ex: 20" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem>
+                            <FormControl>
+                                <Input 
+                                    type="number" 
+                                    placeholder="Ex: 20" 
+                                    {...field}
+                                    value={field.value ?? ''}
+                                />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
                     )}/>
                      <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.unit`} render={({ field }) => (
                         <FormItem><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
@@ -451,3 +461,5 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
         </>
     )
 }
+
+    
