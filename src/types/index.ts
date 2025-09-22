@@ -287,6 +287,14 @@ export type DailyLog = {
 
 
 export type PermissionSet = {
+  // Dashboard
+  dashboard: {
+    view: boolean;
+    operational: boolean;
+    pricing: boolean;
+    audit: boolean;
+    technicalSheets: boolean;
+  };
   // Cadastros
   registration: {
     view: boolean;
@@ -603,6 +611,7 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
+    dashboard: { view: true, operational: true, pricing: false, audit: false, technicalSheets: false },
     registration: {
         view: false,
         items: { add: false, edit: false, delete: false },
@@ -636,6 +645,7 @@ export const defaultGuestPermissions: PermissionSet = {
 
 
 export const defaultAdminPermissions: PermissionSet = {
+    dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
     team: { view: true, manage: true },
@@ -761,3 +771,4 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+

@@ -84,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             ...profilePermissions,
+            dashboard: { ...defaultGuestPermissions.dashboard, ...profilePermissions?.dashboard },
             registration: {
                 ...defaultGuestPermissions.registration,
                 ...profilePermissions?.registration,
