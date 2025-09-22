@@ -25,7 +25,7 @@ export function StockManagement() {
     const canViewPurchasing = permissions.stock.purchasing.view;
     const canViewReturns = permissions.stock.returns.view;
     const canViewConversions = permissions.stock.conversions.view;
-    
+
     return (
         <div className="w-full max-w-7xl mx-auto">
             <div className="text-center mb-10">
