@@ -273,9 +273,8 @@ export function PricingSimulator() {
 
     const handleExportFichaTecnicaCompletaPdf = async () => {
         const doc = new jsPDF();
-    
         let isFirstPage = true;
-
+    
         for (const sim of simulationsByCategory) {
             if (!isFirstPage) {
                 doc.addPage();
@@ -284,39 +283,39 @@ export function PricingSimulator() {
             let yPos = 15;
             const pageHeight = doc.internal.pageSize.height;
             const pageWidth = doc.internal.pageSize.width;
-
+    
             // --- Header Section with Image and Title ---
             const hasImage = sim.ppo?.referenceImageUrl;
-
+    
             if (hasImage) {
                 try {
                     const img = new Image();
                     img.src = sim.ppo!.referenceImageUrl!;
-                    await new Promise(resolve => {
-                        img.onload = resolve;
-                        img.onerror = () => { console.error("Image failed to load"); resolve(null); };
+                    await new Promise<void>(resolve => {
+                        img.onload = () => resolve();
+                        img.onerror = () => { console.error("Image failed to load"); resolve(); };
                     });
                     
                     const maxWidth = 60;
                     let imgWidth = img.width;
                     let imgHeight = img.height;
-
+    
                     if (imgWidth > maxWidth) {
                         imgHeight = (maxWidth / imgWidth) * imgHeight;
                         imgWidth = maxWidth;
                     }
                     
                     if (yPos + imgHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
-
-                    const imageX = (pageWidth - imgWidth) / 2; // Center the image
+    
+                    const imageX = (pageWidth - imgWidth) / 2;
                     doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', imageX, yPos, imgWidth, imgHeight);
                     yPos += imgHeight + 5;
-
+    
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
             }
-
+    
             doc.setFontSize(18);
             doc.text(sim.name, pageWidth / 2, yPos, { align: 'center' });
             yPos += 6;
@@ -382,21 +381,26 @@ export function PricingSimulator() {
                     doc.setFont(undefined, 'normal');
 
                     for (const [index, etapa] of phase.etapas.entries()) {
-                         if (yPos > 270) { doc.addPage(); yPos = 15; }
+                        if (yPos > 270) { doc.addPage(); yPos = 15; }
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
                         
                         let stepImageWidth = 0;
                         let stepImageHeight = 0;
+                        let stepImage;
 
                         if (etapa.imageUrl) {
                             try {
-                                const stepImg = new Image();
-                                stepImg.src = etapa.imageUrl;
-                                await new Promise(resolve => { stepImg.onload = resolve; stepImg.onerror = () => resolve(null); });
+                                const img = new Image();
+                                img.src = etapa.imageUrl;
+                                await new Promise<void>(resolve => {
+                                    img.onload = () => resolve();
+                                    img.onerror = () => { resolve(); };
+                                });
+                                stepImage = img;
                                 const stepMaxWidth = 30;
-                                stepImageWidth = stepImg.width > stepMaxWidth ? stepMaxWidth : stepImg.width;
-                                stepImageHeight = (stepImg.height * stepImageWidth) / stepImg.width;
+                                stepImageWidth = stepImage.width > stepMaxWidth ? stepMaxWidth : stepImage.width;
+                                stepImageHeight = (stepImage.height * stepImageWidth) / stepImage.width;
                             } catch (e) {
                                 console.error("Failed to load step image", e);
                             }
@@ -407,16 +411,16 @@ export function PricingSimulator() {
 
                         if (yPos + blockHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
                         
-                        doc.text(stepText, 16, yPos, { maxWidth: 140 });
-                        const textYEnd = yPos + textDimensions.h;
+                        const textY = yPos + (stepImageHeight > 0 ? (blockHeight - textDimensions.h) / 2 : 0);
+                        doc.text(stepText, 16, textY, { maxWidth: 140 });
 
-                        if (etapa.imageUrl && stepImageHeight > 0) {
+                        if (etapa.imageUrl && stepImageHeight > 0 && stepImage) {
                             const imageX = 160;
                             const imageY = yPos;
-                            doc.addImage(etapa.imageUrl, 'JPEG', imageX, imageY, stepImageWidth, stepImageHeight);
+                            doc.addImage(stepImage, 'JPEG', imageX, imageY, stepImageWidth, stepImageHeight);
                         }
                         
-                        yPos = textYEnd + 4;
+                        yPos += blockHeight + 4;
                     }
                 }
                  yPos += 5;
