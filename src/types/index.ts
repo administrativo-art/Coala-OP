@@ -312,7 +312,13 @@ export type PermissionSet = {
   };
   team: { view: boolean; manage: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
-  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
+  settings: {
+    view: boolean;
+    manageUsers: boolean;
+    manageKiosks: boolean;
+    manageProfiles: boolean;
+    manageLabels: boolean;
+  };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
   // Legado
@@ -625,16 +631,16 @@ export const defaultGuestPermissions: PermissionSet = {
     team: { view: false, manage: false },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
-    users: { add: false, edit: false, delete: false, impersonate: false },
     tasks: { view: false, manage: false },
-    reposition: { cancel: false },
     help: { view: true },
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     itemRequests: { add: true, approve: false },
+    reposition: { cancel: false },
 };
 
 
@@ -767,6 +773,4 @@ export type PriceDecision = {
 };
 
 export { unitCategories };
-    
-
     

@@ -117,7 +117,24 @@ function LabelSettings() {
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
-    const canManageUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
+    const canManageUsers = permissions.settings.manageUsers;
+    const canManageLabels = permissions.settings.manageLabels;
+
+    const defaultTab = canManageUsers ? "users" : canManageLabels ? "labels" : "";
+    const gridCols = [canManageUsers, canManageLabels].filter(Boolean).length;
+    
+    if (!canManageUsers && !canManageLabels) {
+        return (
+             <Card>
+                <CardHeader>
+                    <CardTitle>Acesso Negado</CardTitle>
+                    <CardDescription>
+                        Você não tem permissão para acessar nenhuma configuração.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        )
+    }
 
     return (
         <div className="w-full space-y-6">
@@ -126,20 +143,23 @@ export default function SettingsPage() {
                 <p className="text-muted-foreground">Gerencie usuários, perfis e outras configurações do sistema.</p>
             </div>
             
-             <Tabs defaultValue="users" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+             <Tabs defaultValue={defaultTab} className="w-full">
+                <TabsList className={gridCols > 1 ? "grid w-full grid-cols-2" : "grid w-full grid-cols-1"}>
                     {canManageUsers && <TabsTrigger value="users"><Users className="mr-2 h-4 w-4" /> Usuários e perfis</TabsTrigger>}
-                    <TabsTrigger value="labels"><Ticket className="mr-2 h-4 w-4" /> Etiquetas</TabsTrigger>
+                    {canManageLabels && <TabsTrigger value="labels"><Ticket className="mr-2 h-4 w-4" /> Etiquetas</TabsTrigger>}
                 </TabsList>
                 {canManageUsers && 
                     <TabsContent value="users" className="mt-4">
                         <UserManagement />
                     </TabsContent>
                 }
-                <TabsContent value="labels" className="mt-4">
-                    <LabelSettings />
-                </TabsContent>
+                {canManageLabels &&
+                    <TabsContent value="labels" className="mt-4">
+                        <LabelSettings />
+                    </TabsContent>
+                }
             </Tabs>
         </div>
     )
 }
+
