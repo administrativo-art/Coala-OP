@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -40,7 +41,6 @@ const permissionsSchema = z.object({
     entities: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   }),
   stock: z.object({
-    view: z.boolean(),
     inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
     stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
     audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
@@ -179,7 +179,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
   
-   const renderModuleToggle = (label: string, name: `permissions.${keyof PermissionSet}.view`, description?: string) => (
+   const renderModuleToggle = (label: string, name: `permissions.${keyof Omit<PermissionSet, 'stock'>}.view`, description?: string) => (
     <FormField
       control={form.control}
       name={name}
@@ -260,7 +260,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="stock">
                                 <AccordionTrigger className="text-lg font-semibold"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
-                                     {renderModuleToggle("Ver Módulo de Estoque", "permissions.stock.view")}
                                      <div className="pl-4 border-l-2 ml-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
                                         {renderModuleToggle("Ver Controle de Estoque", "permissions.stock.inventoryControl.view")}
@@ -411,3 +410,5 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     </>
   );
 }
+
+    

@@ -62,7 +62,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canRegister = !loading && permissions.registration.view;
   const canSimulatePricing = !loading && permissions.pricing.view;
   const canViewTasks = !loading && permissions.tasks.view;
-  const canAudit = !loading && permissions.stock.audit.start;
+  
   const canManageStock = !loading && (
     permissions.stock.inventoryControl.view ||
     permissions.stock.stockCount.view ||
@@ -308,3 +308,5 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     </div>
   )
 }
+
+    
