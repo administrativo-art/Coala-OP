@@ -237,7 +237,8 @@ export type PPO = {
     etapas: {
       id: string;
       text: string;
-      quantityText?: string;
+      quantity?: number;
+      unit?: string;
       imageUrl?: string;
     }[];
   }[];

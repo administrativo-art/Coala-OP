@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info, Utensils } from 'lucide-react';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -23,6 +23,8 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@
 import { resizeImage } from '@/lib/image-utils';
 import dynamic from 'next/dynamic';
 import { Separator } from './ui/separator';
+import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 
 const PhotoCaptureModal = dynamic(
@@ -33,7 +35,8 @@ const PhotoCaptureModal = dynamic(
 const etapaSchema = z.object({
     id: z.string(),
     text: z.string().min(1, "A descrição da etapa não pode ser vazia."),
-    quantityText: z.string().optional(),
+    quantity: z.coerce.number().optional(),
+    unit: z.string().optional(),
     imageUrl: z.string().optional(),
 });
 
@@ -275,7 +278,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                           )}/>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive mt-7" onClick={() => removePhase(phaseIndex)}><Trash2 className="h-4 w-4"/></Button>
                         </div>
-                        <PhaseSteps control={form.control} phaseIndex={phaseIndex} form={form} />
+                        <PhaseEtapas control={form.control} phaseIndex={phaseIndex} form={form} />
                       </div>
                     ))}
                     <Button type="button" variant="outline" className="w-full" onClick={() => appendPhase({ id: `phase-${Date.now()}`, name: '', etapas: [{id: `etapa-${Date.now()}`, text: ''}] })}>
@@ -345,7 +348,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
 }
 
 
-function PhaseSteps({ control, phaseIndex, form }: { control: any, phaseIndex: number, form: any }) {
+function PhaseEtapas({ control, phaseIndex, form }: { control: any, phaseIndex: number, form: any }) {
   const { fields, append, remove } = useFieldArray({
     control,
     name: `assemblyInstructions.${phaseIndex}.etapas`,
@@ -377,11 +380,15 @@ function PhaseSteps({ control, phaseIndex, form }: { control: any, phaseIndex: n
 }
 
 function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: number, etapaIndex: number }) {
-    const [showQuantity, setShowQuantity] = useState(!!form.getValues(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantityText`));
+    const [showQuantity, setShowQuantity] = useState(!!form.getValues(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantity`));
     const [showImage, setShowImage] = useState(!!form.getValues(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`));
     
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const allUnits = useMemo(() => {
+        return unitCategories.flatMap(category => Object.keys(units[category]));
+    }, []);
 
     const handlePhotoCaptured = async (dataUrl: string) => {
         try {
@@ -408,7 +415,7 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
         <>
             <div className="flex items-center gap-2">
                 <Button type="button" size="sm" variant={showQuantity ? "secondary" : "ghost"} onClick={() => setShowQuantity(!showQuantity)}>
-                    <PlusCircle className="mr-2 h-4 w-4"/> Quantidade
+                    <Utensils className="mr-2 h-4 w-4"/> Qtd.
                 </Button>
                 <Button type="button" size="sm" variant={showImage ? "secondary" : "ghost"} onClick={() => setShowImage(!showImage)}>
                     <Camera className="mr-2 h-4 w-4"/> Imagem
@@ -416,9 +423,14 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
             </div>
 
             {showQuantity && (
-                <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantityText`} render={({ field }) => (
-                    <FormItem><FormControl><Input placeholder="Ex: 20 ml, 30 gramas..." {...field} /></FormControl><FormMessage /></FormItem>
-                )}/>
+                <div className="grid grid-cols-2 gap-2">
+                    <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantity`} render={({ field }) => (
+                        <FormItem><FormControl><Input type="number" placeholder="Ex: 20" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                     <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.unit`} render={({ field }) => (
+                        <FormItem><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                    )}/>
+                </div>
             )}
 
             {showImage && (
