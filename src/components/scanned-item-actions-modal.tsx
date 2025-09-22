@@ -28,8 +28,8 @@ export function ScannedItemActionsModal({ product, onOpenChange }: ScannedItemAc
   
   const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
 
-  const canAddLot = permissions.lots.add;
-  const canConsumeLot = permissions.lots.edit; // Assuming edit permission allows consumption
+  const canAddLot = permissions.lots?.add;
+  const canConsumeLot = permissions.lots?.edit; // Assuming edit permission allows consumption
 
   const handleViewInStock = () => {
     if (!product) return;
@@ -115,4 +115,3 @@ export function ScannedItemActionsModal({ product, onOpenChange }: ScannedItemAc
     </>
   );
 }
-
