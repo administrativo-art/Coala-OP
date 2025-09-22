@@ -231,7 +231,14 @@ export type PPO = {
   ncm?: string;
   cest?: string;
   cfop?: string;
-  assemblyInstructions?: { id: string; text: string }[];
+  assemblyInstructions?: {
+    id: string;
+    name: string;
+    steps: {
+      id: string;
+      text: string;
+    }[];
+  }[];
   qualityStandard?: string;
   allergens?: { id: string; text: string }[];
   preparationTime?: number; // in seconds
@@ -759,8 +766,4 @@ export type PriceDecision = {
 };
 
 export { unitCategories };
-    
-
-    
-
     

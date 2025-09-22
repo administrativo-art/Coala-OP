@@ -30,13 +30,23 @@ const PhotoCaptureModal = dynamic(
   { ssr: false }
 );
 
+const stepSchema = z.object({
+    id: z.string(),
+    text: z.string().min(1, "O passo não pode ser vazio."),
+});
+
+const phaseSchema = z.object({
+    id: z.string(),
+    name: z.string().min(1, "O nome da fase é obrigatório."),
+    steps: z.array(stepSchema).min(1, "A fase deve ter pelo menos um passo."),
+});
 
 const ppoSchema = z.object({
   sku: z.string().optional(),
   ncm: z.string().optional(),
   cest: z.string().optional(),
   cfop: z.string().optional(),
-  assemblyInstructions: z.array(z.object({ id: z.string(), text: z.string().min(1, "A instrução não pode ser vazia.") })),
+  assemblyInstructions: z.array(phaseSchema),
   qualityStandard: z.string().optional(),
   allergens: z.array(z.object({ id: z.string(), text: z.string().min(1, "O alergênico não pode ser vazio.") })),
   preparationTime: z.coerce.number().optional(),
@@ -80,7 +90,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     },
   });
 
-  const { fields: instructionFields, append: appendInstruction, remove: removeInstruction } = useFieldArray({
+  const { fields: phaseFields, append: appendPhase, remove: removePhase } = useFieldArray({
     control: form.control,
     name: 'assemblyInstructions',
   });
@@ -253,19 +263,21 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                     <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <FormLabel>Modo de Montagem</FormLabel>
-                    {instructionFields.map((field, index) => (
-                      <div key={field.id} className="flex items-center gap-2">
-                          <span className="font-semibold text-muted-foreground">{index + 1}.</span>
-                          <FormField control={form.control} name={`assemblyInstructions.${index}.text`} render={({ field: stepField }) => (
-                              <FormItem className="flex-grow"><FormControl><Input {...stepField} /></FormControl><FormMessage /></FormItem>
+                    {phaseFields.map((phase, phaseIndex) => (
+                      <div key={phase.id} className="p-4 border rounded-lg space-y-3">
+                        <div className="flex items-center gap-2">
+                          <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.name`} render={({ field }) => (
+                            <FormItem className="flex-grow"><FormLabel>Nome da Fase</FormLabel><FormControl><Input placeholder="Ex: Preparo da base" {...field} /></FormControl><FormMessage /></FormItem>
                           )}/>
-                          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeInstruction(index)}><Trash2 className="h-4 w-4"/></Button>
+                          <Button type="button" variant="ghost" size="icon" className="text-destructive mt-7" onClick={() => removePhase(phaseIndex)}><Trash2 className="h-4 w-4"/></Button>
+                        </div>
+                        <PhaseSteps control={form.control} phaseIndex={phaseIndex} />
                       </div>
                     ))}
-                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => appendInstruction({ id: `instr-${Date.now()}`, text: '' })}>
-                        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
+                    <Button type="button" variant="outline" className="w-full" onClick={() => appendPhase({ id: `phase-${Date.now()}`, name: '', steps: [{id: `step-${Date.now()}`, text: ''}] })}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Fase
                     </Button>
                   </div>
                   
@@ -329,3 +341,29 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     </>
   );
 }
+
+function PhaseSteps({ control, phaseIndex }: { control: any, phaseIndex: number }) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `assemblyInstructions.${phaseIndex}.steps`,
+  });
+
+  return (
+    <div className="pl-4 border-l-2 ml-2 space-y-2">
+      <FormLabel>Passos da Fase</FormLabel>
+      {fields.map((step, stepIndex) => (
+        <div key={step.id} className="flex items-center gap-2">
+          <span className="font-semibold text-muted-foreground">{stepIndex + 1}.</span>
+          <FormField control={control} name={`assemblyInstructions.${phaseIndex}.steps.${stepIndex}.text`} render={({ field }) => (
+            <FormItem className="flex-grow"><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+          )}/>
+          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(stepIndex)}><Trash2 className="h-4 w-4"/></Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => append({ id: `step-${Date.now()}`, text: '' })}>
+        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
+      </Button>
+    </div>
+  );
+}
+
