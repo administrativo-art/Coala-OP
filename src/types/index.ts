@@ -629,6 +629,12 @@ export const defaultGuestPermissions: PermissionSet = {
     tasks: { view: true, manage: false },
     reposition: { cancel: false },
     help: { view: true },
+    products: { add: false, edit: false, delete: false },
+    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    kiosks: { add: false, delete: false },
+    predefinedLists: { add: false, edit: false, delete: false },
+    consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
+    itemRequests: { add: true, approve: false },
 };
 
 
@@ -753,3 +759,5 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
+    
