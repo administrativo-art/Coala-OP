@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
@@ -6,19 +7,14 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
-import { LayoutDashboard, ClipboardCheck, Shell, Users, ChevronsLeft, ChevronsRight, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase, ShieldCheck as AuditIcon, BookOpen, FileText, MinusCircle } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, Shell, Users, ListPlus, Settings, LifeBuoy, DollarSign, ListTodo, AreaChart, Search, Truck, BarChart2, ShieldAlert, ListOrdered, Repeat, UserCog, Briefcase, ShieldCheck as AuditIcon, BookOpen, FileText, MinusCircle } from 'lucide-react'
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/ui/accordion"
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
-
-interface SidebarProps {
-    isCollapsed: boolean;
-    setIsCollapsed: (isCollapsed: boolean) => void;
-}
+import { SheetClose } from './ui/sheet';
 
 interface NavItem {
     href: string;
@@ -30,7 +26,7 @@ interface NavItem {
     subItems?: Omit<NavItem, 'group' | 'subItems' | 'notificationCount'>[];
 }
 
-export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter();
   const { permissions, loading, user } = useAuth()
@@ -58,11 +54,10 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const canManageUsers = !loading && permissions.settings.view;
   const canManageTeam = !loading && permissions.team.view;
   const canUseHelp = !loading && permissions.help.view;
-  const isMasterUser = user?.username === 'Tiago Brasil';
   const canRegister = !loading && permissions.registration.view;
   const canSimulatePricing = !loading && permissions.pricing.view;
   const canViewTasks = !loading && permissions.tasks.view;
-  const canManageStock = !loading && permissions.stock.view;
+  const canManageStock = !loading && (permissions.stock.inventoryControl.view || permissions.stock.stockCount.view || permissions.stock.audit.view || permissions.stock.analysis.view || permissions.stock.purchasing.view || permissions.stock.returns.view || permissions.stock.conversions.view);
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'main', show: true },
@@ -149,25 +144,25 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
 
   const renderLink = (item: Pick<NavItem, 'href'|'label'|'icon'>, isSubItem = false) => (
-     <Link
-        href={item.href}
-        className={cn(
-            "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative",
-            isCollapsed ? "justify-center" : "justify-start",
-            pathname.startsWith(item.href) && !isSubItem && "bg-secondary text-secondary-foreground",
-            pathname === item.href && isSubItem && "bg-muted text-foreground",
-            isSubItem && "pl-8 text-sm h-8"
-        )}
-    >
-        {isSubItem && <div className={cn("absolute left-4 top-0 h-full w-[2px] rounded-r transition-colors", pathname.startsWith(item.href) ? "bg-primary" : "bg-border/70 group-hover:bg-border")} />}
-        <item.icon className={cn("shrink-0", isSubItem ? "h-4 w-4" : "h-5 w-5")} />
-        {!isCollapsed && <span className={cn("whitespace-nowrap flex-grow transition-opacity duration-150", isCollapsed && "opacity-0")}>{item.label}</span>}
-        <span className="sr-only">{item.label}</span>
-    </Link>
+     <SheetClose asChild>
+      <Link
+          href={item.href}
+          className={cn(
+              "group flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative justify-start",
+              pathname.startsWith(item.href) && !isSubItem && "bg-secondary text-secondary-foreground",
+              pathname === item.href && isSubItem && "bg-muted text-foreground",
+              isSubItem && "pl-8 text-sm h-8"
+          )}
+      >
+          {isSubItem && <div className={cn("absolute left-4 top-0 h-full w-[2px] rounded-r transition-colors", pathname.startsWith(item.href) ? "bg-primary" : "bg-border/70 group-hover:bg-border")} />}
+          <item.icon className={cn("shrink-0", isSubItem ? "h-4 w-4" : "h-5 w-5")} />
+          <span className="whitespace-nowrap flex-grow transition-opacity duration-150">{item.label}</span>
+      </Link>
+     </SheetClose>
   )
   
   const renderNavItem = (item: NavItem) => {
-    const hasSubItems = !isCollapsed && item.subItems && item.subItems.length > 0;
+    const hasSubItems = item.subItems && item.subItems.length > 0;
     
     if (hasSubItems) {
         return (
@@ -191,113 +186,66 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         )
     }
     
-    return (
-        <TooltipProvider delayDuration={0}>
-        <Tooltip>
-            <TooltipTrigger asChild>
-                {renderLink(item)}
-            </TooltipTrigger>
-            {isCollapsed && (
-            <TooltipContent side="right">
-                {item.label}
-                {item.notificationCount && item.notificationCount > 0 && ` (${item.notificationCount})`}
-            </TooltipContent>
-            )}
-        </Tooltip>
-        </TooltipProvider>
-    );
+    return renderLink(item);
   };
 
   return (
-    <div className={cn("hidden border-r bg-card text-foreground md:flex flex-col dark transition-[width] duration-300", isCollapsed ? "w-[80px]" : "w-[280px]")}>
-      <div className="flex h-[60px] shrink-0 items-center justify-center border-b px-4">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            {isCollapsed ? (
-                <Shell className="h-8 w-8 text-primary" />
-            ) : (
-                <div className="font-logo select-none">
-                  <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
-                  <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
-                </div>
-            )}
-             <span className="sr-only">Coala Shakes</span>
-          </Link>
-        </div>
-
-       {!isCollapsed && (
-          <div className="p-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar no menu..."
-                className="w-full rounded-lg bg-muted pl-8 h-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+           <div className="font-logo select-none">
+              <div className="text-left text-2xl font-bold text-primary leading-none">coala</div>
+              <div className="text-left text-xl font-bold text-accent -mt-1.5 pl-2.5 leading-none">shakes</div>
             </div>
-          </div>
-        )}
-        
-        <div className="p-2 border-b">
-            <Button variant="ghost" className="w-full justify-center" size="icon" onClick={() => setIsCollapsed(!isCollapsed)}>
-                {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-                <span className="sr-only">{isCollapsed ? "Expandir" : "Recolher"}</span>
-            </Button>
-        </div>
+           <span className="sr-only">Coala Shakes</span>
+        </Link>
+      </div>
 
-       <nav ref={navRef} className={cn("flex-1 flex flex-col overflow-y-auto px-2 py-4 relative", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
+       <div className="p-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Buscar no menu..."
+            className="w-full rounded-lg bg-muted pl-8 h-9"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+        
+       <nav ref={navRef} className={cn("flex-1 overflow-y-auto px-2 py-4 space-y-2", isScrolling && 'shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_5px_5px_-5px_rgba(0,0,0,0.3)]')}>
         <ul>
             {navGroups.main.items.map(item => (
                 <li key={item.href}>{renderNavItem(item)}</li>
             ))}
         </ul>
 
-        {isCollapsed ? (
-            <ul className="space-y-1 mt-2 border-t pt-2">
-                {filteredNavItems.filter(i => i.group !== 'main').map(item => (
-                    <li key={item.href}>{renderNavItem(item)}</li>
-                ))}
-            </ul>
-        ) : (
-            <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
-                {Object.entries(navGroups).map(([key, group]) => {
-                    if (key === 'main' || group.items.length === 0) return null;
-                    const GroupIcon = group.icon;
+        <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full">
+            {Object.entries(navGroups).map(([key, group]) => {
+                if (key === 'main' || group.items.length === 0) return null;
+                const GroupIcon = group.icon;
 
-                    return (
-                        <AccordionItem value={key} key={key} className="border-none">
-                            <AccordionTrigger className="p-3 text-base text-muted-foreground hover:no-underline hover:text-foreground data-[state=open]:bg-secondary/20">
-                                <div className="flex items-center gap-3">
-                                  <GroupIcon className="h-5 w-5" />
-                                  <span>{group.label}</span>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="pb-1">
-                                <ul className="space-y-1">
-                                    {group.items.map(item => (
-                                        <li key={item.href}>{renderNavItem(item)}</li>
-                                    ))}
-                                </ul>
-                            </AccordionContent>
-                        </AccordionItem>
-                    );
-                })}
-            </Accordion>
-        )}
+                return (
+                    <AccordionItem value={key} key={key} className="border-none">
+                        <AccordionTrigger className="p-3 text-base text-muted-foreground hover:no-underline hover:text-foreground data-[state=open]:bg-secondary/20">
+                            <div className="flex items-center gap-3">
+                              <GroupIcon className="h-5 w-5" />
+                              <span>{group.label}</span>
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-1">
+                            <ul className="space-y-1">
+                                {group.items.map(item => (
+                                    <li key={item.href}>{renderNavItem(item)}</li>
+                                ))}
+                            </ul>
+                        </AccordionContent>
+                    </AccordionItem>
+                );
+            })}
+        </Accordion>
       </nav>
-      
-      <div className="p-2 border-t">
-        <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
-          <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>
-             <ThemeToggle />
-             <span className="text-xs text-muted-foreground">v1.0.0</span>
-          </div>
-        </div>
-        {isCollapsed && <ThemeToggle />}
-      </div>
     </div>
   )
 }
-
-    
