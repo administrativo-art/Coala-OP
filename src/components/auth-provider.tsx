@@ -7,6 +7,8 @@ import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPer
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, runTransaction, serverTimestamp, setDoc } from "firebase/firestore";
 import { ProfilesContext } from '@/components/profiles-provider';
+import { produce } from 'immer';
+
 
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user'; // New key
@@ -65,49 +67,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   useEffect(() => {
-    if (!profilesContext || profilesContext.loading) {
+    if (!profilesContext || profilesContext.loading || !currentUser) {
       setPermissions(defaultGuestPermissions);
       return;
     }
-
-    if (currentUser) {
-      if (currentUser.username === 'Tiago Brasil') {
-        setPermissions(defaultAdminPermissions);
-        return;
-      }
-      
-      if (profilesContext.profiles.length > 0) {
-        const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
-        const profilePermissions = userProfile ? userProfile.permissions : {};
-        
-        // Deep merge permissions to ensure all keys exist and are correctly overridden
-        const deepMerge = (target: any, source: any): any => {
-            const output = { ...target };
-            if (target && typeof target === 'object' && source && typeof source === 'object') {
-                Object.keys(source).forEach(key => {
-                    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                        if (!(key in target)) {
-                            Object.assign(output, { [key]: source[key] });
-                        } else {
-                            output[key] = deepMerge(target[key], source[key]);
-                        }
-                    } else {
-                        Object.assign(output, { [key]: source[key] });
-                    }
-                });
-            }
-            return output;
-        };
-        
-        const finalPermissions = deepMerge(JSON.parse(JSON.stringify(defaultGuestPermissions)), profilePermissions);
-
-        setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
-      } else {
-        setPermissions(defaultGuestPermissions);
-      }
-    } else {
-      setPermissions(defaultGuestPermissions);
+  
+    if (currentUser.username === 'Tiago Brasil') {
+      setPermissions(defaultAdminPermissions);
+      return;
     }
+  
+    const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
+  
+    if (!userProfile?.permissions) {
+      setPermissions(defaultGuestPermissions);
+      return;
+    }
+  
+    const finalPermissions = produce(defaultGuestPermissions, draftState => {
+      const profilePermissions = userProfile.permissions;
+      for (const moduleKey in profilePermissions) {
+        const key = moduleKey as keyof PermissionSet;
+        if (draftState[key] && typeof draftState[key] === 'object') {
+          Object.assign(draftState[key], profilePermissions[key]);
+        }
+      }
+    });
+  
+    setPermissions(finalPermissions);
   }, [currentUser, profilesContext, profilesContext?.loading, profilesContext?.profiles]);
 
 
@@ -297,3 +284,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+    
