@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import Link from "next/link"
@@ -46,6 +45,9 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
                 </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col p-0">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Menu Principal</SheetTitle>
+                </SheetHeader>
                 <Sidebar />
             </SheetContent>
         </Sheet>
