@@ -18,9 +18,9 @@ export type PriceHistoryEntry = {
 }
 
 export type BaseProductStockLevel = {
-    min: number;
-    safetyStock: number;
-    leadTime: number;
+    min?: number;
+    safetyStock?: number;
+    leadTime?: number;
     override: boolean;
 };
 
@@ -753,5 +753,3 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
-
-
