@@ -78,46 +78,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (profilesContext.profiles.length > 0) {
         const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
-        
         const profilePermissions = userProfile ? userProfile.permissions : {};
         
-        // Deep merge permissions to ensure all keys exist
-        const finalPermissions: PermissionSet = {
-            ...defaultGuestPermissions,
-            ...profilePermissions,
-            dashboard: { ...defaultGuestPermissions.dashboard, ...profilePermissions?.dashboard },
-            registration: {
-                ...defaultGuestPermissions.registration,
-                ...profilePermissions?.registration,
-                items: { ...defaultGuestPermissions.registration.items, ...profilePermissions?.registration?.items },
-                baseProducts: { ...defaultGuestPermissions.registration.baseProducts, ...profilePermissions?.registration?.baseProducts },
-                entities: { ...defaultGuestPermissions.registration.entities, ...profilePermissions?.registration?.entities },
-            },
-            stock: {
-              ...defaultGuestPermissions.stock,
-              ...profilePermissions?.stock,
-              inventoryControl: { ...defaultGuestPermissions.stock.inventoryControl, ...profilePermissions?.stock?.inventoryControl },
-              stockCount: { ...defaultGuestPermissions.stock.stockCount, ...profilePermissions?.stock?.stockCount },
-              audit: { ...defaultGuestPermissions.stock.audit, ...profilePermissions?.stock?.audit },
-              analysis: { ...defaultGuestPermissions.stock.analysis, ...profilePermissions?.stock?.analysis },
-              purchasing: { ...defaultGuestPermissions.stock.purchasing, ...profilePermissions?.stock?.purchasing },
-              returns: { ...defaultGuestPermissions.stock.returns, ...profilePermissions?.stock?.returns },
-              conversions: { ...defaultGuestPermissions.stock.conversions, ...profilePermissions?.stock?.conversions },
-            },
-            team: { ...defaultGuestPermissions.team, ...profilePermissions?.team },
-            pricing: { ...defaultGuestPermissions.pricing, ...profilePermissions?.pricing },
-            settings: { ...defaultGuestPermissions.settings, ...profilePermissions?.settings },
-            help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
-            tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
-            products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
-            lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
-            users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
-            kiosks: { ...defaultGuestPermissions.kiosks, ...profilePermissions?.kiosks },
-            predefinedLists: { ...defaultGuestPermissions.predefinedLists, ...profilePermissions?.predefinedLists },
-            consumptionAnalysis: { ...defaultGuestPermissions.consumptionAnalysis, ...profilePermissions?.consumptionAnalysis },
-            itemRequests: { ...defaultGuestPermissions.itemRequests, ...profilePermissions?.itemRequests },
-            reposition: { ...defaultGuestPermissions.reposition, ...profilePermissions?.reposition },
+        // Deep merge permissions to ensure all keys exist and are correctly overridden
+        const deepMerge = (target: any, source: any): any => {
+            const output = { ...target };
+            if (target && typeof target === 'object' && source && typeof source === 'object') {
+                Object.keys(source).forEach(key => {
+                    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                        if (!(key in target)) {
+                            Object.assign(output, { [key]: source[key] });
+                        } else {
+                            output[key] = deepMerge(target[key], source[key]);
+                        }
+                    } else {
+                        Object.assign(output, { [key]: source[key] });
+                    }
+                });
+            }
+            return output;
         };
+        
+        const finalPermissions = deepMerge(JSON.parse(JSON.stringify(defaultGuestPermissions)), profilePermissions);
 
         setPermissions(userProfile ? finalPermissions : defaultGuestPermissions);
       } else {
