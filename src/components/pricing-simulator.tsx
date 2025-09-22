@@ -282,12 +282,11 @@ export function PricingSimulator() {
             }
             isFirstPage = false;
             let yPos = 15;
+            const pageHeight = doc.internal.pageSize.height;
+            const pageWidth = doc.internal.pageSize.width;
 
             // --- Header Section with Image and Title ---
-            let imageSectionHeight = 0;
             const hasImage = sim.ppo?.referenceImageUrl;
-            let finalImageWidth = 0;
-            let finalImageHeight = 0;
 
             if (hasImage) {
                 try {
@@ -295,30 +294,37 @@ export function PricingSimulator() {
                     img.src = sim.ppo!.referenceImageUrl!;
                     await new Promise(resolve => {
                         img.onload = resolve;
-                        img.onerror = () => resolve(null); // Continue even if image fails to load
+                        img.onerror = () => { console.error("Image failed to load"); resolve(null); };
                     });
-
-                    const maxWidth = 50;
-                    finalImageWidth = img.width > maxWidth ? maxWidth : img.width;
-                    finalImageHeight = (img.height * finalImageWidth) / img.width;
-                    imageSectionHeight = finalImageHeight + 5;
                     
-                    if (yPos + finalImageHeight > 280) { doc.addPage(); yPos = 15; }
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, finalImageWidth, finalImageHeight);
+                    const maxWidth = 60;
+                    let imgWidth = img.width;
+                    let imgHeight = img.height;
+
+                    if (imgWidth > maxWidth) {
+                        imgHeight = (maxWidth / imgWidth) * imgHeight;
+                        imgWidth = maxWidth;
+                    }
+                    
+                    if (yPos + imgHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
+
+                    const imageX = (pageWidth - imgWidth) / 2; // Center the image
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', imageX, yPos, imgWidth, imgHeight);
+                    yPos += imgHeight + 5;
+
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
             }
-            
-            const textStartX = hasImage ? 14 + finalImageWidth + 5 : 14;
+
             doc.setFontSize(18);
-            doc.text(sim.name, textStartX, yPos + 5);
+            doc.text(sim.name, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 6;
+            
             doc.setFontSize(9);
             doc.setTextColor(100);
-            doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textStartX, yPos + 10);
-            
-            const textHeight = 15;
-            yPos += Math.max(imageSectionHeight, textHeight);
+            doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 10;
             
             // --- Stats Table ---
             autoTable(doc, {
@@ -377,10 +383,9 @@ export function PricingSimulator() {
 
                     for (const [index, etapa] of phase.etapas.entries()) {
                          if (yPos > 270) { doc.addPage(); yPos = 15; }
-                        const qtyText = etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : '';
+                        const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: 140 });
-
+                        
                         let stepImageWidth = 0;
                         let stepImageHeight = 0;
 
@@ -389,23 +394,29 @@ export function PricingSimulator() {
                                 const stepImg = new Image();
                                 stepImg.src = etapa.imageUrl;
                                 await new Promise(resolve => { stepImg.onload = resolve; stepImg.onerror = () => resolve(null); });
-                                stepImageWidth = 30;
+                                const stepMaxWidth = 30;
+                                stepImageWidth = stepImg.width > stepMaxWidth ? stepMaxWidth : stepImg.width;
                                 stepImageHeight = (stepImg.height * stepImageWidth) / stepImg.width;
                             } catch (e) {
                                 console.error("Failed to load step image", e);
                             }
                         }
 
+                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: 140 });
                         const blockHeight = Math.max(textDimensions.h, stepImageHeight);
-                        if (yPos + blockHeight > 280) { doc.addPage(); yPos = 15; }
 
+                        if (yPos + blockHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
+                        
                         doc.text(stepText, 16, yPos, { maxWidth: 140 });
+                        const textYEnd = yPos + textDimensions.h;
 
                         if (etapa.imageUrl && stepImageHeight > 0) {
-                            doc.addImage(etapa.imageUrl, 'JPEG', 160, yPos, stepImageWidth, stepImageHeight);
+                            const imageX = 160;
+                            const imageY = yPos;
+                            doc.addImage(etapa.imageUrl, 'JPEG', imageX, imageY, stepImageWidth, stepImageHeight);
                         }
                         
-                        yPos += blockHeight + 4;
+                        yPos = textYEnd + 4;
                     }
                 }
                  yPos += 5;
