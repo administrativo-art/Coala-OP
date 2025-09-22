@@ -158,7 +158,7 @@ export function UserManagement() {
   };
 
   const canManageAnyUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
-  const canManageKiosks = permissions.kiosks.add || permissions.kiosks.delete;
+  const canManageKiosks = permissions.kiosks?.add || permissions.kiosks?.delete;
 
   if (!canManageAnyUsers) {
     return (
@@ -489,7 +489,7 @@ export function UserManagement() {
         kiosks={kiosks}
         updateKiosk={updateKiosk}
         deleteKiosk={deleteKiosk}
-        permissions={permissions.kiosks}
+        permissions={{add: !!permissions.kiosks?.add, delete: !!permissions.kiosks?.delete}}
       />
 
       {userToDelete && (
