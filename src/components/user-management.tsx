@@ -1,12 +1,11 @@
 
-
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useUser } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -47,7 +46,8 @@ type UserFormValues = z.infer<typeof userSchema>;
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
 export function UserManagement() {
-  const { users, addUser, updateUser, deleteUser, permissions, user: currentUser } = useAuth();
+  const { permissions } = useAuth();
+  const { users, addUser, deleteUser, user: currentUser, updateUser: rawUpdateUser } = useUser();
   const { kiosks, updateKiosk, deleteKiosk, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   
@@ -74,6 +74,10 @@ export function UserManagement() {
         color: null,
     }
   });
+
+  const updateUser = async (userToUpdate: User) => {
+    await rawUpdateUser(userToUpdate);
+  }
   
   const isFolguista = form.watch('folguista');
 
@@ -504,3 +508,5 @@ export function UserManagement() {
     </>
   );
 }
+
+    

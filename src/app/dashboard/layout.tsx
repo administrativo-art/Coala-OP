@@ -1,10 +1,9 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useUser } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -39,7 +38,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user, isAuthenticated, loading, originalUser, stopImpersonating } = useAuth();
+  const { user, originalUser, stopImpersonating } = useUser();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const { legacyTasks, loading: tasksLoading } = useAllTasks();
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
@@ -51,16 +51,16 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const startTime = performance.now();
-    if (!loading) {
+    if (!authLoading) {
       const endTime = performance.now();
       setDataLoadTime(endTime - startTime);
       if (!isAuthenticated) {
         router.push('/login');
       }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, authLoading, router]);
   
-  if (!isMounted || loading || tasksLoading || !isAuthenticated) {
+  if (!isMounted || authLoading || tasksLoading || !isAuthenticated) {
     return <LoadingSkeleton />;
   }
 
@@ -83,3 +83,5 @@ export default function DashboardLayout({
     </div>
   )
 }
+
+    

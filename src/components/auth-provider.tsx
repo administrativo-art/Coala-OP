@@ -5,17 +5,125 @@ import React, { createContext, useState, useEffect, useCallback, useContext, use
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, runTransaction, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { ProfilesContext } from '@/components/profiles-provider';
 import { produce } from 'immer';
 
-
 const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
-const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user'; // New key
+const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
+// 1. User Context: Manages only the current user identity
+// This is the key to forcing a remount of the AuthProvider
+export interface UserContextType {
+  user: User | null;
+  originalUser: User | null;
+  users: User[];
+  loading: boolean;
+  impersonate: (userId: string) => void;
+  stopImpersonating: () => void;
+  logout: () => void;
+  updateUser: (user: User) => Promise<void>;
+}
+
+export const UserContext = createContext<UserContextType | undefined>(undefined);
+
+export function UserProvider({ children }: { children: React.ReactNode }) {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [originalUser, setOriginalUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      if (storedUser) setCurrentUser(JSON.parse(storedUser));
+      const storedOriginalUser = localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
+      if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
+    } catch (error) {
+      console.error("Failed to load user state from storage", error);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, "users"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const usersData = querySnapshot.docs.map(docData => {
+            const data = docData.data();
+            return { 
+                id: docData.id, 
+                ...data,
+                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+             } as User
+        });
+        setUsers(usersData);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const logout = useCallback(() => {
+    setCurrentUser(null);
+    setOriginalUser(null);
+    localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
+    router.push('/login');
+  }, [router]);
+
+  const impersonate = useCallback((userId: string) => {
+    const userToImpersonate = users.find(u => u.id === userId);
+    if (userToImpersonate && currentUser) {
+      setOriginalUser(currentUser);
+      setCurrentUser(userToImpersonate);
+      localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
+      localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToImpersonate));
+    }
+  }, [users, currentUser]);
+
+  const stopImpersonating = useCallback(() => {
+    if (originalUser) {
+      setCurrentUser(originalUser);
+      setOriginalUser(null);
+      localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(originalUser));
+      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
+    }
+  }, [originalUser]);
+
+  const updateUser = useCallback(async (updatedUser: User) => {
+    const userRef = doc(db, "users", updatedUser.id);
+    const { id, ...dataToUpdate } = updatedUser;
+    try {
+        await updateDoc(userRef, dataToUpdate as any);
+        // Also update the current user in state if they are the one being edited
+        if (currentUser?.id === id) {
+            const newCurrentUser = { ...currentUser, ...dataToUpdate };
+            setCurrentUser(newCurrentUser);
+            localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(newCurrentUser));
+        }
+    } catch (error) {
+        console.error("Error updating user:", error);
+    }
+  }, [currentUser]);
+
+  const value = useMemo(() => ({
+    user: currentUser,
+    originalUser,
+    users,
+    loading,
+    impersonate,
+    stopImpersonating,
+    logout,
+    updateUser,
+  }), [currentUser, originalUser, users, loading, impersonate, stopImpersonating, logout, updateUser]);
+
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+}
+
+// 2. Auth Context: Manages permissions for the current user.
+// This component will be remounted on user change, ensuring a clean state.
 export interface AuthContextType {
   user: User | null;
-  originalUser: User | null; // To track impersonation
+  originalUser: User | null;
   users: User[];
   isAuthenticated: boolean;
   loading: boolean;
@@ -33,258 +141,104 @@ export interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [originalUser, setOriginalUser] = useState<User | null>(null); // New state for impersonation
+  const userContext = useContext(UserContext);
+  if (!userContext) throw new Error("AuthProvider must be used within a UserProvider");
+
+  const { user, originalUser, users, loading: userLoading, impersonate, stopImpersonating, logout, updateUser: rawUpdateUser } = userContext;
+
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
-  const [authLoading, setAuthLoading] = useState(true);
-  const router = useRouter();
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
   const profilesContext = useContext(ProfilesContext);
 
   useEffect(() => {
-    try {
-      const storedCurrentUser = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-      const storedOriginalUser = window.localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
-      if (storedCurrentUser) {
-        setCurrentUser(JSON.parse(storedCurrentUser));
-      }
-      if (storedOriginalUser) {
-        setOriginalUser(JSON.parse(storedOriginalUser));
-      }
-    } catch (error) {
-        console.error("Failed to load user state from storage", error);
-    }
-    setAuthLoading(false); // Initial load done
-  }, []);
-  
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    setOriginalUser(null); // Clear impersonation state
-    setPermissions(defaultGuestPermissions);
-    window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
-    window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY); // Clear impersonation from storage
-    router.push('/login');
-  }, [router]);
-
-  useEffect(() => {
-    // Reset to guest permissions immediately if user or profiles are not ready
-    if (!profilesContext || profilesContext.loading || !currentUser) {
+    setLoadingPermissions(true);
+    if (!user || !profilesContext || profilesContext.loading) {
       setPermissions(defaultGuestPermissions);
+      setLoadingPermissions(false);
       return;
     }
-  
-    // Handle master admin case
-    if (currentUser.username === 'Tiago Brasil') {
+    
+    if (user.username === 'Tiago Brasil') {
       setPermissions(defaultAdminPermissions);
+      setLoadingPermissions(false);
       return;
     }
-  
-    // Find the user's profile
-    const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
-  
-    // If no profile is found, they get guest permissions
+
+    const userProfile = profilesContext.profiles.find(p => p.id === user.profileId);
+
     if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
+      setLoadingPermissions(false);
       return;
     }
-  
-    // Deep merge permissions using Immer for a clean, immutable update
+    
     const finalPermissions = produce(defaultGuestPermissions, draftState => {
       const profilePermissions = userProfile.permissions;
-      
-      // Iterate over each module in the profile's permissions
       for (const moduleKey in profilePermissions) {
         const key = moduleKey as keyof PermissionSet;
         const modulePerms = profilePermissions[key];
-
-        // Ensure the module exists in the draft state before merging
         if (draftState[key] && typeof modulePerms === 'object' && modulePerms !== null) {
-          // Iterate over each specific permission within the module
           for (const subKey in modulePerms) {
-            const permissionKey = subKey as keyof typeof modulePerms;
-            (draftState[key] as any)[permissionKey] = modulePerms[permissionKey];
+             if (subKey in draftState[key]) {
+                (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
+             }
           }
         }
       }
     });
-  
+
     setPermissions(finalPermissions);
-  }, [currentUser, profilesContext, profilesContext?.loading, profilesContext?.profiles]);
+    setLoadingPermissions(false);
+  }, [user, profilesContext, profilesContext.loading, profilesContext.profiles]);
 
-
-  useEffect(() => {
-    if (!profilesContext || profilesContext.loading) return; 
-
-    const q = query(collection(db, "users"));
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        if (querySnapshot.empty && !localStorage.getItem('users_seeded') && profilesContext.adminProfileId) {
-            console.log("No users found. Seeding master user...");
-            const masterUser: Omit<User, 'id'> = {
-              username: 'Tiago Brasil',
-              password: 'master',
-              profileId: profilesContext.adminProfileId,
-              assignedKioskIds: ['matriz'],
-              turno: null,
-              folguista: false,
-              operacional: true,
-              valeTransporte: 0,
-              color: null,
-            };
-            try {
-              await addDoc(collection(db, "users"), masterUser as any);
-              localStorage.setItem('users_seeded', 'true');
-            } catch (seedError) {
-              console.error("Error seeding master user: ", seedError);
-            }
-            return;
-        }
-
-        const usersData = querySnapshot.docs.map(docData => {
-            const data = docData.data();
-            return { 
-                id: docData.id, 
-                ...data,
-                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
-                turno: data.turno ?? null,
-                folguista: data.folguista ?? false,
-                operacional: data.operacional ?? false,
-                valeTransporte: data.valeTransporte ?? 0,
-                color: data.color ?? null,
-             } as User
-        });
-
-        setUsers(usersData);
-        
-        // Update current user if their data changed in Firestore
-        if (currentUser) {
-            const foundUser = usersData.find(u => u.id === currentUser.id);
-            if (!foundUser) {
-                logout();
-            } else if (JSON.stringify(foundUser) !== JSON.stringify(currentUser)) {
-                setCurrentUser(foundUser);
-                window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(foundUser));
-            }
-        }
-        
-        // Update original user if their data changed
-        if (originalUser) {
-            const foundOriginalUser = usersData.find(u => u.id === originalUser.id);
-            if (!foundOriginalUser) {
-                logout(); // If the original user was deleted, log out entirely.
-            } else if (JSON.stringify(foundOriginalUser) !== JSON.stringify(originalUser)) {
-                setOriginalUser(foundOriginalUser);
-                window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(foundOriginalUser));
-            }
-        }
-        
-    }, (error) => {
-        console.error("Error fetching users from Firestore: ", error);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser, originalUser, logout, profilesContext, profilesContext?.loading, profilesContext?.adminProfileId]);
-  
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", password));
-    try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            const data = userDoc.data();
-            const userToLogin = { 
-                id: userDoc.id, 
-                ...data,
-                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
-                turno: data.turno ?? null,
-                folguista: data.folguista ?? false,
-                operacional: data.operacional ?? false,
-                valeTransporte: data.valeTransporte ?? 0,
-                color: data.color ?? null,
-             } as User;
-            setCurrentUser(userToLogin);
-            window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error("Login error:", error);
-        return false;
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const data = userDoc.data();
+        const userToLogin = {
+            id: userDoc.id,
+            ...data,
+            assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+        } as User;
+        // This will now be handled by the parent UserProvider
+        localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
+        window.dispatchEvent(new Event("storage")); // Force update across tabs
+        return true;
     }
+    return false;
   }, []);
 
   const addUser = useCallback(async (userData: Omit<User, 'id'>) => {
-    try {
-        await addDoc(collection(db, "users"), userData as any);
-    } catch(error) {
-        console.error("Error adding user:", error);
-    }
+    await addDoc(collection(db, "users"), userData as any);
   }, []);
 
   const updateUser = useCallback(async (updatedUser: User) => {
-    const userRef = doc(db, "users", updatedUser.id);
-    const { id, ...dataToUpdate } = updatedUser;
-    try {
-        await updateDoc(userRef, dataToUpdate as any);
-    } catch (error) {
-        console.error("Error updating user:", error);
-    }
-  }, []);
+    await rawUpdateUser(updatedUser);
+  }, [rawUpdateUser]);
 
   const deleteUser = useCallback(async (userId: string) => {
-    try {
-        await deleteDoc(doc(db, "users", userId));
-    } catch (error) {
-        console.error("Error deleting user:", error);
-        throw error;
-    }
+    await deleteDoc(doc(db, "users", userId));
   }, []);
 
   const changePassword = useCallback(async (username: string, oldPassword: string, newPassword: string): Promise<boolean> => {
     const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", oldPassword));
-    try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            const userRef = doc(db, "users", userDoc.id);
-            await updateDoc(userRef, { password: newPassword });
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error("Change password error:", error);
-        return false;
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        await updateDoc(doc(db, "users", userDoc.id), { password: newPassword });
+        return true;
     }
+    return false;
   }, []);
-  
-  const impersonate = useCallback((userId: string) => {
-    if (!permissions.users.impersonate) {
-        console.error("User does not have permission to impersonate.");
-        return;
-    }
-    const userToImpersonate = users.find(u => u.id === userId);
-    if (userToImpersonate && currentUser) {
-        setOriginalUser(currentUser);
-        setCurrentUser(userToImpersonate);
-        window.localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
-        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToImpersonate));
-    }
-  }, [users, currentUser, permissions]);
-
-  const stopImpersonating = useCallback(() => {
-    if (originalUser) {
-        setCurrentUser(originalUser);
-        setOriginalUser(null);
-        window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(originalUser));
-        window.localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
-    }
-  }, [originalUser]);
 
   const value: AuthContextType = useMemo(() => ({
-    user: currentUser,
+    user,
     originalUser,
     users,
-    isAuthenticated: !!currentUser,
-    loading: authLoading || (!!currentUser && (!profilesContext || profilesContext.loading)),
+    isAuthenticated: !!user,
+    loading: userLoading || loadingPermissions,
     permissions,
     login,
     logout,
@@ -294,7 +248,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     changePassword,
     impersonate,
     stopImpersonating,
-  }), [currentUser, originalUser, users, authLoading, profilesContext, permissions, login, logout, addUser, updateUser, deleteUser, changePassword, impersonate, stopImpersonating]);
+  }), [
+    user, originalUser, users, userLoading, loadingPermissions, permissions,
+    login, logout, addUser, updateUser, deleteUser, changePassword, impersonate, stopImpersonating
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

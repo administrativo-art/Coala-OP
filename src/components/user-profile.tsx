@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useRef } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useUser } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
 import {
@@ -27,7 +27,8 @@ import { useToast } from '@/hooks/use-toast';
 import { resizeImage } from '@/lib/image-utils';
 
 export function UserProfile() {
-  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser, permissions } = useAuth();
+  const { permissions } = useAuth();
+  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useUser();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();

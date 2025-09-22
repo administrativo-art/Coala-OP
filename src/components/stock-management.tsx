@@ -6,13 +6,17 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat, ShieldCheck as AuditIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { Skeleton } from './ui/skeleton';
 
 export function StockManagement() {
     const { permissions, loading } = useAuth();
 
     if (loading) {
-      // You can return a loading skeleton here if you want
-      return null;
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-64" />)}
+        </div>
+      );
     }
     
     const canViewInventoryControl = permissions.stock.view && permissions.stock.inventoryControl.view;
@@ -155,4 +159,5 @@ export function StockManagement() {
         </div>
     );
 }
+
     

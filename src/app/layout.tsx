@@ -1,9 +1,8 @@
 
-
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/components/auth-provider';
+import { AuthProvider, UserProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
 import { LocationsProvider } from '@/components/locations-provider';
@@ -31,6 +30,7 @@ import { TaskProvider } from '@/components/task-provider';
 import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provider';
 import { ClassificationsProvider } from '@/components/classifications-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
+import { AuthLayout } from '@/components/auth-layout';
 
 export const metadata: Metadata = {
   title: 'Coala Shakes',
@@ -59,8 +59,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-        <ProfilesProvider>
-          <AuthProvider>
+        <UserProvider>
+          <AuthLayout>
             <KiosksProvider>
               <LocationsProvider>
                 <CompanySettingsProvider>
@@ -112,8 +112,8 @@ export default function RootLayout({
                 </CompanySettingsProvider>
               </LocationsProvider>
             </KiosksProvider>
-          </AuthProvider>
-        </ProfilesProvider>
+          </AuthLayout>
+        </UserProvider>
         <Toaster />
         </ThemeProvider>
       </body>
@@ -121,3 +121,4 @@ export default function RootLayout({
   );
 }
 
+    
