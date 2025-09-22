@@ -271,48 +271,49 @@ export function PricingSimulator() {
         XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
 
-    const handleExportFichaTecnicaCompletaPdf = () => {
+    const handleExportFichaTecnicaCompletaPdf = async () => {
         const doc = new jsPDF();
-        let yPos = 15;
     
-        const addTitle = (title: string) => {
-            if (yPos > 180) { doc.addPage(); yPos = 15; }
+        const addTitle = (title: string, yPos: number) => {
+            if (yPos > 250) { doc.addPage(); yPos = 15; }
             doc.setFontSize(18);
             doc.text(title, 14, yPos);
-            yPos += 8;
+            return yPos + 8;
         };
-    
-        addTitle("Ficha técnica completa");
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        const filterText = `Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`;
-        doc.text(filterText, 14, yPos);
-        yPos += 10;
-    
-        simulationsByCategory.forEach(sim => {
-            if (yPos > 220) { doc.addPage(); yPos = 15; }
-    
-            const hasImage = sim.ppo?.referenceImageUrl;
-            let textX = 14;
-            
-            if (hasImage) {
+        
+        let isFirstPage = true;
+
+        for (const sim of simulationsByCategory) {
+            if (!isFirstPage) {
+                doc.addPage();
+            }
+            isFirstPage = false;
+            let yPos = 15;
+
+            yPos = addTitle(sim.name, yPos);
+            doc.setFontSize(9);
+            doc.setTextColor(100);
+            doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, 14, yPos);
+            yPos += 10;
+        
+            if (sim.ppo?.referenceImageUrl) {
                 try {
                     const img = new Image();
-                    img.src = sim.ppo!.referenceImageUrl!;
-                    const imgWidth = 30;
+                    img.src = sim.ppo.referenceImageUrl;
+                    await new Promise(resolve => img.onload = resolve);
+                    
+                    const maxWidth = 50;
+                    const imgWidth = img.width > maxWidth ? maxWidth : img.width;
                     const imgHeight = (img.height * imgWidth) / img.width;
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imgWidth, imgHeight);
+
+                    if (yPos + imgHeight > 280) { doc.addPage(); yPos = 15; }
+                    doc.addImage(sim.ppo.referenceImageUrl, 'JPEG', 14, yPos, imgWidth, imgHeight);
                     yPos += imgHeight + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
             }
-            
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text(sim.name, 14, yPos);
-            yPos += 8;
-
+    
             autoTable(doc, {
                 startY: yPos,
                 body: [[
@@ -327,8 +328,7 @@ export function PricingSimulator() {
                 styles: { halign: 'center', cellPadding: 2, fontSize: 8 },
             });
             yPos = (doc as any).lastAutoTable.finalY + 5;
-
-
+    
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -352,61 +352,67 @@ export function PricingSimulator() {
                 footStyles: { fillColor: '#F3F4F6', textColor: '#000000', fontStyle: 'bold' },
                 foot: [['Total CMV', '', '', '', formatCurrency(sim.totalCmv)]]
             });
-    
             yPos = (doc as any).lastAutoTable.finalY + 10;
     
-            if (sim.ppo) {
-                if (yPos > 200) { doc.addPage(); yPos = 15; }
-                
-                if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-                    doc.setFontSize(12);
-                    doc.setFont(undefined, 'bold');
-                    doc.text('Modo de Montagem', 14, yPos);
-                    yPos += 6;
+            if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                 if (yPos > 250) { doc.addPage(); yPos = 15; }
+                 doc.setFontSize(12); doc.setFont(undefined, 'bold');
+                 doc.text('Modo de Montagem', 14, yPos); yPos += 6;
+                 doc.setFont(undefined, 'normal');
+
+                for (const phase of sim.ppo.assemblyInstructions) {
+                    if (yPos > 260) { doc.addPage(); yPos = 15; }
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold');
+                    doc.text(phase.name, 14, yPos); yPos += 5;
                     doc.setFont(undefined, 'normal');
 
-                    sim.ppo.assemblyInstructions.forEach(phase => {
-                        if (yPos > 260) { doc.addPage(); yPos = 15; }
-                        doc.setFontSize(10);
-                        doc.setFont(undefined, 'bold');
-                        doc.text(phase.name, 14, yPos);
-                        yPos += 5;
-                        doc.setFont(undefined, 'normal');
-
-                        phase.etapas.forEach((etapa, index) => {
-                             if (yPos > 270) { doc.addPage(); yPos = 15; }
-                            const qtyText = etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : '';
-                            doc.text(`${index + 1}. ${etapa.text} ${qtyText}`, 16, yPos, { maxWidth: 178 });
-                            yPos += doc.getTextDimensions(`${index + 1}. ${etapa.text} ${qtyText}`, { maxWidth: 178 }).h + 4;
-                        });
-                    });
-                     yPos += 5;
+                    for (const [index, etapa] of phase.etapas.entries()) {
+                         if (yPos > 270) { doc.addPage(); yPos = 15; }
+                        const qtyText = etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : '';
+                        doc.text(`${index + 1}. ${etapa.text} ${qtyText}`, 16, yPos, { maxWidth: 178 });
+                        yPos += doc.getTextDimensions(`${index + 1}. ${etapa.text} ${qtyText}`, { maxWidth: 178 }).h + 4;
+                        
+                        if (etapa.imageUrl) {
+                             try {
+                                const img = new Image();
+                                img.src = etapa.imageUrl;
+                                await new Promise(resolve => img.onload = resolve);
+                                const imgWidth = 25;
+                                const imgHeight = (img.height * imgWidth) / img.width;
+                                if (yPos + imgHeight > 280) { doc.addPage(); yPos = 15; }
+                                doc.addImage(etapa.imageUrl, 'JPEG', 18, yPos, imgWidth, imgHeight);
+                                yPos += imgHeight + 4;
+                            } catch (e) {
+                                console.error("Failed to add etapa image to PDF", e);
+                            }
+                        }
+                    }
                 }
-
-                const ppoTableBody: any[][] = [];
-                 if(sim.ppo.ncm) ppoTableBody.push(['NCM', sim.ppo.ncm]);
-                 if(sim.ppo.cest) ppoTableBody.push(['CEST', sim.ppo.cest]);
-                 if(sim.ppo.cfop) ppoTableBody.push(['CFOP', sim.ppo.cfop]);
-                 if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
-                 if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
-                 if(sim.ppo.qualityStandard) ppoTableBody.push(['Padrão de Qualidade', sim.ppo.qualityStandard]);
-                 if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
-                 if(sim.ppo.allergens && sim.ppo.allergens.length > 0) {
-                    ppoTableBody.push(['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]);
-                 }
-                
-                if (ppoTableBody.length > 0) {
-                     autoTable(doc, {
-                        startY: yPos,
-                        body: ppoTableBody,
-                        theme: 'striped',
-                        styles: { cellPadding: 2, fontSize: 9 },
-                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
-                    });
-                     yPos = (doc as any).lastAutoTable.finalY + 10;
-                }
+                 yPos += 5;
             }
-        });
+
+            const ppoTableBody: any[][] = [
+                 ...(sim.ppo?.ncm ? [['NCM', sim.ppo.ncm]] : []),
+                 ...(sim.ppo?.cest ? [['CEST', sim.ppo.cest]] : []),
+                 ...(sim.ppo?.cfop ? [['CFOP', sim.ppo.cfop]] : []),
+                 ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
+                 ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
+                 ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard]] : []),
+                 ...(sim.ppo?.assemblyVideoUrl ? [['Link do Vídeo', sim.ppo.assemblyVideoUrl]] : []),
+                 ...(sim.ppo?.allergens && sim.ppo.allergens.length > 0 ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
+            ];
+            
+            if (ppoTableBody.length > 0) {
+                 if (yPos > 240) { doc.addPage(); yPos = 15; }
+                 autoTable(doc, {
+                    startY: yPos,
+                    body: ppoTableBody,
+                    theme: 'striped',
+                    styles: { cellPadding: 2, fontSize: 9 },
+                    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
+                });
+            }
+        }
     
         doc.save(`fichas_tecnicas_completas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
