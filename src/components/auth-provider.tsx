@@ -79,8 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profilesContext.profiles.length > 0) {
         const userProfile = profilesContext.profiles.find(p => p.id === currentUser.profileId);
         
-        const profilePermissions = userProfile ? userProfile.permissions : defaultGuestPermissions;
+        const profilePermissions = userProfile ? userProfile.permissions : {};
         
+        // Deep merge permissions to ensure all keys exist
         const finalPermissions: PermissionSet = {
             ...defaultGuestPermissions,
             ...profilePermissions,
@@ -108,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             settings: { ...defaultGuestPermissions.settings, ...profilePermissions?.settings },
             help: { ...defaultGuestPermissions.help, ...profilePermissions?.help },
             tasks: { ...defaultGuestPermissions.tasks, ...profilePermissions?.tasks },
-            // Legacy permissions
             products: { ...defaultGuestPermissions.products, ...profilePermissions?.products },
             lots: { ...defaultGuestPermissions.lots, ...profilePermissions?.lots },
             users: { ...defaultGuestPermissions.users, ...profilePermissions?.users },
@@ -315,3 +315,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+    
