@@ -30,15 +30,17 @@ const PhotoCaptureModal = dynamic(
   { ssr: false }
 );
 
-const stepSchema = z.object({
+const etapaSchema = z.object({
     id: z.string(),
-    text: z.string().min(1, "O passo não pode ser vazio."),
+    text: z.string().min(1, "A descrição da etapa não pode ser vazia."),
+    quantityText: z.string().optional(),
+    imageUrl: z.string().optional(),
 });
 
 const phaseSchema = z.object({
     id: z.string(),
     name: z.string().min(1, "O nome da fase é obrigatório."),
-    steps: z.array(stepSchema).min(1, "A fase deve ter pelo menos um passo."),
+    etapas: z.array(etapaSchema).min(1, "A fase deve ter pelo menos uma etapa."),
 });
 
 const ppoSchema = z.object({
@@ -273,10 +275,10 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                           )}/>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive mt-7" onClick={() => removePhase(phaseIndex)}><Trash2 className="h-4 w-4"/></Button>
                         </div>
-                        <PhaseSteps control={form.control} phaseIndex={phaseIndex} />
+                        <PhaseSteps control={form.control} phaseIndex={phaseIndex} form={form} />
                       </div>
                     ))}
-                    <Button type="button" variant="outline" className="w-full" onClick={() => appendPhase({ id: `phase-${Date.now()}`, name: '', steps: [{id: `step-${Date.now()}`, text: ''}] })}>
+                    <Button type="button" variant="outline" className="w-full" onClick={() => appendPhase({ id: `phase-${Date.now()}`, name: '', etapas: [{id: `etapa-${Date.now()}`, text: ''}] })}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Fase
                     </Button>
                   </div>
@@ -342,28 +344,98 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
   );
 }
 
-function PhaseSteps({ control, phaseIndex }: { control: any, phaseIndex: number }) {
+
+function PhaseSteps({ control, phaseIndex, form }: { control: any, phaseIndex: number, form: any }) {
   const { fields, append, remove } = useFieldArray({
     control,
-    name: `assemblyInstructions.${phaseIndex}.steps`,
+    name: `assemblyInstructions.${phaseIndex}.etapas`,
   });
 
   return (
-    <div className="pl-4 border-l-2 ml-2 space-y-2">
-      <FormLabel>Passos da Fase</FormLabel>
-      {fields.map((step, stepIndex) => (
-        <div key={step.id} className="flex items-center gap-2">
-          <span className="font-semibold text-muted-foreground">{stepIndex + 1}.</span>
-          <FormField control={control} name={`assemblyInstructions.${phaseIndex}.steps.${stepIndex}.text`} render={({ field }) => (
-            <FormItem className="flex-grow"><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-          )}/>
-          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(stepIndex)}><Trash2 className="h-4 w-4"/></Button>
+    <div className="pl-4 border-l-2 ml-2 space-y-3">
+      <FormLabel>Etapas da Fase</FormLabel>
+      {fields.map((etapa, etapaIndex) => (
+        <div key={etapa.id} className="p-3 border rounded-md bg-background space-y-2">
+           <div className="flex items-start gap-2">
+                <span className="font-semibold text-muted-foreground pt-2">{etapaIndex + 1}.</span>
+                <FormField control={control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.text`} render={({ field }) => (
+                    <FormItem className="flex-grow">
+                        <FormControl><Input placeholder="Descrição da etapa..." {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}/>
+                <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(etapaIndex)}><Trash2 className="h-4 w-4"/></Button>
+           </div>
+           <EtapaExtras form={form} phaseIndex={phaseIndex} etapaIndex={etapaIndex} />
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => append({ id: `step-${Date.now()}`, text: '' })}>
-        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Passo
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => append({ id: `etapa-${Date.now()}`, text: '' })}>
+        <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Etapa
       </Button>
     </div>
   );
 }
 
+function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: number, etapaIndex: number }) {
+    const [showQuantity, setShowQuantity] = useState(!!form.getValues(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantityText`));
+    const [showImage, setShowImage] = useState(!!form.getValues(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`));
+    
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoCaptured = async (dataUrl: string) => {
+        try {
+            const resized = await resizeImage(dataUrl, 256, 256);
+            form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, resized, { shouldValidate: true, shouldDirty: true });
+        } catch (e) { console.error(e) }
+        setIsPhotoModalOpen(false);
+    };
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            try {
+                const resized = await resizeImage(reader.result as string, 256, 256);
+                form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, resized, { shouldValidate: true, shouldDirty: true });
+            } catch (error) { console.error(error) }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    return (
+        <>
+            <div className="flex items-center gap-2">
+                <Button type="button" size="sm" variant={showQuantity ? "secondary" : "ghost"} onClick={() => setShowQuantity(!showQuantity)}>
+                    <PlusCircle className="mr-2 h-4 w-4"/> Quantidade
+                </Button>
+                <Button type="button" size="sm" variant={showImage ? "secondary" : "ghost"} onClick={() => setShowImage(!showImage)}>
+                    <Camera className="mr-2 h-4 w-4"/> Imagem
+                </Button>
+            </div>
+
+            {showQuantity && (
+                <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.quantityText`} render={({ field }) => (
+                    <FormItem><FormControl><Input placeholder="Ex: 20 ml, 30 gramas..." {...field} /></FormControl><FormMessage /></FormItem>
+                )}/>
+            )}
+
+            {showImage && (
+                 <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                        {form.watch(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`) ? <Image src={form.watch(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`)} alt="Preview" width={64} height={64} className="object-cover" /> : <Camera className="h-8 w-8 text-muted-foreground" />}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2 h-3 w-3" /> Tirar foto</Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-3 w-3" /> Upload</Button>
+                    </div>
+                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                </div>
+            )}
+             {isPhotoModalOpen && (
+                <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={handlePhotoCaptured} />
+             )}
+        </>
+    )
+}

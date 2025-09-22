@@ -234,9 +234,11 @@ export type PPO = {
   assemblyInstructions?: {
     id: string;
     name: string;
-    steps: {
+    etapas: {
       id: string;
       text: string;
+      quantityText?: string;
+      imageUrl?: string;
     }[];
   }[];
   qualityStandard?: string;
