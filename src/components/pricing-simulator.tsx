@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -275,7 +276,7 @@ export function PricingSimulator() {
         let yPos = 15;
     
         const addTitle = (title: string) => {
-            if (yPos > 260) { doc.addPage(); yPos = 15; }
+            if (yPos > 180) { doc.addPage(); yPos = 15; }
             doc.setFontSize(18);
             doc.text(title, 14, yPos);
             yPos += 8;
@@ -291,14 +292,17 @@ export function PricingSimulator() {
         simulationsByCategory.forEach(sim => {
             if (yPos > 220) { doc.addPage(); yPos = 15; }
     
-            const imageSize = 30;
             const hasImage = sim.ppo?.referenceImageUrl;
             let textX = 14;
             
             if (hasImage) {
                 try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
-                    textX = 14 + imageSize + 5;
+                    const img = new Image();
+                    img.src = sim.ppo!.referenceImageUrl!;
+                    const imgWidth = 30;
+                    const imgHeight = (img.height * imgWidth) / img.width;
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imgWidth, imgHeight);
+                    yPos += imgHeight + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
@@ -306,8 +310,8 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
-            yPos += (hasImage ? imageSize : 0) + 10;
+            doc.text(sim.name, 14, yPos);
+            yPos += 8;
 
             autoTable(doc, {
                 startY: yPos,
@@ -352,8 +356,33 @@ export function PricingSimulator() {
             yPos = (doc as any).lastAutoTable.finalY + 10;
     
             if (sim.ppo) {
-                if (yPos > 240) { doc.addPage(); yPos = 15; }
+                if (yPos > 200) { doc.addPage(); yPos = 15; }
                 
+                if (sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                    doc.setFontSize(12);
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Modo de Montagem', 14, yPos);
+                    yPos += 6;
+                    doc.setFont(undefined, 'normal');
+
+                    sim.ppo.assemblyInstructions.forEach(phase => {
+                        if (yPos > 260) { doc.addPage(); yPos = 15; }
+                        doc.setFontSize(10);
+                        doc.setFont(undefined, 'bold');
+                        doc.text(phase.name, 14, yPos);
+                        yPos += 5;
+                        doc.setFont(undefined, 'normal');
+
+                        phase.etapas.forEach((etapa, index) => {
+                             if (yPos > 270) { doc.addPage(); yPos = 15; }
+                            const qtyText = etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : '';
+                            doc.text(`${index + 1}. ${etapa.text} ${qtyText}`, 16, yPos, { maxWidth: 178 });
+                            yPos += doc.getTextDimensions(`${index + 1}. ${etapa.text} ${qtyText}`, { maxWidth: 178 }).h + 4;
+                        });
+                    });
+                     yPos += 5;
+                }
+
                 const ppoTableBody: any[][] = [];
                  if(sim.ppo.ncm) ppoTableBody.push(['NCM', sim.ppo.ncm]);
                  if(sim.ppo.cest) ppoTableBody.push(['CEST', sim.ppo.cest]);
@@ -361,9 +390,6 @@ export function PricingSimulator() {
                  if(sim.ppo.preparationTime) ppoTableBody.push(['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]);
                  if(sim.ppo.portionWeight) ppoTableBody.push(['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]);
                  if(sim.ppo.qualityStandard) ppoTableBody.push(['Padrão de Qualidade', sim.ppo.qualityStandard]);
-                 if(sim.ppo.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-                     ppoTableBody.push(['Modo de Montagem', sim.ppo.assemblyInstructions.map((instr, i) => `${i + 1}. ${instr.text}`).join('\n')]);
-                 }
                  if(sim.ppo.assemblyVideoUrl) ppoTableBody.push(['Link do Vídeo', sim.ppo.assemblyVideoUrl]);
                  if(sim.ppo.allergens && sim.ppo.allergens.length > 0) {
                     ppoTableBody.push(['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]);
@@ -374,8 +400,7 @@ export function PricingSimulator() {
                         startY: yPos,
                         body: ppoTableBody,
                         theme: 'striped',
-                        headStyles: { fillColor: '#6B7280' },
-                        styles: { cellPadding: 2 },
+                        styles: { cellPadding: 2, fontSize: 9 },
                         columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
                     });
                      yPos = (doc as any).lastAutoTable.finalY + 10;
@@ -400,14 +425,15 @@ export function PricingSimulator() {
             doc.text('Ficha técnica simplificada', 14, yPos);
             yPos += 10;
 
-            const imageSize = 30;
             const hasImage = sim.ppo?.referenceImageUrl;
-            let textX = 14;
-
             if (hasImage) {
                 try {
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imageSize, imageSize);
-                    textX = 14 + imageSize + 5;
+                    const img = new Image();
+                    img.src = sim.ppo!.referenceImageUrl!;
+                    const imgWidth = 30;
+                    const imgHeight = (img.height * imgWidth) / img.width;
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imgWidth, imgHeight);
+                    yPos += imgHeight + 5;
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
                 }
@@ -415,8 +441,9 @@ export function PricingSimulator() {
             
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
-            doc.text(sim.name, textX, yPos + (hasImage ? imageSize / 2 - 5 : 0));
-            yPos += (hasImage ? imageSize : 0) + 10;
+            doc.text(sim.name, 14, yPos);
+            yPos += 8;
+
 
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
