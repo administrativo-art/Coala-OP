@@ -32,6 +32,7 @@ import { collection, onSnapshot, query, where, Timestamp } from "firebase/firest
 import { db } from "@/lib/firebase";
 import { PurchaseAlertCard } from "@/components/purchase-alert-card"
 import { TechnicalSheetDashboard } from "@/components/technical-sheet-dashboard"
+import { TaskManager } from "@/components/task-manager"
 
 interface OnlineUser {
     id: string;
@@ -433,6 +434,7 @@ export default function DashboardPage() {
         if (permissions.dashboard.pricing) return 'pricing';
         if (permissions.dashboard.technicalSheets) return 'technical-sheets';
         if (permissions.dashboard.audit) return 'audit';
+        if (permissions.tasks.view) return 'tasks';
         return 'operational'; // Fallback
     }
 
@@ -444,11 +446,12 @@ export default function DashboardPage() {
             </div>
             
             <Tabs defaultValue={getDefaultTab()} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
                     {permissions.dashboard.operational && <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>}
                     {permissions.dashboard.pricing && <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>}
                     {permissions.dashboard.technicalSheets && <TabsTrigger value="technical-sheets"><FileText className="mr-2" /> Fichas Técnicas</TabsTrigger>}
                     {permissions.dashboard.audit && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Auditoria</TabsTrigger>}
+                    {permissions.tasks.view && <TabsTrigger value="tasks"><ListTodo className="mr-2 h-4 w-4" /> Tarefas</TabsTrigger>}
                 </TabsList>
 
                 {permissions.dashboard.operational && (
@@ -471,8 +474,12 @@ export default function DashboardPage() {
                         <AuditDashboard />
                     </TabsContent>
                 )}
+                 {permissions.tasks.view && (
+                     <TabsContent value="tasks" className="mt-6">
+                        <TaskManager />
+                    </TabsContent>
+                )}
             </Tabs>
         </div>
     );
 }
-
