@@ -322,7 +322,7 @@ export function PricingSimulator() {
                         img.onerror = () => { console.error("Image failed to load"); resolve(); };
                     });
                     
-                    const maxWidth = 60;
+                    const maxWidth = 50; // Image width
                     let imgWidth = img.width;
                     let imgHeight = img.height;
     
@@ -333,23 +333,44 @@ export function PricingSimulator() {
                     
                     if (yPos + imgHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
     
-                    const imageX = (pageWidth - imgWidth) / 2;
+                    const imageX = 14; // Left margin
                     doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', imageX, yPos, imgWidth, imgHeight);
-                    yPos += imgHeight + 5;
+                    
+                    // Text positioning to the right of the image
+                    const textX = imageX + imgWidth + 5;
+                    const textBlockWidth = pageWidth - textX - 14;
+                    const textY = yPos + (imgHeight / 2); // Vertically centered
+
+                    doc.setFontSize(18);
+                    doc.text(sim.name, textX, textY, { align: 'left', maxWidth: textBlockWidth, baseline: 'middle' });
+                    
+                    doc.setFontSize(9);
+                    doc.setTextColor(100);
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, textY + 6, { align: 'left', maxWidth: textBlockWidth });
+
+                    yPos += imgHeight + 10;
     
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
+                     // Fallback for when image fails
+                    doc.setFontSize(18);
+                    doc.text(sim.name, pageWidth / 2, yPos, { align: 'center' });
+                    yPos += 6;
+                    doc.setFontSize(9);
+                    doc.setTextColor(100);
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
+                    yPos += 10;
                 }
+            } else {
+                 // Title block if no image
+                doc.setFontSize(18);
+                doc.text(sim.name, 14, yPos);
+                yPos += 6;
+                doc.setFontSize(9);
+                doc.setTextColor(100);
+                doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, 14, yPos);
+                yPos += 10;
             }
-    
-            doc.setFontSize(18);
-            doc.text(sim.name, pageWidth / 2, yPos, { align: 'center' });
-            yPos += 6;
-            
-            doc.setFontSize(9);
-            doc.setTextColor(100);
-            doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
-            yPos += 10;
             
             const financialAndFiscalData = [
                 ['Preço Venda', formatCurrency(sim.salePrice)],
@@ -372,7 +393,7 @@ export function PricingSimulator() {
             });
             yPos = (doc as any).lastAutoTable.finalY + 10;
             
-            const ingredients = simulationItems
+             const ingredients = simulationItems
                 .filter(item => item.simulationId === sim.id)
                 .map(item => {
                     const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
@@ -396,7 +417,6 @@ export function PricingSimulator() {
                 });
                 yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-
 
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                  if (yPos > 250) { doc.addPage(); yPos = 15; }
@@ -894,4 +914,3 @@ export function PricingSimulator() {
         </div>
     );
 }
-
