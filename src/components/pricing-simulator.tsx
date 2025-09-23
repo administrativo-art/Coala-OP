@@ -304,12 +304,12 @@ export function PricingSimulator() {
         const margin = 14;
         const contentWidth = doc.internal.pageSize.width - margin * 2;
     
-        const addSectionTitle = (title: string, yPos: number): number => {
+        const addSectionTitle = (title: string, yPos: number, isSub: boolean = false): number => {
             if (yPos > pageHeight - 30) { doc.addPage(); yPos = 15; }
-            doc.setFontSize(14); doc.setFont(undefined, 'bold');
-            doc.text(title, margin, yPos);
+            doc.setFontSize(isSub ? 11 : 14); doc.setFont(undefined, 'bold');
+            doc.text(title, margin + (isSub ? 4 : 0), yPos);
             doc.setFont(undefined, 'normal');
-            return yPos + 8;
+            return yPos + (isSub ? 6 : 8);
         };
     
         const drawContainer = (startY: number, height: number) => {
@@ -318,13 +318,13 @@ export function PricingSimulator() {
                 doc.addPage();
                 startY = 15;
             }
-            doc.setFillColor(248, 250, 252); // light gray
+            doc.setFillColor(248, 250, 252);
             doc.roundedRect(margin, startY, contentWidth, height, 3, 3, 'F');
             return startY;
         };
     
         const drawInnerSeparator = (y: number) => {
-            doc.setDrawColor(226, 232, 240); // lighter gray
+            doc.setDrawColor(226, 232, 240);
             doc.setLineWidth(0.2);
             doc.line(margin + 5, y, contentWidth + margin - 5, y);
         };
@@ -336,7 +336,6 @@ export function PricingSimulator() {
     
             // Header with image and text
             const hasImage = sim.ppo?.referenceImageUrl;
-            const headerStartY = yPos;
             if (hasImage) {
                 try {
                     const imageSize = 30;
@@ -348,12 +347,12 @@ export function PricingSimulator() {
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin + imageSize + 5, yPos + imageSize / 2 + 6, { baseline: 'middle' });
                     doc.setTextColor(0);
                     yPos += imageSize + 10;
-                } catch (e) { 
+                } catch (e) {
                     yPos = addSectionTitle(sim.name, yPos);
                     doc.setFontSize(9); doc.setTextColor(100);
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
                     yPos += 8;
-                 }
+                }
             } else {
                 yPos = addSectionTitle(sim.name, yPos);
                 doc.setFontSize(9); doc.setTextColor(100);
@@ -365,7 +364,7 @@ export function PricingSimulator() {
             const financialData = [['Preço Venda', formatCurrency(sim.salePrice)], ['Custo Bruto', formatCurrency(sim.grossCost)], ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`], ['Markup', `${sim.markup.toFixed(2)}x`], ['Meta', sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'], ['NCM', sim.ppo?.ncm || 'N/A'], ['CEST', sim.ppo?.cest || 'N/A'], ['CFOP', sim.ppo?.cfop || 'N/A']];
             autoTable(doc, { startY: yPos, head: [['Informações de valor e fiscais', '']], body: financialData, theme: 'striped', headStyles: { fillColor: '#273344' }, columnStyles: { 0: { fontStyle: 'bold' } } });
             yPos = (doc as any).lastAutoTable.finalY + 10;
-            
+    
             // Ingredients
             const ingredients = simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                 const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
@@ -376,77 +375,82 @@ export function PricingSimulator() {
                 autoTable(doc, { startY: yPos, head: [['Ingrediente', 'Quantidade']], body: ingredients, theme: 'grid', headStyles: { fillColor: '#334155' } });
                 yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-
+    
             // Assembly Instructions
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                 yPos = addSectionTitle("Modo de Montagem", yPos);
-                let containerStartY = yPos;
-                
+                let containerStartY = yPos - 4;
+                let containerContentHeight = 0;
+    
                 for (const phase of sim.ppo.assemblyInstructions) {
-                    const phaseContainerStartY = yPos;
-                    doc.setFontSize(11); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, margin + 5, yPos + 5);
-                    yPos += 10;
-
-                    for(const [index, etapa] of phase.etapas.entries()) {
-                         if (yPos > pageHeight - 40) { // Check before drawing an etapa
-                            drawContainer(containerStartY, yPos - containerStartY);
+                    const phaseStartY = yPos;
+                    yPos = addSectionTitle(phase.name, yPos, true);
+                    let phaseContentHeight = 0;
+    
+                    for (const [index, etapa] of phase.etapas.entries()) {
+                        const stepText = `${index + 1}. ${etapa.text} ${etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : ''}`;
+                        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+                        
+                        let textMaxWidth = contentWidth - 25;
+                        const hasEtapaImage = etapa.imageUrl;
+                        if (hasEtapaImage) textMaxWidth -= 24;
+    
+                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
+                        const stepHeight = Math.max(textDimensions.h, hasEtapaImage ? 22 : 0);
+    
+                        if (yPos + stepHeight > pageHeight - 20) {
+                            drawContainer(containerStartY, containerContentHeight + 8);
                             doc.addPage();
                             yPos = 15;
                             containerStartY = 15;
+                            containerContentHeight = 0;
                         }
-                        const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
-                        const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        doc.setFontSize(9); doc.setFont(undefined, 'normal');
-                        
-                        let textMaxWidth = contentWidth - 15;
-                        if (etapa.imageUrl) textMaxWidth -= 24;
-
-                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
-                        doc.text(stepText, margin + 5, yPos, { maxWidth: textMaxWidth });
-
-                        if (etapa.imageUrl) {
-                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 25, yPos - 2, 20, 20); } catch(e) {}
+    
+                        doc.text(stepText, margin + 5, yPos + 4, { maxWidth: textMaxWidth });
+    
+                        if (hasEtapaImage) {
+                            try { doc.addImage(etapa.imageUrl!, 'JPEG', contentWidth + margin - 25, yPos - 2, 20, 20); } catch (e) {}
                         }
                         
-                        yPos += textDimensions.h + 2;
-                         if (index < phase.etapas.length - 1) {
+                        yPos += stepHeight + 4;
+                        phaseContentHeight += stepHeight + 4;
+    
+                        if (index < phase.etapas.length - 1) {
                             drawInnerSeparator(yPos);
                             yPos += 4;
+                            phaseContentHeight += 4;
                         }
                     }
+                    containerContentHeight += phaseContentHeight + 10; // add space between phases
                     yPos += 5;
                 }
-                 drawContainer(containerStartY - 4, yPos - containerStartY + 4);
+                drawContainer(containerStartY, containerContentHeight);
                 yPos += 5;
             }
-            
+    
             // Video Link
             if (sim.ppo?.assemblyVideoUrl) {
-                yPos = drawContainer(yPos, 14) + 2;
-                doc.setFontSize(10); doc.setTextColor(63, 81, 181);
+                let containerStartY = yPos;
+                yPos = drawContainer(containerStartY, 14) + 2;
+                doc.setFontSize(10);
+                doc.setTextColor(63, 81, 181);
                 doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 5, { url: sim.ppo.assemblyVideoUrl });
                 doc.setTextColor(0);
-                yPos += 15;
+                yPos = containerStartY + 19;
             }
-
+    
             // Other Details
-            const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo?.qualityStandard : (sim.ppo?.qualityStandard ? [{id: '1', text: sim.ppo.qualityStandard}] : []);
-            const details = [
-                ['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null],
-                ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null],
-                ...qualityStandardArray.map(q => ['Padrão de Qualidade', q.text]),
-                ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]
-            ].filter(d => d[1]);
-
+            const details = [['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null], ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null], ...(sim.ppo?.qualityStandard?.map(q => ['Padrão de Qualidade', q.text]) ?? []), ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]].filter(d => d[1]);
+            
             if (details.length > 0) {
+                let containerStartY = yPos;
                 const tableHeight = details.length * 7 + 10;
-                yPos = drawContainer(yPos, tableHeight);
+                yPos = drawContainer(containerStartY, tableHeight);
                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0 }, columnStyles: { 0: { fontStyle: 'bold' } } });
                 yPos = (doc as any).lastAutoTable.finalY + 5;
             }
         }
-    
+        
         doc.save(`fichas_tecnicas_completas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
