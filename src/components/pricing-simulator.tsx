@@ -302,6 +302,14 @@ export function PricingSimulator() {
         const doc = new jsPDF();
         let isFirstPage = true;
     
+        const addSection = (title: string, yPos: number, isSub: boolean = false) => {
+            doc.setFontSize(isSub ? 10 : 12);
+            doc.setFont(undefined, 'bold');
+            doc.text(title, 14, yPos);
+            doc.setFont(undefined, 'normal');
+            return yPos + (isSub ? 5 : 6);
+        };
+
         for (const sim of filteredSimulations) {
             if (!isFirstPage) {
                 doc.addPage();
@@ -322,7 +330,7 @@ export function PricingSimulator() {
                         img.onerror = () => { console.error("Image failed to load"); resolve(); };
                     });
                     
-                    const maxWidth = 50; // Image width
+                    const maxWidth = 50; 
                     let imgWidth = img.width;
                     let imgHeight = img.height;
     
@@ -333,13 +341,12 @@ export function PricingSimulator() {
                     
                     if (yPos + imgHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
     
-                    const imageX = 14; // Left margin
+                    const imageX = 14;
                     doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', imageX, yPos, imgWidth, imgHeight);
                     
-                    // Text positioning to the right of the image
                     const textX = imageX + imgWidth + 5;
                     const textBlockWidth = pageWidth - textX - 14;
-                    const textY = yPos + (imgHeight / 2); // Vertically centered
+                    const textY = yPos + (imgHeight / 2);
 
                     doc.setFontSize(18);
                     doc.text(sim.name, textX, textY, { align: 'left', maxWidth: textBlockWidth, baseline: 'middle' });
@@ -352,17 +359,8 @@ export function PricingSimulator() {
     
                 } catch (e) {
                     console.error("Failed to add image to PDF", e);
-                     // Fallback for when image fails
-                    doc.setFontSize(18);
-                    doc.text(sim.name, pageWidth / 2, yPos, { align: 'center' });
-                    yPos += 6;
-                    doc.setFontSize(9);
-                    doc.setTextColor(100);
-                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
-                    yPos += 10;
                 }
             } else {
-                 // Title block if no image
                 doc.setFontSize(18);
                 doc.text(sim.name, 14, yPos);
                 yPos += 6;
@@ -406,9 +404,7 @@ export function PricingSimulator() {
             
             if (ingredients.length > 0) {
                 if (yPos > 250) { doc.addPage(); yPos = 15; }
-                 doc.setFontSize(12); doc.setFont(undefined, 'bold');
-                 doc.text('Composição (Ingredientes)', 14, yPos); yPos += 6;
-                 doc.setFont(undefined, 'normal');
+                yPos = addSection('Composição (Ingredientes)', yPos);
                 autoTable(doc, {
                     startY: yPos,
                     head: [['Ingrediente', 'Quantidade']],
@@ -420,15 +416,11 @@ export function PricingSimulator() {
 
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                  if (yPos > 250) { doc.addPage(); yPos = 15; }
-                 doc.setFontSize(12); doc.setFont(undefined, 'bold');
-                 doc.text('Modo de Montagem', 14, yPos); yPos += 6;
-                 doc.setFont(undefined, 'normal');
+                 yPos = addSection('Modo de Montagem', yPos);
 
                 for (const phase of sim.ppo.assemblyInstructions) {
                     if (yPos > 260) { doc.addPage(); yPos = 15; }
-                    doc.setFontSize(10); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, 14, yPos); yPos += 5;
-                    doc.setFont(undefined, 'normal');
+                    yPos = addSection(phase.name, yPos, true);
 
                     for (const [index, etapa] of phase.etapas.entries()) {
                         if (yPos > 270) { doc.addPage(); yPos = 15; }
@@ -450,33 +442,20 @@ export function PricingSimulator() {
                 yPos += 10;
             }
 
-            const details = [
+             const details = [
                  ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
                  ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
-            ];
+                 ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
+                 ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
+            ].filter(d => d[1]);
+
              if (details.length > 0) {
                 if (yPos > 240) { doc.addPage(); yPos = 15; }
+                yPos = addSection('Detalhes Adicionais', yPos);
                 autoTable(doc, {
                     startY: yPos,
                     body: details,
                     theme: 'plain',
-                    styles: { cellPadding: 2, fontSize: 9 },
-                    columnStyles: { 0: { fontStyle: 'bold' } },
-                });
-                yPos = (doc as any).lastAutoTable.finalY + 10;
-            }
-            
-            const qualityAndAllergens = [
-                 ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
-                 ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
-            ];
-
-             if (qualityAndAllergens.length > 0) {
-                if (yPos > 240) { doc.addPage(); yPos = 15; }
-                autoTable(doc, {
-                    startY: yPos,
-                    body: qualityAndAllergens,
-                    theme: 'striped',
                     styles: { cellPadding: 2, fontSize: 9 },
                     columnStyles: { 0: { fontStyle: 'bold' } },
                 });
