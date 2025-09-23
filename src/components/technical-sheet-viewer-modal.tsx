@@ -103,11 +103,12 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                                 <h3 className="font-semibold text-lg mb-2">Modo de Montagem</h3>
                                 <div className="space-y-4">
                                 {simulation.ppo.assemblyInstructions.map(phase => (
-                                    <div key={phase.id}>
-                                        <h4 className="font-semibold text-md mb-2">{phase.name}</h4>
-                                        <ol className="list-decimal list-inside space-y-3 pl-2">
-                                            {phase.etapas.map(etapa => (
-                                                <li key={etapa.id} className="grid grid-cols-[1fr_auto] gap-4 items-center">
+                                    <div key={phase.id} className="p-4 border rounded-lg bg-muted/30">
+                                        <h4 className="font-semibold text-md mb-3">{phase.name}</h4>
+                                        <ol className="space-y-3">
+                                            {phase.etapas.map((etapa, index) => (
+                                                <li key={etapa.id} className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
+                                                    <span className="font-bold text-primary">{index + 1}.</span>
                                                     <div>
                                                         <span className="font-medium">{etapa.text}</span>
                                                         {etapa.quantity && etapa.unit && <span className="text-muted-foreground text-sm"> ({etapa.quantity} {etapa.unit})</span>}
