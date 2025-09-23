@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -296,13 +296,21 @@ export function PricingSimulator() {
 
         XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
-
-    const handleExportFichaTecnicaCompletaPdf = async () => {
+    
+     const handleExportFichaTecnicaCompletaPdf = async () => {
         const doc = new jsPDF();
         let isFirstPage = true;
         const pageHeight = doc.internal.pageSize.height;
         const margin = 14;
         const contentWidth = doc.internal.pageSize.width - margin * 2;
+    
+        const addTitle = (title: string, yPos: number): number => {
+            if (yPos > 260) { doc.addPage(); yPos = 15; }
+            doc.setFontSize(18);
+            doc.text(title, 14, yPos);
+            yPos += 8;
+            return yPos;
+        };
     
         const addSectionTitle = (title: string, yPos: number, isSub: boolean = false): number => {
             if (yPos > pageHeight - 30) { doc.addPage(); yPos = 15; }
@@ -312,14 +320,14 @@ export function PricingSimulator() {
             return yPos + (isSub ? 6 : 8);
         };
     
-        const drawContainer = (startY: number, height: number) => {
+        const drawContainer = (startY: number, height: number): number => {
             let finalY = startY + height;
             if (finalY > pageHeight - 15) {
                 doc.addPage();
                 startY = 15;
             }
             doc.setFillColor(248, 250, 252);
-            doc.roundedRect(margin, startY, contentWidth, height, 3, 3, 'F');
+            doc.roundedRect(margin, startY - 4, contentWidth, height + 8, 3, 3, 'F');
             return startY;
         };
     
@@ -348,13 +356,13 @@ export function PricingSimulator() {
                     doc.setTextColor(0);
                     yPos += imageSize + 10;
                 } catch (e) {
-                    yPos = addSectionTitle(sim.name, yPos);
+                    yPos = addTitle(sim.name, yPos);
                     doc.setFontSize(9); doc.setTextColor(100);
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
                     yPos += 8;
                 }
             } else {
-                yPos = addSectionTitle(sim.name, yPos);
+                yPos = addTitle(sim.name, yPos);
                 doc.setFontSize(9); doc.setTextColor(100);
                 doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
                 yPos += 8;
@@ -378,79 +386,79 @@ export function PricingSimulator() {
     
             // Assembly Instructions
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
+                let containerStartY = yPos;
                 yPos = addSectionTitle("Modo de Montagem", yPos);
-                let containerStartY = yPos - 4;
-                let containerContentHeight = 0;
-    
-                for (const phase of sim.ppo.assemblyInstructions) {
-                    const phaseStartY = yPos;
+                
+                let contentHeight = 0;
+                const drawPhase = (phase: any) => {
+                    const phaseTitleHeight = 8;
+                    if (yPos + phaseTitleHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
                     yPos = addSectionTitle(phase.name, yPos, true);
-                    let phaseContentHeight = 0;
-    
-                    for (const [index, etapa] of phase.etapas.entries()) {
+                    contentHeight += phaseTitleHeight;
+
+                    phase.etapas.forEach((etapa: any, index: number) => {
                         const stepText = `${index + 1}. ${etapa.text} ${etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : ''}`;
-                        doc.setFontSize(9); doc.setFont(undefined, 'normal');
-                        
-                        let textMaxWidth = contentWidth - 25;
                         const hasEtapaImage = etapa.imageUrl;
-                        if (hasEtapaImage) textMaxWidth -= 24;
-    
+                        const textMaxWidth = hasEtapaImage ? contentWidth - 45 : contentWidth - 15;
                         const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
                         const stepHeight = Math.max(textDimensions.h, hasEtapaImage ? 22 : 0);
-    
-                        if (yPos + stepHeight > pageHeight - 20) {
-                            drawContainer(containerStartY, containerContentHeight + 8);
-                            doc.addPage();
-                            yPos = 15;
-                            containerStartY = 15;
-                            containerContentHeight = 0;
-                        }
-    
+
+                        if (yPos + stepHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
+
+                        doc.setFontSize(9); doc.setFont(undefined, 'normal');
                         doc.text(stepText, margin + 5, yPos + 4, { maxWidth: textMaxWidth });
-    
-                        if (hasEtapaImage) {
-                            try { doc.addImage(etapa.imageUrl!, 'JPEG', contentWidth + margin - 25, yPos - 2, 20, 20); } catch (e) {}
-                        }
+                        if (hasEtapaImage) { try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 25, yPos - 2, 20, 20); } catch (e) {} }
                         
                         yPos += stepHeight + 4;
-                        phaseContentHeight += stepHeight + 4;
-    
+                        contentHeight += stepHeight + 4;
+
                         if (index < phase.etapas.length - 1) {
                             drawInnerSeparator(yPos);
                             yPos += 4;
-                            phaseContentHeight += 4;
+                            contentHeight += 4;
                         }
-                    }
-                    containerContentHeight += phaseContentHeight + 10; // add space between phases
+                    });
                     yPos += 5;
-                }
-                drawContainer(containerStartY, containerContentHeight);
-                yPos += 5;
+                    contentHeight += 5;
+                };
+                drawContainer(containerStartY, 0); // Start with a dummy container to set the start
+                sim.ppo.assemblyInstructions.forEach(drawPhase);
             }
     
             // Video Link
             if (sim.ppo?.assemblyVideoUrl) {
                 let containerStartY = yPos;
-                yPos = drawContainer(containerStartY, 14) + 2;
+                const containerHeight = 14;
+                if (containerStartY + containerHeight > pageHeight - 20) { doc.addPage(); containerStartY = 15; }
+                yPos = drawContainer(containerStartY, containerHeight) + 2;
                 doc.setFontSize(10);
                 doc.setTextColor(63, 81, 181);
                 doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 5, { url: sim.ppo.assemblyVideoUrl });
                 doc.setTextColor(0);
-                yPos = containerStartY + 19;
+                yPos = containerStartY + containerHeight + 5;
             }
     
             // Other Details
-            const details = [['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null], ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null], ...(sim.ppo?.qualityStandard?.map(q => ['Padrão de Qualidade', q.text]) ?? []), ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]].filter(d => d[1]);
+            const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) 
+                ? sim.ppo.qualityStandard 
+                : (sim.ppo?.qualityStandard ? [{ text: sim.ppo.qualityStandard }] : []);
+
+            const details = [
+                ['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null],
+                ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null],
+                ...qualityStandardArray.map((q: any) => ['Padrão de Qualidade', q.text]),
+                ['Alergênicos', sim.ppo?.allergens?.map((a: any) => a.text).join(', ')]
+            ].filter((d): d is [string, string] => !!d[1]);
             
             if (details.length > 0) {
+                const tableHeight = details.length * 10 + 10;
+                if (yPos + tableHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
                 let containerStartY = yPos;
-                const tableHeight = details.length * 7 + 10;
                 yPos = drawContainer(containerStartY, tableHeight);
-                autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+                autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0.1, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
                 yPos = (doc as any).lastAutoTable.finalY + 5;
             }
         }
-        
         doc.save(`fichas_tecnicas_completas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
