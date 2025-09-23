@@ -313,27 +313,30 @@ export function PricingSimulator() {
         };
     
         const drawContainer = (startY: number, height: number) => {
-            if (startY + height > pageHeight - 15) {
+            let finalY = startY + height;
+            if (finalY > pageHeight - 15) {
                 doc.addPage();
                 startY = 15;
             }
-            doc.setFillColor(248, 250, 252);
+            doc.setFillColor(248, 250, 252); // light gray
             doc.roundedRect(margin, startY, contentWidth, height, 3, 3, 'F');
             return startY;
         };
-
+    
         const drawInnerSeparator = (y: number) => {
-            doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.2);
+            doc.setDrawColor(226, 232, 240); // lighter gray
+            doc.setLineWidth(0.2);
             doc.line(margin + 5, y, contentWidth + margin - 5, y);
         };
-
+    
         for (const sim of filteredSimulations) {
             if (!isFirstPage) { doc.addPage(); }
             isFirstPage = false;
             let yPos = 15;
     
-            // Header
+            // Header with image and text
             const hasImage = sim.ppo?.referenceImageUrl;
+            const headerStartY = yPos;
             if (hasImage) {
                 try {
                     const imageSize = 30;
@@ -345,14 +348,19 @@ export function PricingSimulator() {
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin + imageSize + 5, yPos + imageSize / 2 + 6, { baseline: 'middle' });
                     doc.setTextColor(0);
                     yPos += imageSize + 10;
-                } catch (e) { yPos = addSectionTitle(sim.name, yPos); }
+                } catch (e) { 
+                    yPos = addSectionTitle(sim.name, yPos);
+                    doc.setFontSize(9); doc.setTextColor(100);
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
+                    yPos += 8;
+                 }
             } else {
                 yPos = addSectionTitle(sim.name, yPos);
                 doc.setFontSize(9); doc.setTextColor(100);
                 doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
                 yPos += 8;
             }
-
+    
             // Financial and Fiscal
             const financialData = [['Preço Venda', formatCurrency(sim.salePrice)], ['Custo Bruto', formatCurrency(sim.grossCost)], ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`], ['Markup', `${sim.markup.toFixed(2)}x`], ['Meta', sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'], ['NCM', sim.ppo?.ncm || 'N/A'], ['CEST', sim.ppo?.cest || 'N/A'], ['CFOP', sim.ppo?.cfop || 'N/A']];
             autoTable(doc, { startY: yPos, head: [['Informações de valor e fiscais', '']], body: financialData, theme: 'striped', headStyles: { fillColor: '#273344' }, columnStyles: { 0: { fontStyle: 'bold' } } });
@@ -369,57 +377,70 @@ export function PricingSimulator() {
                 yPos = (doc as any).lastAutoTable.finalY + 10;
             }
 
-            // Assembly
+            // Assembly Instructions
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                 yPos = addSectionTitle("Modo de Montagem", yPos);
-                const containerStartY = yPos;
-                let currentYInContainer = containerStartY + 5;
+                let containerStartY = yPos;
                 
-                sim.ppo.assemblyInstructions.forEach(phase => {
+                for (const phase of sim.ppo.assemblyInstructions) {
+                    const phaseContainerStartY = yPos;
                     doc.setFontSize(11); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, margin + 5, currentYInContainer);
-                    currentYInContainer += 7;
+                    doc.text(phase.name, margin + 5, yPos + 5);
+                    yPos += 10;
 
-                    phase.etapas.forEach((etapa, index) => {
+                    for(const [index, etapa] of phase.etapas.entries()) {
+                         if (yPos > pageHeight - 40) { // Check before drawing an etapa
+                            drawContainer(containerStartY, yPos - containerStartY);
+                            doc.addPage();
+                            yPos = 15;
+                            containerStartY = 15;
+                        }
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
                         doc.setFontSize(9); doc.setFont(undefined, 'normal');
                         
                         let textMaxWidth = contentWidth - 15;
-                        if(etapa.imageUrl) { textMaxWidth -= 24; }
+                        if (etapa.imageUrl) textMaxWidth -= 24;
 
                         const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
-                        doc.text(stepText, margin + 5, currentYInContainer, { maxWidth: textMaxWidth });
+                        doc.text(stepText, margin + 5, yPos, { maxWidth: textMaxWidth });
 
-                        if(etapa.imageUrl) {
-                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 25, currentYInContainer - 2, 20, 20); } catch(e) {}
+                        if (etapa.imageUrl) {
+                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 25, yPos - 2, 20, 20); } catch(e) {}
                         }
                         
-                        currentYInContainer += textDimensions.h + 4;
-                        if (index < phase.etapas.length - 1) {
-                            drawInnerSeparator(currentYInContainer);
-                            currentYInContainer += 4;
+                        yPos += textDimensions.h + 2;
+                         if (index < phase.etapas.length - 1) {
+                            drawInnerSeparator(yPos);
+                            yPos += 4;
                         }
-                    });
-                     currentYInContainer += 5;
-                });
-                drawContainer(containerStartY - 4, currentYInContainer - containerStartY + 8);
-                yPos = currentYInContainer + 5;
+                    }
+                    yPos += 5;
+                }
+                 drawContainer(containerStartY - 4, yPos - containerStartY + 4);
+                yPos += 5;
             }
             
-            // Video
+            // Video Link
             if (sim.ppo?.assemblyVideoUrl) {
                 yPos = drawContainer(yPos, 14) + 2;
                 doc.setFontSize(10); doc.setTextColor(63, 81, 181);
-                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos, { url: sim.ppo.assemblyVideoUrl });
+                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 5, { url: sim.ppo.assemblyVideoUrl });
                 doc.setTextColor(0);
                 yPos += 15;
             }
 
             // Other Details
-            const details = [['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null], ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null], ...sim.ppo?.qualityStandard?.map(q => ['Padrão de Qualidade', q.text]) ?? [], ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]].filter(d => d[1]);
+            const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo?.qualityStandard : (sim.ppo?.qualityStandard ? [{id: '1', text: sim.ppo.qualityStandard}] : []);
+            const details = [
+                ['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null],
+                ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null],
+                ...qualityStandardArray.map(q => ['Padrão de Qualidade', q.text]),
+                ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]
+            ].filter(d => d[1]);
+
             if (details.length > 0) {
-                const tableHeight = details.length * 10 + 10;
+                const tableHeight = details.length * 7 + 10;
                 yPos = drawContainer(yPos, tableHeight);
                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0 }, columnStyles: { 0: { fontStyle: 'bold' } } });
                 yPos = (doc as any).lastAutoTable.finalY + 5;

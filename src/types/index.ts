@@ -242,7 +242,7 @@ export type PPO = {
       imageUrl?: string;
     }[];
   }[];
-  qualityStandard?: string;
+  qualityStandard?: { id: string; text: string }[];
   allergens?: { id: string; text: string }[];
   preparationTime?: number; // in seconds
   portionWeight?: number; // in grams or mL
