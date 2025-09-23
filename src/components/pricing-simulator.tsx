@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -7,7 +6,29 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download, FileText, Eye } from "lucide-react";
+import {
+    PlusCircle,
+    Inbox,
+    Search,
+    Eraser,
+    Settings,
+    Layers,
+    Edit,
+    BarChart3,
+    Table as TableIcon,
+    CheckCircle2,
+    AlertTriangle,
+    History,
+    ArrowUpDown,
+    ChevronsUpDown,
+    Check,
+    Filter,
+    Download,
+    FileText,
+    Eye,
+    MoreHorizontal,
+    Trash2,
+} from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
@@ -676,7 +697,7 @@ export function PricingSimulator() {
                                             meetsGoal ? <CheckCircle2 className="h-5 w-5 text-green-500"/> : <AlertTriangle className="h-5 w-5 text-orange-500"/>
                                         ) : <div className="h-5 w-5"/>}
                                         <DropdownMenu>
-                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><Layers className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
@@ -867,3 +888,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
