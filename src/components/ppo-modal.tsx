@@ -52,7 +52,7 @@ const ppoSchema = z.object({
   cest: z.string().optional(),
   cfop: z.string().optional(),
   assemblyInstructions: z.array(phaseSchema),
-  qualityStandard: z.string().optional(),
+  qualityStandard: z.array(z.object({ id: z.string(), text: z.string().min(1, "O padrão de qualidade não pode ser vazio.") })),
   allergens: z.array(z.object({ id: z.string(), text: z.string().min(1, "O alergênico não pode ser vazio.") })),
   preparationTime: z.coerce.number().optional(),
   portionWeight: z.coerce.number().optional(),
@@ -85,7 +85,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       cest: '',
       cfop: '',
       assemblyInstructions: [],
-      qualityStandard: '',
+      qualityStandard: [],
       allergens: [],
       preparationTime: 0,
       portionWeight: 0,
@@ -104,6 +104,11 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
     control: form.control,
     name: 'allergens',
   });
+  
+  const { fields: qualityFields, append: appendQuality, remove: removeQuality } = useFieldArray({
+    control: form.control,
+    name: 'qualityStandard',
+  });
 
   useEffect(() => {
     if (simulation) {
@@ -114,7 +119,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
         cest: ppoData.cest || '',
         cfop: ppoData.cfop || '',
         assemblyInstructions: ppoData.assemblyInstructions || [],
-        qualityStandard: ppoData.qualityStandard || '',
+        qualityStandard: ppoData.qualityStandard || [],
         allergens: ppoData.allergens || [],
         preparationTime: ppoData.preparationTime || 0,
         portionWeight: ppoData.portionWeight || 0,
@@ -293,6 +298,21 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                           <FormMessage />
                       </FormItem>
                    )}/>
+                   
+                    <div className="space-y-2">
+                        <FormLabel>Padrão de Qualidade</FormLabel>
+                        {qualityFields.map((field, index) => (
+                          <div key={field.id} className="flex items-center gap-2">
+                              <FormField control={form.control} name={`qualityStandard.${index}.text`} render={({ field: stepField }) => (
+                                  <FormItem className="flex-grow"><FormControl><Input placeholder="Ex: Borda do copo limpa" {...stepField} /></FormControl><FormMessage /></FormItem>
+                              )}/>
+                              <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeQuality(index)}><Trash2 className="h-4 w-4"/></Button>
+                          </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => appendQuality({ id: `quality-${Date.now()}`, text: '' })}>
+                            <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Padrão de Qualidade
+                        </Button>
+                    </div>
 
                    <div className="space-y-2">
                     <FormLabel>Alergênicos</FormLabel>
@@ -308,11 +328,6 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                         <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Alergênico
                     </Button>
                   </div>
-
-
-                  <FormField control={form.control} name="qualityStandard" render={({ field }) => (
-                      <FormItem><FormLabel>Padrão de Qualidade</FormLabel><FormControl><Textarea placeholder="Ex: Borda do copo limpa, cobertura uniforme..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
-                  )}/>
 
                   <div className="grid grid-cols-3 gap-4">
                       <FormField control={form.control} name="preparationTime" render={({ field }) => (
@@ -461,5 +476,3 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
         </>
     )
 }
-
-    
