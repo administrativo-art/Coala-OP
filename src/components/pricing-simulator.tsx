@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -52,6 +53,8 @@ import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
+
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -75,8 +78,10 @@ export function PricingSimulator() {
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
+    const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
     const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
+    const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
@@ -96,6 +101,11 @@ export function PricingSimulator() {
     const handlePpoClick = (simulation: ProductSimulation) => {
         setSimulationToEdit(simulation);
         setIsPpoModalOpen(true);
+    };
+    
+    const handleViewTechnicalSheet = (simulation: ProductSimulation) => {
+        setSimulationToView(simulation);
+        setIsViewerModalOpen(true);
     };
 
     const handleDelete = async (simulationId: string) => {
@@ -699,7 +709,7 @@ export function PricingSimulator() {
                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -864,6 +874,12 @@ export function PricingSimulator() {
                 onOpenChange={setIsPpoModalOpen}
                 simulation={simulationToEdit}
             />
+
+            <TechnicalSheetViewerModal
+                open={isViewerModalOpen}
+                onOpenChange={setIsViewerModalOpen}
+                simulation={simulationToView}
+            />
             
             <PricingParametersModal
                 open={isParamsModalOpen}
@@ -888,4 +904,3 @@ export function PricingSimulator() {
     );
 }
 
-    
