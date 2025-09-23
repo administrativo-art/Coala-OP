@@ -311,27 +311,28 @@ export function PricingSimulator() {
             doc.setFont(undefined, 'normal');
             return yPos + 8;
         };
-
-        const drawContainer = (startY: number, endY: number) => {
+    
+        const drawContainer = (startY: number, height: number) => {
+            if (startY + height > pageHeight - 15) {
+                doc.addPage();
+                startY = 15;
+            }
             doc.setFillColor(248, 250, 252);
-            doc.roundedRect(margin, startY, contentWidth, endY - startY, 3, 3, 'F');
-            return endY + 5;
+            doc.roundedRect(margin, startY, contentWidth, height, 3, 3, 'F');
+            return startY;
         };
-        
+
         const drawInnerSeparator = (y: number) => {
-            doc.setDrawColor(226, 232, 240);
-            doc.setLineWidth(0.2);
-            doc.line(margin + 4, y, contentWidth + margin - 4, y);
+            doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.2);
+            doc.line(margin + 5, y, contentWidth + margin - 5, y);
         };
 
         for (const sim of filteredSimulations) {
-            if (!isFirstPage) {
-                doc.addPage();
-            }
+            if (!isFirstPage) { doc.addPage(); }
             isFirstPage = false;
             let yPos = 15;
     
-            // Header with image and title
+            // Header
             const hasImage = sim.ppo?.referenceImageUrl;
             if (hasImage) {
                 try {
@@ -344,35 +345,19 @@ export function PricingSimulator() {
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin + imageSize + 5, yPos + imageSize / 2 + 6, { baseline: 'middle' });
                     doc.setTextColor(0);
                     yPos += imageSize + 10;
-                } catch (e) {
-                    yPos = addSectionTitle(sim.name, yPos);
-                }
+                } catch (e) { yPos = addSectionTitle(sim.name, yPos); }
             } else {
-                doc.setFontSize(18); doc.setFont(undefined, 'bold');
-                doc.text(sim.name, margin, yPos);
-                yPos += 8;
-                 doc.setFontSize(9); doc.setFont(undefined, 'normal');
-                doc.setTextColor(100);
-                doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos);
-                doc.setTextColor(0);
+                yPos = addSectionTitle(sim.name, yPos);
+                doc.setFontSize(9); doc.setTextColor(100);
+                doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos); doc.setTextColor(0);
                 yPos += 8;
             }
-    
-            // Financial and Fiscal Table
-            const financialData = [
-                ['Preço Venda', formatCurrency(sim.salePrice)], ['Custo Bruto', formatCurrency(sim.grossCost)],
-                ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`], ['Markup', `${sim.markup.toFixed(2)}x`],
-                ['Meta', sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'], ['NCM', sim.ppo?.ncm || 'N/A'],
-                ['CEST', sim.ppo?.cest || 'N/A'], ['CFOP', sim.ppo?.cfop || 'N/A'],
-            ];
-            autoTable(doc, {
-                startY: yPos,
-                head: [['Informações de valor e fiscais', '']],
-                body: financialData, theme: 'striped', headStyles: { fillColor: '#273344' },
-                columnStyles: { 0: { fontStyle: 'bold' } },
-            });
+
+            // Financial and Fiscal
+            const financialData = [['Preço Venda', formatCurrency(sim.salePrice)], ['Custo Bruto', formatCurrency(sim.grossCost)], ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`], ['Markup', `${sim.markup.toFixed(2)}x`], ['Meta', sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'], ['NCM', sim.ppo?.ncm || 'N/A'], ['CEST', sim.ppo?.cest || 'N/A'], ['CFOP', sim.ppo?.cfop || 'N/A']];
+            autoTable(doc, { startY: yPos, head: [['Informações de valor e fiscais', '']], body: financialData, theme: 'striped', headStyles: { fillColor: '#273344' }, columnStyles: { 0: { fontStyle: 'bold' } } });
             yPos = (doc as any).lastAutoTable.finalY + 10;
-    
+            
             // Ingredients
             const ingredients = simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                 const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
@@ -383,85 +368,61 @@ export function PricingSimulator() {
                 autoTable(doc, { startY: yPos, head: [['Ingrediente', 'Quantidade']], body: ingredients, theme: 'grid', headStyles: { fillColor: '#334155' } });
                 yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-    
-            // Assembly Instructions
+
+            // Assembly
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                 yPos = addSectionTitle("Modo de Montagem", yPos);
                 const containerStartY = yPos;
-                doc.setFillColor(248, 250, 252);
+                let currentYInContainer = containerStartY + 5;
                 
-                let totalHeight = 0;
-                sim.ppo.assemblyInstructions.forEach(phase => {
-                    totalHeight += 12; // Phase title
-                    phase.etapas.forEach((etapa, index) => {
-                        const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
-                        const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        let textMaxWidth = contentWidth - 8;
-                        if(etapa.imageUrl) { textMaxWidth -= 24; }
-                        totalHeight += doc.getTextDimensions(stepText, { maxWidth: textMaxWidth }).h + 4;
-                        if(etapa.imageUrl) totalHeight = Math.max(totalHeight, 20);
-                        if (index < phase.etapas.length - 1) totalHeight += 4;
-                    });
-                });
-                
-                if (yPos + totalHeight > pageHeight - 15) { doc.addPage(); yPos = 15; }
-                doc.roundedRect(margin, yPos - 4, contentWidth, totalHeight + 8, 3, 3, 'F');
-
                 sim.ppo.assemblyInstructions.forEach(phase => {
                     doc.setFontSize(11); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, margin + 4, yPos);
-                    yPos += 7;
+                    doc.text(phase.name, margin + 5, currentYInContainer);
+                    currentYInContainer += 7;
 
                     phase.etapas.forEach((etapa, index) => {
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
                         doc.setFontSize(9); doc.setFont(undefined, 'normal');
                         
-                        let textMaxWidth = contentWidth - 8;
-                        if(etapa.imageUrl) {
-                            textMaxWidth -= 24;
-                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 20, yPos - 2, 20, 20); } catch(e) {}
-                        }
+                        let textMaxWidth = contentWidth - 15;
+                        if(etapa.imageUrl) { textMaxWidth -= 24; }
 
                         const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
-                        doc.text(stepText, margin + 4, yPos, { maxWidth: textMaxWidth });
-                        yPos += textDimensions.h + 4;
+                        doc.text(stepText, margin + 5, currentYInContainer, { maxWidth: textMaxWidth });
+
+                        if(etapa.imageUrl) {
+                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 25, currentYInContainer - 2, 20, 20); } catch(e) {}
+                        }
                         
+                        currentYInContainer += textDimensions.h + 4;
                         if (index < phase.etapas.length - 1) {
-                            drawInnerSeparator(yPos);
-                            yPos += 4;
+                            drawInnerSeparator(currentYInContainer);
+                            currentYInContainer += 4;
                         }
                     });
-                     yPos += 5;
+                     currentYInContainer += 5;
                 });
+                drawContainer(containerStartY - 4, currentYInContainer - containerStartY + 8);
+                yPos = currentYInContainer + 5;
             }
-
-            // Video Link
+            
+            // Video
             if (sim.ppo?.assemblyVideoUrl) {
-                if (yPos > pageHeight - 20) { doc.addPage(); yPos = 15; }
-                doc.setFillColor(248, 250, 252);
-                doc.roundedRect(margin, yPos - 4, contentWidth, 14, 3, 3, 'F');
+                yPos = drawContainer(yPos, 14) + 2;
                 doc.setFontSize(10); doc.setTextColor(63, 81, 181);
-                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 2, { url: sim.ppo.assemblyVideoUrl });
+                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos, { url: sim.ppo.assemblyVideoUrl });
                 doc.setTextColor(0);
                 yPos += 15;
             }
-            
-            // Other Details
-            const details = [
-                ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
-                ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)`]] : []),
-                ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard]] : []),
-                ...(sim.ppo?.allergens && sim.ppo.allergens.length > 0 ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : [])
-            ];
 
+            // Other Details
+            const details = [['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null], ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null], ...sim.ppo?.qualityStandard?.map(q => ['Padrão de Qualidade', q.text]) ?? [], ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')]].filter(d => d[1]);
             if (details.length > 0) {
-                 if (yPos > pageHeight - 40) { doc.addPage(); yPos = 15; }
-                 yPos = addSectionTitle("Detalhes Adicionais", yPos);
-                 const tableStartY = yPos;
-                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0.1, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
-                 yPos = (doc as any).lastAutoTable.finalY + 5;
-                 drawContainer(tableStartY - 4, yPos - 5);
+                const tableHeight = details.length * 10 + 10;
+                yPos = drawContainer(yPos, tableHeight);
+                autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+                yPos = (doc as any).lastAutoTable.finalY + 5;
             }
         }
     
@@ -889,4 +850,3 @@ export function PricingSimulator() {
         </div>
     );
 }
-
