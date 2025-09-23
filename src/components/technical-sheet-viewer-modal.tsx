@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useMemo } from 'react';
@@ -11,7 +10,7 @@ import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { Video, Info, Utensils, Award } from 'lucide-react';
+import { Video, Info, Utensils, Award, Clock } from 'lucide-react';
 
 interface TechnicalSheetViewerModalProps {
   open: boolean;
@@ -123,14 +122,49 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             </div>
                         )}
                         
-                        {(simulation.ppo?.qualityStandard?.length || simulation.ppo?.allergens?.length || simulation.ppo?.preparationTime) && (
+                        {simulation.ppo?.assemblyVideoUrl && (
                             <div>
-                                <h3 className="font-semibold text-lg mb-2">Detalhes Adicionais</h3>
-                                <div className="p-4 border rounded-lg space-y-3 bg-muted/50">
+                                <h3 className="font-semibold text-lg mb-2">Vídeo de Montagem</h3>
+                                <a href={simulation.ppo.assemblyVideoUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
+                                    <Video className="h-5 w-5" /> Assistir vídeo de montagem
+                                </a>
+                            </div>
+                        )}
+
+                         {(simulation.ppo?.preparationTime || simulation.ppo?.portionWeight) && (
+                            <div>
+                                <h3 className="font-semibold text-lg mb-2">Parâmetros</h3>
+                                <div className="p-4 border rounded-lg grid grid-cols-2 gap-4 bg-muted/30">
+                                    {simulation.ppo.preparationTime && (
+                                        <div className="flex items-center gap-2">
+                                            <Clock className="h-5 w-5 text-primary" />
+                                            <div>
+                                                <p className="font-medium">Tempo de Preparo</p>
+                                                <p className="text-sm text-muted-foreground">{simulation.ppo.preparationTime} segundos</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {simulation.ppo.portionWeight && (
+                                        <div className="flex items-center gap-2">
+                                            <Utensils className="h-5 w-5 text-primary" />
+                                            <div>
+                                                <p className="font-medium">Peso da Porção</p>
+                                                <p className="text-sm text-muted-foreground">{simulation.ppo.portionWeight}g (±{simulation.ppo.portionTolerance || 0}g)</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {(simulation.ppo?.qualityStandard?.length || simulation.ppo?.allergens?.length) && (
+                            <div>
+                                <h3 className="font-semibold text-lg mb-2">Qualidade e Alergênicos</h3>
+                                <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
                                     {simulation.ppo.qualityStandard && simulation.ppo.qualityStandard.length > 0 && (
                                         <div>
                                             <h4 className="font-medium flex items-center gap-2"><Award className="h-4 w-4 text-primary" />Padrão de Qualidade</h4>
-                                            <ul className="list-disc list-inside text-sm text-muted-foreground pl-4">
+                                            <ul className="list-disc list-inside text-sm text-muted-foreground pl-4 mt-1">
                                                 {simulation.ppo.qualityStandard.map(item => <li key={item.id}>{item.text}</li>)}
                                             </ul>
                                         </div>
@@ -141,9 +175,6 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                                             <p className="text-sm text-muted-foreground">{simulation.ppo.allergens.map(a => a.text).join(', ')}</p>
                                         </div>
                                     )}
-                                    {simulation.ppo.preparationTime && <p className="text-sm"><strong>Tempo de Preparo:</strong> {simulation.ppo.preparationTime} seg</p>}
-                                    {simulation.ppo.portionWeight && <p className="text-sm"><strong>Peso da Porção:</strong> {simulation.ppo.portionWeight}g (±{simulation.ppo.portionTolerance || 0}g)</p>}
-                                    {simulation.ppo.assemblyVideoUrl && <p className="text-sm"><strong>Vídeo:</strong> <a href={simulation.ppo.assemblyVideoUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1"><Video className="h-4 w-4" />Assistir</a></p>}
                                 </div>
                             </div>
                         )}
