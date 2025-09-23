@@ -14,7 +14,6 @@ import {
     Settings,
     Layers,
     Edit,
-    BarChart3,
     Table as TableIcon,
     CheckCircle2,
     AlertTriangle,
@@ -27,7 +26,7 @@ import {
     FileText,
     Eye,
     MoreHorizontal,
-    Trash2,
+    Trash2
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
@@ -701,7 +700,7 @@ export function PricingSimulator() {
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Ficha Técnica (PPO)</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
