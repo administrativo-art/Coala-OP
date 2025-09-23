@@ -372,6 +372,32 @@ export function PricingSimulator() {
             });
             yPos = (doc as any).lastAutoTable.finalY + 10;
             
+            const ingredients = simulationItems
+                .filter(item => item.simulationId === sim.id)
+                .map(item => {
+                    const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+                    return {
+                        name: baseProduct?.name || 'Insumo não encontrado',
+                        quantity: item.quantity,
+                        unit: item.overrideUnit || baseProduct?.unit || 'un'
+                    };
+                });
+            
+            if (ingredients.length > 0) {
+                if (yPos > 250) { doc.addPage(); yPos = 15; }
+                 doc.setFontSize(12); doc.setFont(undefined, 'bold');
+                 doc.text('Composição (Ingredientes)', 14, yPos); yPos += 6;
+                 doc.setFont(undefined, 'normal');
+                autoTable(doc, {
+                    startY: yPos,
+                    head: [['Ingrediente', 'Quantidade']],
+                    body: ingredients.map(i => [i.name, `${i.quantity} ${i.unit}`]),
+                    theme: 'striped',
+                });
+                yPos = (doc as any).lastAutoTable.finalY + 10;
+            }
+
+
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                  if (yPos > 250) { doc.addPage(); yPos = 15; }
                  doc.setFontSize(12); doc.setFont(undefined, 'bold');
@@ -674,7 +700,7 @@ export function PricingSimulator() {
                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -868,5 +894,4 @@ export function PricingSimulator() {
         </div>
     );
 }
-
 
