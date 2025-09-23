@@ -313,10 +313,16 @@ export function PricingSimulator() {
         };
 
         const drawContainer = (startY: number, endY: number) => {
-            doc.setFillColor(248, 250, 252); // bg-muted/30
+            doc.setFillColor(248, 250, 252);
             doc.roundedRect(margin, startY, contentWidth, endY - startY, 3, 3, 'F');
             return endY + 5;
-        }
+        };
+        
+        const drawInnerSeparator = (y: number) => {
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.2);
+            doc.line(margin + 4, y, contentWidth + margin - 4, y);
+        };
 
         for (const sim of filteredSimulations) {
             if (!isFirstPage) {
@@ -342,7 +348,14 @@ export function PricingSimulator() {
                     yPos = addSectionTitle(sim.name, yPos);
                 }
             } else {
-                yPos = addSectionTitle(sim.name, yPos);
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
+                doc.text(sim.name, margin, yPos);
+                yPos += 8;
+                 doc.setFontSize(9); doc.setFont(undefined, 'normal');
+                doc.setTextColor(100);
+                doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin, yPos);
+                doc.setTextColor(0);
+                yPos += 8;
             }
     
             // Financial and Fiscal Table
@@ -375,43 +388,62 @@ export function PricingSimulator() {
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                 yPos = addSectionTitle("Modo de Montagem", yPos);
                 const containerStartY = yPos;
-
-                for (const phase of sim.ppo.assemblyInstructions) {
-                    if (yPos > pageHeight - 40) { doc.addPage(); yPos = 15; }
-                    doc.setFontSize(11); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, margin + 2, yPos);
-                    yPos += 7;
-
-                    for (const [index, etapa] of phase.etapas.entries()) {
-                        if (yPos > pageHeight - 20) { doc.addPage(); yPos = 15; }
+                doc.setFillColor(248, 250, 252);
+                
+                let totalHeight = 0;
+                sim.ppo.assemblyInstructions.forEach(phase => {
+                    totalHeight += 12; // Phase title
+                    phase.etapas.forEach((etapa, index) => {
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        
+                        let textMaxWidth = contentWidth - 8;
+                        if(etapa.imageUrl) { textMaxWidth -= 24; }
+                        totalHeight += doc.getTextDimensions(stepText, { maxWidth: textMaxWidth }).h + 4;
+                        if(etapa.imageUrl) totalHeight = Math.max(totalHeight, 20);
+                        if (index < phase.etapas.length - 1) totalHeight += 4;
+                    });
+                });
+                
+                if (yPos + totalHeight > pageHeight - 15) { doc.addPage(); yPos = 15; }
+                doc.roundedRect(margin, yPos - 4, contentWidth, totalHeight + 8, 3, 3, 'F');
+
+                sim.ppo.assemblyInstructions.forEach(phase => {
+                    doc.setFontSize(11); doc.setFont(undefined, 'bold');
+                    doc.text(phase.name, margin + 4, yPos);
+                    yPos += 7;
+
+                    phase.etapas.forEach((etapa, index) => {
+                        const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
+                        const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
                         doc.setFontSize(9); doc.setFont(undefined, 'normal');
-                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: contentWidth - 8 });
-                        doc.text(stepText, margin + 4, yPos, { maxWidth: contentWidth - 8 });
+                        
+                        let textMaxWidth = contentWidth - 8;
+                        if(etapa.imageUrl) {
+                            textMaxWidth -= 24;
+                            try { doc.addImage(etapa.imageUrl, 'JPEG', contentWidth + margin - 20, yPos - 2, 20, 20); } catch(e) {}
+                        }
+
+                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: textMaxWidth });
+                        doc.text(stepText, margin + 4, yPos, { maxWidth: textMaxWidth });
                         yPos += textDimensions.h + 4;
                         
                         if (index < phase.etapas.length - 1) {
-                            if (yPos > pageHeight - 15) { doc.addPage(); yPos = 15; }
-                            doc.setDrawColor(226, 232, 240); // border
-                            doc.line(margin + 4, yPos, contentWidth + margin - 4, yPos);
+                            drawInnerSeparator(yPos);
                             yPos += 4;
                         }
-                    }
-                    yPos += 5;
-                }
-                drawContainer(containerStartY - 4, yPos - 5);
+                    });
+                     yPos += 5;
+                });
             }
 
             // Video Link
             if (sim.ppo?.assemblyVideoUrl) {
                 if (yPos > pageHeight - 20) { doc.addPage(); yPos = 15; }
-                const containerStartY = yPos;
+                doc.setFillColor(248, 250, 252);
+                doc.roundedRect(margin, yPos - 4, contentWidth, 14, 3, 3, 'F');
                 doc.setFontSize(10); doc.setTextColor(63, 81, 181);
-                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 5, { url: sim.ppo.assemblyVideoUrl });
+                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 2, { url: sim.ppo.assemblyVideoUrl });
                 doc.setTextColor(0);
-                drawContainer(containerStartY - 4, yPos + 10);
                 yPos += 15;
             }
             
@@ -419,15 +451,15 @@ export function PricingSimulator() {
             const details = [
                 ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
                 ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)`]] : []),
-                ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
-                ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
-            ].filter((d): d is [string, string] => !!d[1]);
+                ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard]] : []),
+                ...(sim.ppo?.allergens && sim.ppo.allergens.length > 0 ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : [])
+            ];
 
             if (details.length > 0) {
                  if (yPos > pageHeight - 40) { doc.addPage(); yPos = 15; }
                  yPos = addSectionTitle("Detalhes Adicionais", yPos);
                  const tableStartY = yPos;
-                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: 0.1, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
                  yPos = (doc as any).lastAutoTable.finalY + 5;
                  drawContainer(tableStartY - 4, yPos - 5);
             }
@@ -857,3 +889,4 @@ export function PricingSimulator() {
         </div>
     );
 }
+
