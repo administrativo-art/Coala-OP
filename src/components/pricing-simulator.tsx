@@ -300,15 +300,23 @@ export function PricingSimulator() {
     const handleExportFichaTecnicaCompletaPdf = async () => {
         const doc = new jsPDF();
         let isFirstPage = true;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 14;
+        const contentWidth = doc.internal.pageSize.width - margin * 2;
     
-        const addSectionTitle = (doc: jsPDF, title: string, yPos: number): number => {
-            if (yPos > 260) { doc.addPage(); yPos = 15; }
-            doc.setFontSize(12); doc.setFont(undefined, 'bold');
-            doc.text(title, 14, yPos);
-            yPos += 8;
+        const addSectionTitle = (title: string, yPos: number): number => {
+            if (yPos > pageHeight - 30) { doc.addPage(); yPos = 15; }
+            doc.setFontSize(14); doc.setFont(undefined, 'bold');
+            doc.text(title, margin, yPos);
             doc.setFont(undefined, 'normal');
-            return yPos;
+            return yPos + 8;
         };
+
+        const drawContainer = (startY: number, endY: number) => {
+            doc.setFillColor(248, 250, 252); // bg-muted/30
+            doc.roundedRect(margin, startY, contentWidth, endY - startY, 3, 3, 'F');
+            return endY + 5;
+        }
 
         for (const sim of filteredSimulations) {
             if (!isFirstPage) {
@@ -316,35 +324,28 @@ export function PricingSimulator() {
             }
             isFirstPage = false;
             let yPos = 15;
-            const pageHeight = doc.internal.pageSize.height;
     
-            // Header
-            if (sim.ppo?.referenceImageUrl) {
+            // Header with image and title
+            const hasImage = sim.ppo?.referenceImageUrl;
+            if (hasImage) {
                 try {
-                    const imageSize = 40;
-                    doc.addImage(sim.ppo.referenceImageUrl, 'JPEG', 14, yPos, imageSize, imageSize);
-                    
-                    doc.setFontSize(18);
-                    doc.setFont(undefined, 'bold');
-                    const textY = yPos + (imageSize / 2) - 3;
-                    doc.text(sim.name, 14 + imageSize + 5, textY, { baseline: 'middle' });
-                    doc.setFontSize(9);
-                    doc.setFont(undefined, 'normal');
+                    const imageSize = 30;
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', margin, yPos, imageSize, imageSize);
+                    doc.setFontSize(18); doc.setFont(undefined, 'bold');
+                    doc.text(sim.name, margin + imageSize + 5, yPos + imageSize / 2, { baseline: 'middle' });
+                    doc.setFontSize(9); doc.setFont(undefined, 'normal');
                     doc.setTextColor(100);
-                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, 14 + imageSize + 5, textY + 6, { baseline: 'middle' });
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, margin + imageSize + 5, yPos + imageSize / 2 + 6, { baseline: 'middle' });
                     doc.setTextColor(0);
-                    
                     yPos += imageSize + 10;
                 } catch (e) {
-                    console.error(e);
-                    // Fallback to text only if image fails
-                    yPos = addSectionTitle(doc, sim.name, yPos);
+                    yPos = addSectionTitle(sim.name, yPos);
                 }
             } else {
-                yPos = addSectionTitle(doc, sim.name, yPos);
+                yPos = addSectionTitle(sim.name, yPos);
             }
     
-            // Financial Info
+            // Financial and Fiscal Table
             const financialData = [
                 ['Preço Venda', formatCurrency(sim.salePrice)], ['Custo Bruto', formatCurrency(sim.grossCost)],
                 ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`], ['Markup', `${sim.markup.toFixed(2)}x`],
@@ -354,70 +355,64 @@ export function PricingSimulator() {
             autoTable(doc, {
                 startY: yPos,
                 head: [['Informações de valor e fiscais', '']],
-                body: financialData,
-                theme: 'striped',
-                headStyles: { fillColor: '#273344', fontStyle: 'bold' },
+                body: financialData, theme: 'striped', headStyles: { fillColor: '#273344' },
                 columnStyles: { 0: { fontStyle: 'bold' } },
             });
             yPos = (doc as any).lastAutoTable.finalY + 10;
-
+    
             // Ingredients
             const ingredients = simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                 const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
                 return [baseProduct?.name || 'N/A', `${item.quantity} ${item.overrideUnit || baseProduct?.unit || 'un'}`];
             });
             if (ingredients.length > 0) {
-                 if (yPos > 250) { doc.addPage(); yPos = 15; }
-                yPos = addSectionTitle(doc, "Composição (Ingredientes)", yPos);
+                yPos = addSectionTitle('Composição (Ingredientes)', yPos);
                 autoTable(doc, { startY: yPos, head: [['Ingrediente', 'Quantidade']], body: ingredients, theme: 'grid', headStyles: { fillColor: '#334155' } });
                 yPos = (doc as any).lastAutoTable.finalY + 10;
             }
     
             // Assembly Instructions
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-                yPos = addSectionTitle(doc, "Modo de Montagem", yPos);
+                yPos = addSectionTitle("Modo de Montagem", yPos);
+                const containerStartY = yPos;
 
                 for (const phase of sim.ppo.assemblyInstructions) {
-                    if (yPos > 260) { doc.addPage(); yPos = 15; }
-                    doc.setFillColor(248, 250, 252); // Muted background
-                    
-                    const textDimensions = doc.getTextDimensions(phase.name, { maxWidth: 180 });
-                    const phaseBlockHeight = textDimensions.h + 8;
-                    doc.roundedRect(14, yPos - 5, doc.internal.pageSize.width - 28, phaseBlockHeight, 3, 3, 'F');
-                    
-                    doc.setFontSize(10); doc.setFont(undefined, 'bold');
-                    doc.text(phase.name, 16, yPos); 
-                    yPos += phaseBlockHeight;
+                    if (yPos > pageHeight - 40) { doc.addPage(); yPos = 15; }
+                    doc.setFontSize(11); doc.setFont(undefined, 'bold');
+                    doc.text(phase.name, margin + 2, yPos);
+                    yPos += 7;
 
                     for (const [index, etapa] of phase.etapas.entries()) {
-                         if (yPos > 270) { doc.addPage(); yPos = 15; }
+                        if (yPos > pageHeight - 20) { doc.addPage(); yPos = 15; }
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        const stepTextDimensions = doc.getTextDimensions(stepText, { maxWidth: 170 });
-                        if (yPos + stepTextDimensions.h > pageHeight - 20) { doc.addPage(); yPos = 15; }
-                        doc.setFontSize(9);
-                        doc.text(stepText, 18, yPos, { maxWidth: 170 });
-                        yPos += stepTextDimensions.h + 2;
-
+                        
+                        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: contentWidth - 8 });
+                        doc.text(stepText, margin + 4, yPos, { maxWidth: contentWidth - 8 });
+                        yPos += textDimensions.h + 4;
+                        
                         if (index < phase.etapas.length - 1) {
-                            if (yPos > 275) { doc.addPage(); yPos = 15; }
+                            if (yPos > pageHeight - 15) { doc.addPage(); yPos = 15; }
                             doc.setDrawColor(226, 232, 240); // border
-                            doc.line(20, yPos, 190, yPos);
+                            doc.line(margin + 4, yPos, contentWidth + margin - 4, yPos);
                             yPos += 4;
                         }
                     }
                     yPos += 5;
                 }
+                drawContainer(containerStartY - 4, yPos - 5);
             }
 
-             // Video
+            // Video Link
             if (sim.ppo?.assemblyVideoUrl) {
-                if (yPos > 270) { doc.addPage(); yPos = 15; }
-                doc.setFontSize(10);
-                doc.setTextColor(63, 81, 181);
-                doc.textWithLink('Link para o vídeo de montagem', 14, yPos, { url: sim.ppo.assemblyVideoUrl });
-                doc.setTextColor(0, 0, 0);
-                yPos += 10;
+                if (yPos > pageHeight - 20) { doc.addPage(); yPos = 15; }
+                const containerStartY = yPos;
+                doc.setFontSize(10); doc.setTextColor(63, 81, 181);
+                doc.textWithLink('Link para o vídeo de montagem', margin + 4, yPos + 5, { url: sim.ppo.assemblyVideoUrl });
+                doc.setTextColor(0);
+                drawContainer(containerStartY - 4, yPos + 10);
+                yPos += 15;
             }
             
             // Other Details
@@ -429,16 +424,17 @@ export function PricingSimulator() {
             ].filter((d): d is [string, string] => !!d[1]);
 
             if (details.length > 0) {
-                 if (yPos > 240) { doc.addPage(); yPos = 15; }
-                 yPos = addSectionTitle(doc, "Detalhes Adicionais", yPos);
-                autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold' } } });
-                yPos = (doc as any).lastAutoTable.finalY + 10;
+                 if (yPos > pageHeight - 40) { doc.addPage(); yPos = 15; }
+                 yPos = addSectionTitle("Detalhes Adicionais", yPos);
+                 const tableStartY = yPos;
+                 autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+                 yPos = (doc as any).lastAutoTable.finalY + 5;
+                 drawContainer(tableStartY - 4, yPos - 5);
             }
         }
     
         doc.save(`fichas_tecnicas_completas_${new Date().toISOString().slice(0,10)}.pdf`);
     };
-
 
     const handleExportFichaTecnicaSimplificadaPdf = () => {
         const doc = new jsPDF();
@@ -666,8 +662,8 @@ export function PricingSimulator() {
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -861,4 +857,3 @@ export function PricingSimulator() {
         </div>
     );
 }
-
