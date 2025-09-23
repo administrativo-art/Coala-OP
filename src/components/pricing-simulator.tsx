@@ -303,76 +303,102 @@ export function PricingSimulator() {
         const pageMargin = 14;
         const pageContentWidth = doc.internal.pageSize.getWidth() - 2 * pageMargin;
     
-        const addSectionTitle = (title: string, currentY: number) => {
-            if (currentY > 260) { doc.addPage(); currentY = 15; }
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text(title, pageMargin, currentY);
-            doc.setFont(undefined, 'normal');
-            return currentY + 6;
+        const addSectionTitle = (title: string, currentY: number, docInstance: jsPDF, margin: number) => {
+            if (currentY > 260) { docInstance.addPage(); currentY = 15; }
+            docInstance.setFontSize(12);
+            docInstance.setFont(undefined, 'bold');
+            docInstance.text(title, margin, currentY);
+            docInstance.setFont(undefined, 'normal');
+            return currentY + 8;
         };
-    
-        const drawContainer = (startY: number, contentHeight: number) => {
-            const endY = startY + contentHeight;
-            if (startY > 260) {
-                doc.addPage();
-                startY = 15;
-            }
-            doc.setFillColor(248, 250, 252); // Muted background color
-            doc.rect(pageMargin - 2, startY - 5, pageContentWidth + 4, contentHeight + 5, 'F');
-            return startY;
-        };
-    
+
         // --- HEADER ---
         const hasImage = sim.ppo?.referenceImageUrl;
-        const imageSize = 40;
         let textX = pageMargin;
-        let headerHeight = 25; // Default height without image
-    
+        let headerStartY = yPos;
+        let headerHeight = 25; // Default height
+
         if (hasImage) {
             try {
                 const img = new Image();
                 img.src = sim.ppo!.referenceImageUrl!;
-                await new Promise(resolve => {
-                    img.onload = resolve;
-                    img.onerror = () => resolve(null); // Resolve to not block PDF generation
-                });
-    
+                await new Promise(resolve => { img.onload = resolve; img.onerror = () => resolve(null); });
+
                 if (img.width > 0) {
+                    const imageSize = 40;
                     const aspectRatio = img.width / img.height;
-                    const imgWidth = imageSize * aspectRatio;
-                    const imgHeight = imageSize;
-                    doc.addImage(img, 'JPEG', pageMargin, yPos, imgWidth, imgHeight);
-                    textX = pageMargin + imgWidth + 5;
+                    let imgWidth = imageSize * aspectRatio;
+                    let imgHeight = imageSize;
+                    
+                    if (imgWidth > imageSize) {
+                        imgHeight = imageSize / aspectRatio;
+                        imgWidth = imageSize;
+                    }
+                    
                     headerHeight = imgHeight + 10;
+                    yPos = headerStartY + imgHeight + 10;
+
+                    doc.addImage(img, 'JPEG', pageMargin, headerStartY, imgWidth, imgHeight);
+                    textX = pageMargin + imgWidth + 10;
+
+                    const titleY = headerStartY + (imgHeight / 2) - 3;
+                    doc.setFontSize(18);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(sim.name, textX, titleY);
+
+                    doc.setFontSize(9);
+                    doc.setFont(undefined, 'normal');
+                    doc.setTextColor(100);
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, titleY + 6);
                 }
-            } catch (e) {
-                console.error("Failed to add image", e);
-            }
+            } catch (e) { console.error("Failed to add image", e); yPos += headerHeight; }
+        } else {
+             doc.setFontSize(18);
+             doc.setFont(undefined, 'bold');
+             doc.text(sim.name, textX, yPos + 7);
+             doc.setFontSize(9);
+             doc.setTextColor(100);
+             doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, yPos + 13);
+             yPos += headerHeight;
         }
-    
-        const titleY = yPos + (headerHeight / 2) - 3;
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.text(sim.name, textX, titleY);
-    
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        doc.setTextColor(100);
-        doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, titleY + 6);
-    
-        yPos += headerHeight;
 
         // --- FINANCIAL SUMMARY ---
-        yPos = addSectionTitle('Resumo Financeiro', yPos);
+        yPos = addSectionTitle('Resumo Financeiro', yPos, doc, pageMargin);
+        
         const financialData = [
-            ['Preço de Venda', formatCurrency(sim.salePrice)],
-            ['Custo Bruto', formatCurrency(sim.grossCost)],
-            ['Lucro Bruto', `${formatCurrency(sim.profitValue)} (${sim.profitPercentage.toFixed(2)}%)`],
-            ['Markup', `${sim.markup.toFixed(2)}x`],
+            { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
+            { label: 'Custo Bruto', value: formatCurrency(sim.grossCost) },
+            { label: 'Lucro Bruto', value: `${formatCurrency(sim.profitValue)} (${sim.profitPercentage.toFixed(2)}%)` },
+            { label: 'Markup', value: `${sim.markup.toFixed(2)}x` },
         ];
-        autoTable(doc, { startY: yPos, body: financialData, theme: 'plain', styles: { cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold' } } });
-        yPos = (doc as any).lastAutoTable.finalY + 10;
+
+        const cardWidth = (pageContentWidth - 10) / 2;
+        const cardHeight = 20;
+        let cardX = pageMargin;
+        let cardY = yPos;
+
+        doc.setFillColor(248, 250, 252); // Muted background
+
+        financialData.forEach((item, index) => {
+            if (index > 0 && index % 2 === 0) {
+                cardX = pageMargin;
+                cardY += cardHeight + 5;
+            }
+            
+            doc.rect(cardX, cardY, cardWidth, cardHeight, 'F');
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(item.label, cardX + 5, cardY + 8);
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(0);
+            doc.text(item.value, cardX + cardWidth - 5, cardY + 14, { align: 'right' });
+
+            cardX += cardWidth + 10;
+        });
+
+        yPos = cardY + cardHeight + 15;
+
 
         // --- COMPOSITION ---
         const ingredients = simulationItems
@@ -391,7 +417,7 @@ export function PricingSimulator() {
             });
 
         if (ingredients.length > 0) {
-            yPos = addSectionTitle('Composição (CMV)', yPos);
+            yPos = addSectionTitle('Composição (CMV)', yPos, doc, pageMargin);
             autoTable(doc, {
                 startY: yPos,
                 head: [['Insumo', 'Quantidade', 'Custo/unid.', 'Impacto', 'Custo Total']],
@@ -406,13 +432,13 @@ export function PricingSimulator() {
             doc.text(formatCurrency(sim.totalCmv), doc.internal.pageSize.getWidth() - pageMargin, yPos, { align: 'right' });
             yPos += 10;
         }
-    
+
         // --- ASSEMBLY ---
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-            yPos = addSectionTitle('Modo de Montagem', yPos);
+            yPos = addSectionTitle('Modo de Montagem', yPos, doc, pageMargin);
             const containerStartY = yPos;
             let blockY = yPos;
-    
+
             for (const phase of sim.ppo.assemblyInstructions) {
                 if (blockY > 250) { doc.addPage(); blockY = 15; }
                 doc.setFontSize(10);
@@ -420,7 +446,7 @@ export function PricingSimulator() {
                 doc.text(phase.name, pageMargin, blockY);
                 blockY += 6;
                 doc.setFont(undefined, 'normal');
-    
+
                 for (const [etapaIndex, etapa] of phase.etapas.entries()) {
                     if (blockY > 250) { doc.addPage(); blockY = 15; }
                     const stepText = `${etapaIndex + 1}. ${etapa.text}`;
@@ -456,9 +482,9 @@ export function PricingSimulator() {
             }
             yPos = blockY;
         }
-    
+
         // --- OTHER DETAILS ---
-        const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : [];
+        const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ text: sim.ppo.qualityStandard }] : []);
         const details = [
             ['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null],
             ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null],
@@ -471,11 +497,17 @@ export function PricingSimulator() {
         ].filter((d): d is [string, string] => !!d[1]);
         
         if (details.length > 0) {
-            yPos = addSectionTitle("Detalhes Adicionais", yPos);
-            autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: { top: 0, right: 0, bottom: 0.1, left: 0}, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+            yPos = addSectionTitle("Detalhes Adicionais", yPos, doc, pageMargin);
+            autoTable(doc, {
+                startY: yPos,
+                body: details,
+                theme: 'plain',
+                styles: { cellPadding: 2, lineWidth: { top: 0, right: 0, bottom: 0.1, left: 0 }, lineColor: 226 },
+                columnStyles: { 0: { fontStyle: 'bold' } }
+            });
             yPos = (doc as any).lastAutoTable.finalY + 5;
         }
-        
+
         doc.save(`ficha_tecnica_${sim.name.replace(/ /g, '_')}.pdf`);
     };
 
@@ -905,3 +937,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
