@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info, Utensils } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Upload, Camera, Video, Info, Utensils, Award } from 'lucide-react';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBaseProducts } from '@/hooks/use-base-products';

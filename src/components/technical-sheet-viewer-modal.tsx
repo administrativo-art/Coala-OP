@@ -99,24 +99,24 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                         </div>
                         
                         {simulation.ppo?.assemblyInstructions && simulation.ppo.assemblyInstructions.length > 0 && (
-                            <div>
+                            <div className="p-4 border rounded-lg bg-muted/30">
                                 <h3 className="font-semibold text-lg mb-2">Modo de Montagem</h3>
                                 <div className="space-y-4">
                                 {simulation.ppo.assemblyInstructions.map(phase => (
-                                    <div key={phase.id} className="p-4 border rounded-lg bg-muted/30">
+                                    <div key={phase.id}>
                                         <h4 className="font-semibold text-md mb-3">{phase.name}</h4>
                                         <ol className="space-y-3">
                                             {phase.etapas.map((etapa, index) => (
                                                 <React.Fragment key={etapa.id}>
-                                                <li className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
-                                                    <span className="font-bold text-primary">{index + 1}.</span>
-                                                    <div>
-                                                        <span className="font-medium">{etapa.text}</span>
-                                                        {etapa.quantity && etapa.unit && <span className="text-muted-foreground text-sm"> ({etapa.quantity} {etapa.unit})</span>}
-                                                    </div>
-                                                    {etapa.imageUrl && <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={64} height={64} className="rounded-md object-cover" />}
-                                                </li>
-                                                {index < phase.etapas.length - 1 && <Separator className="my-2" />}
+                                                    <li className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
+                                                        <span className="font-bold text-primary">{index + 1}.</span>
+                                                        <div>
+                                                            <span className="font-medium">{etapa.text}</span>
+                                                            {etapa.quantity && etapa.unit && <span className="text-muted-foreground text-sm"> ({etapa.quantity} {etapa.unit})</span>}
+                                                        </div>
+                                                        {etapa.imageUrl && <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={64} height={64} className="rounded-md object-cover" />}
+                                                    </li>
+                                                    {index < phase.etapas.length - 1 && <Separator className="my-2" />}
                                                 </React.Fragment>
                                             ))}
                                         </ol>
