@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -106,7 +107,8 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                                         <h4 className="font-semibold text-md mb-3">{phase.name}</h4>
                                         <ol className="space-y-3">
                                             {phase.etapas.map((etapa, index) => (
-                                                <li key={etapa.id} className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
+                                                <React.Fragment key={etapa.id}>
+                                                <li className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
                                                     <span className="font-bold text-primary">{index + 1}.</span>
                                                     <div>
                                                         <span className="font-medium">{etapa.text}</span>
@@ -114,6 +116,8 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                                                     </div>
                                                     {etapa.imageUrl && <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={64} height={64} className="rounded-md object-cover" />}
                                                 </li>
+                                                {index < phase.etapas.length - 1 && <Separator className="my-2" />}
+                                                </React.Fragment>
                                             ))}
                                         </ol>
                                     </div>
@@ -122,60 +126,54 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             </div>
                         )}
                         
-                        {simulation.ppo?.assemblyVideoUrl && (
-                            <div>
-                                <h3 className="font-semibold text-lg mb-2">Vídeo de Montagem</h3>
-                                <a href={simulation.ppo.assemblyVideoUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
-                                    <Video className="h-5 w-5" /> Assistir vídeo de montagem
+                         {simulation.ppo?.assemblyVideoUrl && (
+                            <div className="p-4 border rounded-lg bg-muted/30">
+                                <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><Video /> Vídeo de Montagem</h4>
+                                <a href={simulation.ppo.assemblyVideoUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-2">
+                                     Assistir vídeo de montagem
                                 </a>
                             </div>
                         )}
 
-                         {(simulation.ppo?.preparationTime || simulation.ppo?.portionWeight) && (
-                            <div>
-                                <h3 className="font-semibold text-lg mb-2">Parâmetros</h3>
-                                <div className="p-4 border rounded-lg grid grid-cols-2 gap-4 bg-muted/30">
-                                    {simulation.ppo.preparationTime && (
-                                        <div className="flex items-center gap-2">
-                                            <Clock className="h-5 w-5 text-primary" />
-                                            <div>
-                                                <p className="font-medium">Tempo de Preparo</p>
-                                                <p className="text-sm text-muted-foreground">{simulation.ppo.preparationTime} segundos</p>
-                                            </div>
+                        {(simulation.ppo?.preparationTime || simulation.ppo?.portionWeight) && (
+                            <div className="p-4 border rounded-lg bg-muted/30 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {simulation.ppo.preparationTime && (
+                                    <div className="flex items-center gap-3">
+                                        <Clock className="h-6 w-6 text-primary" />
+                                        <div>
+                                            <p className="font-semibold">Tempo de Preparo</p>
+                                            <p className="text-sm text-muted-foreground">{simulation.ppo.preparationTime} segundos</p>
                                         </div>
-                                    )}
-                                    {simulation.ppo.portionWeight && (
-                                        <div className="flex items-center gap-2">
-                                            <Utensils className="h-5 w-5 text-primary" />
-                                            <div>
-                                                <p className="font-medium">Peso da Porção</p>
-                                                <p className="text-sm text-muted-foreground">{simulation.ppo.portionWeight}g (±{simulation.ppo.portionTolerance || 0}g)</p>
-                                            </div>
+                                    </div>
+                                )}
+                                {simulation.ppo.portionWeight && (
+                                    <div className="flex items-center gap-3">
+                                        <Utensils className="h-6 w-6 text-primary" />
+                                        <div>
+                                            <p className="font-semibold">Peso da Porção</p>
+                                            <p className="text-sm text-muted-foreground">{simulation.ppo.portionWeight}g (±{simulation.ppo.portionTolerance || 0}g)</p>
                                         </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                         
-                        {(simulation.ppo?.qualityStandard?.length || simulation.ppo?.allergens?.length) && (
-                            <div>
-                                <h3 className="font-semibold text-lg mb-2">Qualidade e Alergênicos</h3>
-                                <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
-                                    {simulation.ppo.qualityStandard && simulation.ppo.qualityStandard.length > 0 && (
-                                        <div>
-                                            <h4 className="font-medium flex items-center gap-2"><Award className="h-4 w-4 text-primary" />Padrão de Qualidade</h4>
-                                            <ul className="list-disc list-inside text-sm text-muted-foreground pl-4 mt-1">
-                                                {simulation.ppo.qualityStandard.map(item => <li key={item.id}>{item.text}</li>)}
-                                            </ul>
-                                        </div>
-                                    )}
-                                     {simulation.ppo.allergens && simulation.ppo.allergens.length > 0 && (
-                                        <div>
-                                            <h4 className="font-medium flex items-center gap-2"><Info className="h-4 w-4 text-primary" /> Alergênicos</h4>
-                                            <p className="text-sm text-muted-foreground">{simulation.ppo.allergens.map(a => a.text).join(', ')}</p>
-                                        </div>
-                                    )}
-                                </div>
+                        {(simulation.ppo?.qualityStandard?.length || (simulation.ppo?.allergens && simulation.ppo?.allergens.length > 0)) && (
+                            <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
+                                {simulation.ppo.qualityStandard && simulation.ppo.qualityStandard.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold flex items-center gap-2 mb-1"><Award className="h-4 w-4 text-primary" />Padrão de Qualidade</h4>
+                                        <ul className="list-disc list-inside text-sm text-muted-foreground pl-4">
+                                            {simulation.ppo.qualityStandard.map(item => <li key={item.id}>{item.text}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                                 {simulation.ppo.allergens && simulation.ppo.allergens.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold flex items-center gap-2 mb-1"><Info className="h-4 w-4 text-primary" /> Alergênicos</h4>
+                                        <p className="text-sm text-muted-foreground">{simulation.ppo.allergens.map(a => a.text).join(', ')}</p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
