@@ -351,46 +351,27 @@ export function PricingSimulator() {
             doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
             
+            const financialAndFiscalData = [
+                ['Preço Venda', formatCurrency(sim.salePrice)],
+                ['Custo Bruto', formatCurrency(sim.grossCost)],
+                ['Lucro %', `${sim.profitPercentage.toFixed(2)}%`],
+                ['Markup', `${sim.markup.toFixed(2)}x`],
+                ['Meta', sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'],
+                ['NCM', sim.ppo?.ncm || 'N/A'],
+                ['CEST', sim.ppo?.cest || 'N/A'],
+                ['CFOP', sim.ppo?.cfop || 'N/A'],
+            ];
+
             autoTable(doc, {
                 startY: yPos,
-                body: [[
-                  { content: `SKU\n${sim.ppo?.sku || 'N/A'}` },
-                  { content: `Preço Venda\n${formatCurrency(sim.salePrice)}` },
-                  { content: `Custo Bruto\n${formatCurrency(sim.grossCost)}` },
-                  { content: `Lucro\n${sim.profitPercentage.toFixed(2)}%` },
-                  { content: `Markup\n${sim.markup.toFixed(2)}x` },
-                  { content: `Meta\n${sim.profitGoal ? `${sim.profitGoal}%` : 'N/A'}` },
-                ]],
-                theme: 'plain',
-                styles: { halign: 'center', cellPadding: 2, fontSize: 8 },
-            });
-            yPos = (doc as any).lastAutoTable.finalY + 5;
-    
-            const items = simulationItems.filter(item => item.simulationId === sim.id);
-            const bodyData = items.map(item => {
-                const baseProductInfo = baseProductMap.get(item.baseProductId);
-                const cost = (item.overrideCostPerUnit || 0) * item.quantity;
-                const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
-                return [
-                    baseProductInfo?.name || 'N/A',
-                    `${item.quantity} ${item.overrideUnit || baseProductInfo?.unit}`,
-                    formatCurrency(item.overrideCostPerUnit || 0),
-                    `${impact.toFixed(1)}%`,
-                    formatCurrency(cost)
-                ];
-            });
-    
-            autoTable(doc, {
-                startY: yPos,
-                head: [['Insumo Base', 'Quantidade', 'Custo/unid.', 'Impacto', 'Total']],
-                body: bodyData,
+                head: [['Informações de valor e fiscais', '']],
+                body: financialAndFiscalData,
                 theme: 'striped',
-                headStyles: { fillColor: '#273344' },
-                footStyles: { fillColor: '#F3F4F6', textColor: '#000000', fontStyle: 'bold' },
-                foot: [['Total CMV', '', '', '', formatCurrency(sim.totalCmv)]]
+                headStyles: { fillColor: '#273344', fontStyle: 'bold' },
+                columnStyles: { 0: { fontStyle: 'bold' } },
             });
             yPos = (doc as any).lastAutoTable.finalY + 10;
-    
+            
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                  if (yPos > 250) { doc.addPage(); yPos = 15; }
                  doc.setFontSize(12); doc.setFont(undefined, 'bold');
@@ -407,67 +388,51 @@ export function PricingSimulator() {
                         if (yPos > 270) { doc.addPage(); yPos = 15; }
                         const qtyText = (etapa.quantity && etapa.unit) ? `(${etapa.quantity} ${etapa.unit})` : '';
                         const stepText = `${index + 1}. ${etapa.text} ${qtyText}`;
-                        
-                        let stepImageWidth = 0;
-                        let stepImageHeight = 0;
-                        let stepImage;
-
-                        if (etapa.imageUrl) {
-                            try {
-                                const img = new Image();
-                                img.src = etapa.imageUrl;
-                                await new Promise<void>(resolve => {
-                                    img.onload = () => resolve();
-                                    img.onerror = () => { resolve(); };
-                                });
-                                stepImage = img;
-                                const stepMaxWidth = 30;
-                                stepImageWidth = stepImage.width > stepMaxWidth ? stepMaxWidth : stepImage.width;
-                                stepImageHeight = (stepImage.height * stepImageWidth) / stepImage.width;
-                            } catch (e) {
-                                console.error("Failed to load step image", e);
-                            }
-                        }
-
-                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: 140 });
-                        const blockHeight = Math.max(textDimensions.h, stepImageHeight);
-
-                        if (yPos + blockHeight > pageHeight - 20) { doc.addPage(); yPos = 15; }
-                        
-                        const textY = yPos + (stepImageHeight > 0 ? (blockHeight - textDimensions.h) / 2 : 0);
-                        doc.text(stepText, 16, textY, { maxWidth: 140 });
-
-                        if (etapa.imageUrl && stepImageHeight > 0 && stepImage) {
-                            const imageX = 160;
-                            const imageY = yPos;
-                            doc.addImage(stepImage, 'JPEG', imageX, imageY, stepImageWidth, stepImageHeight);
-                        }
-                        
-                        yPos += blockHeight + 4;
+                        const textDimensions = doc.getTextDimensions(stepText, { maxWidth: 180 });
+                        if (yPos + textDimensions.h > pageHeight - 20) { doc.addPage(); yPos = 15; }
+                        doc.text(stepText, 16, yPos, { maxWidth: 180 });
+                        yPos += textDimensions.h + 2;
                     }
                 }
                  yPos += 5;
             }
-            
+
+            if (sim.ppo?.assemblyVideoUrl) {
+                if (yPos > 270) { doc.addPage(); yPos = 15; }
+                doc.setFontSize(10);
+                doc.textWithLink('Link para o vídeo de montagem', 14, yPos, { url: sim.ppo.assemblyVideoUrl });
+                yPos += 10;
+            }
+
             const details = [
-                 ...(sim.ppo?.ncm ? [['NCM', sim.ppo.ncm]] : []),
-                 ...(sim.ppo?.cest ? [['CEST', sim.ppo.cest]] : []),
-                 ...(sim.ppo?.cfop ? [['CFOP', sim.ppo.cfop]] : []),
                  ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
                  ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
-                 ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
-                 ...(sim.ppo?.assemblyVideoUrl ? [['Link do Vídeo', sim.ppo.assemblyVideoUrl]] : []),
-                 ...(sim.ppo?.allergens && sim.ppo.allergens.length > 0 ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
             ];
-            
-            if (details.length > 0) {
-                 if (yPos > 240) { doc.addPage(); yPos = 15; }
-                 autoTable(doc, {
+             if (details.length > 0) {
+                if (yPos > 240) { doc.addPage(); yPos = 15; }
+                autoTable(doc, {
                     startY: yPos,
-                    body: details.map(d => [d[0], d[1]]),
+                    body: details,
+                    theme: 'plain',
+                    styles: { cellPadding: 2, fontSize: 9 },
+                    columnStyles: { 0: { fontStyle: 'bold' } },
+                });
+                yPos = (doc as any).lastAutoTable.finalY + 10;
+            }
+            
+            const qualityAndAllergens = [
+                 ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
+                 ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
+            ];
+
+             if (qualityAndAllergens.length > 0) {
+                if (yPos > 240) { doc.addPage(); yPos = 15; }
+                autoTable(doc, {
+                    startY: yPos,
+                    body: qualityAndAllergens,
                     theme: 'striped',
                     styles: { cellPadding: 2, fontSize: 9 },
-                    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
+                    columnStyles: { 0: { fontStyle: 'bold' } },
                 });
             }
         }
@@ -903,4 +868,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
 
