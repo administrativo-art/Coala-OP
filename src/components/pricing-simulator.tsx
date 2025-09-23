@@ -300,45 +300,67 @@ export function PricingSimulator() {
     const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
         const doc = new jsPDF();
         let yPos = 15;
-    
-        const addTitle = (title: string) => {
-            doc.setFontSize(18);
-            doc.setFont(undefined, 'bold');
-            doc.text(title, 14, yPos, { maxWidth: 180 });
-            yPos += doc.getTextDimensions(title, { maxWidth: 180 }).h + 4;
-        };
-    
-        const addSubTitle = (title: string) => {
-            if (yPos > 260) { doc.addPage(); yPos = 15; }
+        const pageMargin = 14;
+        const pageContentWidth = doc.internal.pageSize.getWidth() - 2 * pageMargin;
+
+        const addSectionTitle = (title: string, currentY: number) => {
+            if (currentY > 260) { doc.addPage(); currentY = 15; }
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
-            doc.text(title, 14, yPos);
-            yPos += 8;
+            doc.text(title, pageMargin, currentY);
             doc.setFont(undefined, 'normal');
+            return currentY + 8;
         };
-    
-        addTitle(sim.name);
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, 14, yPos);
-        yPos += 10;
-    
+
+        const drawContainer = (startY: number, endY: number) => {
+            doc.setFillColor(248, 250, 252); // Muted background color
+            doc.rect(pageMargin - 4, startY - 5, pageContentWidth + 8, endY - startY + 10, 'F');
+        };
+
+        // --- HEADER ---
         const hasImage = sim.ppo?.referenceImageUrl;
+        const imageSize = 40;
+        let headerHeight = imageSize + 15;
+
         if (hasImage) {
             try {
-                const img = new Image();
+                const img = new window.Image();
                 img.src = sim.ppo!.referenceImageUrl!;
-                await new Promise(resolve => img.onload = resolve);
-                const imgWidth = 40;
-                const imgHeight = (img.height * imgWidth) / img.width;
-                if (yPos + imgHeight > 280) { doc.addPage(); yPos = 15; }
-                doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imgWidth, imgHeight);
-                yPos += imgHeight + 10;
-            } catch (e) {
-                console.error("Failed to add image to PDF", e);
-            }
+                await new Promise(resolve => {
+                    img.onload = resolve;
+                    img.onerror = () => resolve(null);
+                });
+
+                if (img.width > 0) {
+                    const aspectRatio = img.width / img.height;
+                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', pageMargin, yPos, imageSize * aspectRatio, imageSize);
+                    
+                    const textX = pageMargin + (imageSize * aspectRatio) + 10;
+                    const textY = yPos + (imageSize / 2);
+
+                    doc.setFontSize(18);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(sim.name, textX, textY);
+                    
+                    doc.setFontSize(9);
+                    doc.setFont(undefined, 'normal');
+                    doc.setTextColor(100);
+                    doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, textY + 6);
+                }
+            } catch (e) { console.error("Failed to add image", e) }
+        } else {
+            headerHeight = 25;
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            doc.text(sim.name, pageMargin, yPos);
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(100);
+            doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageMargin, yPos + 6);
         }
+        yPos += headerHeight;
     
+        // --- COMPOSITION ---
         const ingredients = simulationItems
             .filter(item => item.simulationId === sim.id)
             .map(item => {
@@ -347,51 +369,111 @@ export function PricingSimulator() {
             });
     
         if (ingredients.length > 0) {
-            addSubTitle('Composição (Ingredientes)');
+            yPos = addSectionTitle('Composição (Ingredientes)', yPos);
             autoTable(doc, { startY: yPos, head: [['Ingrediente', 'Quantidade']], body: ingredients, theme: 'striped' });
             yPos = (doc as any).lastAutoTable.finalY + 10;
         }
     
+        // --- ASSEMBLY ---
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
-            addSubTitle('Modo de Montagem');
-            sim.ppo.assemblyInstructions.forEach(phase => {
+            yPos = addSectionTitle('Modo de Montagem', yPos);
+            let containerStartY = yPos;
+            doc.setFillColor(248, 250, 252);
+            
+            let blockY = yPos;
+            for (const phase of sim.ppo.assemblyInstructions) {
+                 if (blockY > 260) { doc.addPage(); blockY = 15; containerStartY = 15; }
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
-                doc.text(phase.name, 14, yPos);
-                yPos += 6;
+                doc.text(phase.name, pageMargin, blockY);
+                blockY += 6;
                 doc.setFont(undefined, 'normal');
 
-                phase.etapas.forEach((etapa, index) => {
-                    const stepText = `${index + 1}. ${etapa.text} ${etapa.quantity && etapa.unit ? `(${etapa.quantity} ${etapa.unit})` : ''}`;
-                    const textLines = doc.splitTextToSize(stepText, 180);
-                    if (yPos + textLines.length * 5 > 280) { doc.addPage(); yPos = 15; }
-                    doc.text(textLines, 14, yPos);
-                    yPos += textLines.length * 5 + 2;
-                });
-                yPos += 5;
-            });
+                for (const [etapaIndex, etapa] of phase.etapas.entries()) {
+                    if (blockY > 260) { doc.addPage(); blockY = 15; containerStartY = 15; }
+                    const stepText = `${etapaIndex + 1}. ${etapa.text}`;
+                    const textLines = doc.splitTextToSize(stepText, pageContentWidth - (etapa.imageUrl ? 40 : 0) - 10);
+                    doc.text(textLines, pageMargin, blockY);
+                    
+                    let textHeight = doc.getTextDimensions(textLines).h;
+                    
+                    if (etapa.imageUrl) {
+                        try {
+                           const img = new window.Image();
+                           img.src = etapa.imageUrl;
+                           await new Promise(resolve => { img.onload = resolve; img.onerror = () => resolve(null); });
+                           
+                           if(img.width > 0){
+                               const imgWidth = 30;
+                               const imgHeight = (img.height * imgWidth) / img.width;
+                               const imgX = doc.internal.pageSize.getWidth() - pageMargin - imgWidth;
+                               doc.addImage(etapa.imageUrl, 'JPEG', imgX, blockY - 2, imgWidth, imgHeight);
+                               textHeight = Math.max(textHeight, imgHeight);
+                           }
+                        } catch(e) { console.error("Failed to add step image", e); }
+                    }
+                    
+                    blockY += textHeight + 4;
+                    if (etapaIndex < phase.etapas.length - 1) {
+                         doc.setDrawColor(226); // Border color
+                         doc.line(pageMargin + 5, blockY, doc.internal.pageSize.getWidth() - pageMargin - 5, blockY);
+                         blockY += 4;
+                    }
+                }
+                blockY += 5;
+            }
+            drawContainer(containerStartY - 4, blockY);
+            yPos = blockY;
+        }
+
+        // --- VIDEO ---
+        if (sim.ppo?.assemblyVideoUrl) {
+            let containerStartY = yPos;
+            yPos = addSectionTitle('Vídeo de Montagem', yPos);
+            doc.setTextColor(43, 108, 176);
+            doc.textWithLink('Assistir vídeo de montagem', pageMargin, yPos, { url: sim.ppo.assemblyVideoUrl });
+            doc.setTextColor(0);
+            yPos += 10;
+            drawContainer(containerStartY - 4, yPos - 5);
         }
     
-        const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ text: sim.ppo.qualityStandard }] : []);
-
+        // --- OTHER DETAILS ---
+        const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ id: '1', text: sim.ppo.qualityStandard }] : []);
         const details = [
             ['Tempo de Preparo', sim.ppo?.preparationTime ? `${sim.ppo.preparationTime} seg` : null],
             ['Peso da Porção', sim.ppo?.portionWeight ? `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` : null],
             ...qualityStandardArray.map(q => ['Padrão de Qualidade', q.text]),
             ['Alergênicos', sim.ppo?.allergens?.map(a => a.text).join(', ')],
-            ['Link do Vídeo', sim.ppo?.assemblyVideoUrl],
-            ['NCM', sim.ppo?.ncm],
-            ['CEST', sim.ppo?.cest],
-            ['CFOP', sim.ppo?.cfop],
         ].filter((d): d is [string, string] => !!d[1]);
-    
+        
         if (details.length > 0) {
-            addSubTitle('Detalhes Adicionais');
-            autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+            let containerStartY = yPos;
+            yPos = addSectionTitle("Detalhes Adicionais", yPos);
+            const tableStartY = yPos;
+            autoTable(doc, { startY: yPos, body: details, theme: 'plain', styles: { cellPadding: 2, lineWidth: { top: 0, right: 0, bottom: 0.1, left: 0}, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+            yPos = (doc as any).lastAutoTable.finalY + 5;
+            drawContainer(tableStartY - 4, yPos - 5);
+        }
+        
+        // --- FISCAL INFO ---
+        const fiscalDetails = [
+             ['NCM', sim.ppo?.ncm],
+             ['CEST', sim.ppo?.cest],
+             ['CFOP', sim.ppo?.cfop],
+        ].filter((d): d is [string, string] => !!d[1]);
+
+        if(fiscalDetails.length > 0) {
+             let containerStartY = yPos;
+            yPos = addSectionTitle("Informações Fiscais", yPos);
+            const tableStartY = yPos;
+            autoTable(doc, { startY: yPos, body: fiscalDetails, theme: 'plain', styles: { cellPadding: 2, lineWidth: { top: 0, right: 0, bottom: 0.1, left: 0}, lineColor: 226 }, columnStyles: { 0: { fontStyle: 'bold' } } });
+            yPos = (doc as any).lastAutoTable.finalY + 5;
+            drawContainer(tableStartY - 4, yPos - 5);
         }
     
         doc.save(`ficha_tecnica_${sim.name.replace(/ /g, '_')}.pdf`);
     };
+
 
     const handleExportFichaTecnicaSimplificadaPdf = () => {
         const doc = new jsPDF();
