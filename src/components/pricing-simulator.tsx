@@ -7,7 +7,7 @@ import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download, FileText } from "lucide-react";
+import { PlusCircle, Inbox, Search, Eraser, Settings, Layers, Edit, BarChart3, Table as TableIcon, CheckCircle2, AlertTriangle, History, ArrowUpDown, ChevronsUpDown, Check, Filter, Download, FileText, Eye } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
@@ -31,7 +31,7 @@ import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -95,8 +95,8 @@ export function PricingSimulator() {
     const categoryMap = useMemo(() => {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
-    
-    const simulationsByCategory = useMemo(() => {
+
+    const filteredSimulations = useMemo(() => {
         const filtered = simulations.filter(sim => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
@@ -116,7 +116,6 @@ export function PricingSimulator() {
                 aValue = a[sortConfig.key as keyof ProductSimulation];
                 bValue = b[sortConfig.key as keyof ProductSimulation];
             }
-
 
             if (aValue === undefined || aValue === null) return 1;
             if (bValue === undefined || bValue === null) return -1;
@@ -172,7 +171,7 @@ export function PricingSimulator() {
         yPos += 10;
     
         const tableHead = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup', 'Meta', 'NCM', 'CEST', 'CFOP']];
-        const tableBody = simulationsByCategory.map(sim => [
+        const tableBody = filteredSimulations.map(sim => [
             sim.name,
             sim.ppo?.sku || 'N/A',
             formatCurrency(sim.salePrice),
@@ -198,7 +197,7 @@ export function PricingSimulator() {
     };
 
     const handleExportGerencialCsv = () => {
-        const dataForCsv = simulationsByCategory.map(sim => ({
+        const dataForCsv = filteredSimulations.map(sim => ({
             'Mercadoria': sim.name,
             'SKU': sim.ppo?.sku || '',
             'Preço Venda': sim.salePrice,
@@ -229,7 +228,7 @@ export function PricingSimulator() {
     };
     
     const handleExportXlsx = () => {
-        const dataForSheet = simulationsByCategory.map(sim => ({
+        const dataForSheet = filteredSimulations.map(sim => ({
             'Mercadoria': sim.name,
             'SKU': sim.ppo?.sku || '',
             'Preço Venda': sim.salePrice,
@@ -246,22 +245,20 @@ export function PricingSimulator() {
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório Gerencial");
 
-        // Format numbers as currency/percentage in Excel
-        // This is a basic example; more complex formatting may require more work
         for (const cellAddress in worksheet) {
-            if (cellAddress[0] === '!') continue; // skip sheet metadata
+            if (cellAddress[0] === '!') continue;
             const col = cellAddress.replace(/[0-9]/g, '');
             const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
-            if (row > 1) { // Skip header
-                if (['C', 'D'].includes(col)) { // Preço Venda, Custo Bruto
+            if (row > 1) { 
+                if (['C', 'D'].includes(col)) {
                     worksheet[cellAddress].z = 'R$ #,##0.00';
                 }
-                if (['E', 'G'].includes(col)) { // Lucro %, Meta Lucro %
+                if (['E', 'G'].includes(col)) { 
                      worksheet[cellAddress].t = 'n';
                      worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
                      worksheet[cellAddress].z = '0.00%';
                 }
-                 if (['F'].includes(col)) { // Markup
+                 if (['F'].includes(col)) {
                     worksheet[cellAddress].z = '0.00"x"';
                 }
             }
@@ -275,7 +272,7 @@ export function PricingSimulator() {
         const doc = new jsPDF();
         let isFirstPage = true;
     
-        for (const sim of simulationsByCategory) {
+        for (const sim of filteredSimulations) {
             if (!isFirstPage) {
                 doc.addPage();
             }
@@ -284,7 +281,6 @@ export function PricingSimulator() {
             const pageHeight = doc.internal.pageSize.height;
             const pageWidth = doc.internal.pageSize.width;
     
-            // --- Header Section with Image and Title ---
             const hasImage = sim.ppo?.referenceImageUrl;
     
             if (hasImage) {
@@ -325,7 +321,6 @@ export function PricingSimulator() {
             doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
             
-            // --- Stats Table ---
             autoTable(doc, {
                 startY: yPos,
                 body: [[
@@ -341,7 +336,6 @@ export function PricingSimulator() {
             });
             yPos = (doc as any).lastAutoTable.finalY + 5;
     
-            // --- Ingredients Table ---
             const items = simulationItems.filter(item => item.simulationId === sim.id);
             const bodyData = items.map(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -367,7 +361,6 @@ export function PricingSimulator() {
             });
             yPos = (doc as any).lastAutoTable.finalY + 10;
     
-            // --- Assembly Instructions ---
             if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
                  if (yPos > 250) { doc.addPage(); yPos = 15; }
                  doc.setFontSize(12); doc.setFont(undefined, 'bold');
@@ -426,23 +419,22 @@ export function PricingSimulator() {
                  yPos += 5;
             }
             
-            // --- Additional Details ---
-            const ppoTableBody: any[][] = [
+            const details = [
                  ...(sim.ppo?.ncm ? [['NCM', sim.ppo.ncm]] : []),
                  ...(sim.ppo?.cest ? [['CEST', sim.ppo.cest]] : []),
                  ...(sim.ppo?.cfop ? [['CFOP', sim.ppo.cfop]] : []),
                  ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
                  ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
-                 ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard]] : []),
+                 ...(sim.ppo?.qualityStandard ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
                  ...(sim.ppo?.assemblyVideoUrl ? [['Link do Vídeo', sim.ppo.assemblyVideoUrl]] : []),
                  ...(sim.ppo?.allergens && sim.ppo.allergens.length > 0 ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
             ];
             
-            if (ppoTableBody.length > 0) {
+            if (details.length > 0) {
                  if (yPos > 240) { doc.addPage(); yPos = 15; }
                  autoTable(doc, {
                     startY: yPos,
-                    body: ppoTableBody,
+                    body: details.map(d => [d[0], d[1]]),
                     theme: 'striped',
                     styles: { cellPadding: 2, fontSize: 9 },
                     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: {cellWidth: 'auto'} },
@@ -457,7 +449,7 @@ export function PricingSimulator() {
         const doc = new jsPDF();
         let yPos = 15;
 
-        simulationsByCategory.forEach((sim, index) => {
+        filteredSimulations.forEach((sim, index) => {
             if (index > 0) {
                 doc.addPage();
                 yPos = 15;
@@ -511,7 +503,7 @@ export function PricingSimulator() {
 
     const handleExportFichaTecnicaSimplificadaCsv = () => {
         const dataForCsv: any[] = [];
-        simulationsByCategory.forEach((sim, simIndex) => {
+        filteredSimulations.forEach((sim, simIndex) => {
             const simItems = simulationItems.filter(item => item.simulationId === sim.id);
             simItems.forEach(item => {
                 const baseProductInfo = baseProductMap.get(item.baseProductId);
@@ -523,7 +515,7 @@ export function PricingSimulator() {
                 });
             });
 
-            if (simIndex < simulationsByCategory.length - 1) {
+            if (simIndex < filteredSimulations.length - 1) {
                 for (let i = 0; i < 4; i++) {
                     dataForCsv.push({ "Mercadoria": '', "Insumo": '', "Quantidade": '', "Unidade": '' });
                 }
@@ -581,10 +573,10 @@ export function PricingSimulator() {
     };
 
     const handleSelectAllChange = (isSelected: boolean) => {
-        setSelectedSimulations(isSelected ? new Set(simulationsByCategory.map(p => p.id)) : new Set());
+        setSelectedSimulations(isSelected ? new Set(filteredSimulations.map(p => p.id)) : new Set());
     };
     
-    const allFilteredSelected = simulationsByCategory.length > 0 && selectedSimulations.size === simulationsByCategory.length;
+    const allFilteredSelected = filteredSimulations.length > 0 && selectedSimulations.size === filteredSimulations.length;
 
     const renderSortableHeader = (label: string, key: SortKey) => (
         <Button variant="ghost" onClick={() => handleSort(key)} className="justify-end w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
@@ -613,7 +605,7 @@ export function PricingSimulator() {
             );
         }
         
-        if (simulationsByCategory.length === 0) {
+        if (filteredSimulations.length === 0) {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
@@ -624,24 +616,14 @@ export function PricingSimulator() {
         }
         
         return (
-            <div className="space-y-4">
-                 <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 text-sm px-4 py-2 font-semibold text-muted-foreground">
-                    <Checkbox checked={allFilteredSelected} onCheckedChange={handleSelectAllChange} />
-                    <Button variant="ghost" onClick={() => handleSort('name')} className="justify-start w-full p-0 h-auto hover:bg-transparent text-muted-foreground font-semibold hover:text-foreground">
-                        Mercadoria
-                        {sortConfig.key === 'name' && <ArrowUpDown className="ml-2 h-4 w-4" />}
-                    </Button>
-                    <div className="w-6"></div>
-                    {renderSortableHeader("Preço atual", "salePrice")}
-                    {renderSortableHeader("Custo total", "grossCost")}
-                    {renderSortableHeader("Markup", "markup")}
-                    {renderSortableHeader("Meta lucro", "profitGoal")}
-                    {renderSortableHeader("Lucro %", "profitPercentage")}
-                    <div className="text-center">Status</div>
-                    <div className="text-right">Ações</div>
+            <div className="space-y-2">
+                 <div className="flex items-center gap-4 px-2 py-2 border-y">
+                    <Checkbox id="select-all" checked={allFilteredSelected} onCheckedChange={handleSelectAllChange} />
+                    <Label htmlFor="select-all" className="text-sm font-medium">Selecionar todos ({filteredSimulations.length})</Label>
                 </div>
-                <Accordion type="multiple" className="w-full space-y-3">
-                {simulationsByCategory.map(sim => {
+                
+                <Accordion type="multiple" className="space-y-2">
+                    {filteredSimulations.map(sim => {
                         const simCategories = (sim.categoryIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const simGroups = (sim.groupIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
@@ -649,92 +631,94 @@ export function PricingSimulator() {
                         const profitColorClass = getProfitColorClass(sim.profitPercentage);
 
                         return (
-                             <AccordionItem value={sim.id} key={sim.id} className="border-l-0 rounded-lg overflow-hidden bg-muted/40 relative">
-                                <div className="absolute left-0 top-0 bottom-0 w-1.5 flex flex-col">
-                                    {(simCategories.length > 0 ? simCategories : [{id: 'default', name: 'default', color: 'hsl(var(--border))', type: 'category'}]).map((cat, index) => (
-                                        <div key={cat.id} className="flex-1" style={{ backgroundColor: cat.color || 'hsl(var(--border))' }}></div>
-                                    ))}
-                                </div>
-                                <div className="grid grid-cols-[auto_minmax(0,2.5fr)_auto_repeat(6,minmax(0,1fr))_auto] items-center gap-4 pl-4 pr-4 py-2 group">
-                                     <Checkbox checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
-                                     <div className="font-semibold text-left">
-                                        <p>{sim.name}</p>
+                             <AccordionItem value={sim.id} key={sim.id} className="border-b-0">
+                                <Card className="overflow-hidden">
+                                <div className="flex items-center p-2 pr-4 bg-muted/30">
+                                    <Checkbox className="mx-2" checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
+                                    <div className="flex-grow">
+                                        <p className="font-semibold">{sim.name}</p>
                                         <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
-                                        <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                            {simCategories.map(cat => (
-                                                <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
-                                            ))}
-                                            {line && <Badge variant="outline">{line.name}</Badge>}
-                                            {simGroups.map(group => (
-                                                <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>{group.name}</Badge>
-                                            ))}
-                                        </div>
                                     </div>
-                                    <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2 [&>svg]:mr-2 group flex items-center gap-3 px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground h-9 relative data-[state=open]:bg-secondary/50">
-                                        <div className="flex items-center gap-3 flex-grow">
-                                            
-                                        </div>
-                                    </AccordionTrigger>
-                                    <div className="text-right font-bold">{formatCurrency(sim.salePrice)}</div>
-                                    <div className="text-right">{formatCurrency(sim.grossCost)}</div>
-                                    <div className="text-right">{sim.markup.toFixed(1)}x</div>
-                                    <div className="text-right font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</div>
-                                    <div className={cn("text-right font-bold", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</div>
-                                    <div className="flex justify-center">
+                                    <div className="flex items-center gap-1">
+                                        {simCategories.map(cat => (
+                                            <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
+                                        ))}
+                                        {line && <Badge variant="outline">{line.name}</Badge>}
+                                        {simGroups.map(group => (
+                                            <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>{group.name}</Badge>
+                                        ))}
+                                    </div>
+                                    <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
+                                </div>
+                                <div className="grid grid-cols-6 items-center px-4 py-3">
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Preço</p>
+                                        <p className="font-bold">{formatCurrency(sim.salePrice)}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Custo</p>
+                                        <p>{formatCurrency(sim.grossCost)}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Markup</p>
+                                        <p>{sim.markup.toFixed(1)}x</p>
+                                    </div>
+                                     <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Meta</p>
+                                        <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Lucro</p>
+                                        <p className={cn("font-bold text-lg", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</p>
+                                    </div>
+                                    <div className="flex justify-center items-center gap-2">
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
-                                            meetsGoal ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                            ) : (
-                                                <AlertTriangle className="h-5 w-5 text-orange-500" />
-                                            )
-                                        ) : <div className="h-5 w-5" />}
-                                    </div>
-                                    <div className="flex flex-col gap-0.5 pl-2 border-l h-full justify-around">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(sim)}>
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePpoClick(sim)}>
-                                            <FileText className="h-4 w-4"/>
-                                        </Button>
+                                            meetsGoal ? <CheckCircle2 className="h-5 w-5 text-green-500"/> : <AlertTriangle className="h-5 w-5 text-orange-500"/>
+                                        ) : <div className="h-5 w-5"/>}
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><Layers className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica (Visual)</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Ficha Técnica (PPO)</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </div>
-                                <AccordionContent className="pl-8 pr-4 pb-4 bg-background">
-                                    <div className="overflow-x-auto pt-2">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="border-b">
-                                                    <th className="p-2 text-left text-sm font-medium text-muted-foreground">Insumo base</th>
-                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Quantidade</th>
-                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Custo / unidade</th>
-                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Impacto</th>
-                                                    <th className="p-2 text-right text-sm font-medium text-muted-foreground">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
+                                <AccordionContent>
+                                    <div className="px-4 pb-4 bg-background border-t">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Insumo base</TableHead>
+                                                    <TableHead>Quantidade</TableHead>
+                                                    <TableHead className="text-right">Custo / unidade</TableHead>
+                                                    <TableHead className="text-right">Impacto</TableHead>
+                                                    <TableHead className="text-right">Total</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
                                                 {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
                                                     const baseProductInfo = baseProductMap.get(item.baseProductId);
                                                     const cost = (item.overrideCostPerUnit || 0) * item.quantity;
                                                     const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
                                                     return (
-                                                        <tr key={item.id} className="border-b">
-                                                            <td className="p-2">{baseProductInfo?.name || 'Insumo não encontrado'}</td>
-                                                            <td className="p-2 text-right">{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</td>
-                                                            <td className="p-2 text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</td>
-                                                            <td className="p-2 text-right">{impact.toFixed(1)}%</td>
-                                                            <td className="p-2 text-right font-semibold text-primary">{formatCurrency(cost)}</td>
-                                                        </tr>
+                                                        <TableRow key={item.id}>
+                                                            <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
+                                                            <TableCell>{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
+                                                            <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
+                                                            <TableCell className="text-right">{impact.toFixed(1)}%</TableCell>
+                                                            <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
+                                                        </TableRow>
                                                     )
                                                 })}
-                                            </tbody>
-                                            <tfoot>
-                                                <tr className="border-t font-bold">
-                                                    <td colSpan={4} className="p-2 text-right">Total</td>
-                                                    <td className="p-2 text-right text-primary">{formatCurrency(sim.totalCmv)}</td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
+                                            </TableBody>
+                                        </Table>
                                     </div>
                                 </AccordionContent>
+                                </Card>
                             </AccordionItem>
                         );
                     })
@@ -768,7 +752,7 @@ export function PricingSimulator() {
                             )}
                              <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" disabled={simulationsByCategory.length === 0}>
+                                    <Button variant="outline" disabled={filteredSimulations.length === 0}>
                                         <Download className="mr-2 h-4 w-4" />
                                         Exportar
                                     </Button>
@@ -842,21 +826,6 @@ export function PricingSimulator() {
                             )}
                         </div>
                     </div>
-                     <div className="flex flex-wrap items-center gap-4 pt-2">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                    <ArrowUpDown className="mr-2 h-4 w-4" /> Ordenar por: {sortConfig.key === 'name' ? 'Nome' : sortConfig.key === 'sku' ? 'SKU' : sortConfig.key === 'salePrice' ? 'Preço' : 'Lucro %'}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                                 <DropdownMenuItem onSelect={() => handleSort('name')}>Nome</DropdownMenuItem>
-                                 <DropdownMenuItem onSelect={() => handleSort('sku')}>SKU</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => handleSort('salePrice')}>Preço</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => handleSort('profitPercentage')}>Lucro %</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
                 </div>
                 <div className="mt-4">
                     {renderTable()}
@@ -892,7 +861,7 @@ export function PricingSimulator() {
                 open={isBatchEditModalOpen}
                 onOpenChange={setIsBatchEditModalOpen}
                 simulations={simulations}
-                filteredSimulations={simulationsByCategory}
+                filteredSimulations={filteredSimulations}
                 selectedSimulationIds={selectedSimulations}
             />
         </div>
