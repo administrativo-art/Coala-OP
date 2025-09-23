@@ -303,11 +303,13 @@ export function PricingSimulator() {
         let isFirstPage = true;
     
         const addSection = (title: string, yPos: number, isSub: boolean = false) => {
+            if (yPos > 260) { doc.addPage(); yPos = 15; }
             doc.setFontSize(isSub ? 10 : 12);
             doc.setFont(undefined, 'bold');
             doc.text(title, 14, yPos);
+            yPos += (isSub ? 5 : 6);
             doc.setFont(undefined, 'normal');
-            return yPos + (isSub ? 5 : 6);
+            return yPos;
         };
 
         for (const sim of filteredSimulations) {
@@ -323,11 +325,11 @@ export function PricingSimulator() {
     
             if (hasImage) {
                 try {
-                    const img = new Image();
+                    const img = new window.Image();
                     img.src = sim.ppo!.referenceImageUrl!;
                     await new Promise<void>(resolve => {
                         img.onload = () => resolve();
-                        img.onerror = () => { console.error("Image failed to load"); resolve(); };
+                        img.onerror = () => { console.error("Image failed to load for PDF"); resolve(); };
                     });
                     
                     const maxWidth = 50; 
@@ -443,10 +445,10 @@ export function PricingSimulator() {
             }
 
              const details = [
-                 ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
-                 ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
-                 ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
-                 ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
+                ...(sim.ppo?.preparationTime ? [['Tempo de Preparo', `${sim.ppo.preparationTime} seg`]] : []),
+                ...(sim.ppo?.portionWeight ? [['Peso da Porção', `${sim.ppo.portionWeight}g (Tolerância: ±${sim.ppo.portionTolerance || 0}g)`]] : []),
+                ...(sim.ppo?.qualityStandard?.length ? [['Padrão de Qualidade', sim.ppo.qualityStandard.map(q => q.text).join('; ')]] : []),
+                ...(sim.ppo?.allergens?.length ? [['Alergênicos', sim.ppo.allergens.map(a => a.text).join(', ')]] : []),
             ].filter(d => d[1]);
 
              if (details.length > 0) {
@@ -459,6 +461,7 @@ export function PricingSimulator() {
                     styles: { cellPadding: 2, fontSize: 9 },
                     columnStyles: { 0: { fontStyle: 'bold' } },
                 });
+                yPos = (doc as any).lastAutoTable.finalY + 10;
             }
         }
     
@@ -482,7 +485,7 @@ export function PricingSimulator() {
             const hasImage = sim.ppo?.referenceImageUrl;
             if (hasImage) {
                 try {
-                    const img = new Image();
+                    const img = new window.Image();
                     img.src = sim.ppo!.referenceImageUrl!;
                     const imgWidth = 30;
                     const imgHeight = (img.height * imgWidth) / img.width;
@@ -702,7 +705,7 @@ export function PricingSimulator() {
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
