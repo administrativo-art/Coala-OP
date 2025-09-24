@@ -220,17 +220,6 @@ export function PricingSimulator() {
     
         const snap = (n: number) => Math.round(n * 100) / 100;
     
-        const twoCols = (padX: number, gap: number) => {
-            const SAFE = 0.6;
-            const innerLeft = pageMargin + padX + SAFE;
-            const innerRight = pageMargin + pageContentWidth - padX - SAFE;
-            let colW = (innerRight - innerLeft - gap) / 2;
-            colW = Math.floor(colW * 100) / 100;
-            const xLeft = Math.floor(innerLeft * 100) / 100;
-            const xRight = Math.floor((innerRight - colW) * 100) / 100;
-            return { colW, xLeft, xRight };
-        };
-    
         const drawStepBadge = (cx: number, cy: number, n: number) => {
             const r = 3.2; 
             doc.setDrawColor(220);
@@ -349,8 +338,19 @@ export function PricingSimulator() {
         const rowGap = 6;
         const gap = 8;
         
-        const grid = twoCols(outerPadX, gap);
-        const colW = grid.colW;
+        const twoCols = (padX: number, gap: number) => {
+          const SAFE = 0.6;
+          const innerLeft  = pageMargin + padX + SAFE;
+          const innerRight = pageMargin + pageContentWidth - padX - SAFE;
+          let colW = (innerRight - innerLeft - gap) / 2;
+          colW = Math.floor(colW * 100) / 100;
+          const xLeft  = Math.floor(innerLeft * 100) / 100;
+          const xRight = Math.floor((innerRight - colW) * 100) / 100;
+          return { colW, xLeft, xRight };
+        };
+
+        const g = twoCols(outerPadX, gap);
+        const colW = g.colW;
         
         const rowHeights = [];
         for (let i = 0; i < infoItems.length; i += 2) {
@@ -371,8 +371,8 @@ export function PricingSimulator() {
         let gridY = yPos + outerPadY + 9 + 4;
         let idx = 0;
         for (const hRow of rowHeights) {
-            const xLeft = snap(grid.xLeft);
-            const xRight = snap(grid.xRight);
+            const xLeft = snap(g.xLeft);
+            const xRight = snap(g.xRight);
             if (idx < infoItems.length) drawInfoCard(xLeft, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
             if (idx < infoItems.length) drawInfoCard(xRight, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
             gridY += hRow + rowGap;
@@ -405,10 +405,11 @@ export function PricingSimulator() {
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
             yPos = addSectionTitle('Modo de Montagem', yPos);
             let blockY = yPos;
+        
             const phaseTitleH = 12;
             const gapBetweenSteps = 5;
             const lineColor = 226;
-
+        
             for (const fase of sim.ppo.assemblyInstructions) {
                 ensureSpace(phaseTitleH + 18);
                 doc.setFillColor(248, 250, 252);
@@ -509,6 +510,20 @@ export function PricingSimulator() {
                     doc.line(SEP_LEFT, blockY, SEP_RIGHT, blockY);
                     doc.setLineDash();
                     blockY += gapBetweenSteps;
+        
+                    const note = (etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '';
+                    if (note.trim()) {
+                        const noteMaxW = pageContentWidth - 10;
+                        const { lines: nLines, h: nH } = measureStepTextH(note.trim(), noteMaxW);
+                        ensureSpace(nH + 3);
+                        doc.setFontSize(9);
+                        doc.setFont(undefined, 'italic');
+                        doc.setTextColor(100);
+                        doc.text(nLines as any, pageMargin + 5, blockY);
+                        blockY += nH + 3;
+                        doc.setTextColor(0);
+                        doc.setFont(undefined, 'normal');
+                    }
                 }
         
                 const review = ((fase as any).reviewText || (fase as any).checklist || '').trim();
@@ -899,7 +914,7 @@ export function PricingSimulator() {
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleExportFichaTecnicaCompletaPdf(sim)}><Download className="mr-2 h-4 w-4" />Baixar Ficha Completa</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={()={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
