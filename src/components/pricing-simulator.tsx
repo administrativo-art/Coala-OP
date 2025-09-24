@@ -182,6 +182,57 @@ export function PricingSimulator() {
         return 'text-primary'; 
     };
 
+    const handleExportGerencialPdf = () => {
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text('Relatório Gerencial de Mercadorias', 14, 22);
+
+        const head = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup']];
+        const body = filteredSimulations.map(sim => [
+            sim.name,
+            sim.ppo?.sku || '',
+            formatCurrency(sim.salePrice),
+            formatCurrency(sim.grossCost),
+            `${sim.profitPercentage.toFixed(2)}%`,
+            `${sim.markup.toFixed(1)}x`,
+        ]);
+
+        autoTable(doc, {
+            startY: 30,
+            head: head,
+            body: body,
+            theme: 'striped',
+            headStyles: { fillColor: '#273344' }
+        });
+        
+        doc.save(`relatorio_gerencial_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+const handleExportGerencialCsv = () => {
+    const dataForCsv = filteredSimulations.map(sim => ({
+        'Mercadoria': sim.name,
+        'SKU': sim.ppo?.sku || '',
+        'Preço Venda': sim.salePrice,
+        'Custo Bruto': sim.grossCost,
+        'Lucro %': sim.profitPercentage,
+        'Markup': sim.markup,
+        'Meta Lucro %': sim.profitGoal || '',
+        'NCM': sim.ppo?.ncm || '',
+        'CEST': sim.ppo?.cest || '',
+        'CFOP': sim.ppo?.cfop || '',
+    }));
+
+    const csv = Papa.unparse(dataForCsv);
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
 const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const doc = new jsPDF();
   let yPos = 15;
@@ -216,33 +267,29 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   };
 
   const roundedRect = (x: number, y: number, w: number, h: number, r = 3, style: 'S'|'F'|'DF' = 'S') => {
-    (doc as any).roundedRect(x, y, w, h, r, r, style);
+    (doc as any).roundedRect(x, y, w, h, r, r, style); // jsPDF já possui roundedRect
   };
 
   const ensureSpace = (needed: number) => {
     if (yPos + needed > 275) { doc.addPage(); yPos = 15; }
   };
-  
-  const measureCardH = (value: string, w: number) => {
-    doc.setFontSize(12); doc.setFont(undefined,'bold');
-    const lines = doc.splitTextToSize(value || '—', w - 10);
-    const h = (doc.getTextDimensions(lines as any).h || 0);
-    return Math.max(18, 12 + h);
-  };
 
+  // Mini-card (rótulo + valor)
   const drawInfoCard = (x: number, y: number, w: number, h: number, label: string, value: string, opts?: { highlight?: boolean }) => {
-    doc.setDrawColor(226);
-    if (opts?.highlight) doc.setFillColor(254, 249, 195);
-    else doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226);             // #E2E8F0
+    if (opts?.highlight) doc.setFillColor(254, 249, 195); // #FEF9C3 (aleŕgênicos)
+    else doc.setFillColor(255, 255, 255);                 // white
     roundedRect(x, y, w, h, 1.8, 'DF');
 
+    // label
     doc.setFontSize(10);
-    doc.setTextColor(100);
+    doc.setTextColor(100);             // cinza médio
     doc.setFont(undefined, 'normal');
     doc.text(label, x + 5, y + 7);
 
+    // valor
     doc.setFontSize(12);
-    doc.setTextColor(17, 24, 39);
+    doc.setTextColor(17, 24, 39);      // #111827
     doc.setFont(undefined, 'bold');
 
     const maxTextWidth = w - 10;
@@ -250,11 +297,18 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.text(lines as any, x + 5, y + 14);
   };
 
+  const measureCardH = (value: string, w: number) => {
+    doc.setFontSize(12); doc.setFont(undefined,'bold');
+    const lines = doc.splitTextToSize(value || '—', w - 10);
+    const h = (doc.getTextDimensions(lines as any).h || 0);
+    return Math.max(18, 12 + h); // mínimo 18
+  };
+
   // ---------- HEADER ----------
   const hasImage = sim.ppo?.referenceImageUrl;
   let textX = pageMargin;
   let headerStartY = yPos;
-  let headerHeight = 25;
+  let headerHeight = 25; // default
 
   if (hasImage) {
     try {
@@ -301,13 +355,8 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, yPos + 13);
     yPos += headerHeight;
   }
-  
-  // ---------- INFORMAÇÕES DE VENDA E FISCAIS ----------
-  const outerPadX = 8;
-  const outerPadY = 6;
-  const gap = 8;
-  const rowGap = 6;
 
+  // ---------- INFORMAÇÕES DE VENDA E FISCAIS (cards modernos, 2 colunas) ----------
   const infoItems: Array<{label: string; value: string}> = [
     { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
     { label: 'Markup', value: `${sim.markup.toFixed(2)}x` },
@@ -317,17 +366,27 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     { label: 'CEST', value: sim.ppo?.cest || '—' },
     { label: 'CFOP', value: sim.ppo?.cfop || '—' },
   ];
+
+  const outerPadX = 8;
+  const outerPadY = 6;
+  const gap = 8;
+  const rows = Math.ceil(infoItems.length / 2);
+  const rowGap = 6;
   
   const grid = twoCols(outerPadX, gap);
   const colW = grid.colW;
 
+  let totalGridHeight = 0;
   const rowHeights: number[] = [];
   for (let i = 0; i < infoItems.length; i += 2) {
     const hL = measureCardH(infoItems[i]?.value || '', colW);
     const hR = infoItems[i + 1] ? measureCardH(infoItems[i + 1]?.value || '', colW) : 0;
-    rowHeights.push(Math.max(hL, hR));
+    const hRow = Math.max(hL, hR);
+    rowHeights.push(hRow);
+    totalGridHeight += hRow;
   }
-  const totalGridHeight = rowHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights.length - 1) * rowGap;
+  totalGridHeight += Math.max(0, rows - 1) * rowGap;
+
   const boxHeight = outerPadY * 2 + 10 + 4 + totalGridHeight;
   
   ensureSpace(boxHeight + 8);
@@ -343,19 +402,22 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   let gridY = yPos + outerPadY + 10 + 4;
   let itemIdx = 0;
   for (const hRow of rowHeights) {
+    const xLeft  = snap(grid.xLeft);
+    const xRight = snap(grid.xRight);
+    
     if (itemIdx < infoItems.length) {
       const it = infoItems[itemIdx++];
-      drawInfoCard(snap(grid.xLeft), gridY, colW, hRow, it.label, it.value);
+      drawInfoCard(xLeft,  gridY, colW, hRow, it.label, it.value);
     }
     if (itemIdx < infoItems.length) {
       const it = infoItems[itemIdx++];
-      drawInfoCard(snap(grid.xRight), gridY, colW, hRow, it.label, it.value);
+      drawInfoCard(xRight, gridY, colW, hRow, it.label, it.value);
     }
     gridY += hRow + rowGap;
   }
 
   yPos += boxHeight + 8;
-
+  
   // ---------- COMPOSIÇÃO (CMV) ----------
   const ingredients = simulationItems
     .filter(item => item.simulationId === sim.id)
@@ -365,7 +427,13 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
       const qty = item.quantity;
       const cost = costPerUnit * qty;
       const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
-      return { name: baseProduct?.name || 'Insumo não encontrado', qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`, cpuStr: formatCurrency(costPerUnit), impact, cost };
+      return {
+        name: baseProduct?.name || 'Insumo não encontrado',
+        qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`,
+        cpuStr: formatCurrency(costPerUnit),
+        impact,
+        cost
+      };
     })
     .filter(row => row.cost > 0)
     .sort((a,b) => b.cost - a.cost)
@@ -392,7 +460,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     yPos += 10;
   }
 
-  // ---------- MODO DE MONTAGEM ----------
+  // ---------- MODO DE MONTAGEM (fases destacadas, linhas + imagem) ----------
   if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
     yPos = addSectionTitle('Modo de Montagem', yPos);
     let blockY = yPos;
@@ -471,7 +539,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.setTextColor(0);
     yPos += boxH + 6;
   }
-
+  
   // ---------- DETALHES ADICIONAIS ----------
   const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ id: '1', text: sim.ppo.qualityStandard }] : []);
   const padroes = qualityStandardArray.map(q => q.text).filter(Boolean);
@@ -489,20 +557,25 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     const padX2 = 8;
     const gap2 = 8;
     const rowGap2 = 6;
-
+    const rows2 = Math.ceil(detalhes.length / 2);
+    
     const grid2 = twoCols(padX2, gap2);
     const colW2 = grid2.colW;
 
+    let totalGridHeight2 = 0;
     const rowHeights2: number[] = [];
     for (let i = 0; i < detalhes.length; i += 2) {
       const hL = measureCardH(detalhes[i]?.value || '', colW2);
       const hR = detalhes[i + 1] ? measureCardH(detalhes[i + 1]?.value || '', colW2) : 0;
-      rowHeights2.push(Math.max(hL, hR));
+      const hRow = Math.max(hL, hR);
+      rowHeights2.push(hRow);
+      totalGridHeight2 += hRow;
     }
-    const totalGridHeight2 = rowHeights2.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights2.length - 1) * rowGap2;
+    totalGridHeight2 += Math.max(0, rows2 - 1) * rowGap2;
+
     const innerH2 = 10 + 4 + totalGridHeight2 + 10;
     
-    ensureSpace(innerH2 + 8);
+    ensureSpace(innerH2 + 4);
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226);
     roundedRect(pageMargin, yPos, pageContentWidth, innerH2, 4, 'DF');
@@ -512,20 +585,23 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.setTextColor(39, 51, 68);
     doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + 10);
 
-    let gy = yPos + 10 + 4;
+    let gy = yPos + 16;
     let di = 0;
     for (const hRow of rowHeights2) {
+      const xL = snap(grid2.xLeft);
+      const xR = snap(grid2.xRight);
+      
       if (di < detalhes.length) {
         const it = detalhes[di++];
-        drawInfoCard(snap(grid2.xLeft), gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
+        drawInfoCard(xL, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
       }
       if (di < detalhes.length) {
         const it = detalhes[di++];
-        drawInfoCard(snap(grid2.xRight), gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
+        drawInfoCard(xR, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
       }
       gy += hRow + rowGap2;
     }
-    yPos += innerH2 + 8;
+    yPos += innerH2 + 6;
   }
 
   // ---------- FOOTER ----------
