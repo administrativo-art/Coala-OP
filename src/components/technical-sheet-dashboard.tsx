@@ -13,6 +13,7 @@ import { Skeleton } from './ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { TechnicalSheetViewerModal } from './technical-sheet-viewer-modal';
 import { type ProductSimulation } from '@/types';
+import { AssemblyInstructionsModal } from './assembly-instructions-modal';
 
 export function TechnicalSheetDashboard() {
     const { simulations, loading: loadingSims } = useProductSimulation();
@@ -22,7 +23,7 @@ export function TechnicalSheetDashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
     const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
-
+    const [simulationForAssembly, setSimulationForAssembly] = useState<ProductSimulation | null>(null);
 
     const loading = loadingSims || loadingCats;
 
@@ -145,7 +146,7 @@ export function TechnicalSheetDashboard() {
                                 key={sim.id} 
                                 simulation={sim} 
                                 onViewSheet={() => setSimulationToView(sim)}
-                                onViewAssembly={() => setSimulationToView(sim)} // For now, both open the same modal
+                                onViewAssembly={() => setSimulationForAssembly(sim)}
                             />
                         ))}
                     </div>
@@ -162,6 +163,12 @@ export function TechnicalSheetDashboard() {
                 open={!!simulationToView}
                 onOpenChange={() => setSimulationToView(null)}
                 simulation={simulationToView}
+            />
+
+            <AssemblyInstructionsModal
+                open={!!simulationForAssembly}
+                onOpenChange={() => setSimulationForAssembly(null)}
+                simulation={simulationForAssembly}
             />
         </>
     );
