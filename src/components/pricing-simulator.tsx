@@ -182,122 +182,6 @@ export function PricingSimulator() {
         return 'text-primary'; 
     };
 
-    const handleExportGerencialPdf = () => {
-        const doc = new jsPDF('landscape');
-        let yPos = 15;
-    
-        const addTitle = (title: string) => {
-            if (yPos > 180) { doc.addPage(); yPos = 15; }
-            doc.setFontSize(18);
-            doc.text(title, 14, yPos);
-            yPos += 8;
-        };
-    
-        addTitle("Relatório Gerencial de Mercadorias");
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        const filterText = `Filtros: ${searchTerm || 'nenhum'} | Categorias: ${categoryFilters.size > 0 ? Array.from(categoryFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'} | Linhas: ${lineFilters.size > 0 ? Array.from(lineFilters).map(id => categoryMap.get(id)?.name).join(', ') : 'todas'}`;
-        doc.text(filterText, 14, yPos);
-        yPos += 10;
-    
-        const tableHead = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup', 'Meta', 'NCM', 'CEST', 'CFOP']];
-        const tableBody = filteredSimulations.map(sim => [
-            sim.name,
-            sim.ppo?.sku || 'N/A',
-            formatCurrency(sim.salePrice),
-            formatCurrency(sim.grossCost),
-            `${sim.profitPercentage.toFixed(2)}%`,
-            `${sim.markup.toFixed(2)}x`,
-            sim.profitGoal ? `${sim.profitGoal}%` : 'N/A',
-            sim.ppo?.ncm || 'N/A',
-            sim.ppo?.cest || 'N/A',
-            sim.ppo?.cfop || 'N/A',
-        ]);
-    
-        autoTable(doc, {
-            startY: yPos,
-            head: tableHead,
-            body: tableBody,
-            theme: 'grid',
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: '#273344' },
-        });
-    
-        doc.save(`relatorio_gerencial_mercadorias_${new Date().toISOString().slice(0,10)}.pdf`);
-    };
-
-    const handleExportGerencialCsv = () => {
-        const dataForCsv = filteredSimulations.map(sim => ({
-            'Mercadoria': sim.name,
-            'SKU': sim.ppo?.sku || '',
-            'Preço Venda': sim.salePrice,
-            'Custo Bruto': sim.grossCost,
-            'Lucro %': sim.profitPercentage,
-            'Markup': sim.markup,
-            'Meta Lucro %': sim.profitGoal || '',
-            'NCM': sim.ppo?.ncm || '',
-            'CEST': sim.ppo?.cest || '',
-            'CFOP': sim.ppo?.cfop || '',
-        }));
-
-        const csv = Papa.unparse(dataForCsv, {
-            quotes: true,
-            delimiter: ",",
-            header: true,
-            decimalSeparator: '.'
-        });
-
-        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-    
-    const handleExportXlsx = () => {
-        const dataForSheet = filteredSimulations.map(sim => ({
-            'Mercadoria': sim.name,
-            'SKU': sim.ppo?.sku || '',
-            'Preço Venda': sim.salePrice,
-            'Custo Bruto': sim.grossCost,
-            'Lucro %': sim.profitPercentage,
-            'Markup': sim.markup,
-            'Meta Lucro %': sim.profitGoal || '',
-            'NCM': sim.ppo?.ncm || '',
-            'CEST': sim.ppo?.cest || '',
-            'CFOP': sim.ppo?.cfop || '',
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório Gerencial");
-
-        for (const cellAddress in worksheet) {
-            if (cellAddress[0] === '!') continue;
-            const col = cellAddress.replace(/[0-9]/g, '');
-            const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
-            if (row > 1) { 
-                if (['C', 'D'].includes(col)) {
-                    worksheet[cellAddress].z = 'R$ #,##0.00';
-                }
-                if (['E', 'G'].includes(col)) { 
-                     worksheet[cellAddress].t = 'n';
-                     worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
-                     worksheet[cellAddress].z = '0.00%';
-                }
-                 if (['F'].includes(col)) {
-                    worksheet[cellAddress].z = '0.00"x"';
-                }
-            }
-        }
-
-
-        XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
-    };
-    
 const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const doc = new jsPDF();
   let yPos = 15;
@@ -305,6 +189,22 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const pageContentWidth = doc.internal.pageSize.getWidth() - 2 * pageMargin;
 
   // ---------- helpers de desenho ----------
+  const twoCols = (padX: number, gap: number) => {
+    const SAFE = 0.6; // folga em mm para não encostar nas bordas arredondadas
+    const innerLeft  = pageMargin + padX + SAFE;
+    const innerRight = pageMargin + pageContentWidth - padX - SAFE;
+  
+    let colW = (innerRight - innerLeft - gap) / 2;
+    colW = Math.floor(colW * 100) / 100; // arredonda para baixo
+  
+    const xLeft  = Math.floor(innerLeft * 100) / 100;
+    const xRight = Math.floor((innerRight - colW) * 100) / 100;
+  
+    return { colW, xLeft, xRight };
+  };
+
+  const snap = (n: number) => Math.round(n * 100) / 100;
+
   const addSectionTitle = (title: string, currentY: number) => {
     if (currentY > 260) { doc.addPage(); currentY = 15; }
     doc.setFontSize(12);
@@ -322,20 +222,19 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const ensureSpace = (needed: number) => {
     if (yPos + needed > 275) { doc.addPage(); yPos = 15; }
   };
-
-  const measureCardHeight = (label: string, value: string, w: number) => {
-    doc.setFontSize(12);
-    doc.setFont(undefined,'bold');
+  
+  const measureCardH = (value: string, w: number) => {
+    doc.setFontSize(12); doc.setFont(undefined,'bold');
     const lines = doc.splitTextToSize(value || '—', w - 10);
-    const valueH = doc.getTextDimensions(lines as any).h;
-    return Math.max(18, 12 + valueH);
+    const h = (doc.getTextDimensions(lines as any).h || 0);
+    return Math.max(18, 12 + h);
   };
 
   const drawInfoCard = (x: number, y: number, w: number, h: number, label: string, value: string, opts?: { highlight?: boolean }) => {
     doc.setDrawColor(226);
     if (opts?.highlight) doc.setFillColor(254, 249, 195);
     else doc.setFillColor(255, 255, 255);
-    roundedRect(x, y, w, h, 2, 'DF');
+    roundedRect(x, y, w, h, 1.8, 'DF');
 
     doc.setFontSize(10);
     doc.setTextColor(100);
@@ -402,12 +301,12 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, yPos + 13);
     yPos += headerHeight;
   }
-
+  
   // ---------- INFORMAÇÕES DE VENDA E FISCAIS ----------
-  const outerPad = 6;
-  const colGap = 8;
-  const cols = 2;
-  const colW = (pageContentWidth - colGap) / cols;
+  const outerPadX = 8;
+  const outerPadY = 6;
+  const gap = 8;
+  const rowGap = 6;
 
   const infoItems: Array<{label: string; value: string}> = [
     { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
@@ -418,38 +317,44 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     { label: 'CEST', value: sim.ppo?.cest || '—' },
     { label: 'CFOP', value: sim.ppo?.cfop || '—' },
   ];
-
-  const cardHeights = [];
-  for (let i = 0; i < infoItems.length; i += 2) {
-      const h1 = measureCardHeight(infoItems[i].label, infoItems[i].value, colW);
-      const h2 = infoItems[i+1] ? measureCardHeight(infoItems[i+1].label, infoItems[i+1].value, colW) : 0;
-      cardHeights.push(Math.max(h1, h2));
-  }
-  const totalCardHeight = cardHeights.reduce((sum, h) => sum + h, 0);
-  const rowGap = 6;
-  const innerHeight = totalCardHeight + (cardHeights.length - 1) * rowGap + outerPad * 2 + 8; // Extra padding for title
-  ensureSpace(innerHeight + 6);
   
-  const boxStartY = yPos;
+  const grid = twoCols(outerPadX, gap);
+  const colW = grid.colW;
+
+  const rowHeights: number[] = [];
+  for (let i = 0; i < infoItems.length; i += 2) {
+    const hL = measureCardH(infoItems[i]?.value || '', colW);
+    const hR = infoItems[i + 1] ? measureCardH(infoItems[i + 1]?.value || '', colW) : 0;
+    rowHeights.push(Math.max(hL, hR));
+  }
+  const totalGridHeight = rowHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights.length - 1) * rowGap;
+  const boxHeight = outerPadY * 2 + 10 + 4 + totalGridHeight;
+  
+  ensureSpace(boxHeight + 8);
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226);
-  roundedRect(pageMargin, yPos, pageContentWidth, innerHeight, 4, 'DF');
+  roundedRect(pageMargin, yPos, pageContentWidth, boxHeight, 4, 'DF');
 
   doc.setFontSize(11);
   doc.setFont(undefined, 'bold');
   doc.setTextColor(39, 51, 68);
-  doc.text('Informações de Venda e Fiscais', pageMargin + outerPad, yPos + outerPad + 3);
+  doc.text('Informações de Venda e Fiscais', pageMargin + outerPadX, yPos + outerPadY + 3);
   
-  let gridY = yPos + outerPad + 9;
-  for (let i = 0; i < cardHeights.length; i++) {
-    const rowHeight = cardHeights[i];
-    const item1 = infoItems[i*2];
-    const item2 = infoItems[i*2+1];
-    if(item1) drawInfoCard(pageMargin + outerPad, gridY, colW, rowHeight, item1.label, item1.value);
-    if(item2) drawInfoCard(pageMargin + outerPad + colW + colGap, gridY, colW, rowHeight, item2.label, item2.value);
-    gridY += rowHeight + rowGap;
+  let gridY = yPos + outerPadY + 10 + 4;
+  let itemIdx = 0;
+  for (const hRow of rowHeights) {
+    if (itemIdx < infoItems.length) {
+      const it = infoItems[itemIdx++];
+      drawInfoCard(snap(grid.xLeft), gridY, colW, hRow, it.label, it.value);
+    }
+    if (itemIdx < infoItems.length) {
+      const it = infoItems[itemIdx++];
+      drawInfoCard(snap(grid.xRight), gridY, colW, hRow, it.label, it.value);
+    }
+    gridY += hRow + rowGap;
   }
-  yPos = boxStartY + innerHeight + 8;
+
+  yPos += boxHeight + 8;
 
   // ---------- COMPOSIÇÃO (CMV) ----------
   const ingredients = simulationItems
@@ -460,17 +365,18 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
       const qty = item.quantity;
       const cost = costPerUnit * qty;
       const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
-      return { name: baseProduct?.name || 'Insumo não encontrado', qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`, cpuStr: formatCurrency(costPerUnit), impact: impact, cost: cost };
+      return { name: baseProduct?.name || 'Insumo não encontrado', qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`, cpuStr: formatCurrency(costPerUnit), impact, cost };
     })
     .filter(row => row.cost > 0)
-    .sort((a,b) => b.cost - a.cost);
+    .sort((a,b) => b.cost - a.cost)
+    .map(row => [row.name, row.qtyStr, row.cpuStr, `${row.impact.toFixed(1)}%`, formatCurrency(row.cost)]);
 
   if (ingredients.length > 0) {
     yPos = addSectionTitle('Composição (CMV)', yPos);
     autoTable(doc, {
       startY: yPos,
       head: [['Insumo', 'Quantidade', 'Custo/unid.', 'Impacto', 'Custo Total']],
-      body: ingredients.map(r => [r.name, r.qtyStr, r.cpuStr, `${r.impact.toFixed(1)}%`, formatCurrency(r.cost)]),
+      body: ingredients,
       theme: 'striped',
       headStyles: { fillColor: [39, 51, 68], textColor: 255 },
       styles: { fontSize: 10, fillColor: [255, 255, 255] },
@@ -483,17 +389,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.setTextColor(0);
     doc.text('CMV Total:', doc.internal.pageSize.getWidth() - pageMargin - 50, yPos);
     doc.text(formatCurrency(sim.totalCmv), doc.internal.pageSize.getWidth() - pageMargin, yPos, { align: 'right' });
-    yPos += 5;
-    
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100);
-    doc.text(
-      'Obs.: O Custo Bruto pode incluir itens/encargos fora da tabela de CMV; por isso os valores podem divergir.',
-      pageMargin,
-      yPos + 5
-    );
-    yPos += 8;
+    yPos += 10;
   }
 
   // ---------- MODO DE MONTAGEM ----------
@@ -535,8 +431,9 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
             im.src = etapa.imageUrl;
             await new Promise(resolve => { im.onload = resolve; im.onerror = () => resolve(null); });
             if (im.width > 0) {
-              const imgH = (im.height * rightImgW) / im.width;
-              doc.addImage(im, 'JPEG', doc.internal.pageSize.getWidth() - pageMargin - rightImgW, blockY - 2, rightImgW, imgH);
+              const imgW = rightImgW;
+              const imgH = (im.height * imgW) / im.width;
+              doc.addImage(im, 'JPEG', doc.internal.pageSize.getWidth() - pageMargin - rightImgW, blockY - 2, imgW, imgH);
               textHeight = Math.max(textHeight, imgH);
             }
           } catch {}
@@ -567,7 +464,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     const linkY = yPos + 16;
     doc.setFontSize(10);
     doc.setFont(undefined, 'normal');
-    doc.setTextColor(0,0,238);
+    doc.setTextColor(0, 0, 238);
     doc.text(linkLabel, pageMargin + 6, linkY);
     const labelW = doc.getTextWidth(linkLabel);
     doc.link(pageMargin + 6, linkY - 4, labelW, 6, { url: sim.ppo.assemblyVideoUrl });
@@ -576,33 +473,36 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   }
 
   // ---------- DETALHES ADICIONAIS ----------
-  const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ text: sim.ppo.qualityStandard }] : []);
+  const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ id: '1', text: sim.ppo.qualityStandard }] : []);
   const padroes = qualityStandardArray.map(q => q.text).filter(Boolean);
-
+  
   const detalhesBrutos: Array<{label: string; value: string; highlight?: boolean} | null> = [
     sim.ppo?.preparationTime ? { label: 'Tempo de Preparo', value: `${sim.ppo.preparationTime} seg` } : null,
     sim.ppo?.portionWeight ? { label: 'Peso da Porção', value: `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` } : null,
     padroes.length ? { label: 'Padrões de Qualidade', value: padroes.join('\n') } : null,
     sim.ppo?.allergens?.length ? { label: 'Alergênicos', value: sim.ppo.allergens.map(a => a.text).join(', '), highlight: true } : null,
   ];
-  
+
   const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
-
+  
   if (detalhes.length > 0) {
-    const cols2 = 2;
-    const gap = 8;
-    const colW2 = (pageContentWidth - gap) / cols2;
-    const cardHeights2 = [];
-    for (let i = 0; i < detalhes.length; i += 2) {
-      const h1 = measureCardHeight(detalhes[i].label, detalhes[i].value, colW2);
-      const h2 = detalhes[i+1] ? measureCardHeight(detalhes[i+1].label, detalhes[i+1].value, colW2) : 0;
-      cardHeights2.push(Math.max(h1, h2));
-    }
-    const totalCardHeight2 = cardHeights2.reduce((sum, h) => sum + h, 0);
-    const innerH2 = totalCardHeight2 + (cardHeights2.length - 1) * rowGap + 12 + 12;
-    ensureSpace(innerH2 + 4);
+    const padX2 = 8;
+    const gap2 = 8;
+    const rowGap2 = 6;
 
-    const boxStartY2 = yPos;
+    const grid2 = twoCols(padX2, gap2);
+    const colW2 = grid2.colW;
+
+    const rowHeights2: number[] = [];
+    for (let i = 0; i < detalhes.length; i += 2) {
+      const hL = measureCardH(detalhes[i]?.value || '', colW2);
+      const hR = detalhes[i + 1] ? measureCardH(detalhes[i + 1]?.value || '', colW2) : 0;
+      rowHeights2.push(Math.max(hL, hR));
+    }
+    const totalGridHeight2 = rowHeights2.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights2.length - 1) * rowGap2;
+    const innerH2 = 10 + 4 + totalGridHeight2 + 10;
+    
+    ensureSpace(innerH2 + 8);
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226);
     roundedRect(pageMargin, yPos, pageContentWidth, innerH2, 4, 'DF');
@@ -610,25 +510,22 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
     doc.setTextColor(39, 51, 68);
-    doc.text('Detalhes Adicionais', pageMargin + 6, yPos + 10);
+    doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + 10);
 
-    let gy = yPos + 16;
+    let gy = yPos + 10 + 4;
     let di = 0;
-    for (let r = 0; r < cardHeights2.length; r++) {
-      const rowHeight = cardHeights2[r];
-      const xL = pageMargin + 6;
-      const xR = xL + colW2 + gap;
+    for (const hRow of rowHeights2) {
       if (di < detalhes.length) {
         const it = detalhes[di++];
-        drawInfoCard(xL, gy, colW2, rowHeight, it.label, it.value, { highlight: it.highlight });
+        drawInfoCard(snap(grid2.xLeft), gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
       }
       if (di < detalhes.length) {
         const it = detalhes[di++];
-        drawInfoCard(xR, gy, colW2, rowHeight, it.label, it.value, { highlight: it.highlight });
+        drawInfoCard(snap(grid2.xRight), gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
       }
-      gy += rowHeight + rowGap;
+      gy += hRow + rowGap2;
     }
-    yPos = boxStartY2 + innerH2 + 6;
+    yPos += innerH2 + 8;
   }
 
   // ---------- FOOTER ----------
@@ -736,7 +633,48 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
         link.click();
         document.body.removeChild(link);
     };
+    
+    const handleExportXlsx = () => {
+        const dataForSheet = filteredSimulations.map(sim => ({
+            'Mercadoria': sim.name,
+            'SKU': sim.ppo?.sku || '',
+            'Preço Venda': sim.salePrice,
+            'Custo Bruto': sim.grossCost,
+            'Lucro %': sim.profitPercentage,
+            'Markup': sim.markup,
+            'Meta Lucro %': sim.profitGoal || '',
+            'NCM': sim.ppo?.ncm || '',
+            'CEST': sim.ppo?.cest || '',
+            'CFOP': sim.ppo?.cfop || '',
+        }));
 
+        const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório Gerencial");
+
+        for (const cellAddress in worksheet) {
+            if (cellAddress[0] === '!') continue;
+            const col = cellAddress.replace(/[0-9]/g, '');
+            const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
+            if (row > 1) { 
+                if (['C', 'D'].includes(col)) {
+                    worksheet[cellAddress].z = 'R$ #,##0.00';
+                }
+                if (['E', 'G'].includes(col)) { 
+                     worksheet[cellAddress].t = 'n';
+                     worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
+                     worksheet[cellAddress].z = '0.00%';
+                }
+                 if (['F'].includes(col)) {
+                    worksheet[cellAddress].z = '0.00"x"';
+                }
+            }
+        }
+
+
+        XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
+    };
+    
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
     
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
