@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -244,13 +243,13 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     const SAFE = 0.6; // folga em mm para não encostar nas bordas arredondadas
     const innerLeft  = pageMargin + padX + SAFE;
     const innerRight = pageMargin + pageContentWidth - padX - SAFE;
-  
+
     let colW = (innerRight - innerLeft - gap) / 2;
     colW = Math.floor(colW * 100) / 100; // arredonda para baixo
-  
+
     const xLeft  = Math.floor(innerLeft * 100) / 100;
     const xRight = Math.floor((innerRight - colW) * 100) / 100;
-  
+
     return { colW, xLeft, xRight };
   };
 
@@ -267,31 +266,27 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   };
 
   const roundedRect = (x: number, y: number, w: number, h: number, r = 3, style: 'S'|'F'|'DF' = 'S') => {
-    (doc as any).roundedRect(x, y, w, h, r, r, style); // jsPDF já possui roundedRect
+    (doc as any).roundedRect(x, y, w, h, r, r, style);
   };
 
   const ensureSpace = (needed: number) => {
     if (yPos + needed > 275) { doc.addPage(); yPos = 15; }
   };
 
-  // Mini-card (rótulo + valor)
   const drawInfoCard = (x: number, y: number, w: number, h: number, label: string, value: string, opts?: { highlight?: boolean }) => {
-    doc.setDrawColor(226);             // #E2E8F0
-    if (opts?.highlight) doc.setFillColor(254, 249, 195); // #FEF9C3 (aleŕgênicos)
-    else doc.setFillColor(255, 255, 255);                 // white
+    doc.setDrawColor(226);
+    if (opts?.highlight) doc.setFillColor(254, 249, 195);
+    else doc.setFillColor(255, 255, 255);
     roundedRect(x, y, w, h, 1.8, 'DF');
 
-    // label
     doc.setFontSize(10);
-    doc.setTextColor(100);             // cinza médio
+    doc.setTextColor(100);
     doc.setFont(undefined, 'normal');
     doc.text(label, x + 5, y + 7);
 
-    // valor
     doc.setFontSize(12);
-    doc.setTextColor(17, 24, 39);      // #111827
+    doc.setTextColor(17, 24, 39);
     doc.setFont(undefined, 'bold');
-
     const maxTextWidth = w - 10;
     const lines = doc.splitTextToSize(value || '—', maxTextWidth);
     doc.text(lines as any, x + 5, y + 14);
@@ -301,15 +296,13 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     doc.setFontSize(12); doc.setFont(undefined,'bold');
     const lines = doc.splitTextToSize(value || '—', w - 10);
     const h = (doc.getTextDimensions(lines as any).h || 0);
-    return Math.max(18, 12 + h); // mínimo 18
+    return Math.max(18, 12 + h);
   };
 
   // ---------- HEADER ----------
   const hasImage = sim.ppo?.referenceImageUrl;
   let textX = pageMargin;
   let headerStartY = yPos;
-  let headerHeight = 25; // default
-
   if (hasImage) {
     try {
       const img = new Image();
@@ -324,39 +317,26 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
         let imgH = box / aspect;
         if (imgH > box) { imgH = box; imgW = box * aspect; }
 
-        headerHeight = imgH + 10;
         yPos = headerStartY + imgH + 10;
-
         doc.addImage(img, 'JPEG', pageMargin, headerStartY, imgW, imgH);
         textX = pageMargin + imgW + 10;
-
         const titleY = headerStartY + (imgH / 2) - 3;
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.setTextColor(0);
+        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
         doc.text(sim.name, textX, titleY);
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        doc.setTextColor(100);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
         doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, titleY + 6);
       }
-    } catch {
-      yPos += headerHeight;
-    }
+    } catch { yPos += 25; }
   } else {
-    doc.setFontSize(18);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(0);
+    doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
     doc.text(sim.name, textX, yPos + 7);
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9); doc.setTextColor(100); doc.setFont(undefined, 'normal');
     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, yPos + 13);
-    yPos += headerHeight;
+    yPos += 25;
   }
 
-  // ---------- INFORMAÇÕES DE VENDA E FISCAIS (cards modernos, 2 colunas) ----------
+  // ---------- INFORMAÇÕES DE VENDA E FISCAIS ----------
+  const outerPadX = 8; const outerPadY = 6; const gap = 8;
   const infoItems: Array<{label: string; value: string}> = [
     { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
     { label: 'Markup', value: `${sim.markup.toFixed(2)}x` },
@@ -367,17 +347,9 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     { label: 'CFOP', value: sim.ppo?.cfop || '—' },
   ];
 
-  const outerPadX = 8;
-  const outerPadY = 6;
-  const gap = 8;
-  const rows = Math.ceil(infoItems.length / 2);
-  const rowGap = 6;
-  
-  const grid = twoCols(outerPadX, gap);
-  const colW = grid.colW;
-
+  const grid = twoCols(outerPadX, gap); const colW = grid.colW; const rowGap = 6;
+  const rowHeights = [];
   let totalGridHeight = 0;
-  const rowHeights: number[] = [];
   for (let i = 0; i < infoItems.length; i += 2) {
     const hL = measureCardH(infoItems[i]?.value || '', colW);
     const hR = infoItems[i + 1] ? measureCardH(infoItems[i + 1]?.value || '', colW) : 0;
@@ -385,39 +357,23 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
     rowHeights.push(hRow);
     totalGridHeight += hRow;
   }
-  totalGridHeight += Math.max(0, rows - 1) * rowGap;
-
+  totalGridHeight += Math.max(0, Math.ceil(infoItems.length / 2) - 1) * rowGap;
   const boxHeight = outerPadY * 2 + 10 + 4 + totalGridHeight;
-  
   ensureSpace(boxHeight + 8);
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226);
+  doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
   roundedRect(pageMargin, yPos, pageContentWidth, boxHeight, 4, 'DF');
-
-  doc.setFontSize(11);
-  doc.setFont(undefined, 'bold');
-  doc.setTextColor(39, 51, 68);
+  doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
   doc.text('Informações de Venda e Fiscais', pageMargin + outerPadX, yPos + outerPadY + 3);
-  
-  let gridY = yPos + outerPadY + 10 + 4;
-  let itemIdx = 0;
+
+  let gridY = yPos + outerPadY + 10 + 4; let idx = 0;
   for (const hRow of rowHeights) {
-    const xLeft  = snap(grid.xLeft);
-    const xRight = snap(grid.xRight);
-    
-    if (itemIdx < infoItems.length) {
-      const it = infoItems[itemIdx++];
-      drawInfoCard(xLeft,  gridY, colW, hRow, it.label, it.value);
-    }
-    if (itemIdx < infoItems.length) {
-      const it = infoItems[itemIdx++];
-      drawInfoCard(xRight, gridY, colW, hRow, it.label, it.value);
-    }
+    const xLeft = snap(grid.xLeft); const xRight = snap(grid.xRight);
+    if (idx < infoItems.length) drawInfoCard(xLeft, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
+    if (idx < infoItems.length) drawInfoCard(xRight, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
     gridY += hRow + rowGap;
   }
-
   yPos += boxHeight + 8;
-  
+
   // ---------- COMPOSIÇÃO (CMV) ----------
   const ingredients = simulationItems
     .filter(item => item.simulationId === sim.id)
@@ -427,13 +383,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
       const qty = item.quantity;
       const cost = costPerUnit * qty;
       const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
-      return {
-        name: baseProduct?.name || 'Insumo não encontrado',
-        qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`,
-        cpuStr: formatCurrency(costPerUnit),
-        impact,
-        cost
-      };
+      return { name: baseProduct?.name || 'Insumo não encontrado', qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`, cpuStr: formatCurrency(costPerUnit), impact, cost };
     })
     .filter(row => row.cost > 0)
     .sort((a,b) => b.cost - a.cost)
@@ -441,74 +391,48 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
 
   if (ingredients.length > 0) {
     yPos = addSectionTitle('Composição (CMV)', yPos);
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Insumo', 'Quantidade', 'Custo/unid.', 'Impacto', 'Custo Total']],
-      body: ingredients,
-      theme: 'striped',
-      headStyles: { fillColor: [39, 51, 68], textColor: 255 },
-      styles: { fontSize: 10, fillColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [246, 248, 250] }
-    });
+    autoTable(doc, { startY: yPos, head: [['Insumo', 'Quantidade', 'Custo/unid.', 'Impacto', 'Custo Total']], body: ingredients, theme: 'striped', headStyles: { fillColor: [39,51,68], textColor: 255 }, styles: { fontSize: 10 }, alternateRowStyles: { fillColor: [246,248,250] } });
     yPos = (doc as any).lastAutoTable.finalY + 5;
-
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(0);
+    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
     doc.text('CMV Total:', doc.internal.pageSize.getWidth() - pageMargin - 50, yPos);
     doc.text(formatCurrency(sim.totalCmv), doc.internal.pageSize.getWidth() - pageMargin, yPos, { align: 'right' });
     yPos += 10;
   }
 
-  // ---------- MODO DE MONTAGEM (fases destacadas, linhas + imagem) ----------
+  // ---------- MODO DE MONTAGEM ----------
   if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
     yPos = addSectionTitle('Modo de Montagem', yPos);
     let blockY = yPos;
-
     for (const fase of sim.ppo.assemblyInstructions) {
-      const minFirstStepH = 18;
-      ensureSpace(14 + minFirstStepH);
-      doc.setFillColor(248, 250, 252);
-      doc.setDrawColor(226);
+      const minFirstStepH = 18; ensureSpace(14 + minFirstStepH);
+      doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
       roundedRect(pageMargin, blockY, pageContentWidth, 10, 2, 'DF');
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(39, 51, 68);
+      doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
       doc.text(fase.name, pageMargin + 5, blockY + 7);
       blockY += 14;
-
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(0);
+      doc.setFont(undefined, 'normal'); doc.setTextColor(0);
 
       for (let i = 0; i < fase.etapas.length; i++) {
-        ensureSpace(18);
-        const etapa = fase.etapas[i];
-        const leftX = pageMargin + 5;
-        const rightImgW = 40;
+        ensureSpace(18); const etapa = fase.etapas[i]; const leftX = pageMargin + 5; const rightImgW = 40;
         const reservedRight = etapa.imageUrl ? rightImgW : 0;
         const maxWidth = pageContentWidth - reservedRight - 10;
         const lines = doc.splitTextToSize(`${i + 1}. ${etapa.text}`, maxWidth);
-        doc.setFontSize(10);
-        doc.text(lines as any, leftX, blockY);
-
+        doc.setFontSize(10); doc.text(lines as any, leftX, blockY);
         let textHeight = doc.getTextDimensions(lines as any).h;
+
         if (etapa.imageUrl) {
           try {
-            const im = new Image();
-            im.crossOrigin = 'anonymous';
-            im.src = etapa.imageUrl;
+            const im = new Image(); im.crossOrigin = 'anonymous'; im.src = etapa.imageUrl;
             await new Promise(resolve => { im.onload = resolve; im.onerror = () => resolve(null); });
             if (im.width > 0) {
-              const imgW = rightImgW;
-              const imgH = (im.height * imgW) / im.width;
+              const imgW = rightImgW; const imgH = (im.height * imgW) / im.width;
               doc.addImage(im, 'JPEG', doc.internal.pageSize.getWidth() - pageMargin - rightImgW, blockY - 2, imgW, imgH);
               textHeight = Math.max(textHeight, imgH);
             }
           } catch {}
         }
         blockY += textHeight + 2;
-        doc.setDrawColor(226);
-        doc.line(pageMargin + 5, blockY, doc.internal.pageSize.getWidth() - pageMargin - 5, blockY);
+        doc.setDrawColor(226); doc.line(pageMargin + 5, blockY, doc.internal.pageSize.getWidth() - pageMargin - 5, blockY);
         blockY += 4;
       }
       blockY += 2;
@@ -518,28 +442,20 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
 
   // ---------- VÍDEO DE MONTAGEM ----------
   if (sim.ppo?.assemblyVideoUrl) {
-    yPos = addSectionTitle('Vídeo de Montagem', yPos);
-    const boxH = 24;
-    ensureSpace(boxH + 4);
-    doc.setFillColor(230, 240, 250);
-    doc.setDrawColor(200);
+    const boxH = 24; ensureSpace(boxH + 10);
+    doc.setFillColor(230, 240, 250); doc.setDrawColor(200);
     roundedRect(pageMargin, yPos, pageContentWidth, boxH, 3, 'DF');
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(39, 51, 68);
-    doc.text('Assista ao passo a passo completo:', pageMargin + 6, yPos + 9);
-    const linkLabel = 'Abrir vídeo';
-    const linkY = yPos + 16;
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(0, 0, 238);
+    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
+    doc.text('Vídeo de montagem', pageMargin + 6, yPos + 9);
+    const linkLabel = 'Abrir vídeo'; const linkY = yPos + 16;
+    doc.setFontSize(10); doc.setFont(undefined, 'normal'); doc.setTextColor(0, 0, 238);
     doc.text(linkLabel, pageMargin + 6, linkY);
     const labelW = doc.getTextWidth(linkLabel);
     doc.link(pageMargin + 6, linkY - 4, labelW, 6, { url: sim.ppo.assemblyVideoUrl });
     doc.setTextColor(0);
     yPos += boxH + 6;
   }
-  
+
   // ---------- DETALHES ADICIONAIS ----------
   const qualityStandardArray = Array.isArray(sim.ppo?.qualityStandard) ? sim.ppo.qualityStandard : (sim.ppo?.qualityStandard ? [{ id: '1', text: sim.ppo.qualityStandard }] : []);
   const padroes = qualityStandardArray.map(q => q.text).filter(Boolean);
@@ -554,51 +470,28 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
   
   if (detalhes.length > 0) {
-    const padX2 = 8;
-    const gap2 = 8;
-    const rowGap2 = 6;
-    const rows2 = Math.ceil(detalhes.length / 2);
-    
-    const grid2 = twoCols(padX2, gap2);
-    const colW2 = grid2.colW;
-
-    let totalGridHeight2 = 0;
-    const rowHeights2: number[] = [];
+    const padX2 = 8; const gap2 = 8; const rowGap2 = 6;
+    const grid2 = twoCols(padX2, gap2); const colW2 = grid2.colW;
+    const rowHeights2: number[] = []; let totalGridHeight2 = 0;
     for (let i = 0; i < detalhes.length; i += 2) {
       const hL = measureCardH(detalhes[i]?.value || '', colW2);
       const hR = detalhes[i + 1] ? measureCardH(detalhes[i + 1]?.value || '', colW2) : 0;
       const hRow = Math.max(hL, hR);
-      rowHeights2.push(hRow);
-      totalGridHeight2 += hRow;
+      rowHeights2.push(hRow); totalGridHeight2 += hRow;
     }
-    totalGridHeight2 += Math.max(0, rows2 - 1) * rowGap2;
-
-    const innerH2 = 10 + 4 + totalGridHeight2 + 10;
-    
-    ensureSpace(innerH2 + 4);
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226);
+    totalGridHeight2 += Math.max(0, Math.ceil(detalhes.length / 2) - 1) * rowGap2;
+    const innerH2 = 10 + 4 + totalGridHeight2 + 12;
+    ensureSpace(innerH2 + 10);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
     roundedRect(pageMargin, yPos, pageContentWidth, innerH2, 4, 'DF');
-
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(39, 51, 68);
+    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
     doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + 10);
 
-    let gy = yPos + 16;
-    let di = 0;
+    let gy = yPos + 16; let di = 0;
     for (const hRow of rowHeights2) {
-      const xL = snap(grid2.xLeft);
-      const xR = snap(grid2.xRight);
-      
-      if (di < detalhes.length) {
-        const it = detalhes[di++];
-        drawInfoCard(xL, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
-      }
-      if (di < detalhes.length) {
-        const it = detalhes[di++];
-        drawInfoCard(xR, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight });
-      }
+      const xL = snap(grid2.xLeft); const xR = snap(grid2.xRight);
+      if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xL, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight }); }
+      if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xR, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight }); }
       gy += hRow + rowGap2;
     }
     yPos += innerH2 + 6;
@@ -608,8 +501,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   const pages = (doc as any).getNumberOfPages();
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
-    doc.setFontSize(8);
-    doc.setTextColor(100);
+    doc.setFontSize(8); doc.setTextColor(100);
     const footer = `${sim.name} · pág. ${p}/${pages} · ${new Date().toLocaleDateString('pt-BR')}`;
     doc.text(footer, pageMargin, doc.internal.pageSize.getHeight() - 6);
   }
@@ -617,7 +509,7 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
   doc.save(`ficha_tecnica_${sim.name.replace(/ /g, '_')}.pdf`);
 };
 
-    const handleExportFichaTecnicaSimplificadaPdf = () => {
+const handleExportFichaTecnicaSimplificadaPdf = () => {
         const doc = new jsPDF();
         let yPos = 15;
 
@@ -1083,3 +975,5 @@ const handleExportFichaTecnicaCompletaPdf = async (sim: ProductSimulation) => {
         </div>
     );
 }
+
+    
