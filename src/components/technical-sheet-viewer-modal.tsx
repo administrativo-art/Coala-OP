@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useMemo } from 'react';
@@ -108,15 +107,14 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                                         <ol className="space-y-3">
                                             {phase.etapas.map((etapa, index) => (
                                                 <React.Fragment key={etapa.id}>
-                                                    <li className="grid grid-cols-[auto_1fr_auto] gap-4 items-center">
-                                                        <span className="font-bold text-primary">{index + 1}.</span>
+                                                    <li className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
+                                                        <span className="font-bold text-primary pt-1">{index + 1}.</span>
                                                         <div>
                                                             <span className="font-medium">{etapa.text}</span>
                                                             {etapa.quantity && etapa.unit && <span className="text-muted-foreground text-sm"> ({etapa.quantity} {etapa.unit})</span>}
                                                         </div>
                                                         {etapa.imageUrl && <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={64} height={64} className="rounded-md object-cover" />}
                                                     </li>
-                                                    {index < phase.etapas.length - 1 && <Separator className="my-2" />}
                                                 </React.Fragment>
                                             ))}
                                         </ol>
