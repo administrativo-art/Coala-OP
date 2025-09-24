@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -140,7 +141,12 @@ export function TechnicalSheetDashboard() {
                 {filteredSimulations.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredSimulations.map(sim => (
-                            <TechnicalSheetCard key={sim.id} simulation={sim} onOpenModal={() => setSimulationToView(sim)} />
+                            <TechnicalSheetCard 
+                                key={sim.id} 
+                                simulation={sim} 
+                                onViewSheet={() => setSimulationToView(sim)}
+                                onViewAssembly={() => setSimulationToView(sim)} // For now, both open the same modal
+                            />
                         ))}
                     </div>
                 ) : (
