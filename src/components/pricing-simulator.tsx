@@ -262,41 +262,14 @@ export function PricingSimulator() {
           const lines = doc.splitTextToSize(value || '—', maxTextWidth);
           doc.text(lines as any, x + 5, y + 14);
         };
-        
-        // Desenha o número da etapa dentro de um círculo, com centralização exata
-        const drawStepBadge = (cx: number, cy: number, n: number) => {
-            const r = 3.2; // raio em mm
-            // círculo
-            doc.setDrawColor(220);
-            doc.setFillColor(246, 248, 250); // cinza muito claro
-            (doc as any).circle(cx, cy, r, 'FD');
 
-            // texto
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(39, 51, 68);
-
-            const label = String(n);
-            const tw = doc.getTextWidth(label);
-
-            // Centralização horizontal: x = cx - tw/2
-            // Centralização vertical: usar baseline ~ 0.32 * fontSize abaixo do centro
-            const vAdjust = doc.getFontSize() * 0.32; // ajuste empírico para baseline
-            doc.text(label, cx - tw / 2, cy + vAdjust);
-
-            // restaura
-            doc.setTextColor(0);
-            doc.setFont(undefined, 'normal');
-        };
-
-        // mede a altura que o texto do passo vai ocupar para uma largura dada
         const measureStepTextH = (txt: string, maxW: number) => {
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
             const lines = doc.splitTextToSize(txt, maxW);
             return { lines, h: doc.getTextDimensions(lines as any).h || 4 };
         };
-
+        
         // ---------- CABEÇALHO ----------
         const hasImage = sim.ppo?.referenceImageUrl;
         let textX = pageMargin;
@@ -413,41 +386,43 @@ export function PricingSimulator() {
             yPos = (doc as any).lastAutoTable.finalY + 10;
         }
     
-        // ---------- MODO DE MONTAGEM (fases destacadas, numeração, layout responsivo) ----------
+        // ---------- MODO DE MONTAGEM (sem círculos, sem imagens, com medidas) ----------
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
             yPos = addSectionTitle('Modo de Montagem', yPos);
             let blockY = yPos;
-
+        
             const phaseTitleH = 12;
             const gapBetweenSteps = 6;
             const lineColor = 226;
-
+        
             for (const fase of sim.ppo.assemblyInstructions) {
                 // Título da fase (caixa suave)
                 ensureSpace(phaseTitleH + 6);
                 doc.setFillColor(248, 250, 252);
                 doc.setDrawColor(226);
                 (doc as any).roundedRect(pageMargin, blockY, pageContentWidth, phaseTitleH, 3, 3, 'DF');
-
-                // centralização vertical do texto do título
+        
+                // Título centralizado VERTICALMENTE e justificado
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
                 doc.setTextColor(39, 51, 68);
-                const _vAdj = doc.getFontSize() * 0.32; // mesmo ajuste de baseline
-                const titleY = blockY + phaseTitleH / 2 + _vAdj;
-                doc.text(fase.name || 'Fase', pageMargin + 6, titleY);
-
+                const _baseline = doc.getFontSize() * 0.32;
+                const titleY = blockY + phaseTitleH / 2 + _baseline;
+                doc.text(fase.name || 'Fase', pageMargin + 6, titleY, {
+                    align: 'justify',
+                    maxWidth: pageContentWidth - 12
+                });
+        
                 blockY += phaseTitleH + 4; // respiro abaixo do título
-
-                // Etapas
+        
+                // Etapas (somente texto, sem imagens nem badges)
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(0);
-                
+
                 const SEP_INSET_L = pageMargin + 5;
                 const SEP_INSET_R = doc.internal.pageSize.getWidth() - pageMargin - 5;
                 const PAD_TOP = 6;
                 const PAD_BOTTOM = 6;
-                const SEP_GAP = 0;
                 const textStartX = pageMargin + 6;
                 const maxTextW = pageContentWidth - 12;
 
@@ -460,45 +435,45 @@ export function PricingSimulator() {
                         doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
                         doc.setLineDash();
                     }
-                    
+
                     const qty = (etapa.quantity ?? (etapa as any).qty ?? (etapa as any).quantidade ?? (etapa as any).amount ?? (etapa as any).medida ?? (etapa as any).qtd) as number | string | undefined;
                     const unit = (etapa.unit ?? (etapa as any).unidade ?? (etapa as any).units ?? (etapa as any).sigla) as string | undefined;
                     const extraSize = (etapa.size ?? (etapa as any).tamanho) as string | undefined;
-
+              
                     let measureStr = '';
                     if (qty !== undefined && qty !== null && `${qty}`.trim() !== '') {
-                        measureStr = `${qty}${unit ? ` ${unit}` : ''}`;
+                      measureStr = `${qty}${unit ? ` ${unit}` : ''}`;
                     } else if (extraSize) {
-                        measureStr = extraSize;
+                      measureStr = extraSize;
                     }
-                    
+              
                     const coreText = (etapa.text || '').trim();
-                    const stepLabel = measureStr
-                        ? `${i + 1}. ${coreText} (${measureStr})`
-                        : `${i + 1}. ${coreText}`;
+                    const stepLabel = measureStr ? `${i + 1}. ${coreText} (${measureStr})` : `${i + 1}. ${coreText}`;
                     
                     doc.setFontSize(10);
-                    doc.setFont(undefined, 'normal');
-                    doc.setTextColor(0);
                     const lines = doc.splitTextToSize(stepLabel, maxTextW);
                     const textH = doc.getTextDimensions(lines as any).h || 4;
 
                     const rowH = PAD_TOP + textH + PAD_BOTTOM;
                     ensureSpace(rowH + 1);
 
-                    const textY = blockY + PAD_TOP + (SEP_GAP ? SEP_GAP : 0);
-                    doc.text(lines as any, textStartX, textY);
+                    const textY = blockY + PAD_TOP + (rowH - PAD_TOP - PAD_BOTTOM - textH) / 2 + textH * 0.32;
+
+                    doc.text(lines as any, textStartX, textY, {
+                        align: 'justify',
+                        maxWidth: maxTextW
+                    });
 
                     blockY += rowH;
                     doc.setDrawColor(226);
                     doc.setLineDash([1], 0);
                     doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
                     doc.setLineDash();
-                    
+
                     const note = ((etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '').trim();
                     if (note) {
                         const nLines = doc.splitTextToSize(note, pageContentWidth - 10);
-                        const nH = (doc.getTextDimensions(nLines as any).h || 4);
+                        const nH = doc.getTextDimensions(nLines as any).h || 4;
                         ensureSpace(nH + 3);
                         doc.setFontSize(9);
                         doc.setFont(undefined, 'italic');
@@ -1082,3 +1057,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
