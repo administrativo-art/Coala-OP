@@ -220,29 +220,7 @@ export function PricingSimulator() {
     
         const snap = (n: number) => Math.round(n * 100) / 100;
     
-        const drawStepBadge = (cx: number, cy: number, n: number) => {
-            const r = 3.2; 
-            doc.setDrawColor(220);
-            doc.setFillColor(246, 248, 250); 
-            (doc as any).circle(cx, cy, r, 'FD');
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(39, 51, 68);
-            const label = String(n);
-            const tw = doc.getTextWidth(label);
-            const vAdjust = doc.getFontSize() * 0.32;
-            doc.text(label, cx - tw / 2, cy + vAdjust);
-            doc.setTextColor(0); 
-            doc.setFont(undefined, 'normal');
-        };
-        
-        const measureStepTextH = (txt: string, maxW: number) => {
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            const lines = doc.splitTextToSize(txt, maxW);
-            return { lines, h: (doc.getTextDimensions(lines as any).h || 4) };
-        };
-    
+        // ---------- HELPERS (topo da função) ----------
         const addSectionTitle = (title: string, currentY: number) => {
             if (currentY > 260) { doc.addPage(); currentY = 15; }
             doc.setFontSize(12);
@@ -262,10 +240,10 @@ export function PricingSimulator() {
         };
     
         const measureCardH = (value: string, w: number) => {
-            doc.setFontSize(12); doc.setFont(undefined,'bold');
-            const lines = doc.splitTextToSize(value || '—', w - 10);
-            const h = (doc.getTextDimensions(lines as any).h || 0);
-            return Math.max(18, 12 + h);
+          doc.setFontSize(12); doc.setFont(undefined, 'bold');
+          const lines = doc.splitTextToSize(value || '—', w - 10);
+          const h = (doc.getTextDimensions(lines as any).h || 0);
+          return Math.max(18, 12 + h);
         };
         
         const drawInfoCard = (x: number, y: number, w: number, h: number, label: string, value: string, opts?: { highlight?: boolean }) => {
@@ -284,7 +262,31 @@ export function PricingSimulator() {
           const lines = doc.splitTextToSize(value || '—', maxTextWidth);
           doc.text(lines as any, x + 5, y + 14);
         };
+
+        const drawStepBadge = (cx: number, cy: number, n: number) => {
+            const r = 3.2; 
+            doc.setDrawColor(220);
+            doc.setFillColor(246, 248, 250); 
+            (doc as any).circle(cx, cy, r, 'FD');
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(39, 51, 68);
+            const label = String(n);
+            const tw = doc.getTextWidth(label);
+            const vAdjust = doc.getFontSize() * 0.32; 
+            doc.text(label, cx - tw / 2, cy + vAdjust);
+            doc.setTextColor(0); 
+            doc.setFont(undefined, 'normal');
+        };
+
+        const measureStepTextH = (txt: string, maxW: number) => {
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            const lines = doc.splitTextToSize(txt, maxW);
+            return { lines, h: (doc.getTextDimensions(lines as any).h || 4) };
+        };
     
+        // ---------- CABEÇALHO ----------
         const hasImage = sim.ppo?.referenceImageUrl;
         let textX = pageMargin;
         let headerStartY = yPos;
@@ -323,6 +325,7 @@ export function PricingSimulator() {
             yPos += 25;
         }
     
+        // ---------- INFORMAÇÕES DE VENDA E FISCAIS ----------
         const infoItems: Array<{label: string; value: string}> = [
             { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
             { label: 'Markup', value: `${sim.markup.toFixed(2)}x` },
@@ -333,52 +336,53 @@ export function PricingSimulator() {
             { label: 'CFOP', value: sim.ppo?.cfop || '—' },
         ];
         
-        const outerPadX = 8;
-        const outerPadY = 6;
-        const rowGap = 6;
-        const gap = 8;
+        const padX_info = 8;
+        const padTop_info = 10;
+        const titleH_info = 10;
+        const titleGap_info = 4;
+        const rowGap_info = 6;
         
+        const gridTopY_info = yPos + padTop_info + titleH_info + titleGap_info;
         const twoCols = (padX: number, gap: number) => {
-          const SAFE = 0.6;
-          const innerLeft  = pageMargin + padX + SAFE;
-          const innerRight = pageMargin + pageContentWidth - padX - SAFE;
-          let colW = (innerRight - innerLeft - gap) / 2;
-          colW = Math.floor(colW * 100) / 100;
-          const xLeft  = Math.floor(innerLeft * 100) / 100;
-          const xRight = Math.floor((innerRight - colW) * 100) / 100;
-          return { colW, xLeft, xRight };
+            const SAFE = 0.6;
+            const innerLeft  = pageMargin + padX + SAFE;
+            const innerRight = pageMargin + pageContentWidth - padX - SAFE;
+            let colW = (innerRight - innerLeft - gap) / 2;
+            colW = Math.floor(colW * 100) / 100;
+            const xLeft  = Math.floor(innerLeft * 100) / 100;
+            const xRight = Math.floor((innerRight - colW) * 100) / 100;
+            return { colW, xLeft, xRight };
         };
-
-        const g = twoCols(outerPadX, gap);
-        const colW = g.colW;
+        const g_info = twoCols(padX_info, 8);
         
-        const rowHeights = [];
+        const rowHeights_info = [];
         for (let i = 0; i < infoItems.length; i += 2) {
-            const hL = measureCardH(infoItems[i]?.value || '', colW);
-            const hR = infoItems[i + 1] ? measureCardH(infoItems[i + 1]?.value || '', colW) : 0;
-            rowHeights.push(Math.max(hL, hR));
+            const hL = measureCardH(infoItems[i]?.value || '', g_info.colW);
+            const hR = infoItems[i + 1] ? measureCardH(infoItems[i + 1]?.value || '', g_info.colW) : 0;
+            rowHeights_info.push(Math.max(hL, hR));
         }
         
-        const totalGridHeight = rowHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights.length - 1) * rowGap;
-        const boxH = outerPadY * 2 + 10 + 4 + totalGridHeight;
+        const totalGridHeight_info = rowHeights_info.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights_info.length - 1) * rowGap_info;
+        const boxH_info = padTop_info + titleH_info + titleGap_info + totalGridHeight_info + 10;
     
-        ensureSpace(boxH + 8);
+        ensureSpace(boxH_info + 8);
         doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
-        roundedRect(pageMargin, yPos, pageContentWidth, boxH, 4, 'DF');
+        roundedRect(pageMargin, yPos, pageContentWidth, boxH_info, 4, 'DF');
         doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
-        doc.text('Informações de Venda e Fiscais', pageMargin + outerPadX, yPos + outerPadY + 3);
+        doc.text('Informações de Venda e Fiscais', pageMargin + padX_info, yPos + padTop_info + 3);
     
-        let gridY = yPos + outerPadY + 9 + 4;
-        let idx = 0;
-        for (const hRow of rowHeights) {
-            const xLeft = snap(g.xLeft);
-            const xRight = snap(g.xRight);
-            if (idx < infoItems.length) drawInfoCard(xLeft, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
-            if (idx < infoItems.length) drawInfoCard(xRight, gridY, colW, hRow, infoItems[idx].label, infoItems[idx++].value);
-            gridY += hRow + rowGap;
+        let gridY_info = gridTopY_info;
+        let idx_info = 0;
+        for (const hRow of rowHeights_info) {
+            const xLeft = snap(g_info.xLeft);
+            const xRight = snap(g_info.xRight);
+            if (idx_info < infoItems.length) drawInfoCard(xLeft, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
+            if (idx_info < infoItems.length) drawInfoCard(xRight, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
+            gridY_info += hRow + rowGap_info;
         }
-        yPos += boxH + 8;
+        yPos += boxH_info + 8;
     
+        // ---------- COMPOSIÇÃO (CMV) ----------
         const ingredients = simulationItems
             .filter(item => item.simulationId === sim.id)
             .map(item => {
@@ -402,149 +406,73 @@ export function PricingSimulator() {
             yPos += 10;
         }
     
+        // ---------- MODO DE MONTAGEM (sem círculos, sem imagens, com medidas) ----------
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
             yPos = addSectionTitle('Modo de Montagem', yPos);
             let blockY = yPos;
-        
             const phaseTitleH = 12;
-            const gapBetweenSteps = 5;
+            const gapBetweenSteps = 6;
             const lineColor = 226;
-        
             for (const fase of sim.ppo.assemblyInstructions) {
-                ensureSpace(phaseTitleH + 18);
+                ensureSpace(phaseTitleH + 6);
                 doc.setFillColor(248, 250, 252);
                 doc.setDrawColor(226);
-                roundedRect(pageMargin, blockY, pageContentWidth, phaseTitleH, 3, 'DF');
-        
+                (doc as any).roundedRect(pageMargin, blockY, pageContentWidth, phaseTitleH, 3, 3, 'DF');
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
                 doc.setTextColor(39, 51, 68);
                 const _vAdj = doc.getFontSize() * 0.32;
                 const titleY = blockY + phaseTitleH / 2 + _vAdj;
                 doc.text(fase.name || 'Fase', pageMargin + 6, titleY);
-        
-                blockY += phaseTitleH + 2;
+                blockY += phaseTitleH + 4;
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(0);
-        
                 for (let i = 0; i < fase.etapas.length; i++) {
                     const etapa = fase.etapas[i];
-        
-                    const BADGE_R = 3.2;
-                    const BADGE_COL_X = pageMargin + 9;
-                    const TEXT_START_X = BADGE_COL_X + BADGE_R + 5;
-                    const SEP_LEFT = pageMargin + 5;
-                    const SEP_RIGHT = doc.internal.pageSize.getWidth() - pageMargin - 5;
-                    const rightImgW = 40;
-                    let imageIsSmall = !!etapa.imageUrl;
-                    let plannedImgH = 0;
-        
-                    if (etapa.imageUrl) {
-                        try {
-                            const im = new Image();
-                            im.crossOrigin = 'anonymous';
-                            im.src = etapa.imageUrl;
-                            await new Promise(resolve => { im.onload = resolve; im.onerror = () => resolve(null); });
-                            if (im.width > 0) {
-                                const imgW = rightImgW;
-                                const imgH = (im.height * imgW) / im.width;
-                                plannedImgH = imgH;
-                                if (imgH > 42) imageIsSmall = false;
-                            }
-                        } catch { imageIsSmall = false; }
+                    const qty = (etapa.quantity ?? (etapa as any).qty ?? (etapa as any).quantidade ?? (etapa as any).amount ?? (etapa as any).medida ?? (etapa as any).qtd) as number | string | undefined;
+                    const unit = (etapa.unit ?? (etapa as any).unidade ?? (etapa as any).units ?? (etapa as any).sigla) as string | undefined;
+                    const extraSize = (etapa.size ?? (etapa as any).tamanho) as string | undefined;
+                    let measureStr = '';
+                    if (qty !== undefined && qty !== null && `${qty}`.trim() !== '') {
+                        measureStr = `${qty}${unit ? ` ${unit}` : ''}`;
+                    } else if (extraSize) {
+                        measureStr = extraSize;
                     }
-        
-                    const maxTextW = imageIsSmall
-                        ? (pageContentWidth - (TEXT_START_X - pageMargin) - rightImgW - 6)
-                        : (pageContentWidth - (TEXT_START_X - pageMargin));
-        
-                    const stepLabel = `${etapa.text || ''}`;
-                    const { lines, h: textH } = measureStepTextH(stepLabel, maxTextW);
-                    const rowH = Math.max(textH, imageIsSmall ? plannedImgH : 0);
-        
-                    ensureSpace(rowH + gapBetweenSteps + 4);
-                    const baseY = blockY + 5;
-                    drawStepBadge(BADGE_COL_X, baseY - 1.2, i + 1);
-        
+                    const coreText = (etapa.text || '').trim();
+                    const stepLabel = measureStr ? `${i + 1}. ${coreText} (${measureStr})` : `${i + 1}. ${coreText}`;
+                    const textStartX = pageMargin + 6;
+                    const maxTextW = pageContentWidth - 12;
                     doc.setFontSize(10);
-                    doc.setFont(undefined, 'normal');
-                    doc.setTextColor(0);
-                    doc.text(lines as any, TEXT_START_X, baseY);
-        
-                    if (etapa.imageUrl && plannedImgH > 0) {
-                        try {
-                            const im2 = new Image();
-                            im2.crossOrigin = 'anonymous';
-                            im2.src = etapa.imageUrl;
-                            await new Promise(resolve => { im2.onload = resolve; im2.onerror = () => resolve(null); });
-        
-                            if (im2.width > 0) {
-                                if (imageIsSmall) {
-                                    const imgW = rightImgW;
-                                    const imgX = doc.internal.pageSize.getWidth() - pageMargin - imgW;
-                                    doc.addImage(im2, 'JPEG', imgX, blockY - 1, imgW, plannedImgH);
-                                } else {
-                                    const maxW = pageContentWidth - 20;
-                                    const imgW = Math.min(maxW, im2.width > 0 ? 60 : rightImgW);
-                                    const imgH = (im2.height * imgW) / im2.width;
-                                    const imgX = pageMargin + (pageContentWidth - imgW) / 2;
-                                    const imgY = blockY + textH + 3;
-                                    ensureSpace(imgH + 4);
-                                    doc.addImage(im2, 'JPEG', imgX, imgY, imgW, imgH);
-                                    const totalH = textH + 3 + imgH;
-                                    blockY += totalH + 3;
-                                    doc.setDrawColor(lineColor);
-                                    doc.setLineDash([1], 0);
-                                    doc.line(SEP_LEFT, blockY, SEP_RIGHT, blockY);
-                                    doc.setLineDash();
-                                    blockY += gapBetweenSteps;
-                                    continue;
-                                }
-                            }
-                        } catch {}
-                    }
-        
-                    blockY += rowH + 3;
+                    const lines = doc.splitTextToSize(stepLabel, maxTextW);
+                    const textH = (doc.getTextDimensions(lines as any).h || 4);
+                    ensureSpace(textH + gapBetweenSteps + 4);
+                    doc.text(lines as any, textStartX, blockY);
+                    blockY += textH + 3;
                     doc.setDrawColor(lineColor);
                     doc.setLineDash([1], 0);
-                    doc.line(SEP_LEFT, blockY, SEP_RIGHT, blockY);
+                    doc.line(pageMargin + 5, blockY, doc.internal.pageSize.getWidth() - pageMargin - 5, blockY);
                     doc.setLineDash();
                     blockY += gapBetweenSteps;
-        
-                    const note = (etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '';
-                    if (note.trim()) {
-                        const noteMaxW = pageContentWidth - 10;
-                        const { lines: nLines, h: nH } = measureStepTextH(note.trim(), noteMaxW);
+                    const note = ((etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '').trim();
+                    if (note) {
+                        const nLines = doc.splitTextToSize(note, pageContentWidth - 10);
+                        const nH = (doc.getTextDimensions(nLines as any).h || 4);
                         ensureSpace(nH + 3);
                         doc.setFontSize(9);
                         doc.setFont(undefined, 'italic');
                         doc.setTextColor(100);
-                        doc.text(nLines as any, pageMargin + 5, blockY);
+                        doc.text(nLines as any, pageMargin + 6, blockY);
                         blockY += nH + 3;
-                        doc.setTextColor(0);
                         doc.setFont(undefined, 'normal');
+                        doc.setTextColor(0);
                     }
                 }
-        
-                const review = ((fase as any).reviewText || (fase as any).checklist || '').trim();
-                if (review) {
-                    const { lines: rLines, h: rH } = measureStepTextH(review.trim(), pageContentWidth - 10);
-                    ensureSpace(rH + 8);
-                    doc.setFontSize(9.5);
-                    doc.setFont(undefined, 'bold');
-                    doc.setTextColor(39, 51, 68);
-                    doc.text('Revisão desta fase:', pageMargin + 5, blockY + 2);
-                    doc.setFont(undefined, 'normal');
-                    doc.setTextColor(0);
-                    doc.text(rLines as any, pageMargin + 5, blockY + 7);
-                    blockY += rH + 8;
-                }
-        
                 blockY += 2;
             }
             yPos = blockY;
         }
 
+        // ---------- VÍDEO ----------
         if (sim.ppo?.assemblyVideoUrl) {
             const boxH = 24;
             ensureSpace(boxH + 4);
@@ -562,50 +490,54 @@ export function PricingSimulator() {
             yPos += boxH + 6;
         }
     
+        // ---------- DETALHES ADICIONAIS ----------
         const detalhesBrutos = [
             sim.ppo?.preparationTime ? { label: 'Tempo de Preparo', value: `${sim.ppo.preparationTime} seg` } : null,
             sim.ppo?.portionWeight ? { label: 'Peso da Porção', value: `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` } : null,
             (sim.ppo?.qualityStandard?.length ?? 0 > 0) ? { label: 'Padrões de Qualidade', value: sim.ppo!.qualityStandard!.map(q => q.text).join('\n') } : null,
             sim.ppo?.allergens?.length ? { label: 'Alergênicos', value: sim.ppo.allergens.map(a => a.text).join(', '), highlight: true } : null,
         ];
-        
         const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
     
         if (detalhes.length > 0) {
             const padX2 = 8;
-            const gap2 = 8;
+            const padTop2 = 10;
+            const titleH2 = 10;
+            const titleGap2 = 4;
             const rowGap2 = 6;
-            const grid2 = twoCols(padX2, gap2);
-            const colW2 = grid2.colW;
+            const gridTopY2 = yPos + padTop2 + titleH2 + titleGap2;
+
+            const g2 = twoCols(padX2, 8);
             
             const rowHeights2: number[] = [];
             for (let i = 0; i < detalhes.length; i += 2) {
-                const hL = measureCardH(detalhes[i]?.value || '', colW2);
-                const hR = detalhes[i + 1] ? measureCardH(detalhes[i + 1]?.value || '', colW2) : 0;
+                const hL = measureCardH(detalhes[i]?.value || '', g2.colW);
+                const hR = detalhes[i + 1] ? measureCardH(detalhes[i + 1]?.value || '', g2.colW) : 0;
                 rowHeights2.push(Math.max(hL, hR));
             }
             
             const totalGridHeight2 = rowHeights2.reduce((sum, h) => sum + h, 0) + Math.max(0, rowHeights2.length - 1) * rowGap2;
-            const innerH2 = 10 + 4 + totalGridHeight2 + 12;
+            const innerH2 = padTop2 + titleH2 + titleGap2 + totalGridHeight2 + 10;
     
             ensureSpace(innerH2 + 4);
             doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
             roundedRect(pageMargin, yPos, pageContentWidth, innerH2, 4, 'DF');
             doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
-            doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + 10);
+            doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + padTop2);
     
-            let gy = yPos + 16 + 4;
+            let gy = gridTopY2;
             let di = 0;
             for (const hRow of rowHeights2) {
-                const xL = snap(grid2.xLeft);
-                const xR = snap(grid2.xRight);
-                if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xL, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight }); }
-                if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xR, gy, colW2, hRow, it.label, it.value, { highlight: it.highlight }); }
+                const xL = snap(g2.xLeft);
+                const xR = snap(g2.xRight);
+                if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xL, gy, g2.colW, hRow, it.label, it.value, { highlight: it.highlight }); }
+                if (di < detalhes.length) { const it = detalhes[di++]; drawInfoCard(xR, gy, g2.colW, hRow, it.label, it.value, { highlight: it.highlight }); }
                 gy += hRow + rowGap2;
             }
             yPos += innerH2 + 6;
         }
     
+        // ---------- FOOTER ----------
         const pages = (doc as any).getNumberOfPages();
         for (let p = 1; p <= pages; p++) {
             doc.setPage(p);
@@ -1108,3 +1040,5 @@ export function PricingSimulator() {
         </div>
     );
 }
+
+    
