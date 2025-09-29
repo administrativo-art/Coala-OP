@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload, Edit, Square } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScheduleTableView } from './schedule-table';
@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { ScrollArea } from './ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { ScheduleImportModal } from './schedule-import-modal';
+import { BulkEditScheduleModal } from './bulk-edit-schedule-modal';
 
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -41,8 +42,10 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
   const [initialSelectionDone, setInitialSelectionDone] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
 
   const loading = kiosksLoading || scheduleLoading;
   const canManageSchedule = permissions.team.manage;
@@ -50,6 +53,10 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   useEffect(() => {
     fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
   }, [currentDate, fetchSchedule]);
+
+  useEffect(() => {
+    setSelectedDays(new Set());
+  }, [currentDate, selectedKiosks]);
 
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -336,8 +343,23 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     setIsGenerateConfirmationOpen(false);
   };
   
-  const handleEditClick = (day: Date, kioskId: string) => {
+  const handleDayClick = (day: Date, kioskId: string) => {
     if (!canManageSchedule) return;
+    const dayISO = format(day, 'yyyy-MM-dd');
+    const selectionKey = `${dayISO}::${kioskId}`;
+    
+    setSelectedDays(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(selectionKey)) {
+            newSet.delete(selectionKey);
+        } else {
+            newSet.add(selectionKey);
+        }
+        return newSet;
+    });
+  };
+
+  const handleEditClick = (day: Date, kioskId: string) => {
     const dayISO = format(day, 'yyyy-MM-dd');
     const dayData = scheduleMap.get(dayISO);
 
@@ -457,6 +479,11 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
                 {canManageSchedule && (
                   <>
+                    {selectedDays.size > 0 && (
+                        <Button onClick={() => setIsBulkEditModalOpen(true)}>
+                            <Edit className="mr-2 h-4 w-4" /> Editar em Lote ({selectedDays.size})
+                        </Button>
+                    )}
                     <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
                     </Button>
@@ -483,6 +510,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     scheduleMap={scheduleMap}
                     dates={daysInMonth}
                     onEditDay={handleEditClick}
+                    onDayClick={canManageSchedule ? handleDayClick : undefined}
+                    selectedDays={selectedDays}
                     canManage={canManageSchedule}
                     users={users}
                     workDayCounts={workDayCounts}
@@ -551,6 +580,16 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         <ScheduleImportModal
             open={isImportModalOpen}
             onOpenChange={setIsImportModalOpen}
+        />
+        <BulkEditScheduleModal
+            open={isBulkEditModalOpen}
+            onOpenChange={setIsBulkEditModalOpen}
+            selectedKeys={selectedDays}
+            onConfirm={() => {
+                // Invalidate and refetch data
+                fetchSchedule(getYear(currentDate), getMonth(currentDate) + 1);
+                setSelectedDays(new Set());
+            }}
         />
     </>
   );

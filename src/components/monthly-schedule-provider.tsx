@@ -115,6 +115,39 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     }
 
   }, []);
+  
+  const bulkUpdateSchedules = useCallback(async (dayIds: string[], kioskId: string, turn: string, employeeNames: string[], action: 'add' | 'replace') => {
+    const batch = writeBatch(db);
+    const monthPadded = currentMonth.toString().padStart(2, '0');
+    const collectionPath = `escala/${currentYear}-${monthPadded}/dias`;
+
+    dayIds.forEach(dayId => {
+        const docRef = doc(db, collectionPath, dayId);
+        const shiftKey = `${kioskId} ${turn}`;
+        
+        if (action === 'replace') {
+            batch.update(docRef, { [shiftKey]: employeeNames.join(' + ') });
+        } else { // 'add'
+            // This is tricky without reading first. Best handled client-side then calling updateDailySchedule.
+            // For a pure batch operation, we'd need a server-side function or to overwrite.
+            // Let's assume for now we just overwrite for simplicity, or this would need reads.
+            // A more robust implementation would fetch docs, compute new value, then batch write.
+            // For now, let's just show how it *would* work with a simple replace.
+            // In a real scenario, you'd fetch the current values first.
+            const existingDay = schedule.find(d => d.id === dayId);
+            const existingNames = existingDay ? (existingDay[shiftKey] || '').split(' + ').filter(Boolean) : [];
+            const newNames = Array.from(new Set([...existingNames, ...employeeNames]));
+            batch.set(docRef, { [shiftKey]: newNames.join(' + ') }, { merge: true });
+        }
+    });
+
+    try {
+        await batch.commit();
+    } catch (error) {
+        console.error("Error in bulk schedule update:", error);
+        throw error;
+    }
+  }, [currentYear, currentMonth, schedule]);
 
 
   const value: MonthlyScheduleContextType = useMemo(() => ({
@@ -126,7 +159,8 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
     currentMonth,
     updateDailySchedule,
     createFullMonthSchedule,
-  }), [schedule, previousMonthSchedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule, createFullMonthSchedule]);
+    bulkUpdateSchedules,
+  }), [schedule, previousMonthSchedule, loading, fetchSchedule, currentYear, currentMonth, updateDailySchedule, createFullMonthSchedule, bulkUpdateSchedules]);
 
   return <MonthlyScheduleContext.Provider value={value}>{children}</MonthlyScheduleContext.Provider>;
 }

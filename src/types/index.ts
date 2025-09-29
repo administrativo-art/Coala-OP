@@ -179,6 +179,7 @@ export interface MonthlyScheduleContextType {
   fetchSchedule: (year: number, month: number) => void;
   updateDailySchedule: (dayId: string, updates: Partial<DailySchedule>) => Promise<void>;
   createFullMonthSchedule: (scheduleData: Record<string, any>, year: number, month: number) => Promise<void>;
+  bulkUpdateSchedules: (dayIds: string[], kioskId: string, turn: string, employeeNames: string[], action: 'add' | 'replace') => Promise<void>;
   currentYear: number;
   currentMonth: number;
 }

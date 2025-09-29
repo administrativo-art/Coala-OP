@@ -20,6 +20,8 @@ interface ScheduleTableViewProps {
   scheduleMap: Map<string, DailySchedule>;
   dates: Date[];
   onEditDay: (day: Date, kioskId: string) => void;
+  onDayClick?: (day: Date, kioskId: string) => void;
+  selectedDays?: Set<string>;
   canManage: boolean;
   users: User[];
   workDayCounts: Map<string, number>;
@@ -36,7 +38,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canManage, users, workDayCounts, warnings, todaysWorkersMap }: ScheduleTableViewProps) {
+export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDayClick, selectedDays, canManage, users, workDayCounts, warnings, todaysWorkersMap }: ScheduleTableViewProps) {
 
   const renderEmployeeName = (name: string, date: Date, kioskId: string, isFolga = false) => {
       const dayISO = format(date, 'yyyy-MM-dd');
@@ -105,13 +107,13 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
         </TableHeader>
         <TableBody>
             {dates.map(date => {
-            const dateStr = format(date, 'yyyy-MM-dd');
-            const daySchedule = scheduleMap.get(dateStr);
+            const dayISO = format(date, 'yyyy-MM-dd');
+            const daySchedule = scheduleMap.get(dayISO);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
             const isSunday = date.getDay() === 0;
 
             return (
-                <TableRow key={dateStr} className={cn(isWeekend && 'bg-muted/30', isSunday && 'bg-destructive/10')}>
+                <TableRow key={dayISO} className={cn(isWeekend && 'bg-muted/30', isSunday && 'bg-destructive/10')}>
                 <TableCell className={cn("px-2 py-3 align-top font-semibold", isToday(date) && "bg-accent/20 text-accent-foreground")}>
                     <p>{format(date, 'dd')}</p>
                     <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
@@ -123,7 +125,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                     const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
                     
                     const manualFolga = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
-                    const todaysWorkers = todaysWorkersMap.get(dateStr) || new Set();
+                    const todaysWorkers = todaysWorkersMap.get(dayISO) || new Set();
                     const autoFolgas = users
                         .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
                         .map(u => u.username);
@@ -132,15 +134,19 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
 
                     const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
                     const hasFolgaOrAusencia = (combinedFolgas && combinedFolgas.length > 0) || ausencias.length > 0;
+                    
+                    const selectionKey = `${dayISO}::${kiosk.id}`;
+                    const isSelected = selectedDays?.has(selectionKey);
 
                     return (
                         <TableCell
                           key={kiosk.id}
                           className={cn(
                             "px-2 py-3 align-top text-xs relative group",
-                             canManage && "cursor-pointer hover:bg-accent/10"
+                            onDayClick && "cursor-pointer",
+                            isSelected ? "bg-primary/20" : "hover:bg-accent/10"
                           )}
-                          onClick={canManage ? () => onEditDay(date, kiosk.id) : undefined}
+                          onClick={onDayClick ? () => onDayClick(date, kiosk.id) : undefined}
                         >
                             <div className="min-h-[60px] space-y-1">
                                 {t1 && <p><strong>T1:</strong> {renderShift(t1, date, kiosk.id)}</p>}
@@ -164,7 +170,9 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, canMa
                             </div>
                              {canManage && (
                                 <div className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <Edit className="h-3 w-3 text-muted-foreground" />
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onEditDay(date, kiosk.id);}}>
+                                        <Edit className="h-3 w-3 text-muted-foreground" />
+                                    </Button>
                                 </div>
                             )}
                         </TableCell>
