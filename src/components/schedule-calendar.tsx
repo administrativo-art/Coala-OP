@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload, Edit, Square } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload, Edit, Square, User as UserIcon } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScheduleTableView } from './schedule-table';
@@ -22,6 +22,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { ScheduleImportModal } from './schedule-import-modal';
 import { BulkEditScheduleModal } from './bulk-edit-schedule-modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -44,6 +45,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [initialSelectionDone, setInitialSelectionDone] = useState(false);
   const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
 
@@ -477,6 +479,19 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     </DropdownMenuContent>
                 </DropdownMenu>
 
+                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                      <UserIcon className="mr-2 h-4 w-4" />
+                      <SelectValue placeholder="Filtrar por colaborador..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="all">Todos os colaboradores</SelectItem>
+                      {users.filter(u => u.operacional).map(user => (
+                          <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
                 {canManageSchedule && (
                   <>
                     {selectedDays.size > 0 && (
@@ -517,6 +532,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     workDayCounts={workDayCounts}
                     warnings={warnings}
                     todaysWorkersMap={todaysWorkersMap}
+                    selectedEmployee={selectedEmployee}
                 />
             )}
         </CardContent>

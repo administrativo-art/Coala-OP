@@ -2,7 +2,7 @@
 "use client"
 
 import React from 'react';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type Kiosk, type DailySchedule, type AbsenceEntry, type User } from '../types';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,7 @@ interface ScheduleTableViewProps {
   workDayCounts: Map<string, number>;
   warnings: Map<string, { type: 'overwork' | 'conflict'; message: string }>;
   todaysWorkersMap: Map<string, Set<string>>;
+  selectedEmployee: string;
 }
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
@@ -38,7 +39,7 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDayClick, selectedDays, canManage, users, workDayCounts, warnings, todaysWorkersMap }: ScheduleTableViewProps) {
+export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDayClick, selectedDays, canManage, users, workDayCounts, warnings, todaysWorkersMap, selectedEmployee }: ScheduleTableViewProps) {
 
   const renderEmployeeName = (name: string, date: Date, kioskId: string, isFolga = false) => {
       const dayISO = format(date, 'yyyy-MM-dd');
@@ -56,9 +57,11 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
       if (isFolga) {
           return <span className="text-muted-foreground">{name}</span>;
       }
+      
+      const isSelectedEmployee = selectedEmployee !== 'all' && user.id === selectedEmployee;
 
       return (
-        <span className="inline-flex items-center gap-1">
+        <span className={cn("inline-flex items-center gap-1", isSelectedEmployee && "font-bold")}>
             <span
                 className="px-1.5 py-0.5 rounded-md"
                 style={color ? { backgroundColor: color, color: 'black' } : {}}
@@ -119,9 +122,9 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
                     <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
                 </TableCell>
                 {kiosks.map(kiosk => {
-                    const t1 = lookupShift(daySchedule, kiosk, 'T1');
-                    const t2 = lookupShift(daySchedule, kiosk, 'T2');
-                    const t3 = lookupShift(daySchedule, kiosk, 'T3');
+                    const t1 = lookupShift(daySchedule, kiosk, 'T1') as string;
+                    const t2 = lookupShift(daySchedule, kiosk, 'T2') as string;
+                    const t3 = lookupShift(daySchedule, kiosk, 'T3') as string;
                     const ausencias = (lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
                     
                     const manualFolga = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
@@ -138,13 +141,19 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
                     const selectionKey = `${dayISO}::${kiosk.id}`;
                     const isSelected = selectedDays?.has(selectionKey);
 
+                    const selectedUserObject = selectedEmployee !== 'all' ? users.find(u => u.id === selectedEmployee) : null;
+                    const employeeIsWorking = selectedUserObject && 
+                        (t1.includes(selectedUserObject.username) || t2.includes(selectedUserObject.username) || t3.includes(selectedUserObject.username));
+
+
                     return (
                         <TableCell
                           key={kiosk.id}
                           className={cn(
                             "px-2 py-3 align-top text-xs relative group",
                             onDayClick && "cursor-pointer",
-                            isSelected ? "bg-primary/20" : "hover:bg-accent/10"
+                            isSelected ? "bg-primary/20" : "hover:bg-accent/10",
+                            employeeIsWorking && "bg-blue-100 dark:bg-blue-900/50"
                           )}
                           onClick={onDayClick ? () => onDayClick(date, kiosk.id) : undefined}
                         >
