@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -24,6 +24,10 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { PhotoCaptureModal } from './photo-capture-modal';
+import { useToast } from '@/hooks/use-toast';
+import { resizeImage } from '@/lib/image-utils';
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
@@ -36,6 +40,7 @@ const userSchema = z.object({
   operacional: z.boolean(),
   valeTransporte: z.coerce.number().optional(),
   color: z.string().nullable().optional(),
+  avatarUrl: z.string().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
 }, {
@@ -47,22 +52,18 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
-// Função para formatar o número como moeda brasileira
 const formatCurrency = (value: number | undefined): string => {
-  if (value === undefined || value === null || isNaN(value)) {
-    return '';
-  }
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value).replace('R$', '').trim();
+    if (value === undefined || value === null || isNaN(value)) {
+        return '';
+    }
+    const val = value / 100;
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-// Função para converter o valor formatado de volta para número
 const parseCurrency = (value: string): number => {
-  const onlyNumbers = value.replace(/\D/g, '');
-  if (onlyNumbers === '') return 0;
-  return parseFloat(onlyNumbers) / 100;
+    const onlyNumbers = value.replace(/\D/g, '');
+    if (onlyNumbers === '') return 0;
+    return parseInt(onlyNumbers, 10);
 };
 
 
@@ -70,6 +71,7 @@ export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
   const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
+  const { toast } = useToast();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -80,6 +82,8 @@ export function UserManagement() {
   const [profileFilter, setProfileFilter] = useState('all');
   const [kioskFilter, setKioskFilter] = useState('all');
   const [showPassword, setShowPassword] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -94,6 +98,7 @@ export function UserManagement() {
         operacional: true,
         valeTransporte: 0,
         color: null,
+        avatarUrl: '',
     }
   });
   
@@ -128,6 +133,7 @@ export function UserManagement() {
       operacional: true,
       valeTransporte: 0,
       color: null,
+      avatarUrl: '',
     });
     setShowForm(true);
   };
@@ -145,6 +151,7 @@ export function UserManagement() {
       operacional: user.operacional,
       valeTransporte: user.valeTransporte || 0,
       color: user.color || null,
+      avatarUrl: user.avatarUrl || '',
     });
     setShowForm(true);
   };
@@ -165,7 +172,8 @@ export function UserManagement() {
   const onSubmit = (values: UserFormValues) => {
     if (editingUser) {
       const updatedData: Partial<User> = {
-          ...values
+          ...values,
+          valeTransporte: values.valeTransporte || 0,
       };
       delete (updatedData as any).password; 
       updateUser({ ...editingUser, ...updatedData });
@@ -181,13 +189,50 @@ export function UserManagement() {
           turno: values.turno,
           folguista: values.folguista,
           operacional: values.operacional,
-          valeTransporte: values.valeTransporte,
+          valeTransporte: values.valeTransporte || 0,
           color: values.color,
+          avatarUrl: values.avatarUrl,
       }, values.email, values.password);
     }
     setShowForm(false);
     setEditingUser(null);
   };
+  
+  const handlePhotoUpdate = async (dataUrl: string) => {
+    form.setValue('avatarUrl', dataUrl, { shouldDirty: true });
+    toast({ title: "Foto de perfil atualizada!" });
+  };
+  
+  const handlePhotoCaptured = async (dataUrl: string) => {
+      try {
+          const resized = await resizeImage(dataUrl, 512, 512);
+          handlePhotoUpdate(resized);
+      } catch (e) {
+          toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
+      }
+      setIsPhotoModalOpen(false);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        toast({ variant: 'destructive', title: 'Arquivo muito grande' });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+            const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
+            handlePhotoUpdate(resizedDataUrl);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
 
   const canManageAnyUsers = permissions.settings.manageUsers;
   const canManageKiosks = permissions.settings.manageKiosks;
@@ -227,53 +272,72 @@ export function UserManagement() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}</h3>
                 <div className="space-y-4 p-1">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="username" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nome de usuário</FormLabel>
-                          <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                     <FormField control={form.control} name="email" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>E-mail</FormLabel>
-                          <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  {!editingUser &&
-                    <FormField
-                        control={form.control}
-                        name="password"
-                        render={({ field }) => (
+                 <div className="flex flex-col md:flex-row gap-6 items-start">
+                    <div className="space-y-2">
+                        <Label>Foto do perfil</Label>
+                        <Avatar className="h-24 w-24">
+                           <AvatarImage src={form.watch('avatarUrl') || undefined} />
+                           <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
+                             {form.watch('username')?.charAt(0).toUpperCase() || '?'}
+                           </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col gap-1.5">
+                            <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
+                        </div>
+                        <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
+                        <FormField control={form.control} name="username" render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Senha</FormLabel>
-                                <div className="relative">
-                                    <FormControl>
-                                        <Input
-                                            type={showPassword ? 'text' : 'password'}
-                                            placeholder="Senha com no mínimo 6 caracteres"
-                                            {...field}
-                                        />
-                                    </FormControl>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-                                    >
-                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                    </button>
-                                </div>
-                                <FormMessage />
+                            <FormLabel>Nome de usuário</FormLabel>
+                            <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
+                            <FormMessage />
                             </FormItem>
                         )}
-                    />
-                  }
-                  
+                        />
+                        <FormField control={form.control} name="email" render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>E-mail</FormLabel>
+                            <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                         {!editingUser &&
+                            <div className="col-span-full">
+                               <FormField
+                                    control={form.control}
+                                    name="password"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Senha</FormLabel>
+                                            <div className="relative">
+                                                <FormControl>
+                                                    <Input
+                                                        type={showPassword ? 'text' : 'password'}
+                                                        placeholder="Senha com no mínimo 6 caracteres"
+                                                        {...field}
+                                                    />
+                                                </FormControl>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                </button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                           </div>
+                        }
+                    </div>
+                </div>
+
                   <Separator />
                   <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
                   
@@ -384,7 +448,7 @@ export function UserManagement() {
                     )}/>
                      <FormField control={form.control} name="valeTransporte" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Valor diário do VT (R$)</FormLabel>
+                            <FormLabel>Valor diário do VT</FormLabel>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
                                 <FormControl>
@@ -522,7 +586,7 @@ export function UserManagement() {
                     </div>
                     <div>
                       <span className="md:hidden text-muted-foreground">Perfil: </span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${user.profileId === adminProfileId ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
                         {getProfileName(user.profileId)}
                       </span>
                     </div>
@@ -559,6 +623,12 @@ export function UserManagement() {
         updateKiosk={updateKiosk}
         deleteKiosk={deleteKioskFromProvider}
         permissions={{add: !!canManageKiosks, delete: !!canManageKiosks}}
+      />
+      
+      <PhotoCaptureModal 
+        open={isPhotoModalOpen}
+        onOpenChange={setIsPhotoModalOpen}
+        onPhotoCaptured={handlePhotoCaptured}
       />
 
       {userToDelete && (
