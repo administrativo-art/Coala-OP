@@ -51,10 +51,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const usersData = querySnapshot.docs.map(docData => {
             const data = docData.data();
+            const assignedKiosks = data.assignedKioskIds || (data.kioskId ? [data.kioskId] : []);
             return { 
                 id: docData.id, 
                 ...data,
-                assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+                assignedKioskIds: assignedKiosks,
              } as User
         });
         setUsers(usersData);
@@ -200,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userToLogin = {
             id: userDoc.id,
             ...data,
-            assignedKioskIds: data.assignedKioskIds ?? [data.kioskId].filter(Boolean) ?? [],
+            assignedKioskIds: data.assignedKioskIds || (data.kioskId ? [data.kioskId] : []),
         } as User;
         // This will now be handled by the parent UserProvider
         localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
