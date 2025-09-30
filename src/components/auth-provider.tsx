@@ -46,20 +46,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        // Defer user logic until profiles are loaded
         if (profilesLoading) {
+            setLoading(true); // Ensure we wait for profiles
             return;
         }
 
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap = await getDoc(userDocRef);
 
-        if (!userDocSnap.exists()) {
-          const usersQuery = query(collection(db, 'users'), where("profileId", "==", adminProfileId));
-          const existingAdminSnap = await getDocs(usersQuery);
-
-          if (existingAdminSnap.empty && adminProfileId) {
-            console.log("Creating first admin user document in Firestore...");
+        // Explicit check for the hardcoded admin email
+        if (!userDocSnap.exists() && user.email === 'administrativo@coalashakes.com') {
+          console.log("Admin user logged in, but no Firestore document found. Creating one...");
+          if (adminProfileId) {
             const firstAdminData: Omit<User, 'id'> = {
                 username: user.displayName || user.email!.split('@')[0],
                 email: user.email!,
@@ -67,10 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: [],
                 turno: null,
                 folguista: false,
-                operacional: false,
+                operacional: true,
             };
             await setDoc(userDocRef, firstAdminData);
-            userDocSnap = await getDoc(userDocRef);
+            userDocSnap = await getDoc(userDocRef); // Re-fetch the document
+            console.log("Admin user document created.");
+          } else {
+            console.error("CRITICAL: Admin Profile ID not found. Cannot create admin user document.");
           }
         }
 
@@ -101,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profilesLoading, profiles, adminProfileId, appUser]);
 
   useEffect(() => {
-    if (profilesLoading) return; // Wait for profiles
+    if (profilesLoading) return; 
     const q = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
