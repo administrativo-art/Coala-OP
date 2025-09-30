@@ -1,17 +1,8 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Para a consulta em OnlineUsersPanel
-    // smart-converter-752gf/databases/coala/collectionGroups/userPresence/indexes/CgpicG9ydGFsEAEaCwoHc3RhdHVzEAEaDwoLbGFzdF9zZWVuEAEaDAoIX19uYW1lX18QAQ
-    // Esta é a definição do índice composto para a coleção userPresence
-    // que permite filtrar por 'status' e 'last_seen' simultaneamente.
-    // O erro do Firebase no console de depuração aponta para a necessidade deste índice.
-    
-    // As regras de segurança abaixo são um padrão para começar. 
-    // Por enquanto, elas permitem leitura e escrita se o usuário estiver autenticado.
-    // É importante refinar estas regras no futuro para maior segurança.
+    // Allow read/write access to all documents for authenticated users
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
