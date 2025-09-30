@@ -367,8 +367,8 @@ export function UserManagement() {
                         <FormItem>
                             <FormLabel>Valor diário do VT (R$)</FormLabel>
                             <div className="relative">
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <FormControl><Input type="number" placeholder="ex: 8.80" className="pl-8" {...field} value={field.value ?? ''} /></FormControl>
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                                <FormControl><Input type="number" placeholder="ex: 8.80" className="pl-9" {...field} value={field.value ?? ''} /></FormControl>
                             </div>
                             <FormMessage />
                         </FormItem>
