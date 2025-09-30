@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -22,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -69,7 +68,7 @@ const permissionsSchema = z.object({
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
   itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
-  reposition: z.object({ cancel: z.boolean() }),
+  reposition: { cancel: z.boolean() },
 });
 
 
@@ -86,11 +85,58 @@ type ProfileManagementModalProps = {
   canEdit: boolean;
 };
 
+function DuplicateProfileModal({
+  profileToDuplicate,
+  onClose,
+  onConfirm,
+}: {
+  profileToDuplicate: Profile | null;
+  onClose: () => void;
+  onConfirm: (newName: string) => void;
+}) {
+  const [newName, setNewName] = useState('');
+
+  useEffect(() => {
+    if (profileToDuplicate) {
+      setNewName(`${profileToDuplicate.name} (cópia)`);
+    }
+  }, [profileToDuplicate]);
+
+  if (!profileToDuplicate) return null;
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Duplicar perfil "{profileToDuplicate.name}"</DialogTitle>
+          <DialogDescription>
+            Insira um nome para o novo perfil que terá as mesmas permissões.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nome do novo perfil"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={() => onConfirm(newName)} disabled={!newName.trim()}>
+            Criar Duplicata
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileManagementModalProps) {
   const { profiles, addProfile, updateProfile, deleteProfile } = useProfiles();
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
+  const [profileToDuplicate, setProfileToDuplicate] = useState<Profile | null>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -149,6 +195,20 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     if (profileToDelete) {
       await deleteProfile(profileToDelete.id);
       setProfileToDelete(null);
+    }
+  };
+
+  const handleDuplicateClick = (profile: Profile) => {
+    setProfileToDuplicate(profile);
+  };
+
+  const handleDuplicateConfirm = (newName: string) => {
+    if (profileToDuplicate) {
+      addProfile({
+        name: newName,
+        permissions: profileToDuplicate.permissions,
+      });
+      setProfileToDuplicate(null);
     }
   };
 
@@ -418,15 +478,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     {profiles.length > 0 ? profiles.map(profile => (
                       <div key={profile.id} className="flex items-center justify-between rounded-md border p-3">
                         <span className="font-medium">{profile.name}</span>
-                        {canEdit && <div className="flex gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
+                        {canEdit && <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
                             <DeleteConfirmationDialog
                                 open={false}
                                 onOpenChange={()=>{}}
                                 onConfirm={handleDeleteConfirm}
                                 itemName={`o perfil "${profileToDelete?.name}"`}
                                 triggerButton={
-                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
                                 }
                             />
                         </div>}
@@ -442,6 +503,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
           </div>
         </DialogContent>
       </Dialog>
+
+      <DuplicateProfileModal
+        profileToDuplicate={profileToDuplicate}
+        onClose={() => setProfileToDuplicate(null)}
+        onConfirm={handleDuplicateConfirm}
+      />
     </>
   );
 }
