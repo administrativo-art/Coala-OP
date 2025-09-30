@@ -4,15 +4,17 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, ArrowRight, MinusCircle, History, Truck, Scale } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { useState } from 'react';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
+import { LabelSettingsModal } from '@/components/label-settings';
 
 function InventoryControlContent() {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
+    const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
 
     return (
         <>
@@ -37,6 +39,9 @@ function InventoryControlContent() {
                          <Button variant="outline" onClick={() => setIsConsumptionModalOpen(true)}>
                             <Scale className="mr-2 h-4 w-4"/> Consumo por período
                         </Button>
+                         <Button variant="outline" onClick={() => setIsLabelModalOpen(true)}>
+                            <Ticket className="mr-2 h-4 w-4" /> Configurar Etiquetas
+                        </Button>
                     </div>
                 </div>
                 <ExpiryControl />
@@ -46,6 +51,12 @@ function InventoryControlContent() {
             )}
             {isConsumptionModalOpen && (
                 <FinancialPeriodAnalysisModal open={isConsumptionModalOpen} onOpenChange={setIsConsumptionModalOpen} />
+            )}
+            {isLabelModalOpen && (
+                <LabelSettingsModal
+                    isOpen={isLabelModalOpen}
+                    onClose={() => setIsLabelModalOpen(false)}
+                />
             )}
         </>
     );
