@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';
@@ -170,6 +171,8 @@ export function UserManagement() {
   const canManageAnyUsers = permissions.settings.manageUsers;
   const canManageKiosks = permissions.settings.manageKiosks;
 
+  const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
+  
   if (!canManageAnyUsers) {
     return (
         <Card className="w-full max-w-2xl mx-auto">
