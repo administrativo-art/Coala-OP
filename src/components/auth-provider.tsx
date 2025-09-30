@@ -48,7 +48,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        let userDocSnap = await getDoc(userDocRef);
+
+        if (!userDocSnap.exists()) {
+          // Logic to handle the first-ever admin user.
+          const usersQuery = query(collection(db, 'users'), where('profileId', '==', 'admin'));
+          const adminUsersSnap = await getDocs(usersQuery);
+
+          if (adminUsersSnap.empty && profilesContext && !profilesContext.loading) {
+            const adminProfile = profilesContext.profiles.find(p => p.isDefaultAdmin);
+            if(adminProfile) {
+                console.log("Creating first admin user document in Firestore...");
+                const firstAdminData: Omit<User, 'id'> = {
+                    username: user.displayName || user.email || 'Admin',
+                    email: user.email!,
+                    profileId: adminProfile.id,
+                    assignedKioskIds: [],
+                    turno: null,
+                    folguista: false,
+                    operacional: false,
+                };
+                await setDoc(userDocRef, firstAdminData);
+                userDocSnap = await getDoc(userDocRef); // Re-fetch the doc
+            }
+          }
+        }
+
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
            if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
@@ -72,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, []);
+  }, [profilesContext]);
 
   useEffect(() => {
     const q = query(collection(db, "users"));
@@ -137,6 +162,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     try {
+      // This is a temporary solution for client-side user creation.
+      // For production, this should be moved to a secure backend function.
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       

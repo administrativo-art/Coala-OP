@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Profile, defaultAdminPermissions, defaultUserPermissions, defaultGuestPermissions } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query, getDocs } from 'firebase/firestore';
 
 export interface ProfilesContextType {
   profiles: Profile[];
@@ -25,30 +25,38 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const q = query(collection(db, "profiles"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+      
+      let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
+
       if (querySnapshot.empty && !localStorage.getItem('profiles_seeded')) {
         console.log("No profiles found. Seeding default profiles...");
         const batch = writeBatch(db);
         
         const adminProfileRef = doc(db, "profiles", "admin");
-        batch.set(adminProfileRef, { name: 'Administrador', permissions: defaultAdminPermissions, isDefaultAdmin: true });
+        const adminData = { name: 'Administrador', permissions: defaultAdminPermissions, isDefaultAdmin: true };
+        batch.set(adminProfileRef, adminData);
         
         const userProfileRef = doc(collection(db, "profiles"));
-        batch.set(userProfileRef, { name: 'Usuário padrão', permissions: defaultUserPermissions });
+        const userData = { name: 'Usuário padrão', permissions: defaultUserPermissions };
+        batch.set(userProfileRef, userData);
         
         try {
             await batch.commit();
             localStorage.setItem('profiles_seeded', 'true');
+            // Manually set state since listener won't re-fire immediately
+            setProfiles([{id: 'admin', ...adminData}, {id: userProfileRef.id, ...userData}]);
+            setAdminProfileId('admin');
+            setLoading(false);
         } catch (seedError) {
             console.error("Error seeding profiles:", seedError);
+            setLoading(false);
         }
         return; 
       }
 
-      const profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
-      
       const adminProfile = profilesData.find(p => p.isDefaultAdmin);
-      let adminProfileData = adminProfile;
       if (adminProfile) {
+        setAdminProfileId(adminProfile.id);
         const adminPerms = adminProfile.permissions || {};
         const defaultAdminPerms = defaultAdminPermissions;
         let needsUpdate = false;
@@ -59,9 +67,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           if (!adminPerms[typedKey]) {
             (adminPerms as any)[typedKey] = defaultAdminPerms[typedKey];
             needsUpdate = true;
-          } else if (typeof (defaultAdminPerms as any)[typedKey] === 'object') {
+          } else if (typeof (defaultAdminPerms as any)[typedKey] === 'object' && (defaultAdminPerms as any)[typedKey] !== null) {
             for (const subKey in (defaultAdminPerms as any)[typedKey]) {
-              if ((adminPerms[typedKey] as any)[subKey as keyof typeof adminPerms[typeof typedKey]] === undefined) {
+              if ((adminPerms[typedKey] as any)?.[subKey as keyof typeof adminPerms[typeof typedKey]] === undefined) {
+                 if (!(adminPerms[typedKey])) (adminPerms as any)[typedKey] = {};
                  (adminPerms[typedKey] as any)[subKey] = (defaultAdminPerms[typedKey] as any)[subKey];
                  needsUpdate = true;
               }
@@ -72,14 +81,11 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         if (needsUpdate) {
             console.log("Admin profile is outdated. Auto-updating...");
             const adminProfileRef = doc(db, "profiles", adminProfile.id);
-            // Apply correction immediately to the state
-            adminProfileData = {...adminProfile, permissions: adminPerms};
+            const updatedAdminProfile = {...adminProfile, permissions: adminPerms};
             const index = profilesData.findIndex(p => p.id === adminProfile.id);
             if(index !== -1) {
-              profilesData[index] = adminProfileData;
+              profilesData[index] = updatedAdminProfile;
             }
-
-            // Then update firestore
             updateDoc(adminProfileRef, { permissions: adminPerms }).catch(error => {
                 console.error("Failed to auto-update admin profile:", error);
             });
@@ -87,8 +93,6 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       }
       
       setProfiles(profilesData);
-      setAdminProfileId(adminProfileData ? adminProfileData.id : 'admin');
-
       setLoading(false);
     }, (error) => {
         console.error("Error fetching profiles from Firestore: ", error);
