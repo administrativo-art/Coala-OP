@@ -18,10 +18,9 @@ import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, PlusCircle, Trash2 } from 'lucide-react';
+import { ChevronsUpDown, PlusCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Textarea } from './ui/textarea';
-
 
 type EditScheduleModalProps = {
   dayData: DailySchedule | null;
@@ -49,7 +48,6 @@ type FormValues = z.infer<typeof scheduleSchema>;
 
 const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
     if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    // Prioriza a chave nova com ID, mas mantém o fallback para a chave antiga com nome
     const byId   = daySchedule[`${kiosk.id} ${turn}`];
     const byName = daySchedule[`${kiosk.name} ${turn}`];
     
@@ -61,11 +59,44 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
+function ConflictResolutionModal({ conflicts, onResolve, onCancel }: { conflicts: any[], onResolve: () => void, onCancel: () => void }) {
+    return (
+        <Dialog open={true} onOpenChange={onCancel}>
+            <DialogContent className="max-w-xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><AlertTriangle className="text-destructive"/> Conflitos de Folga e Turno</DialogTitle>
+                    <DialogDescription>
+                        Os colaboradores abaixo estão em folga manual e também escalados para trabalhar no mesmo dia. A folga manual será removida para manter a consistência.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <ScrollArea className="h-48">
+                        <div className="space-y-2 pr-4">
+                            {conflicts.map((c, i) => (
+                                <div key={i} className="p-3 border rounded-lg bg-muted/50">
+                                    <p className="font-semibold">{c.name}</p>
+                                    <p className="text-sm">Folga manual em: <span className="font-medium text-muted-foreground">{c.folgaEm.join(', ')}</span></p>
+                                    <p className="text-sm">Trabalha em: <span className="font-medium text-muted-foreground">{c.trabalhaEm.join(', ')}</span></p>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onCancel}>Cancelar</Button>
+                    <Button onClick={onResolve}>Corrigir e Salvar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: EditScheduleModalProps) {
   const { kiosks } = useKiosks();
-  const { updateDailySchedule, loading } = useMonthlySchedule();
+  const { schedule, updateDailySchedule, loading } = useMonthlySchedule();
   const [showThirdShift, setShowThirdShift] = useState(false);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(scheduleSchema),
@@ -120,9 +151,10 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     }
   }, [dayData, editingKiosk, replace, form]);
 
-  const onSubmit = async (values: FormValues) => {
+  const performSave = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
-    
+    setIsProcessing(true);
+
     const updates: Partial<DailySchedule> = {};
     const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
@@ -139,11 +171,78 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
         }
     }
     
-    updates[`${editingKiosk.id} Folga`] = values.folga.join(' + '); 
+    // Auto-remove employees from "Folga" if they are in a working shift
+    const workingEmployeesToday = new Set<string>();
+    values.shifts.forEach(shift => {
+        shift.value.forEach(name => workingEmployeesToday.add(name));
+    });
+    
+    const finalFolga = values.folga.filter(name => !workingEmployeesToday.has(name));
+
+    updates[`${editingKiosk.id} Folga`] = finalFolga.join(' + '); 
     updates[`${editingKiosk.id} Ausencia`] = values.ausencias;
 
     await updateDailySchedule(dayData.id, updates);
+    setIsProcessing(false);
     onOpenChange(false);
+    setConflicts([]);
+  };
+
+  const onSubmit = async (values: FormValues) => {
+    if (!dayData) return;
+
+    const dayScheduleInContext = schedule.find(d => d.id === dayData.id);
+    if (!dayScheduleInContext) {
+        performSave(values); // No context to check against, save directly
+        return;
+    }
+    
+    // Simulate the state after this edit
+    const simulatedDaySchedule = { ...dayScheduleInContext, [`${editingKiosk!.id} Folga`]: values.folga.join(' + ') };
+    ['T1', 'T2', 'T3'].forEach((turn, index) => {
+        simulatedDaySchedule[`${editingKiosk!.id} ${turn}`] = values.shifts[index].value.join(' + ');
+    });
+
+
+    // --- Conflict Detection Logic ---
+    const workingToday = new Set<string>();
+    kiosks.forEach(kiosk => {
+        ['T1', 'T2', 'T3'].forEach(turn => {
+            const shiftValue = lookupShift(simulatedDaySchedule as DailySchedule, kiosk, turn as any) as string;
+            if (shiftValue) {
+                shiftValue.split(' + ').forEach(name => workingToday.add(name.trim()));
+            }
+        });
+    });
+
+    const foundConflicts: any[] = [];
+    workingToday.forEach(name => {
+        const folgaEm = [];
+        const trabalhaEm = [];
+
+        for (const kiosk of kiosks) {
+            const manualFolgas = (lookupShift(simulatedDaySchedule as DailySchedule, kiosk, 'Folga') as string || '').split(' + ').map(n => n.trim());
+            if (manualFolgas.includes(name)) {
+                folgaEm.push(kiosk.name);
+            }
+             ['T1', 'T2', 'T3'].forEach(turn => {
+                const shiftWorkers = (lookupShift(simulatedDaySchedule as DailySchedule, kiosk, turn as any) as string || '').split(' + ').map(n => n.trim());
+                if (shiftWorkers.includes(name)) {
+                    trabalhaEm.push(`${kiosk.name} (${turn})`);
+                }
+            });
+        }
+        
+        if (folgaEm.length > 0) {
+            foundConflicts.push({ name, folgaEm, trabalhaEm });
+        }
+    });
+
+    if (foundConflicts.length > 0) {
+      setConflicts(foundConflicts);
+    } else {
+      performSave(values);
+    }
   };
 
   if (!dayData || !editingKiosk) return null;
@@ -185,7 +284,8 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
   );
 
   return (
-    <Dialog open={!!dayData} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={!!dayData && conflicts.length === 0} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Editar escala - {editingKiosk.name}</DialogTitle>
@@ -312,11 +412,23 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
             </ScrollArea>
             <DialogFooter className="pt-3 border-t">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={loading}>Salvar alterações</Button>
+              <Button type="submit" disabled={loading || isProcessing}>
+                {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                Salvar alterações
+              </Button>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
+    
+    {conflicts.length > 0 && (
+      <ConflictResolutionModal
+        conflicts={conflicts}
+        onResolve={() => performSave(form.getValues())}
+        onCancel={() => setConflicts([])}
+      />
+    )}
+    </>
   );
 }
