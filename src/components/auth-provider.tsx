@@ -9,7 +9,6 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser } from "firebase/auth";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
-import { ProfilesContext } from './profiles-provider';
 
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
@@ -40,15 +39,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
   const [loading, setLoading] = useState(true);
-  const profilesContext = React.useContext(ProfilesContext);
+  const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const router = useRouter();
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        // Wait for profiles to be loaded before proceeding
-        if (!profilesContext || profilesContext.loading) {
+        // Defer user logic until profiles are loaded
+        if (profilesLoading) {
             return;
         }
 
@@ -56,25 +55,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          const usersQuery = query(collection(db, 'users'));
-          const existingUsersSnap = await getDocs(usersQuery);
+          const usersQuery = query(collection(db, 'users'), where("profileId", "==", adminProfileId));
+          const existingAdminSnap = await getDocs(usersQuery);
 
-          if (existingUsersSnap.empty) {
-            const adminProfile = profilesContext.profiles.find(p => p.isDefaultAdmin);
-            if(adminProfile) {
-                console.log("Creating first admin user document in Firestore...");
-                const firstAdminData: Omit<User, 'id'> = {
-                    username: user.displayName || user.email!.split('@')[0],
-                    email: user.email!,
-                    profileId: adminProfile.id,
-                    assignedKioskIds: [],
-                    turno: null,
-                    folguista: false,
-                    operacional: false,
-                };
-                await setDoc(userDocRef, firstAdminData);
-                userDocSnap = await getDoc(userDocRef);
-            }
+          if (existingAdminSnap.empty && adminProfileId) {
+            console.log("Creating first admin user document in Firestore...");
+            const firstAdminData: Omit<User, 'id'> = {
+                username: user.displayName || user.email!.split('@')[0],
+                email: user.email!,
+                profileId: adminProfileId,
+                assignedKioskIds: [],
+                turno: null,
+                folguista: false,
+                operacional: false,
+            };
+            await setDoc(userDocRef, firstAdminData);
+            userDocSnap = await getDoc(userDocRef);
           }
         }
 
@@ -84,7 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setAppUser(userData);
            }
         } else {
-           console.warn(`Firestore document not found for authenticated user ${user.uid}`);
+           console.warn(`Firestore document not found for authenticated user ${user.uid}. Logging out.`);
+           await signOut(auth);
            setAppUser(null);
         }
       } else {
@@ -101,24 +98,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesContext, appUser]);
+  }, [profilesLoading, profiles, adminProfileId, appUser]);
 
   useEffect(() => {
+    if (profilesLoading) return; // Wait for profiles
     const q = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setUsers(usersData);
     });
     return () => unsubscribeUsers();
-  }, []);
+  }, [profilesLoading]);
 
   useEffect(() => {
-    if (loading || !appUser || !profilesContext || profilesContext.loading) {
+    if (loading || !appUser || profilesLoading) {
       setPermissions(defaultGuestPermissions);
       return;
     }
     
-    const userProfile = profilesContext.profiles.find(p => p.id === appUser.profileId);
+    const userProfile = profiles.find(p => p.id === appUser.profileId);
     
     if (userProfile?.isDefaultAdmin) {
       setPermissions(defaultAdminPermissions);
@@ -146,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
-  }, [appUser, profilesContext, loading]);
+  }, [appUser, profiles, loading, profilesLoading]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -227,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     originalUser,
     users,
     isAuthenticated: !!appUser,
-    loading: loading || (profilesContext ? profilesContext.loading : true),
+    loading: loading || profilesLoading,
     permissions,
     login,
     logout,
@@ -238,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     impersonate,
     stopImpersonating,
   }), [
-    appUser, firebaseUser, originalUser, users, loading, profilesContext, permissions,
+    appUser, firebaseUser, originalUser, users, loading, profiles, profilesLoading, permissions,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
