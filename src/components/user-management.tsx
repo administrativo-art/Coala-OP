@@ -152,7 +152,16 @@ export function UserManagement() {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
              return;
         }
-      addUser(values as Omit<User, 'id'>, values.password);
+      addUser({ 
+          username: values.username, 
+          profileId: values.profileId,
+          assignedKioskIds: values.assignedKioskIds,
+          turno: values.turno,
+          folguista: values.folguista,
+          operacional: values.operacional,
+          valeTransporte: values.valeTransporte,
+          color: values.color,
+      }, values.email, values.password);
     }
     setShowForm(false);
     setEditingUser(null);
@@ -199,7 +208,7 @@ export function UserManagement() {
                     <FormField control={form.control} name="username" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Nome de usuário</FormLabel>
-                          <FormControl><Input placeholder="ex: joao.silva" {...field} disabled={editingUser?.username === 'Tiago Brasil'} /></FormControl>
+                          <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -230,10 +239,10 @@ export function UserManagement() {
                     <FormField control={form.control} name="profileId" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Perfil de permissão</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={editingUser?.username === 'Tiago Brasil' || profilesLoading}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={profilesLoading}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
                             <SelectContent>
-                                {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                {profiles.map(p => <SelectItem key={p.id} value={p.id} disabled={p.isDefaultAdmin && currentUser?.profileId !== adminProfileId}>{p.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -477,7 +486,7 @@ export function UserManagement() {
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'Tiago Brasil' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
+                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                   </div>
                 ))}

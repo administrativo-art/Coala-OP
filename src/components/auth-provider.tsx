@@ -23,7 +23,7 @@ export interface AuthContextType {
   permissions: PermissionSet;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  addUser: (userData: Omit<User, 'id'>, password: string) => Promise<string | null>;
+  addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<string | null>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
@@ -44,17 +44,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Listener for auth state
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        // User is signed in, get their app-specific data
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          setAppUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+          const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
+           if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
+              setAppUser(userData);
+           }
         } else {
-          setAppUser(null);
+           console.warn(`Firestore document not found for authenticated user ${user.uid}`);
+           setAppUser(null);
         }
       } else {
         setAppUser(null);
@@ -62,7 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    // Load impersonation state from localStorage
     try {
       const storedOriginalUser = localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
       if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
@@ -70,13 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Failed to load original user state from storage", error);
     }
 
-    return () => {
-      unsubscribeAuth();
-    };
+    return () => unsubscribeAuth();
   }, []);
 
   useEffect(() => {
-    // Listener for all users in the collection
     const q = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
@@ -91,12 +89,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    if (appUser.username === 'Tiago Brasil') {
+    const userProfile = profilesContext.profiles.find(p => p.id === appUser.profileId);
+    
+    if (userProfile?.isDefaultAdmin) {
       setPermissions(defaultAdminPermissions);
       return;
     }
 
-    const userProfile = profilesContext.profiles.find(p => p.id === appUser.profileId);
     if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
       return;
@@ -136,16 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
-  const addUser = async (userData: Omit<User, 'id'>, password: string):Promise<string | null> => {
+  const addUser = async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     try {
-      // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // Create user document in Firestore with the UID from Auth
       const userDocRef = doc(db, 'users', user.uid);
-      const { password: _, ...userDataWithoutPassword } = userData as any;
-      await setDoc(userDocRef, userDataWithoutPassword);
+      await setDoc(userDocRef, { ...userData, email });
       
       return user.uid;
     } catch (error) {
@@ -156,14 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = async (updatedUser: User) => {
     const userRef = doc(db, "users", updatedUser.id);
-    const { id, ...dataToUpdate } = updatedUser;
-    // Email and password are not updatable through this function
-    delete (dataToUpdate as any).email;
-    delete (dataToUpdate as any).password;
-    await updateDoc(userRef, dataToUpdate as any);
+    const { id, email, ...dataToUpdate } = updatedUser as any;
+    delete dataToUpdate.password;
+    await updateDoc(userRef, dataToUpdate);
   };
   
   const deleteUser = async (userId: string) => {
+    // Note: This only deletes the Firestore record.
+    // Deleting from Firebase Auth requires admin privileges and a backend function.
     await deleteDoc(doc(db, "users", userId));
   };
   
