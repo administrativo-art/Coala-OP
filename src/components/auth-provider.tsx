@@ -58,7 +58,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 assignedKioskIds: assignedKiosks,
              } as User
         });
-        setUsers(usersData);
+        
+        // Correção: Remover o usuário "Tiago Brasil" duplicado que não tem um perfilId válido.
+        // Isso assume que o usuário correto "Tiago Brasil" SEMPRE terá um profileId.
+        const correctTiago = usersData.find(u => u.username === 'Tiago Brasil' && u.profileId);
+        const finalUsers = usersData.filter(u => {
+            if (u.username === 'Tiago Brasil') {
+                return u.id === correctTiago?.id;
+            }
+            return true;
+        });
+
+        setUsers(finalUsers);
     });
     return () => unsubscribe();
   }, []);
