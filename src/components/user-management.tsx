@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -60,6 +60,7 @@ export function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
   const [kioskFilter, setKioskFilter] = useState('all');
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -130,7 +131,7 @@ export function UserManagement() {
   };
   
   const handleDeleteClick = (user: User) => {
-    if (user.id === currentUser?.id || user.username === 'Tiago Brasil') return;
+    if (user.id === currentUser?.id || profileIsAdmin(user.profileId)) return;
     setUserToDelete(user);
   };
 
@@ -226,13 +227,32 @@ export function UserManagement() {
                     />
                   </div>
                   {!editingUser &&
-                    <FormField control={form.control} name="password" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Senha</FormLabel>
-                            <FormControl><Input type="password" placeholder="Senha com no mínimo 6 caracteres" {...field} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
+                    <FormField
+                        control={form.control}
+                        name="password"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Senha</FormLabel>
+                                <div className="relative">
+                                    <FormControl>
+                                        <Input
+                                            type={showPassword ? 'text' : 'password'}
+                                            placeholder="Senha com no mínimo 6 caracteres"
+                                            {...field}
+                                        />
+                                    </FormControl>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                                    >
+                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
+                                </div>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                   }
                   
                   <Separator />
