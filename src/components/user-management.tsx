@@ -115,7 +115,7 @@ export function UserManagement() {
     setEditingUser(user);
     form.reset({
       username: user.username,
-      email: user.email, // Assuming email is on the user object now
+      email: user.email,
       password: '',
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
@@ -145,8 +145,7 @@ export function UserManagement() {
       const updatedData: Partial<User> = {
           ...values
       };
-      // Password is not updated here. It should be done via a separate "reset password" flow.
-      delete updatedData.password; 
+      delete (updatedData as any).password; 
       updateUser({ ...editingUser, ...updatedData });
     } else {
         if (!values.password) {

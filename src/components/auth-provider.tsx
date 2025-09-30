@@ -5,10 +5,11 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser } from "firebase/auth";
-import { ProfilesContext } from '@/components/profiles-provider';
+import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
+import { ProfilesContext } from './profiles-provider';
 
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
@@ -43,13 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Listener for all users in the collection
-    const q = query(collection(db, "users"));
-    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
-        const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(usersData);
-    });
-
     // Listener for auth state
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
@@ -60,12 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userDocSnap.exists()) {
           setAppUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
         } else {
-          // This case might happen if a user is in Firebase Auth but not in Firestore `users` collection.
-          // We should log them out or handle it as an error.
           setAppUser(null);
         }
       } else {
-        // User is signed out
         setAppUser(null);
       }
       setLoading(false);
@@ -81,8 +72,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribeAuth();
-      unsubscribeUsers();
     };
+  }, []);
+
+  useEffect(() => {
+    // Listener for all users in the collection
+    const q = query(collection(db, "users"));
+    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
+        const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(usersData);
+    });
+    return () => unsubscribeUsers();
   }, []);
 
   useEffect(() => {
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
-  }, [appUser, profilesContext, loading, profilesContext.profiles]);
+  }, [appUser, profilesContext, loading]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -138,10 +138,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = async (userData: Omit<User, 'id'>, password: string):Promise<string | null> => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, userData.username, password);
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, password);
       const user = userCredential.user;
+      
+      // Create user document in Firestore with the UID from Auth
       const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, userData);
+      const { password: _, ...userDataWithoutPassword } = userData as any;
+      await setDoc(userDocRef, userDataWithoutPassword);
+      
       return user.uid;
     } catch (error) {
       console.error("Error adding user:", error);
@@ -152,13 +157,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = async (updatedUser: User) => {
     const userRef = doc(db, "users", updatedUser.id);
     const { id, ...dataToUpdate } = updatedUser;
+    // Email and password are not updatable through this function
+    delete (dataToUpdate as any).email;
+    delete (dataToUpdate as any).password;
     await updateDoc(userRef, dataToUpdate as any);
   };
   
   const deleteUser = async (userId: string) => {
-    // This is more complex now. You'd typically use Firebase Admin SDK on a server
-    // to delete a user from Firebase Auth. A client-side delete is not recommended.
-    // For now, we'll just delete from Firestore.
     await deleteDoc(doc(db, "users", userId));
   };
   
@@ -195,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     originalUser,
     users,
     isAuthenticated: !!appUser,
-    loading: loading || profilesContext.loading,
+    loading: loading || (profilesContext ? profilesContext.loading : true),
     permissions,
     login,
     logout,
@@ -206,8 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     impersonate,
     stopImpersonating,
   }), [
-    appUser, firebaseUser, originalUser, users, loading, profilesContext.loading, permissions,
-    login, logout, addUser, updateUser, deleteUser, resetPassword, impersonate, stopImpersonating
+    appUser, firebaseUser, originalUser, users, loading, profilesContext, permissions,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
