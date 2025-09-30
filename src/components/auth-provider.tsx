@@ -47,20 +47,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
+        // Wait for profiles to be loaded before proceeding
+        if (!profilesContext || profilesContext.loading) {
+            return;
+        }
+
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          // Logic to handle the first-ever admin user.
-          const usersQuery = query(collection(db, 'users'), where('profileId', '==', 'admin'));
-          const adminUsersSnap = await getDocs(usersQuery);
+          const usersQuery = query(collection(db, 'users'));
+          const existingUsersSnap = await getDocs(usersQuery);
 
-          if (adminUsersSnap.empty && profilesContext && !profilesContext.loading) {
+          if (existingUsersSnap.empty) {
             const adminProfile = profilesContext.profiles.find(p => p.isDefaultAdmin);
             if(adminProfile) {
                 console.log("Creating first admin user document in Firestore...");
                 const firstAdminData: Omit<User, 'id'> = {
-                    username: user.displayName || user.email || 'Admin',
+                    username: user.displayName || user.email!.split('@')[0],
                     email: user.email!,
                     profileId: adminProfile.id,
                     assignedKioskIds: [],
@@ -69,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     operacional: false,
                 };
                 await setDoc(userDocRef, firstAdminData);
-                userDocSnap = await getDoc(userDocRef); // Re-fetch the doc
+                userDocSnap = await getDoc(userDocRef);
             }
           }
         }
@@ -97,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesContext]);
+  }, [profilesContext, appUser]);
 
   useEffect(() => {
     const q = query(collection(db, "users"));
