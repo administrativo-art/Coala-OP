@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -27,7 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { resizeImage } from '@/lib/image-utils';
 
 export function UserProfile() {
-  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
+  const { user, users, permissions, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
