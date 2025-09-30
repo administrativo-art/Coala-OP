@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -28,6 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { resizeImage } from '@/lib/image-utils';
+import { Label } from '@/components/ui/label';
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
