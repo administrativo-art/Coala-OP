@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Loader2, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, User, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,6 +27,7 @@ export default function LoginPage() {
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
 
   const form = useForm<LoginFormValues>({
@@ -44,16 +45,12 @@ export default function LoginPage() {
   }, [isAuthenticated, authLoading, router]);
 
   const onSubmit = async (values: LoginFormValues) => {
+    setLoginError(null);
     const success = await login(values.email, values.password);
     if (success) {
       router.push('/dashboard');
     } else {
-      form.setError("password", { message: "E-mail ou senha inválidos."})
-      toast({
-        variant: "destructive",
-        title: "Falha no login",
-        description: "Verifique seu e-mail e senha e tente novamente.",
-      });
+      setLoginError("E-mail ou senha inválidos. Verifique seus dados e tente novamente.");
       form.setValue('password', '');
     }
   };
@@ -122,7 +119,15 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <div className="pt-6">
+
+              {loginError && (
+                <div className="bg-destructive/80 text-destructive-foreground p-3 rounded-lg text-center text-sm flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0"/>
+                    {loginError}
+                </div>
+              )}
+
+              <div className="pt-2">
                 <Button
                     type="submit"
                     className="h-12 w-full rounded-full bg-gradient-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-px"
