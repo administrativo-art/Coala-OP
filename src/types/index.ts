@@ -351,9 +351,9 @@ export type Profile = {
 }
 
 export type User = {
-    id:string;
+    id:string; // This will be the Firebase Auth UID
     username: string;
-    password?: string;
+    email: string;
     profileId: string;
     assignedKioskIds: string[];
     turno: 'T1' | 'T2' | null;
@@ -630,6 +630,7 @@ export const defaultGuestPermissions: PermissionSet = {
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     tasks: { view: false, manage: false },
     help: { view: true },
+    // Legado - Will be removed
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
     users: { add: false, edit: false, delete: false, impersonate: false },

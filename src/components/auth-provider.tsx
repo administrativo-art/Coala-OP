@@ -1,151 +1,31 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { db, auth } from '@/lib/firebase';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser } from "firebase/auth";
 import { ProfilesContext } from '@/components/profiles-provider';
 import { produce } from 'immer';
 
-const CURRENT_USER_STORAGE_KEY = 'smart-converter-current-user';
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
-// 1. User Context: Manages only the current user identity
-// This is the key to forcing a remount of the AuthProvider
-export interface UserContextType {
-  user: User | null;
-  originalUser: User | null;
-  users: User[];
-  loading: boolean;
-  impersonate: (userId: string) => void;
-  stopImpersonating: () => void;
-  logout: () => void;
-  updateUser: (user: User) => Promise<void>;
-}
-
-export const UserContext = createContext<UserContextType | undefined>(undefined);
-
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [originalUser, setOriginalUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
-
-  useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-      if (storedUser) setCurrentUser(JSON.parse(storedUser));
-      const storedOriginalUser = localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
-      if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
-    } catch (error) {
-      console.error("Failed to load user state from storage", error);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(db, "users"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const usersData = querySnapshot.docs.map(docData => {
-            const data = docData.data();
-            const assignedKiosks = data.assignedKioskIds || (data.kioskId ? [data.kioskId] : []);
-            return { 
-                id: docData.id, 
-                ...data,
-                assignedKioskIds: assignedKiosks,
-             } as User
-        });
-        
-        // Correção: Remover o usuário "Tiago Brasil" duplicado que não tem um perfilId válido.
-        // Isso assume que o usuário correto "Tiago Brasil" SEMPRE terá um profileId.
-        const correctTiago = usersData.find(u => u.username === 'Tiago Brasil' && u.profileId);
-        const finalUsers = usersData.filter(u => {
-            if (u.username === 'Tiago Brasil') {
-                return u.id === correctTiago?.id;
-            }
-            return true;
-        });
-
-        setUsers(finalUsers);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    setOriginalUser(null);
-    localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
-    localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
-    router.push('/login');
-  }, [router]);
-
-  const impersonate = useCallback((userId: string) => {
-    const userToImpersonate = users.find(u => u.id === userId);
-    if (userToImpersonate && currentUser) {
-      setOriginalUser(currentUser);
-      setCurrentUser(userToImpersonate);
-      localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
-      localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToImpersonate));
-    }
-  }, [users, currentUser]);
-
-  const stopImpersonating = useCallback(() => {
-    if (originalUser) {
-      setCurrentUser(originalUser);
-      setOriginalUser(null);
-      localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(originalUser));
-      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
-    }
-  }, [originalUser]);
-
-  const updateUser = useCallback(async (updatedUser: User) => {
-    const userRef = doc(db, "users", updatedUser.id);
-    const { id, ...dataToUpdate } = updatedUser;
-    try {
-        await updateDoc(userRef, dataToUpdate as any);
-        // Also update the current user in state if they are the one being edited
-        if (currentUser?.id === id) {
-            const newCurrentUser = { ...currentUser, ...dataToUpdate };
-            setCurrentUser(newCurrentUser);
-            localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(newCurrentUser));
-        }
-    } catch (error) {
-        console.error("Error updating user:", error);
-    }
-  }, [currentUser]);
-
-  const value = useMemo(() => ({
-    user: currentUser,
-    originalUser,
-    users,
-    loading,
-    impersonate,
-    stopImpersonating,
-    logout,
-    updateUser,
-  }), [currentUser, originalUser, users, loading, impersonate, stopImpersonating, logout, updateUser]);
-
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
-}
-
-// 2. Auth Context: Manages permissions for the current user.
-// This component will be remounted on user change, ensuring a clean state.
 export interface AuthContextType {
   user: User | null;
+  firebaseUser: FirebaseUser | null;
   originalUser: User | null;
   users: User[];
   isAuthenticated: boolean;
   loading: boolean;
   permissions: PermissionSet;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  addUser: (user: Omit<User, 'id'>) => Promise<void>;
+  addUser: (userData: Omit<User, 'id'>, password: string) => Promise<string | null>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
-  changePassword: (username: string, oldPassword: string, newPassword: string) => Promise<boolean>;
+  resetPassword: (email: string) => Promise<boolean>;
   impersonate: (userId: string) => void;
   stopImpersonating: () => void;
 }
@@ -153,34 +33,72 @@ export interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const userContext = useContext(UserContext);
-  if (!userContext) throw new Error("AuthProvider must be used within a UserProvider");
-
-  const { user, originalUser, users, loading: userLoading, impersonate, stopImpersonating, logout, updateUser: rawUpdateUser } = userContext;
-
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [appUser, setAppUser] = useState<User | null>(null);
+  const [originalUser, setOriginalUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
-  const [loadingPermissions, setLoadingPermissions] = useState(true);
-  const profilesContext = useContext(ProfilesContext);
+  const [loading, setLoading] = useState(true);
+  const profilesContext = React.useContext(ProfilesContext);
+  const router = useRouter();
 
   useEffect(() => {
-    setLoadingPermissions(true);
-    if (!user || !profilesContext || profilesContext.loading) {
+    // Listener for all users in the collection
+    const q = query(collection(db, "users"));
+    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
+        const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(usersData);
+    });
+
+    // Listener for auth state
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      if (user) {
+        // User is signed in, get their app-specific data
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setAppUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+        } else {
+          // This case might happen if a user is in Firebase Auth but not in Firestore `users` collection.
+          // We should log them out or handle it as an error.
+          setAppUser(null);
+        }
+      } else {
+        // User is signed out
+        setAppUser(null);
+      }
+      setLoading(false);
+    });
+
+    // Load impersonation state from localStorage
+    try {
+      const storedOriginalUser = localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
+      if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
+    } catch (error) {
+        console.error("Failed to load original user state from storage", error);
+    }
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeUsers();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading || !appUser || !profilesContext || profilesContext.loading) {
       setPermissions(defaultGuestPermissions);
-      setLoadingPermissions(false);
       return;
     }
     
-    if (user.username === 'Tiago Brasil') {
+    if (appUser.username === 'Tiago Brasil') {
       setPermissions(defaultAdminPermissions);
-      setLoadingPermissions(false);
       return;
     }
 
-    const userProfile = profilesContext.profiles.find(p => p.id === user.profileId);
-
+    const userProfile = profilesContext.profiles.find(p => p.id === appUser.profileId);
     if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
-      setLoadingPermissions(false);
       return;
     }
     
@@ -200,69 +118,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
-    setLoadingPermissions(false);
-  }, [user, profilesContext, profilesContext.loading, profilesContext.profiles]);
+  }, [appUser, profilesContext, loading, profilesContext.profiles]);
 
-  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
-    const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", password));
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        const data = userDoc.data();
-        const userToLogin = {
-            id: userDoc.id,
-            ...data,
-            assignedKioskIds: data.assignedKioskIds || (data.kioskId ? [data.kioskId] : []),
-        } as User;
-        // This will now be handled by the parent UserProvider
-        localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(userToLogin));
-        window.dispatchEvent(new Event("storage")); // Force update across tabs
-        return true;
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return true;
+    } catch (error) {
+      console.error("Login error:", error);
+      return false;
     }
-    return false;
-  }, []);
+  };
 
-  const addUser = useCallback(async (userData: Omit<User, 'id'>) => {
-    await addDoc(collection(db, "users"), userData as any);
-  }, []);
+  const logout = async () => {
+    stopImpersonating();
+    await signOut(auth);
+    router.push('/login');
+  };
 
-  const updateUser = useCallback(async (updatedUser: User) => {
-    await rawUpdateUser(updatedUser);
-  }, [rawUpdateUser]);
+  const addUser = async (userData: Omit<User, 'id'>, password: string):Promise<string | null> => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.username, password);
+      const user = userCredential.user;
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(userDocRef, userData);
+      return user.uid;
+    } catch (error) {
+      console.error("Error adding user:", error);
+      return null;
+    }
+  };
 
-  const deleteUser = useCallback(async (userId: string) => {
+  const updateUser = async (updatedUser: User) => {
+    const userRef = doc(db, "users", updatedUser.id);
+    const { id, ...dataToUpdate } = updatedUser;
+    await updateDoc(userRef, dataToUpdate as any);
+  };
+  
+  const deleteUser = async (userId: string) => {
+    // This is more complex now. You'd typically use Firebase Admin SDK on a server
+    // to delete a user from Firebase Auth. A client-side delete is not recommended.
+    // For now, we'll just delete from Firestore.
     await deleteDoc(doc(db, "users", userId));
-  }, []);
-
-  const changePassword = useCallback(async (username: string, oldPassword: string, newPassword: string): Promise<boolean> => {
-    const q = query(collection(db, "users"), where("username", "==", username), where("password", "==", oldPassword));
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        await updateDoc(doc(db, "users", userDoc.id), { password: newPassword });
-        return true;
+  };
+  
+  const resetPassword = async (email: string): Promise<boolean> => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return true;
+    } catch (error) {
+      console.error("Password reset error:", error);
+      return false;
     }
-    return false;
-  }, []);
+  };
 
-  const value: AuthContextType = useMemo(() => ({
-    user,
+  const impersonate = (userId: string) => {
+    const userToImpersonate = users.find(u => u.id === userId);
+    if (userToImpersonate && appUser && !originalUser) {
+      setOriginalUser(appUser);
+      setAppUser(userToImpersonate);
+      localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(appUser));
+    }
+  };
+
+  const stopImpersonating = () => {
+    if (originalUser) {
+      setAppUser(originalUser);
+      setOriginalUser(null);
+      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
+    }
+  };
+
+  const value = useMemo(() => ({
+    user: appUser,
+    firebaseUser,
     originalUser,
     users,
-    isAuthenticated: !!user,
-    loading: userLoading || loadingPermissions,
+    isAuthenticated: !!appUser,
+    loading: loading || profilesContext.loading,
     permissions,
     login,
     logout,
     addUser,
     updateUser,
     deleteUser,
-    changePassword,
+    resetPassword,
     impersonate,
     stopImpersonating,
   }), [
-    user, originalUser, users, userLoading, loadingPermissions, permissions,
-    login, logout, addUser, updateUser, deleteUser, changePassword, impersonate, stopImpersonating
+    appUser, firebaseUser, originalUser, users, loading, profilesContext.loading, permissions,
+    login, logout, addUser, updateUser, deleteUser, resetPassword, impersonate, stopImpersonating
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

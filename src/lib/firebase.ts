@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCn2V94gjX_Y1n4IOY40Y0JBKgXl--Sgns",
@@ -18,5 +19,6 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 // Connect to the specific "coala" database
 const db = getFirestore(app, "coala");
 const storage = getStorage(app);
+const auth = getAuth(app);
 
-export { db, storage };
+export { db, storage, auth };

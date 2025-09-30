@@ -13,9 +13,10 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Input } from '@/components/ui/input';
 import { Loader2, User, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
-  username: z.string().min(1, 'O nome de usuário é obrigatório.'),
+  email: z.string().email('Por favor, insira um e-mail válido.'),
   password: z.string().min(1, 'A senha é obrigatória.'),
 });
 
@@ -24,11 +25,12 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { toast } = useToast();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: '',
+      email: '',
       password: '',
     },
   });
@@ -40,11 +42,16 @@ export default function LoginPage() {
   }, [isAuthenticated, authLoading, router]);
 
   const onSubmit = async (values: LoginFormValues) => {
-    const success = await login(values.username, values.password);
+    const success = await login(values.email, values.password);
     if (success) {
       router.push('/dashboard');
     } else {
-      form.setError("password", { message: "Usuário ou senha inválidos."})
+      form.setError("password", { message: "E-mail ou senha inválidos."})
+      toast({
+        variant: "destructive",
+        title: "Falha no login",
+        description: "Verifique seu e-mail e senha e tente novamente.",
+      });
       form.setValue('password', '');
     }
   };
@@ -64,18 +71,18 @@ export default function LoginPage() {
         </div>
         
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-[75%]">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
               <FormField
                 control={form.control}
-                name="username"
+                name="email"
                 render={({ field }) => (
                   <FormItem>
                      <div className="relative">
                         <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" />
                         <FormControl>
                             <Input
-                                id="username-input"
-                                placeholder="Usuário"
+                                id="email-input"
+                                placeholder="E-mail"
                                 className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
                                 {...field}
                             />
@@ -121,7 +128,7 @@ export default function LoginPage() {
 
           <div className="text-center mt-4">
             <Link href="/forgot-password" className="text-sm text-black/60 hover:text-black/80 transition-colors duration-200">
-              Trocar minha senha
+              Esqueci minha senha
             </Link>
           </div>
       </div>

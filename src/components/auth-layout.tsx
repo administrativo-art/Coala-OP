@@ -1,19 +1,17 @@
 
 "use client";
 
-import { useContext } from 'react';
-import { UserContext } from './auth-provider';
+// This component is no longer necessary as the logic has been consolidated
+// into the main AuthProvider. It can be removed.
+import React, { useContext } from 'react';
 import { AuthProvider } from './auth-provider';
 import { ProfilesProvider } from './profiles-provider';
 
-// This component wraps the AuthProvider and provides it with a key,
-// ensuring it remounts when the user changes.
-export function AuthLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useContext(UserContext);
 
+export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProfilesProvider>
-      <AuthProvider key={user?.id || 'guest'}>
+      <AuthProvider>
         {children}
       </AuthProvider>
     </ProfilesProvider>

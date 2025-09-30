@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useAuth, useUser } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -26,18 +26,19 @@ import { ScrollArea } from './ui/scroll-area';
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
+  email: z.string().email("O e-mail é inválido."),
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
-  assignedKioskIds: z.array(z.string()).min(1, 'Selecione ao menos um quiosque.'),
+  assignedKioskIds: z.array(z.string()).min(1, 'Selecione pelo menos um quiosque.'),
   turno: z.enum(['T1', 'T2']).nullable(),
   folguista: z.boolean(),
   operacional: z.boolean(),
   valeTransporte: z.coerce.number().optional(),
   color: z.string().nullable().optional(),
 }).refine(data => {
-    return !data.password || data.password.length >= 4;
+    return !data.password || data.password.length >= 6;
 }, {
-    message: "A senha deve ter pelo menos 4 caracteres.",
+    message: "A senha deve ter pelo menos 6 caracteres.",
     path: ["password"],
 });
 
@@ -46,9 +47,8 @@ type UserFormValues = z.infer<typeof userSchema>;
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
 export function UserManagement() {
-  const { permissions } = useAuth();
-  const { users, addUser, deleteUser, user: currentUser, updateUser: rawUpdateUser } = useUser();
-  const { kiosks, updateKiosk, deleteKiosk, loading: kiosksLoading } = useKiosks();
+  const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
+  const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -64,6 +64,7 @@ export function UserManagement() {
     resolver: zodResolver(userSchema),
     defaultValues: {
         username: '',
+        email: '',
         password: '',
         profileId: '',
         assignedKioskIds: [],
@@ -74,10 +75,6 @@ export function UserManagement() {
         color: null,
     }
   });
-
-  const updateUser = async (userToUpdate: User) => {
-    await rawUpdateUser(userToUpdate);
-  }
   
   const isFolguista = form.watch('folguista');
 
@@ -101,6 +98,7 @@ export function UserManagement() {
     setEditingUser(null);
     form.reset({
       username: '',
+      email: '',
       password: '',
       profileId: '',
       assignedKioskIds: [],
@@ -117,6 +115,7 @@ export function UserManagement() {
     setEditingUser(user);
     form.reset({
       username: user.username,
+      email: user.email, // Assuming email is on the user object now
       password: '',
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
@@ -146,23 +145,22 @@ export function UserManagement() {
       const updatedData: Partial<User> = {
           ...values
       };
-      if (!values.password || values.password.trim() === '') {
-        delete updatedData.password;
-      }
+      // Password is not updated here. It should be done via a separate "reset password" flow.
+      delete updatedData.password; 
       updateUser({ ...editingUser, ...updatedData });
     } else {
         if (!values.password) {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
              return;
         }
-      addUser(values as Omit<User, 'id'>);
+      addUser(values as Omit<User, 'id'>, values.password);
     }
     setShowForm(false);
     setEditingUser(null);
   };
 
-  const canManageAnyUsers = permissions.users.add || permissions.users.edit || permissions.users.delete;
-  const canManageKiosks = permissions.kiosks?.add || permissions.kiosks?.delete;
+  const canManageAnyUsers = permissions.settings.manageUsers;
+  const canManageKiosks = permissions.settings.manageKiosks;
 
   if (!canManageAnyUsers) {
     return (
@@ -207,15 +205,24 @@ export function UserManagement() {
                         </FormItem>
                       )}
                     />
-                    <FormField control={form.control} name="password" render={({ field }) => (
+                     <FormField control={form.control} name="email" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Senha</FormLabel>
-                          <FormControl><Input type="password" placeholder={editingUser ? 'Deixe em branco para não alterar' : 'Senha forte'} {...field} /></FormControl>
+                          <FormLabel>E-mail</FormLabel>
+                          <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
+                  {!editingUser &&
+                    <FormField control={form.control} name="password" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Senha</FormLabel>
+                            <FormControl><Input type="password" placeholder="Senha com no mínimo 6 caracteres" {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                  }
                   
                   <Separator />
                   <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
@@ -386,10 +393,10 @@ export function UserManagement() {
           ) : (
             <>
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.users.add}>
+                <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.settings.manageUsers}>
                   <PlusCircle className="mr-2" /> Adicionar usuário
                 </Button>
-                 <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.users.edit}>
+                 <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.settings.manageProfiles}>
                     <Shield className="mr-2" /> Gerenciar perfis
                 </Button>
                  <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
@@ -470,8 +477,8 @@ export function UserManagement() {
                       {(user.valeTransporte || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
-                        {permissions.users.edit && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                        {permissions.users.delete && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'Tiago Brasil' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
+                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
+                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.username === 'Tiago Brasil' || user.id === currentUser?.id}><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                   </div>
                 ))}
@@ -484,7 +491,7 @@ export function UserManagement() {
       <ProfileManagementModal 
         open={isProfilesModalOpen}
         onOpenChange={setIsProfilesModalOpen}
-        canEdit={!!permissions.users?.edit}
+        canEdit={!!permissions.settings.manageProfiles}
       />
 
       <LocationManagementModal
@@ -492,8 +499,8 @@ export function UserManagement() {
         onOpenChange={setIsKiosksModalOpen}
         kiosks={kiosks}
         updateKiosk={updateKiosk}
-        deleteKiosk={deleteKiosk}
-        permissions={{add: !!permissions.kiosks?.add, delete: !!permissions.kiosks?.delete}}
+        deleteKiosk={deleteKioskFromProvider}
+        permissions={{add: !!canManageKiosks, delete: !!canManageKiosks}}
       />
 
       {userToDelete && (
@@ -508,5 +515,3 @@ export function UserManagement() {
     </>
   );
 }
-
-    

@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useRef } from 'react';
-import { useAuth, useUser } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
 import {
@@ -27,8 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { resizeImage } from '@/lib/image-utils';
 
 export function UserProfile() {
-  const { permissions } = useAuth();
-  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useUser();
+  const { user, users, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
@@ -89,6 +88,10 @@ export function UserProfile() {
       reader.readAsDataURL(file);
     }
   };
+  
+  const canImpersonate = useMemo(() => {
+    return permissions.users.impersonate
+  }, [permissions]);
 
   return (
     <>
@@ -145,7 +148,7 @@ export function UserProfile() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
 
-              {permissions.users.impersonate && !isImpersonating && (
+              {canImpersonate && !isImpersonating && (
                 <>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
@@ -194,5 +197,3 @@ export function UserProfile() {
     </>
   );
 }
-
-    
