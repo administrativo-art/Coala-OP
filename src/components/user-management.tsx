@@ -47,6 +47,25 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
+// Função para formatar o número como moeda brasileira
+const formatCurrency = (value: number | undefined): string => {
+  if (value === undefined || value === null || isNaN(value)) {
+    return '';
+  }
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value).replace('R$', '').trim();
+};
+
+// Função para converter o valor formatado de volta para número
+const parseCurrency = (value: string): number => {
+  const onlyNumbers = value.replace(/\D/g, '');
+  if (onlyNumbers === '') return 0;
+  return parseFloat(onlyNumbers) / 100;
+};
+
+
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
   const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
@@ -130,6 +149,7 @@ export function UserManagement() {
     setShowForm(true);
   };
   
+  const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
   const handleDeleteClick = (user: User) => {
     if (user.id === currentUser?.id || profileIsAdmin(user.profileId)) return;
     setUserToDelete(user);
@@ -172,7 +192,6 @@ export function UserManagement() {
   const canManageAnyUsers = permissions.settings.manageUsers;
   const canManageKiosks = permissions.settings.manageKiosks;
 
-  const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
   
   if (!canManageAnyUsers) {
     return (
@@ -368,7 +387,15 @@ export function UserManagement() {
                             <FormLabel>Valor diário do VT (R$)</FormLabel>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
-                                <FormControl><Input type="number" placeholder="ex: 8.80" className="pl-9" {...field} value={field.value ?? ''} /></FormControl>
+                                <FormControl>
+                                <Input
+                                    type="text"
+                                    placeholder="0,00"
+                                    className="pl-9"
+                                    value={formatCurrency(field.value)}
+                                    onChange={(e) => field.onChange(parseCurrency(e.target.value))}
+                                />
+                                </FormControl>
                             </div>
                             <FormMessage />
                         </FormItem>
