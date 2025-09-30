@@ -47,14 +47,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
       if (user) {
         if (profilesLoading) {
-            setLoading(true); // Ensure we wait for profiles
+            setLoading(true);
             return;
         }
 
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap = await getDoc(userDocRef);
 
-        // Explicit check for the hardcoded admin email
         if (!userDocSnap.exists() && user.email === 'administrativo@coalashakes.com') {
           console.log("Admin user logged in, but no Firestore document found. Creating one...");
           if (adminProfileId) {
@@ -68,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 operacional: true,
             };
             await setDoc(userDocRef, firstAdminData);
-            userDocSnap = await getDoc(userDocRef); // Re-fetch the document
+            userDocSnap = await getDoc(userDocRef);
             console.log("Admin user document created.");
           } else {
             console.error("CRITICAL: Admin Profile ID not found. Cannot create admin user document.");
@@ -165,8 +164,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     try {
-      // This is a temporary solution for client-side user creation.
-      // For production, this should be moved to a secure backend function.
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -188,8 +185,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
   
   const deleteUser = async (userId: string) => {
-    // Note: This only deletes the Firestore record.
-    // Deleting from Firebase Auth requires admin privileges and a backend function.
     await deleteDoc(doc(db, "users", userId));
   };
   
@@ -237,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     impersonate,
     stopImpersonating,
   }), [
-    appUser, firebaseUser, originalUser, users, loading, profiles, profilesLoading, permissions,
+    appUser, firebaseUser, originalUser, users, loading, profiles, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, impersonate, stopImpersonating
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
