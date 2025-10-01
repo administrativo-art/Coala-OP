@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth } from '@/lib/firebase';
@@ -42,6 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const router = useRouter();
+
+  const adminCredentials = useRef<{email: string, password: string} | null>(null);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      adminCredentials.current = { email, password };
       return true;
     } catch (error) {
       console.error("Login error:", error);
@@ -159,21 +162,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     stopImpersonating();
+    adminCredentials.current = null;
     await signOut(auth);
     router.push('/login');
   };
 
   const addUser = async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
+    const originalAdminAuth = auth.currentUser;
+    if (!originalAdminAuth) {
+        console.error("Admin not logged in, cannot create user.");
+        return null;
+    }
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const newUser = userCredential.user;
       
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db, 'users', newUser.uid);
       await setDoc(userDocRef, { ...userData, email });
       
-      return user.uid;
+      await signOut(auth);
+      
+      if (adminCredentials.current) {
+         await signInWithEmailAndPassword(auth, adminCredentials.current.email, adminCredentials.current.password);
+      } else {
+        console.warn("Could not automatically re-login admin. Manual login may be required.");
+        router.push('/login');
+      }
+
+      return newUser.uid;
     } catch (error) {
       console.error("Error adding user:", error);
+      try {
+        if (auth.currentUser?.uid !== originalAdminAuth.uid) {
+           await signInWithEmailAndPassword(auth, originalAdminAuth.email!, 'a-dummy-password-that-will-fail-but-is-not-the-point');
+        }
+      } catch (reauthError) {
+         router.push('/login');
+      }
       return null;
     }
   };
@@ -210,6 +236,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
+      if (adminCredentials.current) {
+        adminCredentials.current.password = newPassword;
+      }
       return { success: true };
     } catch (error: any) {
       console.error("Password change error:", error);
