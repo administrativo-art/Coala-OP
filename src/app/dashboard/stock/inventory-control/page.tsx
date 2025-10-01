@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Suspense, useState } from 'react';
@@ -24,8 +25,8 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex flex-col gap-4">
-                    <Link href="/dashboard/stock" className="self-start">
+                <div className="flex flex-col items-start gap-4">
+                    <Link href="/dashboard/stock">
                         <Button variant="outline">
                             <ArrowLeft className="mr-2" />
                             Voltar para gestão de estoque
@@ -34,7 +35,7 @@ function InventoryControlContent() {
                     
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto self-start">
+                        <Button variant="outline" className="w-full sm:w-auto">
                           <Menu className="mr-2 h-4 w-4" />
                           Ações
                         </Button>
