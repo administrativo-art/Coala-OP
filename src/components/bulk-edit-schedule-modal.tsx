@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronsUpDown, Loader2 } from 'lucide-react';
+import { ChevronsUpDown, Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -60,9 +60,11 @@ export function BulkEditScheduleModal({ open, onOpenChange, selectedKeys, onConf
 
   const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'Quiosque';
   
-  const availableEmployees = useMemo(() => {
-    if (!users || !kioskId) return [];
-    return users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
+  const { kioskEmployees, otherEmployees } = useMemo(() => {
+    if (!users || !kioskId) return { kioskEmployees: [], otherEmployees: [] };
+    const kioskEmp = users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
+    const otherEmp = users.filter(u => u.operacional && !u.assignedKioskIds.includes(kioskId!));
+    return { kioskEmployees: kioskEmp, otherEmployees: otherEmp };
   }, [users, kioskId]);
 
 
@@ -120,24 +122,48 @@ export function BulkEditScheduleModal({ open, onOpenChange, selectedKeys, onConf
                             </FormControl>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                            <DropdownMenuLabel>Colaboradores do Quiosque</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                                <ScrollArea className="h-48">
-                                    {availableEmployees.map((emp) => (
-                                    <DropdownMenuCheckboxItem
-                                        key={emp.id}
-                                        checked={field.value?.includes(emp.username)}
-                                        onCheckedChange={(checked) => {
-                                        const currentSelection = field.value || [];
-                                        return checked
-                                            ? field.onChange([...currentSelection, emp.username])
-                                            : field.onChange(currentSelection.filter((name) => name !== emp.username));
-                                        }}
-                                        onSelect={(e) => e.preventDefault()}
-                                    >
-                                        {emp.username}
-                                    </DropdownMenuCheckboxItem>
-                                    ))}
+                                <ScrollArea className="h-60">
+                                    <DropdownMenuGroup>
+                                        <DropdownMenuLabel>Colaboradores do Quiosque</DropdownMenuLabel>
+                                        {kioskEmployees.map((emp) => (
+                                            <DropdownMenuCheckboxItem
+                                                key={emp.id}
+                                                checked={field.value?.includes(emp.username)}
+                                                onCheckedChange={(checked) => {
+                                                    const currentSelection = field.value || [];
+                                                    return checked
+                                                        ? field.onChange([...currentSelection, emp.username])
+                                                        : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                                                }}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {emp.username}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuGroup>
+                                    {otherEmployees.length > 0 && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuGroup>
+                                                <DropdownMenuLabel>Outros Colaboradores</DropdownMenuLabel>
+                                                {otherEmployees.map((emp) => (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={emp.id}
+                                                        checked={field.value?.includes(emp.username)}
+                                                        onCheckedChange={(checked) => {
+                                                            const currentSelection = field.value || [];
+                                                            return checked
+                                                                ? field.onChange([...currentSelection, emp.username])
+                                                                : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                                                        }}
+                                                        onSelect={(e) => e.preventDefault()}
+                                                    >
+                                                        {emp.username}
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                            </DropdownMenuGroup>
+                                        </>
+                                    )}
                                 </ScrollArea>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -175,4 +201,3 @@ export function BulkEditScheduleModal({ open, onOpenChange, selectedKeys, onConf
     </Dialog>
   );
 }
-
