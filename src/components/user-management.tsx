@@ -53,27 +53,24 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
-const formatCurrencyForDisplay = (valueInCents: number | undefined): string => {
-    if (valueInCents === undefined || valueInCents === null || isNaN(valueInCents)) {
+const formatCurrencyForDisplay = (value: number | undefined): string => {
+    if (value === undefined || value === null || isNaN(value)) {
         return '';
     }
-    const realValue = valueInCents / 100;
-    return realValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-const formatCurrencyForInput = (valueInCents: number | undefined): string => {
-    if (valueInCents === undefined || valueInCents === null || isNaN(valueInCents)) {
+const formatCurrencyForInput = (value: number | undefined): string => {
+    if (value === undefined || value === null || isNaN(value)) {
         return '';
     }
-    const realValue = valueInCents / 100;
-    return realValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
-
 
 const parseCurrency = (value: string): number => {
-    const onlyNumbers = value.replace(/\D/g, '');
-    if (onlyNumbers === '') return 0;
-    return parseInt(onlyNumbers, 10);
+    if (!value) return 0;
+    const numberValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+    return isNaN(numberValue) ? 0 : numberValue;
 };
 
 
