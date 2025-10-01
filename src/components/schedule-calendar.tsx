@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -120,7 +121,7 @@ function PreviousWeekSummary({
                         const isSunday = date.getDay() === 0;
 
                         return (
-                            <TableRow key={dayISO} className={cn("border-none", isSunday && 'bg-destructive/10')}>
+                            <TableRow key={dayISO} className={cn(isSunday && 'bg-destructive/10')}>
                                 <TableCell className="px-2 py-3 align-top font-semibold w-24">
                                      <p>{format(date, 'dd')}</p>
                                      <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
