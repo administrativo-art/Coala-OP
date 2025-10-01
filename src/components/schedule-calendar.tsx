@@ -74,7 +74,7 @@ function PreviousDaySummary({
                 >
                     {name}
                     {count && count > 0 && (
-                        <span className="text-xs font-bold opacity-80"> - {count}</span>
+                         <span className="text-xs font-bold opacity-80"> ({count})</span>
                     )}
                 </span>
             </span>
@@ -331,10 +331,51 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
   const handleGenerateConfirm = async () => {
     const newScheduleData: Record<string, DailySchedule> = {};
-    const userWorkdayCounts = new Map<string, number>();
     
+    const userWorkdayCounts = new Map<string, number>();
+    const lastDayPrevMonthISO = format(endOfMonth(subMonths(currentDate, 1)), 'yyyy-MM-dd');
+    const lastDaySchedule = previousScheduleMap.get(lastDayPrevMonthISO);
+
     users.forEach(user => {
-        userWorkdayCounts.set(user.id, workDayCounts.get(`${format(endOfMonth(subMonths(currentDate, 1)), 'yyyy-MM-dd')}-${user.id}`) || 0);
+        let count = 0;
+        if(lastDaySchedule) {
+            let workedLastDay = false;
+            kiosksToDisplay.forEach(kiosk => {
+                ['T1', 'T2', 'T3'].forEach(turn => {
+                     const shiftWorkers = (lookupShift(lastDaySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                     if (shiftWorkers.includes(user.username)) {
+                        workedLastDay = true;
+                     }
+                });
+            });
+            
+            if (workedLastDay) {
+                let tempCount = 0;
+                for (let i = 0; i < 7; i++) {
+                    const checkDay = subDays(endOfDay(subMonths(currentDate, 1)), i);
+                    const checkDayISO = format(checkDay, 'yyyy-MM-dd');
+                    const scheduleForDay = previousScheduleMap.get(checkDayISO);
+                    let worked = false;
+                    if(scheduleForDay){
+                        kiosksToDisplay.forEach(kiosk => {
+                            ['T1', 'T2', 'T3'].forEach(turn => {
+                                 const shiftWorkers = (lookupShift(scheduleForDay, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                                 if (shiftWorkers.includes(user.username)) {
+                                    worked = true;
+                                 }
+                            });
+                        });
+                    }
+                    if (worked) {
+                        tempCount++;
+                    } else {
+                        break; 
+                    }
+                }
+                count = tempCount;
+            }
+        }
+        userWorkdayCounts.set(user.id, count);
     });
 
     daysInMonth.forEach(day => {
