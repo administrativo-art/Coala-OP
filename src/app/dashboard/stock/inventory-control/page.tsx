@@ -24,8 +24,8 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex flex-wrap gap-2 justify-between items-center">
-                    <Link href="/dashboard/stock">
+                <div className="flex flex-col gap-4">
+                    <Link href="/dashboard/stock" className="self-start">
                         <Button variant="outline">
                             <ArrowLeft className="mr-2" />
                             Voltar para gestão de estoque
@@ -34,12 +34,12 @@ function InventoryControlContent() {
                     
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
+                        <Button variant="outline" className="w-full sm:w-auto self-start">
                           <Menu className="mr-2 h-4 w-4" />
                           Ações
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="start">
                         <DropdownMenuItem asChild>
                           <Link href="/dashboard/stock/write-down" className="w-full">
                             <MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa
