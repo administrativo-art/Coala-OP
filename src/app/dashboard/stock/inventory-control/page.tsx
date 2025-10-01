@@ -25,7 +25,7 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex flex-col items-start gap-4">
+                <div className="flex flex-col items-start gap-4 mb-4">
                     <Link href="/dashboard/stock">
                         <Button variant="outline">
                             <ArrowLeft className="mr-2" />
