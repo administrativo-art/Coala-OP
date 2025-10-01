@@ -36,9 +36,9 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     return turn === 'Ausencia' ? [] : '';
 };
 
-function PreviousDaySummary({ 
-    date, 
-    schedule, 
+function PreviousWeekSummary({ 
+    dates,
+    schedules, 
     kiosks,
     users,
     workDayCounts,
@@ -46,8 +46,8 @@ function PreviousDaySummary({
     todaysWorkersMap,
     selectedEmployee,
 }: { 
-    date: Date, 
-    schedule?: DailySchedule, 
+    dates: Date[],
+    schedules: Map<string, DailySchedule>, 
     kiosks: Kiosk[],
     users: User[],
     workDayCounts: Map<string, number>,
@@ -55,13 +55,12 @@ function PreviousDaySummary({
     todaysWorkersMap: Map<string, Set<string>>,
     selectedEmployee: string;
 }) {
-    if (!schedule) {
+    if (dates.length === 0) {
         return null;
     }
 
-    const dayISO = format(date, 'yyyy-MM-dd');
-    
-    const renderEmployeeName = (name: string, isFolga = false) => {
+    const renderEmployeeName = (name: string, date: Date, kioskId: string, isFolga = false) => {
+        const dayISO = format(date, 'yyyy-MM-dd');
         const user = users.find(u => u.username === name.trim());
         if (!user) return name;
 
@@ -100,11 +99,11 @@ function PreviousDaySummary({
         );
     };
 
-    const renderShift = (shiftValue: string | any[], isFolga = false) => {
+    const renderShift = (shiftValue: string | any[], date: Date, kioskId: string, isFolga = false) => {
         if (typeof shiftValue !== 'string' || !shiftValue) return null;
         return shiftValue.split(' + ').map((name, index, arr) => (
             <React.Fragment key={name}>
-                {renderEmployeeName(name.trim(), isFolga)}
+                {renderEmployeeName(name.trim(), date, kioskId, isFolga)}
                 {index < arr.length - 1 && ' + '}
             </React.Fragment>
         ));
@@ -112,61 +111,69 @@ function PreviousDaySummary({
 
     return (
         <div className="mb-4 rounded-lg border bg-muted/50 p-2">
-             <h3 className="px-2 py-2 text-sm font-semibold text-muted-foreground">Resumo do último domingo: {format(date, "dd 'de' MMMM", { locale: ptBR })}</h3>
+             <h3 className="px-2 py-2 text-sm font-semibold text-muted-foreground">Resumo da última semana do mês anterior</h3>
             <Table>
                 <TableBody>
-                    <TableRow className="border-none">
-                        <TableCell className="px-2 py-3 align-top font-semibold w-24">
-                             <p>{format(date, 'dd')}</p>
-                             <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
-                        </TableCell>
-                        {kiosks.map(kiosk => {
-                            const t1 = (lookupShift(schedule, kiosk, 'T1') as string || '');
-                            const t2 = (lookupShift(schedule, kiosk, 'T2') as string || '');
-                            const t3 = (lookupShift(schedule, kiosk, 'T3') as string || '');
-                            
-                            const manualFolga = (lookupShift(schedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
-                            const ausencias = (lookupShift(schedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+                    {dates.map(date => {
+                        const dayISO = format(date, 'yyyy-MM-dd');
+                        const schedule = schedules.get(dayISO);
+                        const isSunday = date.getDay() === 0;
 
-                            const todaysWorkers = todaysWorkersMap.get(dayISO) || new Set();
-                            const autoFolgas = users
-                                .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
-                                .map(u => u.username);
-                    
-                            const combinedFolgas = [...new Set([...manualFolga, ...autoFolgas])].join(' + ');
-
-                            const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
-                            const hasFolgaOrAusencia = (combinedFolgas && combinedFolgas.length > 0) || ausencias.length > 0;
-                            const selectedUserObject = selectedEmployee !== 'all' ? users.find(u => u.id === selectedEmployee) : null;
-                            const employeeIsWorking = selectedUserObject && (t1.includes(selectedUserObject.username) || t2.includes(selectedUserObject.username) || t3.includes(selectedUserObject.username));
-
-
-                            return (
-                                <TableCell key={kiosk.id} className={cn("px-2 py-3 align-top text-xs relative group", employeeIsWorking && "bg-blue-100 dark:bg-blue-900/50")}>
-                                     <div className="min-h-[60px] space-y-1">
-                                        {t1 && <p><strong>T1:</strong> {renderShift(t1)}</p>}
-                                        {t2 && <p><strong>T2:</strong> {renderShift(t2)}</p>}
-                                        {t3 && <p><strong>T3:</strong> {renderShift(t3)}</p>}
-                                        
-                                        {hasWorkShifts && hasFolgaOrAusencia && (
-                                            <Separator className="my-2 border-dashed" />
-                                        )}
-
-                                        {combinedFolgas && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(combinedFolgas, true)}</p>}
-                                        
-                                        {ausencias.length > 0 && ausencias.map(a => {
-                                            const user = users.find(u => u.id === a.userId);
-                                            return (
-                                                <p key={a.userId} className="text-red-500 flex items-center gap-1">
-                                                    <UserIcon className="h-3 w-3"/> Ausente: {user?.username}
-                                                </p>
-                                            )
-                                        })}
-                                    </div>
+                        return (
+                            <TableRow key={dayISO} className={cn("border-none", isSunday && 'bg-destructive/10')}>
+                                <TableCell className="px-2 py-3 align-top font-semibold w-24">
+                                     <p>{format(date, 'dd')}</p>
+                                     <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
                                 </TableCell>
-                            )
-                        })}
-                    </TableRow>
+                                {kiosks.map(kiosk => {
+                                    const t1 = (lookupShift(schedule, kiosk, 'T1') as string || '');
+                                    const t2 = (lookupShift(schedule, kiosk, 'T2') as string || '');
+                                    const t3 = (lookupShift(schedule, kiosk, 'T3') as string || '');
+                                    
+                                    const manualFolga = (lookupShift(schedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+                                    const ausencias = (lookupShift(schedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+
+                                    const todaysWorkers = todaysWorkersMap.get(dayISO) || new Set();
+                                    const autoFolgas = users
+                                        .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
+                                        .map(u => u.username);
+                            
+                                    const combinedFolgas = [...new Set([...manualFolga, ...autoFolgas])].join(' + ');
+
+                                    const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
+                                    const hasFolgaOrAusencia = (combinedFolgas && combinedFolgas.length > 0) || ausencias.length > 0;
+                                    const selectedUserObject = selectedEmployee !== 'all' ? users.find(u => u.id === selectedEmployee) : null;
+                                    const employeeIsWorking = selectedUserObject && (t1.includes(selectedUserObject.username) || t2.includes(selectedUserObject.username) || t3.includes(selectedUserObject.username));
+
+
+                                    return (
+                                        <TableCell key={kiosk.id} className={cn("px-2 py-3 align-top text-xs relative group", employeeIsWorking && "bg-blue-100 dark:bg-blue-900/50")}>
+                                             <div className="min-h-[60px] space-y-1">
+                                                {t1 && <p><strong>T1:</strong> {renderShift(t1, date, kiosk.id)}</p>}
+                                                {t2 && <p><strong>T2:</strong> {renderShift(t2, date, kiosk.id)}</p>}
+                                                {t3 && <p><strong>T3:</strong> {renderShift(t3, date, kiosk.id)}</p>}
+                                                
+                                                {hasWorkShifts && hasFolgaOrAusencia && (
+                                                    <Separator className="my-2 border-dashed" />
+                                                )}
+
+                                                {combinedFolgas && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(combinedFolgas, date, kiosk.id, true)}</p>}
+                                                
+                                                {ausencias.length > 0 && ausencias.map(a => {
+                                                    const user = users.find(u => u.id === a.userId);
+                                                    return (
+                                                        <p key={a.userId} className="text-red-500 flex items-center gap-1">
+                                                            <UserIcon className="h-3 w-3"/> Ausente: {user?.username}
+                                                        </p>
+                                                    )
+                                                })}
+                                            </div>
+                                        </TableCell>
+                                    )
+                                })}
+                            </TableRow>
+                        )
+                    })}
                 </TableBody>
             </Table>
         </div>
@@ -262,8 +269,12 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     
     const allSchedules = new Map([...previousScheduleMap, ...scheduleMap]);
     
+    const allRelevantDates = [
+        ...eachDayOfInterval({ start: subDays(startOfMonth(currentDate), 14), end: endOfMonth(currentDate) })
+    ];
+
     users.forEach(user => {
-        [...previousMonthSchedule.map(s => parseISO(s.id)), ...daysInMonth].forEach(day => {
+        allRelevantDates.forEach(day => {
             const dayISO = format(day, 'yyyy-MM-dd');
             let workedToday = false;
             let isAusente = false;
@@ -307,9 +318,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         });
     });
 
-    daysInMonth.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = scheduleMap.get(dayISO);
+    [...previousScheduleMap.keys(), ...scheduleMap.keys()].forEach(dayISO => {
+        const daySchedule = allSchedules.get(dayISO);
         const workersToday = new Set<string>();
         if (daySchedule) {
             kiosksToDisplay.forEach(kiosk => {
@@ -535,12 +545,10 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
   };
 
-  const prevMonth = subMonths(currentDate, 1);
-  const endOfPrevMonth = endOfMonth(prevMonth);
-  const dayOfWeek = getDay(endOfPrevMonth); 
-  const lastSundayOfPrevMonth = subDays(endOfPrevMonth, dayOfWeek);
-  
-  const prevSundaySchedule = previousScheduleMap.get(format(lastSundayOfPrevMonth, 'yyyy-MM-dd'));
+  const lastWeekOfPrevMonth = useMemo(() => {
+    const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
+    return eachDayOfInterval({ start: subDays(prevMonthEndDate, 6), end: prevMonthEndDate });
+  }, [currentDate]);
 
 
   return (
@@ -632,18 +640,16 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 <Skeleton className="h-96 w-full" />
             ) : (
               <>
-                {prevSundaySchedule && (
-                    <PreviousDaySummary 
-                        date={lastSundayOfPrevMonth} 
-                        schedule={prevSundaySchedule} 
-                        kiosks={filteredKiosks} 
-                        users={users}
-                        workDayCounts={workDayCounts}
-                        warnings={warnings}
-                        todaysWorkersMap={todaysWorkersMap}
-                        selectedEmployee={selectedEmployee}
-                    />
-                )}
+                <PreviousWeekSummary 
+                    dates={lastWeekOfPrevMonth}
+                    schedules={previousScheduleMap}
+                    kiosks={filteredKiosks} 
+                    users={users}
+                    workDayCounts={workDayCounts}
+                    warnings={warnings}
+                    todaysWorkersMap={todaysWorkersMap}
+                    selectedEmployee={selectedEmployee}
+                />
                 <ScheduleTableView 
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
@@ -737,5 +743,3 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
     
 }
-
-    
