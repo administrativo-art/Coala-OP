@@ -17,7 +17,7 @@ import { type DailySchedule, type User, absenceReasons, type AbsenceReason, type
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup } from "@/components/ui/dropdown-menu";
 import { ChevronsUpDown, PlusCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Textarea } from './ui/textarea';
@@ -122,10 +122,13 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     return kiosks.find(k => k.id === kioskId);
   }, [kioskId, kiosks]);
 
-  const availableEmployees = useMemo(() => {
-    if (!users || !kioskId) return [];
-    return users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
+  const { kioskEmployees, otherEmployees } = useMemo(() => {
+    if (!users || !kioskId) return { kioskEmployees: [], otherEmployees: [] };
+    const kioskEmp = users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
+    const otherEmp = users.filter(u => u.operacional && !u.assignedKioskIds.includes(kioskId!));
+    return { kioskEmployees: kioskEmp, otherEmployees: otherEmp };
   }, [users, kioskId]);
+
 
   useEffect(() => {
     if (dayData && editingKiosk) {
@@ -260,24 +263,48 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
             </FormControl>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-            <DropdownMenuLabel>Colaboradores</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <ScrollArea className="h-48">
-                {availableEmployees.map((emp) => (
-                    <DropdownMenuCheckboxItem
-                        key={emp.id}
-                        checked={field.value?.includes(emp.username)}
-                        onCheckedChange={(checked) => {
-                            const currentSelection = field.value || [];
-                            return checked
-                                ? field.onChange([...currentSelection, emp.username])
-                                : field.onChange(currentSelection.filter((name) => name !== emp.username));
-                        }}
-                        onSelect={(e) => e.preventDefault()}
-                    >
-                        {emp.username}
-                    </DropdownMenuCheckboxItem>
-                ))}
+            <ScrollArea className="h-60">
+                <DropdownMenuGroup>
+                    <DropdownMenuLabel>Colaboradores do quiosque</DropdownMenuLabel>
+                    {kioskEmployees.map((emp) => (
+                        <DropdownMenuCheckboxItem
+                            key={emp.id}
+                            checked={field.value?.includes(emp.username)}
+                            onCheckedChange={(checked) => {
+                                const currentSelection = field.value || [];
+                                return checked
+                                    ? field.onChange([...currentSelection, emp.username])
+                                    : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                            }}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {emp.username}
+                        </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuGroup>
+                {otherEmployees.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                             <DropdownMenuLabel>Outros colaboradores</DropdownMenuLabel>
+                            {otherEmployees.map((emp) => (
+                                <DropdownMenuCheckboxItem
+                                    key={emp.id}
+                                    checked={field.value?.includes(emp.username)}
+                                    onCheckedChange={(checked) => {
+                                        const currentSelection = field.value || [];
+                                        return checked
+                                            ? field.onChange([...currentSelection, emp.username])
+                                            : field.onChange(currentSelection.filter((name) => name !== emp.username));
+                                    }}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {emp.username}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </DropdownMenuGroup>
+                    </>
+                )}
             </ScrollArea>
         </DropdownMenuContent>
     </DropdownMenu>
@@ -378,7 +405,7 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
                           <FormLabel>Colaborador</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                            <SelectContent>{availableEmployees.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
+                            <SelectContent>{users.filter(u => u.operacional).map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
                           </Select>
                           <FormMessage />
                         </FormItem>
