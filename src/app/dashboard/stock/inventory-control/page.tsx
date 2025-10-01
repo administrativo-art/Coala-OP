@@ -1,15 +1,20 @@
 "use client";
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, ArrowRight, MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
+import { ArrowLeft, MinusCircle, History, Truck, Scale, Ticket, Menu } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
-import { useState } from 'react';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 function InventoryControlContent() {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -26,23 +31,36 @@ function InventoryControlContent() {
                             Voltar para gestão de estoque
                         </Button>
                     </Link>
-                    <div className="flex flex-wrap gap-2">
-                         <Link href="/dashboard/stock/write-down">
-                            <Button variant="outline"><MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa</Button>
-                        </Link>
-                        <Link href="/dashboard/stock/transfer">
-                            <Button variant="outline"><Truck className="mr-2 h-4 w-4" /> Realizar Transferência</Button>
-                        </Link>
-                        <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
-                            <History className="mr-2 h-4 w-4"/> Consultar Histórico
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                          <Menu className="mr-2 h-4 w-4" />
+                          Ações
                         </Button>
-                         <Button variant="outline" onClick={() => setIsConsumptionModalOpen(true)}>
-                            <Scale className="mr-2 h-4 w-4"/> Consumo por período
-                        </Button>
-                         <Button variant="outline" onClick={() => setIsLabelModalOpen(true)}>
-                            <Ticket className="mr-2 h-4 w-4" /> Configurar Etiquetas
-                        </Button>
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href="/dashboard/stock/write-down" className="w-full">
+                            <MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/dashboard/stock/transfer" className="w-full">
+                            <Truck className="mr-2 h-4 w-4" /> Realizar Transferência
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}>
+                          <History className="mr-2 h-4 w-4"/> Consultar Histórico
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsConsumptionModalOpen(true)}>
+                          <Scale className="mr-2 h-4 w-4"/> Consumo por período
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsLabelModalOpen(true)}>
+                          <Ticket className="mr-2 h-4 w-4" /> Configurar Etiquetas
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
                 <ExpiryControl />
             </div>
