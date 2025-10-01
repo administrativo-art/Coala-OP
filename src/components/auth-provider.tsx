@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc, setDoc } from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 
@@ -26,6 +26,7 @@ export interface AuthContextType {
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   impersonate: (userId: string) => void;
   stopImpersonating: () => void;
 }
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap = await getDoc(userDocRef);
-
+        
         if (!userDocSnap.exists() && user.email === 'administrativo@coalashakes.com') {
           console.log("Admin user logged in, but no Firestore document found. Creating one...");
           if (adminProfileId) {
@@ -198,6 +199,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const changePassword = async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      return { success: false, error: 'Usuário não autenticado.' };
+    }
+
+    const credential = EmailAuthProvider.credential(user.email, oldPassword);
+
+    try {
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Password change error:", error);
+      let errorMessage = 'Ocorreu um erro ao alterar a senha.';
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = 'A senha antiga está incorreta.';
+      }
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const impersonate = (userId: string) => {
     const userToImpersonate = users.find(u => u.id === userId);
     if (userToImpersonate && appUser && !originalUser) {
@@ -229,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     deleteUser,
     resetPassword,
+    changePassword,
     impersonate,
     stopImpersonating,
   }), [

@@ -21,10 +21,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from "@/components/ui/button";
 import { Input } from '@/components/ui/input';
-import { LogOut, Warehouse, Camera, Upload, Users, Undo2 } from 'lucide-react';
+import { LogOut, Warehouse, Camera, Upload, Users, Undo2, KeyRound } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { resizeImage } from '@/lib/image-utils';
+import { ChangePasswordModal } from './change-password-modal';
 
 export function UserProfile() {
   const { user, users, permissions, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
@@ -33,6 +34,7 @@ export function UserProfile() {
   const { toast } = useToast();
 
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const isImpersonating = !!originalUser;
@@ -146,6 +148,10 @@ export function UserProfile() {
                   <Upload className="mr-2 h-4 w-4" />
                   <span>Carregar foto</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                <span>Alterar senha</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
 
               {canImpersonate && !isImpersonating && (
@@ -193,6 +199,11 @@ export function UserProfile() {
         open={isPhotoModalOpen}
         onOpenChange={setIsPhotoModalOpen}
         onPhotoCaptured={handlePhotoCaptured}
+      />
+
+      <ChangePasswordModal
+        open={isPasswordModalOpen}
+        onOpenChange={setIsPasswordModalOpen}
       />
     </>
   );
