@@ -1,9 +1,8 @@
 
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, subDays, endOfDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, addMonths, subMonths, parseISO, subDays, endOfDay, lastDayOfMonth, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
@@ -96,7 +95,7 @@ function PreviousDaySummary({
             <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                     <Undo2 className="h-5 w-5" />
-                    Resumo do Dia Anterior: {format(date, "dd 'de' MMMM", { locale: ptBR })}
+                    Resumo do Último Domingo: {format(date, "dd 'de' MMMM", { locale: ptBR })}
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -506,8 +505,12 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
   };
 
-  const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
-  const prevDaySchedule = previousScheduleMap.get(format(lastDayOfPrevMonth, 'yyyy-MM-dd'));
+  const prevMonth = subMonths(currentDate, 1);
+  const endOfPrevMonth = endOfMonth(prevMonth);
+  const dayOfWeek = getDay(endOfPrevMonth); 
+  const lastSundayOfPrevMonth = subDays(endOfPrevMonth, dayOfWeek);
+  
+  const prevSundaySchedule = previousScheduleMap.get(format(lastSundayOfPrevMonth, 'yyyy-MM-dd'));
 
 
   return (
@@ -600,8 +603,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             ) : (
               <>
                 <PreviousDaySummary 
-                    date={lastDayOfPrevMonth} 
-                    schedule={prevDaySchedule} 
+                    date={lastSundayOfPrevMonth} 
+                    schedule={prevSundaySchedule} 
                     kiosks={kiosksToDisplay} 
                     users={users}
                     workDayCounts={workDayCounts}
