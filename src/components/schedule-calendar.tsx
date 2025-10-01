@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload, Edit, Square, User as UserIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, Wand2, Trash2, Eraser, AlertTriangle, Download, Filter, DollarSign, Upload, Edit, Square, User as UserIcon, Calendar, Undo2 } from 'lucide-react';
 import { type DailySchedule, type User, type Kiosk, type AbsenceEntry } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScheduleTableView } from './schedule-table';
@@ -34,6 +34,49 @@ const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn:
     if (byName !== undefined) return byName;
     return turn === 'Ausencia' ? [] : '';
 };
+
+function PreviousDaySummary({ date, schedule, kiosks }: { date: Date, schedule?: DailySchedule, kiosks: Kiosk[] }) {
+    if (!schedule) {
+        return null;
+    }
+
+    return (
+        <Card className="mb-6 bg-muted/30">
+            <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Undo2 className="h-5 w-5" />
+                    Resumo do Dia Anterior: {format(date, "dd 'de' MMMM", { locale: ptBR })}
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {kiosks.map(kiosk => {
+                        const t1 = (lookupShift(schedule, kiosk, 'T1') as string || '');
+                        const t2 = (lookupShift(schedule, kiosk, 'T2') as string || '');
+                        const t3 = (lookupShift(schedule, kiosk, 'T3') as string || '');
+                        const folgas = (lookupShift(schedule, kiosk, 'Folga') as string || '');
+                        const ausencias = (lookupShift(schedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+                        const hasAnyEntry = t1 || t2 || t3 || folgas || ausencias.length > 0;
+
+                        if (!hasAnyEntry) return null;
+
+                        return (
+                            <div key={kiosk.id} className="p-3 border rounded-lg text-sm bg-background">
+                                <h4 className="font-semibold">{kiosk.name}</h4>
+                                <div className="mt-2 space-y-1">
+                                    {t1 && <p><strong>T1:</strong> {t1}</p>}
+                                    {t2 && <p><strong>T2:</strong> {t2}</p>}
+                                    {t3 && <p><strong>T3:</strong> {t3}</p>}
+                                    {folgas && <p className="text-muted-foreground"><strong>F:</strong> {folgas}</p>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
 
 export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule, kioskId: string) => void; }) {
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -122,36 +165,38 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
       return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
     }
     
-    const prevMonthStartDate = startOfMonth(subMonths(currentDate, 1));
-    const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
-    const prevMonthDays = eachDayOfInterval({ start: prevMonthStartDate, end: prevMonthEndDate });
-
     const initialCounts = new Map<string, number>();
 
     users.forEach(user => {
-      let consecutiveDays = 0;
-      for (let i = prevMonthDays.length - 1; i >= 0; i--) {
-        const day = prevMonthDays[i];
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const daySchedule = previousScheduleMap.get(dayISO);
-        let workedThisDay = false;
-        if (daySchedule) {
-          kiosksToDisplay.forEach(kiosk => {
-            ['T1', 'T2', 'T3'].forEach(turn => {
-              const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-              if (shiftWorkers.includes(user.username)) {
-                workedThisDay = true;
-              }
-            });
-          });
+        let consecutiveDays = 0;
+        let dayCursor = endOfMonth(subMonths(currentDate, 1));
+        
+        for (let i = 0; i < 10; i++) { // Check up to 10 days back for a more robust streak count
+            const dayISO = format(dayCursor, 'yyyy-MM-dd');
+            const daySchedule = previousScheduleMap.get(dayISO);
+            let workedThisDay = false;
+            
+            if (daySchedule) {
+                for (const kiosk of kiosksToDisplay) {
+                    for (const turn of ['T1', 'T2', 'T3']) {
+                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if (shiftWorkers.includes(user.username)) {
+                            workedThisDay = true;
+                            break;
+                        }
+                    }
+                    if (workedThisDay) break;
+                }
+            }
+
+            if (workedThisDay) {
+                consecutiveDays++;
+            } else {
+                break; // Streak broken, stop counting
+            }
+            dayCursor = subDays(dayCursor, 1);
         }
-        if (workedThisDay) {
-          consecutiveDays++;
-        } else {
-          break; // Streak broken
-        }
-      }
-      initialCounts.set(user.id, consecutiveDays);
+        initialCounts.set(user.id, consecutiveDays);
     });
 
     daysInMonth.forEach(day => {
@@ -272,35 +317,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const newScheduleData: Record<string, DailySchedule> = {};
     const userWorkdayCounts = new Map<string, number>();
     
-    const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
-    
-    // Correctly calculate the ending streak for each user from the previous month.
     users.forEach(user => {
-        let consecutiveDays = 0;
-        for (let i = 0; i < 7; i++) { // Check up to 7 days back
-            const dayToCheck = subDays(prevMonthEndDate, i);
-            const dayISO = format(dayToCheck, 'yyyy-MM-dd');
-            const daySchedule = previousScheduleMap.get(dayISO);
-            let workedThisDay = false;
-            if (daySchedule) {
-                for (const kiosk of kiosksToDisplay) {
-                    for (const turn of ['T1', 'T2', 'T3']) {
-                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                        if (shiftWorkers.includes(user.username)) {
-                            workedThisDay = true;
-                            break;
-                        }
-                    }
-                    if (workedThisDay) break;
-                }
-            }
-            if (workedThisDay) {
-                consecutiveDays++;
-            } else {
-                break; // Streak broken
-            }
-        }
-        userWorkdayCounts.set(user.id, consecutiveDays);
+        userWorkdayCounts.set(user.id, workDayCounts.get(`${format(endOfMonth(subMonths(currentDate, 1)), 'yyyy-MM-dd')}-${user.id}`) || 0);
     });
 
     daysInMonth.forEach(day => {
@@ -431,6 +449,10 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
   };
 
+  const lastDayOfPrevMonth = endOfMonth(subMonths(currentDate, 1));
+  const prevDaySchedule = previousScheduleMap.get(format(lastDayOfPrevMonth, 'yyyy-MM-dd'));
+
+
   return (
     <>
       <div className="space-y-6">
@@ -519,6 +541,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             {loading ? (
                 <Skeleton className="h-96 w-full" />
             ) : (
+              <>
+                <PreviousDaySummary date={lastDayOfPrevMonth} schedule={prevDaySchedule} kiosks={kiosksToDisplay} />
                 <ScheduleTableView 
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
@@ -533,6 +557,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                     todaysWorkersMap={todaysWorkersMap}
                     selectedEmployee={selectedEmployee}
                 />
+              </>
             )}
         </CardContent>
       </Card>
