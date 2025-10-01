@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -52,13 +53,22 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
-const formatCurrency = (value: number | undefined): string => {
-    if (value === undefined || value === null || isNaN(value)) {
+const formatCurrencyForDisplay = (valueInCents: number | undefined): string => {
+    if (valueInCents === undefined || valueInCents === null || isNaN(valueInCents)) {
         return '';
     }
-    const val = value / 100;
-    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const realValue = valueInCents / 100;
+    return realValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
+
+const formatCurrencyForInput = (valueInCents: number | undefined): string => {
+    if (valueInCents === undefined || valueInCents === null || isNaN(valueInCents)) {
+        return '';
+    }
+    const realValue = valueInCents / 100;
+    return realValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 
 const parseCurrency = (value: string): number => {
     const onlyNumbers = value.replace(/\D/g, '');
@@ -270,6 +280,9 @@ export function UserManagement() {
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <Button variant="outline" onClick={() => setShowForm(false)}>
+                    Voltar para Configurações
+                </Button>
                 <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}</h3>
                 <div className="space-y-4 p-1">
                  <div className="flex flex-col md:flex-row gap-6 items-start">
@@ -456,7 +469,7 @@ export function UserManagement() {
                                     type="text"
                                     placeholder="0,00"
                                     className="pl-9"
-                                    value={formatCurrency(field.value)}
+                                    value={formatCurrencyForInput(field.value)}
                                     onChange={(e) => field.onChange(parseCurrency(e.target.value))}
                                 />
                                 </FormControl>
@@ -596,7 +609,7 @@ export function UserManagement() {
                     </div>
                      <div>
                       <span className="md:hidden text-muted-foreground">VT diário: </span>
-                      {(user.valeTransporte || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatCurrencyForDisplay(user.valeTransporte)}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
