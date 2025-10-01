@@ -51,7 +51,7 @@ const userSchema = z.object({
 
 type UserFormValues = z.infer<typeof userSchema>;
 
-const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
+const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5', '#A7F3D0', '#99F6E4', '#FECACA', '#DDD6FE', '#E5E7EB', '#FBCFE8'];
 
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
