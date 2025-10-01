@@ -53,27 +53,6 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5'];
 
-const formatCurrencyForDisplay = (value: number | undefined): string => {
-    if (value === undefined || value === null || isNaN(value)) {
-        return '';
-    }
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-};
-
-const formatCurrencyForInput = (value: number | undefined): string => {
-    if (value === undefined || value === null || isNaN(value)) {
-        return '';
-    }
-    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-const parseCurrency = (value: string): number => {
-    if (!value) return 0;
-    const numberValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-    return isNaN(numberValue) ? 0 : numberValue;
-};
-
-
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
   const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
@@ -238,6 +217,23 @@ export function UserManagement() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+    const value = e.target.value;
+    const digitsOnly = value.replace(/\D/g, '');
+    if (digitsOnly === '') {
+        field.onChange(undefined);
+        return;
+    }
+
+    const numericValue = parseInt(digitsOnly, 10) / 100;
+    field.onChange(numericValue);
+  };
+
+  const formatCurrencyForDisplay = (value: number | undefined) => {
+      if (value === undefined || value === null) return '';
+      return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
 
@@ -466,8 +462,8 @@ export function UserManagement() {
                                     type="text"
                                     placeholder="0,00"
                                     className="pl-9"
-                                    value={formatCurrencyForInput(field.value)}
-                                    onChange={(e) => field.onChange(parseCurrency(e.target.value))}
+                                    value={formatCurrencyForDisplay(field.value)}
+                                    onChange={e => handleCurrencyChange(e, field)}
                                 />
                                 </FormControl>
                             </div>
@@ -606,7 +602,7 @@ export function UserManagement() {
                     </div>
                      <div>
                       <span className="md:hidden text-muted-foreground">VT diário: </span>
-                      {formatCurrencyForDisplay(user.valeTransporte)}
+                      {user.valeTransporte ? user.valeTransporte.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
