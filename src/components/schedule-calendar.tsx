@@ -271,17 +271,15 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   const handleGenerateConfirm = async () => {
     const newScheduleData: Record<string, DailySchedule> = {};
     const userWorkdayCounts = new Map<string, number>();
-
-    const prevMonthStartDate = startOfMonth(subMonths(currentDate, 1));
+    
     const prevMonthEndDate = endOfMonth(subMonths(currentDate, 1));
-    const prevMonthDays = eachDayOfInterval({ start: prevMonthStartDate, end: prevMonthEndDate });
-
-    // Calculate the exact ending streak for each user from the previous month
+    
+    // Correctly calculate the ending streak for each user from the previous month.
     users.forEach(user => {
         let consecutiveDays = 0;
-        for (let i = prevMonthDays.length - 1; i >= 0; i--) {
-            const day = prevMonthDays[i];
-            const dayISO = format(day, 'yyyy-MM-dd');
+        for (let i = 0; i < 7; i++) { // Check up to 7 days back
+            const dayToCheck = subDays(prevMonthEndDate, i);
+            const dayISO = format(dayToCheck, 'yyyy-MM-dd');
             const daySchedule = previousScheduleMap.get(dayISO);
             let workedThisDay = false;
             if (daySchedule) {
@@ -299,7 +297,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             if (workedThisDay) {
                 consecutiveDays++;
             } else {
-                break; // Streak is broken
+                break; // Streak broken
             }
         }
         userWorkdayCounts.set(user.id, consecutiveDays);
