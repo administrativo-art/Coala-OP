@@ -111,17 +111,17 @@ function PreviousWeekSummary({
     };
 
     return (
-        <div className="mb-4 rounded-lg border bg-muted/50 p-2">
+        <div className="mb-4 rounded-lg border bg-muted/50">
              <h3 className="px-2 py-2 text-sm font-semibold text-muted-foreground">Resumo da última semana do mês anterior</h3>
             <Table>
                 <TableBody>
-                    {dates.map(date => {
+                    {dates.map((date, dateIndex) => {
                         const dayISO = format(date, 'yyyy-MM-dd');
                         const schedule = schedules.get(dayISO);
                         const isSunday = date.getDay() === 0;
 
                         return (
-                            <TableRow key={dayISO} className={cn(isSunday && 'bg-destructive/10')}>
+                            <TableRow key={dayISO} className={cn(isSunday && 'bg-destructive/10', "border-t")}>
                                 <TableCell className="px-2 py-3 align-top font-semibold w-24">
                                      <p>{format(date, 'dd')}</p>
                                      <p className="text-xs font-normal text-muted-foreground">{format(date, 'EEEE', { locale: ptBR })}</p>
@@ -188,7 +188,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
-  const [isGenerateConfirmationOpen, setIsGenerateConfirmationOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [selectedKiosks, setSelectedKiosks] = useState<string[]>([]);
@@ -334,7 +333,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
 
     return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
-  }, [scheduleMap, previousMonthSchedule, daysInMonth, users, kiosksToDisplay, currentDate]);
+  }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
    const valeTransporteData = useMemo(() => {
     const dailyWorkers = Array.from(todaysWorkersMap.values());
@@ -383,80 +382,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     
     await createFullMonthSchedule(emptyScheduleData, getYear(currentDate), getMonth(currentDate) + 1);
     setIsClearConfirmationOpen(false);
-  };
-
-  const handleGenerateConfirm = async () => {
-    const newScheduleData: Record<string, DailySchedule> = {};
-    
-    const userWorkdayCounts = new Map<string, number>();
-    const lastDayPrevMonth = endOfDay(subMonths(currentDate, 1));
-    
-    users.forEach(user => {
-        let count = 0;
-        // Search backwards from the last day of the previous month
-        for (let i = 0; i < 7; i++) {
-            const checkDay = subDays(lastDayPrevMonth, i);
-            const checkDayISO = format(checkDay, 'yyyy-MM-dd');
-            const scheduleForDay = previousMonthSchedule.find(d => d.id === checkDayISO);
-            let worked = false;
-            if (scheduleForDay) {
-                kiosksToDisplay.forEach(kiosk => {
-                    ['T1', 'T2', 'T3'].forEach(turn => {
-                        const shiftWorkers = (lookupShift(scheduleForDay, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                        if (shiftWorkers.includes(user.username)) {
-                            worked = true;
-                        }
-                    });
-                });
-            }
-            if (worked) {
-                count++;
-            } else {
-                break; // Sequence is broken
-            }
-        }
-        userWorkdayCounts.set(user.id, count);
-    });
-
-    daysInMonth.forEach(day => {
-      const dayISO = format(day, 'yyyy-MM-dd');
-      const newDaySchedule: DailySchedule = {
-        id: dayISO,
-        diaDaSemana: format(day, 'EEEE', { locale: ptBR }),
-      };
-
-      kiosksToDisplay.forEach(kiosk => {
-        newDaySchedule[`${kiosk.id} T1`] = '';
-        newDaySchedule[`${kiosk.id} T2`] = '';
-        newDaySchedule[`${kiosk.id} T3`] = '';
-        newDaySchedule[`${kiosk.id} Folga`] = '';
-        newDaySchedule[`${kiosk.id} Ausencia`] = [];
-      });
-      
-      const operationalUsers = users.filter(u => u.operacional && !u.folguista);
-      
-      operationalUsers.forEach(user => {
-        const consecutiveDays = userWorkdayCounts.get(user.id) || 0;
-        
-        if (consecutiveDays >= 6) {
-            const kioskId = user.assignedKioskIds[0] || kiosksToDisplay[0].id;
-            const folgaKey = `${kioskId} Folga`;
-            newDaySchedule[folgaKey] = newDaySchedule[folgaKey] ? `${newDaySchedule[folgaKey]} + ${user.username}` : user.username;
-            userWorkdayCounts.set(user.id, 0); // Reset count after a day off
-        } else if (user.turno) {
-            const kioskId = user.assignedKioskIds[0];
-            if (kioskId) {
-                const shiftKey = `${kioskId} ${user.turno}`;
-                newDaySchedule[shiftKey] = newDaySchedule[shiftKey] ? `${newDaySchedule[shiftKey]} + ${user.username}` : user.username;
-                userWorkdayCounts.set(user.id, consecutiveDays + 1); // Increment count
-            }
-        }
-      });
-      newScheduleData[dayISO] = newDaySchedule;
-    });
-
-    await createFullMonthSchedule(newScheduleData, getYear(currentDate), getMonth(currentDate) + 1);
-    setIsGenerateConfirmationOpen(false);
   };
   
   const handleDayClick = (day: Date, kioskId: string) => {
@@ -619,9 +544,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                             <Edit className="mr-2 h-4 w-4" /> Editar em Lote ({selectedDays.size})
                         </Button>
                     )}
-                    <Button variant="outline" onClick={() => setIsGenerateConfirmationOpen(true)}>
-                        <Wand2 className="mr-2 h-4 w-4" /> Preenchimento padrão
-                    </Button>
                      <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
                         <Upload className="mr-2 h-4 w-4" /> Importar Escala via CSV
                     </Button>
@@ -710,18 +632,6 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 title="Limpar a escala do mês?"
                 description={`Esta ação irá apagar todos os agendamentos para ${format(currentDate, 'MMMM yyyy', { locale: ptBR })}. Esta ação não pode ser desfeita.`}
                 confirmButtonText="Sim, limpar mês"
-            />
-        )}
-
-        {isGenerateConfirmationOpen && (
-            <DeleteConfirmationDialog
-                open={isGenerateConfirmationOpen}
-                onOpenChange={setIsGenerateConfirmationOpen}
-                onConfirm={handleGenerateConfirm}
-                title="Usar preenchimento padrão?"
-                description="Esta ação irá preencher a escala do mês com base nos turnos padrão dos colaboradores. Os dados existentes serão sobrescritos. Deseja continuar?"
-                confirmButtonText="Sim, Preencher Padrão"
-                confirmButtonVariant="default"
             />
         )}
 
