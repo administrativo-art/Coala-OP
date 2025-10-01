@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -336,11 +335,12 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
   }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
   
    const valeTransporteData = useMemo(() => {
-    const dailyWorkers = Array.from(todaysWorkersMap.values());
     const workedDaysByUser = new Map<string, number>();
 
-    dailyWorkers.forEach(daySet => {
-        daySet.forEach(username => {
+    daysInMonth.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const workers = todaysWorkersMap.get(dayISO) || new Set();
+        workers.forEach(username => {
             workedDaysByUser.set(username, (workedDaysByUser.get(username) || 0) + 1);
         });
     });
@@ -362,7 +362,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         .filter(item => item.workedDays > 0);
 
     return { totalCost, userCosts };
-  }, [todaysWorkersMap, users]);
+  }, [todaysWorkersMap, users, daysInMonth]);
 
   const handleClearMonthConfirm = async () => {
     const emptyScheduleData: Record<string, any> = {};
