@@ -81,7 +81,7 @@ function PreviousDaySummary({
                 >
                     {name}
                     {count && count > 0 && (
-                         <span className="text-xs font-bold opacity-80"> ({count})</span>
+                         <span className="text-xs font-bold opacity-80"> - {count}</span>
                     )}
                 </span>
                   {warning && (
@@ -124,11 +124,19 @@ function PreviousDaySummary({
                             const t1 = (lookupShift(schedule, kiosk, 'T1') as string || '');
                             const t2 = (lookupShift(schedule, kiosk, 'T2') as string || '');
                             const t3 = (lookupShift(schedule, kiosk, 'T3') as string || '');
-                            const folgas = (lookupShift(schedule, kiosk, 'Folga') as string || '');
-                             const ausencias = (lookupShift(schedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+                            
+                            const manualFolga = (lookupShift(schedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
+                            const ausencias = (lookupShift(schedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
+
+                            const todaysWorkers = todaysWorkersMap.get(dayISO) || new Set();
+                            const autoFolgas = users
+                                .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
+                                .map(u => u.username);
+                    
+                            const combinedFolgas = [...new Set([...manualFolga, ...autoFolgas])].join(' + ');
 
                             const hasWorkShifts = (t1 && t1.length > 0) || (t2 && t2.length > 0) || (t3 && t3.length > 0);
-                            const hasFolgaOrAusencia = (folgas && folgas.length > 0) || ausencias.length > 0;
+                            const hasFolgaOrAusencia = (combinedFolgas && combinedFolgas.length > 0) || ausencias.length > 0;
                             const selectedUserObject = selectedEmployee !== 'all' ? users.find(u => u.id === selectedEmployee) : null;
                             const employeeIsWorking = selectedUserObject && (t1.includes(selectedUserObject.username) || t2.includes(selectedUserObject.username) || t3.includes(selectedUserObject.username));
 
@@ -144,7 +152,7 @@ function PreviousDaySummary({
                                             <Separator className="my-2 border-dashed" />
                                         )}
 
-                                        {folgas && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(folgas, true)}</p>}
+                                        {combinedFolgas && <p className="text-muted-foreground"><strong>F:</strong> {renderShift(combinedFolgas, true)}</p>}
                                         
                                         {ausencias.length > 0 && ausencias.map(a => {
                                             const user = users.find(u => u.id === a.userId);
@@ -263,19 +271,21 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
             
             const daySchedule = allSchedules.get(dayISO);
             if (daySchedule) {
-                 // Check work shifts
-                ['T1', 'T2', 'T3'].forEach(turn => {
-                    const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
-                    if (shiftWorkers.includes(user.username)) {
-                        workedToday = true;
-                        workedKiosks.push(kiosk.name);
+                kiosksToDisplay.forEach(kiosk => {
+                    // Check work shifts
+                    ['T1', 'T2', 'T3'].forEach(turn => {
+                        const shiftWorkers = (lookupShift(daySchedule, kiosk, turn as any) as string || '').split(' + ').map(s => s.trim());
+                        if (shiftWorkers.includes(user.username)) {
+                            workedToday = true;
+                            workedKiosks.push(kiosk.name);
+                        }
+                    });
+                    // Check absences
+                    const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
+                    if (ausencias.some(a => a.userId === user.id)) {
+                        isAusente = true;
                     }
                 });
-                 // Check absences
-                const ausencias = lookupShift(daySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || [];
-                if (ausencias.some(a => a.userId === user.id)) {
-                    isAusente = true;
-                }
             }
 
             if (workedKiosks.length > 1) {
@@ -724,5 +734,8 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
         />
     </>
   );
+
+    
+}
 
     
