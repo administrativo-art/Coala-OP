@@ -35,9 +35,8 @@ function InventoryControlContent() {
                     
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto">
-                          <Menu className="mr-2 h-4 w-4" />
-                          Ações
+                        <Button variant="outline" size="icon">
+                          <Menu className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start">
