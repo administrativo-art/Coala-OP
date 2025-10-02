@@ -268,7 +268,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     const allSchedules = new Map([...previousScheduleMap, ...scheduleMap]);
     
     const allRelevantDates = [
-        ...eachDayOfInterval({ start: subDays(startOfMonth(currentDate), 14), end: endOfMonth(currentDate) })
+        ...eachDayOfInterval({ start: subDays(startOfMonth(currentDate), 14), end: endOfDay(lastDayOfMonth(currentDate)) })
     ];
 
     users.forEach(user => {
@@ -331,7 +331,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     });
 
     return { workDayCounts: counts, warnings: warningsMap, todaysWorkersMap: dailyWorkers };
-  }, [scheduleMap, previousScheduleMap, daysInMonth, users, kiosksToDisplay, currentDate]);
+  }, [scheduleMap, previousScheduleMap, users, kiosksToDisplay, currentDate]);
   
    const valeTransporteData = useMemo(() => {
     const workedDaysByUser = new Map<string, number>();
@@ -480,7 +480,7 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
     <>
       <div className="space-y-6">
         <Card className="w-full">
-        <CardHeader className="space-y-4">
+        <CardHeader className="space-y-4 sticky top-0 bg-background/95 backdrop-blur-sm z-20">
             <div>
                 <CardTitle className="flex items-center gap-2"><Users /> Escala de Trabalho</CardTitle>
                 <CardDescription>Visualize e edite as escalas de trabalho mensais.</CardDescription>
@@ -662,5 +662,3 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
     
 }
-
-    
