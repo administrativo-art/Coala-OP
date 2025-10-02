@@ -111,7 +111,6 @@ function PreviousWeekSummary({
 
     return (
         <div className="mb-4 rounded-lg border bg-muted/50">
-             <h3 className="px-2 py-2 text-sm font-semibold text-muted-foreground">Resumo da última semana do mês anterior</h3>
             <Table>
                 <TableBody>
                     {dates.map((date, dateIndex) => {
@@ -563,16 +562,25 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 <Skeleton className="h-96 w-full" />
             ) : (
               <>
-                <PreviousWeekSummary 
-                    dates={lastWeekOfPrevMonth}
-                    schedules={previousScheduleMap}
-                    kiosks={filteredKiosks} 
-                    users={users}
-                    workDayCounts={workDayCounts}
-                    warnings={warnings}
-                    todaysWorkersMap={todaysWorkersMap}
-                    selectedEmployee={selectedEmployee}
-                />
+                 <Accordion type="single" collapsible className="w-full mb-4" defaultValue="item-1">
+                    <AccordionItem value="item-1" className="border rounded-lg">
+                        <AccordionTrigger className="px-4 py-2 text-sm font-semibold hover:no-underline">
+                            Resumo da última semana do mês anterior
+                        </AccordionTrigger>
+                        <AccordionContent className="p-2">
+                             <PreviousWeekSummary 
+                                dates={lastWeekOfPrevMonth}
+                                schedules={previousScheduleMap}
+                                kiosks={filteredKiosks} 
+                                users={users}
+                                workDayCounts={workDayCounts}
+                                warnings={warnings}
+                                todaysWorkersMap={todaysWorkersMap}
+                                selectedEmployee={selectedEmployee}
+                            />
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
                 <ScheduleTableView 
                     kiosks={filteredKiosks}
                     scheduleMap={scheduleMap}
@@ -654,3 +662,5 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
 
     
 }
+
+    
