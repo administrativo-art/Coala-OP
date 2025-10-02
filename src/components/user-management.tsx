@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -54,7 +54,7 @@ type UserFormValues = z.infer<typeof userSchema>;
 const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5', '#A7F3D0', '#99F6E4', '#FECACA', '#DDD6FE', '#E5E7EB', '#FBCFE8'];
 
 export function UserManagement() {
-  const { permissions, users, addUser, deleteUser, user: currentUser, updateUser } = useAuth();
+  const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
   const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { toast } = useToast();
@@ -62,6 +62,7 @@ export function UserManagement() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -152,6 +153,25 @@ export function UserManagement() {
     if (userToDelete) {
       await deleteUser(userToDelete.id);
       setUserToDelete(null);
+    }
+  };
+  
+  const handleResetPasswordConfirm = async () => {
+    if (userToResetPassword) {
+      const success = await resetPassword(userToResetPassword.email);
+      if (success) {
+        toast({
+          title: "E-mail de redefinição enviado!",
+          description: `Um link para redefinir a senha foi enviado para ${userToResetPassword.email}.`
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Falha no envio",
+          description: "Não foi possível enviar o e-mail de redefinição de senha."
+        });
+      }
+      setUserToResetPassword(null);
     }
   };
 
@@ -606,6 +626,18 @@ export function UserManagement() {
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
+                        {permissions.settings.manageUsers && (
+                          <DeleteConfirmationDialog
+                              open={false}
+                              onOpenChange={() => {}}
+                              onConfirm={() => setUserToResetPassword(user)}
+                              title={`Redefinir senha de ${user.username}?`}
+                              description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
+                              confirmButtonText="Sim, enviar e-mail"
+                              confirmButtonVariant="default"
+                              triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
+                          />
+                        )}
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                   </div>
@@ -645,6 +677,18 @@ export function UserManagement() {
           onConfirm={handleDeleteConfirm}
           itemName={`o usuário "${userToDelete.username}"`}
         />
+      )}
+      
+      {userToResetPassword && (
+         <DeleteConfirmationDialog
+            open={!!userToResetPassword}
+            isDeleting={false}
+            onOpenChange={() => setUserToResetPassword(null)}
+            onConfirm={handleResetPasswordConfirm}
+            title={`Enviar link de redefinição?`}
+            description={`Um e-mail será enviado para ${userToResetPassword.email}.`}
+            confirmButtonText="Sim, enviar"
+          />
       )}
     </>
   );
