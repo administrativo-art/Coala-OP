@@ -494,67 +494,71 @@ export function ScheduleCalendar({ onEditDay }: { onEditDay: (day: DailySchedule
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
-                            <Filter className="mr-2 h-4 w-4" />
-                            Filtrar Quiosques ({selectedKiosks.length})
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56">
-                        <DropdownMenuLabel>Exibir quiosques</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => setSelectedKiosks(kiosksToDisplay.map(k => k.id))}>Selecionar Todos</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setSelectedKiosks([])}>Limpar Seleção</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ScrollArea className="h-48">
-                        {kiosksToDisplay.map(kiosk => (
-                            <DropdownMenuCheckboxItem
-                                key={kiosk.id}
-                                checked={selectedKiosks.includes(kiosk.id)}
-                                onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
-                                onSelect={(e) => e.preventDefault()}
-                            >
-                                {kiosk.name}
-                            </DropdownMenuCheckboxItem>
-                        ))}
-                        </ScrollArea>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-2 flex-grow">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Filter className="mr-2 h-4 w-4" />
+                                Filtrar Quiosques ({selectedKiosks.length})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-56">
+                            <DropdownMenuLabel>Exibir quiosques</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks(kiosksToDisplay.map(k => k.id))}>Selecionar Todos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setSelectedKiosks([])}>Limpar Seleção</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <ScrollArea className="h-48">
+                            {kiosksToDisplay.map(kiosk => (
+                                <DropdownMenuCheckboxItem
+                                    key={kiosk.id}
+                                    checked={selectedKiosks.includes(kiosk.id)}
+                                    onCheckedChange={(checked) => handleKioskFilterChange(kiosk.id, !!checked)}
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    {kiosk.name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                            </ScrollArea>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger className="w-full sm:w-[220px]">
-                      <UserIcon className="mr-2 h-4 w-4" />
-                      <SelectValue placeholder="Filtrar por colaborador..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="all">Todos os colaboradores</SelectItem>
-                      {users.filter(u => u.operacional).map(user => (
-                          <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                    <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                      <SelectTrigger className="w-full sm:w-[220px]">
+                          <UserIcon className="mr-2 h-4 w-4" />
+                          <SelectValue placeholder="Filtrar por colaborador..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="all">Todos os colaboradores</SelectItem>
+                          {users.filter(u => u.operacional).map(user => (
+                              <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
 
-                {canManageSchedule && (
-                  <>
-                    {selectedDays.size > 0 && (
-                        <Button onClick={() => setIsBulkEditModalOpen(true)}>
-                            <Edit className="mr-2 h-4 w-4" /> Editar em Lote ({selectedDays.size})
+                    {canManageSchedule && (
+                      <>
+                        {selectedDays.size > 0 && (
+                            <Button onClick={() => setIsBulkEditModalOpen(true)}>
+                                <Edit className="mr-2 h-4 w-4" /> Editar em Lote ({selectedDays.size})
+                            </Button>
+                        )}
+                         <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                            <Upload className="mr-2 h-4 w-4" /> Importar Escala via CSV
                         </Button>
+                      </>
                     )}
-                     <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-                        <Upload className="mr-2 h-4 w-4" /> Importar Escala via CSV
+                     <Button variant="outline" onClick={handleExportPdf}>
+                        <Download className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
+                </div>
+                {canManageSchedule && (
                     <Button variant="destructive" onClick={() => setIsClearConfirmationOpen(true)}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         Limpar Mês
                     </Button>
-                  </>
                 )}
-                 <Button variant="outline" onClick={handleExportPdf}>
-                    <Download className="mr-2 h-4 w-4" /> Exportar PDF
-                </Button>
             </div>
         </CardHeader>
         <CardContent>
