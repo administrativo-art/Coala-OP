@@ -314,7 +314,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                  if (updates.price.type === 'percentage') {
                      newSalePrice = oldPrice * (1 + (updates.price.value / 100));
                  } else { // fixed
-                     newSalePrice = oldPrice + updates.price.value;
+                     newSalePrice = updates.price.value;
                  }
                  
                  newSalePrice = Math.max(0, newSalePrice); 
