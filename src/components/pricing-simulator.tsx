@@ -40,7 +40,7 @@ import { PricingParametersModal } from "./pricing-parameters-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PriceHistoryModal } from "./price-history-modal";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -62,7 +62,7 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-type SortKey = keyof ProductSimulation | 'name' | 'sku';
+type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'grossCost' | 'profitGoal' | 'profitPercentage';
 type SortDirection = 'asc' | 'desc';
 
 export function PricingSimulator() {
@@ -79,13 +79,13 @@ export function PricingSimulator() {
     const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
     const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
     const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
+    const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
-
 
     const handleAddNew = () => {
         setSimulationToEdit(null);
@@ -95,6 +95,18 @@ export function PricingSimulator() {
     const handleEdit = (simulation: ProductSimulation) => {
         setSimulationToEdit(simulation);
         setIsAddEditModalOpen(true);
+    };
+    
+    const handleReactivate = async (simulation: ProductSimulation) => {
+        await bulkUpdateSimulations([simulation], {
+            line: { action: 'keep' },
+            category: { action: 'keep' },
+            group: { action: 'keep' },
+            price: { action: 'keep', type: 'fixed', value: 0 },
+            ncm: { action: 'keep' },
+            cest: { action: 'keep' },
+            cfop: { action: 'keep' },
+        });
     };
 
     const handlePpoClick = (simulation: ProductSimulation) => {
@@ -125,8 +137,21 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
 
+    const { activeSimulations, inactiveSimulations } = useMemo(() => {
+        const active: ProductSimulation[] = [];
+        const inactive: ProductSimulation[] = [];
+        simulations.forEach(sim => {
+            if (sim.status === 'active' || !sim.status) {
+                active.push(sim);
+            } else {
+                inactive.push(sim);
+            }
+        });
+        return { activeSimulations: active, inactiveSimulations: inactive };
+    }, [simulations]);
+
     const filteredSimulations = useMemo(() => {
-        const filtered = simulations.filter(sim => {
+        const filtered = activeSimulations.filter(sim => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
@@ -159,7 +184,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig]);
+    }, [activeSimulations, searchTerm, categoryFilters, lineFilters, sortConfig]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -1002,6 +1027,32 @@ export function PricingSimulator() {
                                     </ScrollArea>
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                             <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between">
+                                        <ArrowUpDown className="mr-2 h-4 w-4" />
+                                        Ordenar
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-56">
+                                    <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={(v) => handleSort(v.split('-')[0] as SortKey)}>
+                                        <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="sku-asc">SKU (Crescente)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="grossCost-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="grossCost-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitPercentage-desc">Lucro (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitPercentage-asc">Lucro (Menor-Maior)</DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                             {totalActiveFilters > 0 && (
                                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                                     <Eraser className="mr-2 h-4 w-4" />
@@ -1014,6 +1065,12 @@ export function PricingSimulator() {
                 <div className="mt-4">
                     {renderTable()}
                 </div>
+                 <ArchivedSimulationsModal 
+                    open={isArchivedModalOpen} 
+                    onOpenChange={setIsArchivedModalOpen} 
+                    simulations={inactiveSimulations}
+                    onReactivate={handleReactivate}
+                />
             </div>
 
             <AddEditSimulationModal 
@@ -1031,7 +1088,7 @@ export function PricingSimulator() {
 
             <TechnicalSheetViewerModal
                 open={isViewerModalOpen}
-                onOpenChange={setIsViewerModalOpen}
+                onOpenChange={() => setSimulationToView(null)}
                 simulation={simulationToView}
             />
             
@@ -1058,4 +1115,38 @@ export function PricingSimulator() {
     );
 }
 
+function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivate }: { open: boolean, onOpenChange: (open: boolean) => void, simulations: ProductSimulation[], onReactivate: (sim: ProductSimulation) => void }) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Mercadorias Inativas</DialogTitle>
+            <DialogDescription>
+              Visualize ou reative mercadorias que foram marcadas como inativas.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-96">
+            <div className="space-y-2 p-1">
+              {simulations.length > 0 ? (
+                simulations.map(sim => (
+                  <div key={sim.id} className="flex items-center justify-between p-2 border rounded-md">
+                    <span className="font-medium">{sim.name}</span>
+                    <Button size="sm" variant="outline" onClick={() => onReactivate(sim)}>
+                      Reativar
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-muted-foreground py-10">
+                  Nenhuma mercadoria inativa.
+                </p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    );
+}
     
+
+      
