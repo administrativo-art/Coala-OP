@@ -142,7 +142,7 @@ export function PricingSimulator() {
         const active: ProductSimulation[] = [];
         const inactive: ProductSimulation[] = [];
         simulations.forEach(sim => {
-            if ((sim.status === 'active' || !sim.status)) {
+            if (sim.status === 'active' || !sim.status) {
                 active.push(sim);
             } else {
                 inactive.push(sim);
@@ -387,7 +387,7 @@ export function PricingSimulator() {
             const xLeft = snap(g_info.xLeft);
             const xRight = snap(g_info.xRight);
             if (idx_info < infoItems.length) drawInfoCard(xLeft, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
-            if (idx_info < infoItems.length) drawInfoCard(xRight, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
+            if (idx_info < infoItems.length) drawInfoCard(xRight, gridY_info, g_info.colW, hRow, infoItems[idx_info++].value);
             gridY_info += hRow + rowGap_info;
         }
         yPos += boxH_info + 8;
@@ -540,7 +540,7 @@ export function PricingSimulator() {
             (sim.ppo?.qualityStandard?.length ?? 0 > 0) ? { label: 'Padrões de Qualidade', value: sim.ppo!.qualityStandard!.map(q => q.text).join('\\n') } : null,
             sim.ppo?.allergens?.length ? { label: 'Alergênicos', value: sim.ppo.allergens.map(a => a.text).join(', '), highlight: true } : null,
         ];
-        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\\/\\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
+        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
     
         if (detalhes.length > 0) {
             const padX2 = 8;
