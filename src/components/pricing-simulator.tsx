@@ -53,6 +53,7 @@ import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -536,10 +537,10 @@ export function PricingSimulator() {
         const detalhesBrutos = [
             sim.ppo?.preparationTime ? { label: 'Tempo de Preparo', value: `${sim.ppo.preparationTime} seg` } : null,
             sim.ppo?.portionWeight ? { label: 'Peso da Porção', value: `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` } : null,
-            (sim.ppo?.qualityStandard?.length ?? 0 > 0) ? { label: 'Padrões de Qualidade', value: sim.ppo!.qualityStandard!.map(q => q.text).join('\n') } : null,
+            (sim.ppo?.qualityStandard?.length ?? 0 > 0) ? { label: 'Padrões de Qualidade', value: sim.ppo!.qualityStandard!.map(q => q.text).join('\\n') } : null,
             sim.ppo?.allergens?.length ? { label: 'Alergênicos', value: sim.ppo.allergens.map(a => a.text).join(', '), highlight: true } : null,
         ];
-        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
+        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\\/\\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
     
         if (detalhes.length > 0) {
             const padX2 = 8;
@@ -1150,3 +1151,7 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
     
 
       
+
+    
+
+    
