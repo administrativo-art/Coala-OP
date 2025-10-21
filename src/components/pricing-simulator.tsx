@@ -540,7 +540,7 @@ export function PricingSimulator() {
             (sim.ppo?.qualityStandard?.length ?? 0 > 0) ? { label: 'Padrões de Qualidade', value: sim.ppo!.qualityStandard!.map(q => q.text).join('\\n') } : null,
             sim.ppo?.allergens?.length ? { label: 'Alergênicos', value: sim.ppo.allergens.map(a => a.text).join(', '), highlight: true } : null,
         ];
-        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\/\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
+        const detalhes = detalhesBrutos.filter(Boolean).filter(d => d && typeof d.value === 'string' && !/^https?:\\/\\//i.test(d.value)) as Array<{label: string; value: string; highlight?: boolean}>;
     
         if (detalhes.length > 0) {
             const padX2 = 8;
@@ -1157,3 +1157,4 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
     
 
     
+
