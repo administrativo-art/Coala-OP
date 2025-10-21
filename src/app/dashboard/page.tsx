@@ -294,6 +294,11 @@ function PricingReportDashboard() {
   const { pricingParameters, loading: loadingParams } = useCompanySettings();
   
   const [chartFilter, setChartFilter] = useState('all');
+  
+  const activeSimulations = useMemo(() => {
+    return simulations.filter(sim => sim.status === 'active' || !sim.status);
+  }, [simulations]);
+
 
   const getProfitColorClass = (percentage: number) => {
     if (!pricingParameters?.profitRanges) return 'text-primary';
@@ -307,11 +312,11 @@ function PricingReportDashboard() {
   };
 
   const { kpis, profitChartData } = useMemo(() => {
-    if (!simulations || simulations.length === 0) {
+    if (!activeSimulations || activeSimulations.length === 0) {
         return { kpis: {}, profitChartData: [] };
     }
 
-    const filteredSimulations = simulations.filter(s => {
+    const filteredSimulations = activeSimulations.filter(s => {
         if (chartFilter === 'all') return true;
         const [type, id] = chartFilter.split(':');
         if (type === 'category') return s.categoryIds.includes(id);
@@ -319,7 +324,7 @@ function PricingReportDashboard() {
         return false;
     });
 
-    const totalSimulations = simulations.length;
+    const totalSimulations = activeSimulations.length;
     const totalProfitPercentage = filteredSimulations.reduce((acc, s) => acc + s.profitPercentage, 0);
     const averageProfitPercentage = filteredSimulations.length > 0 ? totalProfitPercentage / filteredSimulations.length : 0;
 
@@ -347,7 +352,7 @@ function PricingReportDashboard() {
     const categoryCounts: { [name: string]: number } = {};
     const lineCounts: { [name: string]: number } = {};
 
-    simulations.forEach(s => { // Count from all simulations, not just filtered ones
+    activeSimulations.forEach(s => { // Count from all simulations, not just filtered ones
         s.categoryIds.forEach(catId => {
             const category = categories.find(c => c.id === catId);
             if (category && category.type === 'category') {
@@ -384,7 +389,7 @@ function PricingReportDashboard() {
         .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
     return { kpis: kpisResult, profitChartData: profitChartDataResult };
-}, [simulations, categories, chartFilter]);
+}, [activeSimulations, categories, chartFilter]);
 
 
   const activeFilters = {
@@ -396,7 +401,7 @@ function PricingReportDashboard() {
 
   return (
     <PricingDashboard 
-      simulations={simulations} 
+      simulations={activeSimulations} 
       categories={categories}
       isLoading={loadingSimulations || loadingParams || loadingCategories}
       getProfitColorClass={getProfitColorClass}

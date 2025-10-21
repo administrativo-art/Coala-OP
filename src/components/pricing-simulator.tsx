@@ -142,7 +142,7 @@ export function PricingSimulator() {
         const active: ProductSimulation[] = [];
         const inactive: ProductSimulation[] = [];
         simulations.forEach(sim => {
-            if (sim.status === 'active' || !sim.status) { // This is the fix
+            if (sim.status === 'active' || !sim.status) { // CORRECTED LOGIC
                 active.push(sim);
             } else {
                 inactive.push(sim);
@@ -1032,12 +1032,10 @@ export function PricingSimulator() {
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="w-full justify-between">
                                         <ArrowUpDown className="mr-2 h-4 w-4" />
-                                        Ordenar
+                                        Ordenar por
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent className="w-56">
-                                    <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
                                     <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={(v) => handleSort(v.split('-')[0] as SortKey)}>
                                         <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
