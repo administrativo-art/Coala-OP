@@ -142,7 +142,7 @@ export function PricingSimulator() {
         const active: ProductSimulation[] = [];
         const inactive: ProductSimulation[] = [];
         simulations.forEach(sim => {
-            if (sim.status === 'active' || !sim.status) {
+            if ((sim.status === 'active' || !sim.status)) {
                 active.push(sim);
             } else {
                 inactive.push(sim);
@@ -1151,6 +1151,8 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
     
 
       
+
+    
 
     
 
