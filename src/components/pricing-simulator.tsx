@@ -616,99 +616,6 @@ export function PricingSimulator() {
         link.click();
         document.body.removeChild(link);
     };
-
-    const handleExportFichaTecnicaSimplificadaPdf = () => {
-        const doc = new jsPDF();
-        let yPos = 15;
-
-        filteredSimulations.forEach((sim, index) => {
-            if (index > 0) {
-                doc.addPage();
-                yPos = 15;
-            }
-            
-            doc.setFontSize(16);
-            doc.text('Ficha técnica simplificada', 14, yPos);
-            yPos += 10;
-
-            const hasImage = sim.ppo?.referenceImageUrl;
-            if (hasImage) {
-                try {
-                    const img = new Image();
-                    img.src = sim.ppo!.referenceImageUrl!;
-                    const imgWidth = 30;
-                    const imgHeight = (img.height * imgWidth) / img.width;
-                    doc.addImage(sim.ppo!.referenceImageUrl!, 'JPEG', 14, yPos, imgWidth, imgHeight);
-                    yPos += imgHeight + 5;
-                } catch (e) {
-                    console.error("Failed to add image to PDF", e);
-                }
-            }
-            
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text(sim.name, 14, yPos);
-            yPos += 8;
-
-
-            const items = simulationItems.filter(item => item.simulationId === sim.id);
-            const bodyData = items.map(item => {
-                const baseProductInfo = baseProductMap.get(item.baseProductId);
-                return [
-                    baseProductInfo?.name || 'Insumo não encontrado',
-                    `${item.quantity} ${item.overrideUnit || baseProductInfo?.unit}`
-                ];
-            });
-
-            autoTable(doc, {
-                startY: yPos,
-                head: [['Insumo Base', 'Quantidade']],
-                body: bodyData,
-                theme: 'striped',
-                headStyles: { fillColor: '#273344' }
-            });
-            yPos = (doc as any).lastAutoTable.finalY + 10;
-        });
-
-        doc.save(`fichas_tecnicas_simplificadas_${new Date().toISOString().slice(0,10)}.pdf`);
-    };
-
-    const handleExportFichaTecnicaSimplificadaCsv = () => {
-        const dataForCsv: any[] = [];
-        filteredSimulations.forEach((sim, simIndex) => {
-            const simItems = simulationItems.filter(item => item.simulationId === sim.id);
-            simItems.forEach(item => {
-                const baseProductInfo = baseProductMap.get(item.baseProductId);
-                dataForCsv.push({
-                    "Mercadoria": sim.name,
-                    "Insumo": baseProductInfo?.name || 'N/A',
-                    "Quantidade": item.quantity,
-                    "Unidade": item.overrideUnit || baseProductInfo?.unit,
-                });
-            });
-
-            if (simIndex < filteredSimulations.length - 1) {
-                for (let i = 0; i < 4; i++) {
-                    dataForCsv.push({ "Mercadoria": '', "Insumo": '', "Quantidade": '', "Unidade": '' });
-                }
-            }
-        });
-
-        const csv = Papa.unparse(dataForCsv, {
-            quotes: true,
-            delimiter: ",",
-            header: true
-        });
-
-        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `fichas_tecnicas_simplificadas_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
     
     const handleExportXlsx = () => {
         const dataForSheet = filteredSimulations.map(sim => ({
@@ -1153,3 +1060,4 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
       </Dialog>
     );
 }
+

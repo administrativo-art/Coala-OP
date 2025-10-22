@@ -296,10 +296,7 @@ function PricingReportDashboard() {
   const [chartFilter, setChartFilter] = useState('all');
   
   const activeSimulations = useMemo(() => {
-    return simulations.filter(sim => {
-        const isActive = sim.status === 'active' || sim.status === undefined || sim.status === null || sim.status === '';
-        return isActive;
-    });
+    return simulations;
   }, [simulations]);
 
 
@@ -491,3 +488,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+
