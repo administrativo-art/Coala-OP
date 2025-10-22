@@ -149,7 +149,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     overrideUnit: item.overrideUnit,
                 }));
             
-            const isActive = simulationToEdit.status === 'active' || !simulationToEdit.status;
+            const isActive = simulationToEdit.status === 'active' || simulationToEdit.status === undefined || simulationToEdit.status === null || simulationToEdit.status === '';
 
             form.reset({
                 name: simulationToEdit.name,

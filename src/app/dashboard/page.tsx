@@ -297,11 +297,7 @@ function PricingReportDashboard() {
   
   const activeSimulations = useMemo(() => {
     return simulations.filter(sim => {
-        const isActive =
-            sim.status === 'active' ||
-            sim.status === undefined ||
-            sim.status === null ||
-            sim.status === '';
+        const isActive = sim.status === 'active' || sim.status === undefined || sim.status === null || sim.status === '';
         return isActive;
     });
   }, [simulations]);
@@ -481,7 +477,7 @@ export default function DashboardPage() {
                         <TechnicalSheetDashboard />
                     </TabsContent>
                 )}
-                {permissions.dashboard.audit && (
+                 {permissions.dashboard.audit && (
                      <TabsContent value="audit" className="mt-6">
                         <AuditDashboard />
                     </TabsContent>
