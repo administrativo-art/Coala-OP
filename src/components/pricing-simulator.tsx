@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -70,7 +69,7 @@ type StatusFilter = "active" | "inactive" | "all";
 
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory } = useProductSimulation();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory, updateSimulation } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
@@ -379,7 +378,7 @@ export function PricingSimulator() {
             const xLeft = snap(g_info.xLeft);
             const xRight = snap(g_info.xRight);
             if (idx_info < infoItems.length) drawInfoCard(xLeft, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
-            if (idx_info < infoItems.length) drawInfoCard(xRight, gridY_info, g_info.colW, hRow, infoItems[idx_info++].label, infoItems[idx_info++].value);
+            if (idx_info < infoItems.length) drawInfoCard(xRight, gridY_info, g_info.colW, hRow, infoItems[idx_info].label, infoItems[idx_info++].value);
             gridY_info += hRow + rowGap_info;
         }
         yPos += boxH_info + 8;
@@ -1115,5 +1114,3 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
       </Dialog>
     );
 }
-
-    
