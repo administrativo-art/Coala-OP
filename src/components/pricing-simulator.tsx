@@ -104,15 +104,7 @@ export function PricingSimulator() {
     };
     
     const handleReactivate = async (simulation: ProductSimulation) => {
-        await bulkUpdateSimulations([simulation], {
-            line: { action: 'keep' },
-            category: { action: 'keep' },
-            group: { action: 'keep' },
-            price: { action: 'keep', type: 'fixed', value: 0 },
-            ncm: { action: 'keep' },
-            cest: { action: 'keep' },
-            cfop: { action: 'keep' },
-        });
+        await updateSimulation({ ...simulation, status: 'active' });
     };
 
     const handlePpoClick = (simulation: ProductSimulation) => {
@@ -592,6 +584,69 @@ export function PricingSimulator() {
         doc.save(`ficha_tecnica_${sim.name.replace(/ /g, '_')}.pdf`);
     };
 
+    const handleExportFichaTecnicaSimplificadaPdf = () => {
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text('Ficha Técnica Simplificada', 14, 22);
+
+        let yPos = 30;
+
+        filteredSimulations.forEach(sim => {
+            if (yPos > 260) {
+                doc.addPage();
+                yPos = 20;
+            }
+            doc.setFontSize(14);
+            doc.text(sim.name, 14, yPos);
+            yPos += 8;
+
+            const ingredients = simulationItems
+                .filter(item => item.simulationId === sim.id)
+                .map(item => {
+                    const bp = baseProductMap.get(item.baseProductId);
+                    return [bp ? bp.name : 'N/A', `${item.quantity} ${item.overrideUnit || bp?.unit || ''}`];
+                });
+
+            autoTable(doc, {
+                startY: yPos,
+                head: [['Ingrediente', 'Quantidade']],
+                body: ingredients,
+                theme: 'grid',
+                headStyles: { fillColor: '#f1f5f9' },
+                styles: { fontSize: 10 },
+            });
+
+            yPos = (doc as any).lastAutoTable.finalY + 15;
+        });
+
+        doc.save('fichas_tecnicas_simplificadas.pdf');
+    };
+
+    const handleExportFichaTecnicaSimplificadaCsv = () => {
+        const dataForCsv = filteredSimulations.flatMap(sim => {
+            const ingredients = simulationItems
+                .filter(item => item.simulationId === sim.id)
+                .map(item => {
+                    const bp = baseProductMap.get(item.baseProductId);
+                    return `${bp ? bp.name : 'N/A'}: ${item.quantity} ${item.overrideUnit || bp?.unit || ''}`;
+                }).join(' | ');
+            return {
+                'Mercadoria': sim.name,
+                'Ingredientes': ingredients,
+            };
+        });
+
+        const csv = Papa.unparse(dataForCsv);
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", 'fichas_tecnicas_simplificadas.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleExportGerencialCsv = () => {
         const dataForCsv = filteredSimulations.map(sim => ({
             'Mercadoria': sim.name,
@@ -1061,3 +1116,4 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
     );
 }
 
+    
