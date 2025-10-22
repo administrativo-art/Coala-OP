@@ -44,6 +44,7 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
+  status: z.boolean().default(true),
   sku: z.string().optional(),
   categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
@@ -105,6 +106,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     resolver: zodResolver(simulationSchema),
     defaultValues: { 
         name: '', 
+        status: true,
         sku: '',
         categoryIds: [], 
         lineId: null, 
@@ -146,9 +148,12 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     overrideCostPerUnit: item.overrideCostPerUnit,
                     overrideUnit: item.overrideUnit,
                 }));
+            
+            const isActive = simulationToEdit.status === 'active' || !simulationToEdit.status;
 
             form.reset({
                 name: simulationToEdit.name,
+                status: isActive,
                 sku: simulationToEdit.ppo?.sku || '',
                 categoryIds: simulationToEdit.categoryIds || [],
                 lineId: simulationToEdit.lineId,
@@ -164,6 +169,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         } else {
             form.reset({ 
                 name: '', 
+                status: true,
                 sku: '',
                 categoryIds: [], 
                 lineId: null, 
@@ -196,6 +202,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
 
     form.reset({
         name: `${sourceSimulation.name} (cópia)`,
+        status: true,
         sku: '', // SKU is unique, should not be copied
         categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
@@ -324,6 +331,8 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         sku: values.sku,
     };
     
+    const finalStatus = values.status ? 'active' : 'archived';
+    
     // We remove the fiscal fields from the main values object, as they are handled in a different modal.
     const { sku, ncm, cest, cfop, ...restOfValues } = values as any;
 
@@ -331,6 +340,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       const simulationData = { 
         ...simulationToEdit, 
         ...restOfValues,
+        status: finalStatus,
         totalCmv: cmv,
         grossCost,
         profitValue,
@@ -343,6 +353,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     } else {
        const finalData = {
         ...restOfValues,
+        status: finalStatus,
         lineId: values.lineId || null,
         groupIds: values.groupIds || [],
         categoryIds: values.categoryIds || [],
@@ -426,7 +437,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1 pr-6">
               <div className="space-y-4">
-                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
                     <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Nome da mercadoria</FormLabel>
@@ -436,11 +447,27 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     )}/>
                     <FormField control={form.control} name="sku" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>SKU (Código do Produto)</FormLabel>
+                            <FormLabel>SKU</FormLabel>
                             <FormControl><Input placeholder="Ex: MSK-M-P" {...field} value={field.value || ''} /></FormControl>
                             <FormMessage />
                         </FormItem>
                     )}/>
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col items-center gap-2">
+                          <FormLabel>Status</FormLabel>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                           <span className="text-xs text-muted-foreground">{field.value ? 'Ativa' : 'Inativa'}</span>
+                        </FormItem>
+                      )}
+                    />
                  </div>
 
                 {!simulationToEdit && (
