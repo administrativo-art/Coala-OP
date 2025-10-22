@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -141,13 +140,18 @@ export function PricingSimulator() {
     const { activeSimulations, inactiveSimulations } = useMemo(() => {
         const active: ProductSimulation[] = [];
         const inactive: ProductSimulation[] = [];
-        simulations.forEach(sim => {
-            if (sim.status === 'active' || !sim.status) { // CORRECTED LOGIC
-                active.push(sim);
-            } else {
-                inactive.push(sim);
-            }
-        });
+
+        for (const sim of simulations) {
+            const isActive =
+            sim.status === 'active' ||
+            sim.status === undefined ||
+            sim.status === null ||
+            sim.status === ''; // seguro contra strings vazias antigas
+
+            if (isActive) active.push(sim);
+            else inactive.push(sim);
+        }
+
         return { activeSimulations: active, inactiveSimulations: inactive };
     }, [simulations]);
 
