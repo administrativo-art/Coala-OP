@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -53,6 +55,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -64,6 +67,8 @@ const formatCurrency = (value: number | undefined | null) => {
 
 type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'grossCost' | 'profitGoal' | 'profitPercentage';
 type SortDirection = 'asc' | 'desc';
+type StatusFilter = "active" | "inactive" | "all";
+
 
 export function PricingSimulator() {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory } = useProductSimulation();
@@ -86,6 +91,8 @@ export function PricingSimulator() {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+
 
     const handleAddNew = () => {
         setSimulationToEdit(null);
@@ -137,13 +144,16 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
 
-    const { activeSimulations, inactiveSimulations } = useMemo(() => {
-        // Show all simulations by default, do not filter by status
-        return { activeSimulations: simulations, inactiveSimulations: [] };
-    }, [simulations]);
-
     const filteredSimulations = useMemo(() => {
-        const filtered = activeSimulations.filter(sim => {
+        const baseSimulations = simulations;
+
+        const statusFiltered = baseSimulations.filter(sim => {
+            if (statusFilter === 'all') return true;
+            const isActive = sim.status === 'active' || sim.status === undefined || sim.status === null || sim.status === '';
+            return statusFilter === 'active' ? isActive : !isActive;
+        });
+
+        const textAndCategoryFiltered = statusFiltered.filter(sim => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
@@ -151,7 +161,7 @@ export function PricingSimulator() {
             return searchMatch && categoryMatch && lineMatch;
         });
         
-        return filtered.sort((a, b) => {
+        return textAndCategoryFiltered.sort((a, b) => {
             let aValue: any;
             let bValue: any;
 
@@ -176,7 +186,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [activeSimulations, searchTerm, categoryFilters, lineFilters, sortConfig]);
+    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig, statusFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -981,6 +991,13 @@ export function PricingSimulator() {
                             />
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
+                          <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="w-full">
+                                <TabsList className="grid w-full grid-cols-3">
+                                    <TabsTrigger value="active">Ativas</TabsTrigger>
+                                    <TabsTrigger value="inactive">Inativas</TabsTrigger>
+                                    <TabsTrigger value="all">Todas</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
                            <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="w-full justify-between">
@@ -1058,7 +1075,7 @@ export function PricingSimulator() {
                  <ArchivedSimulationsModal 
                     open={isArchivedModalOpen} 
                     onOpenChange={setIsArchivedModalOpen} 
-                    simulations={inactiveSimulations}
+                    simulations={simulations.filter(sim => sim.status === 'archived')}
                     onReactivate={handleReactivate}
                 />
             </div>
