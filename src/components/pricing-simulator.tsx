@@ -138,21 +138,8 @@ export function PricingSimulator() {
     }, [categories]);
 
     const { activeSimulations, inactiveSimulations } = useMemo(() => {
-      const active: ProductSimulation[] = [];
-      const inactive: ProductSimulation[] = [];
-    
-      for (const sim of simulations) {
-        const isActive =
-          sim.status === 'active' ||
-          sim.status === undefined ||
-          sim.status === null ||
-          sim.status === ''; // seguro contra strings vazias antigas
-    
-        if (isActive) active.push(sim);
-        else inactive.push(sim);
-      }
-    
-      return { activeSimulations: active, inactiveSimulations: inactive };
+        // Show all simulations by default, do not filter by status
+        return { activeSimulations: simulations, inactiveSimulations: [] };
     }, [simulations]);
 
     const filteredSimulations = useMemo(() => {
@@ -360,7 +347,7 @@ export function PricingSimulator() {
         const twoCols = (padX: number, gap: number) => {
             const SAFE = 0.6;
             const innerLeft  = pageMargin + padX + SAFE;
-            const innerRight = pageContentWidth - padX - SAFE;
+            const innerRight = pageMargin + pageContentWidth - padX - SAFE;
             let colW = (innerRight - innerLeft - gap) / 2;
             colW = Math.floor(colW * 100) / 100;
             const xLeft  = Math.floor(innerLeft * 100) / 100;
@@ -1150,10 +1137,3 @@ function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivat
       </Dialog>
     );
 }
-    
-
-      
-
-    
-
-    
