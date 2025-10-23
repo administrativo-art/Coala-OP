@@ -122,8 +122,6 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     return kiosks.find(k => k.id === kioskId);
   }, [kioskId, kiosks]);
 
-  if (!dayData || !editingKiosk) return null;
-
   const { kioskEmployees, otherEmployees } = useMemo(() => {
     if (!users || !kioskId) return { kioskEmployees: [], otherEmployees: [] };
     const kioskEmp = users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
@@ -156,6 +154,10 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     }
   }, [dayData, editingKiosk, replace, form]);
 
+  if (!dayData || !editingKiosk) return null;
+  
+  const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
+  
   const performSave = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
     setIsProcessing(true);
@@ -249,8 +251,6 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
       performSave(values);
     }
   };
-
-  const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
   const renderMultiSelect = (field: any, placeholder: string) => (
     <DropdownMenu>
