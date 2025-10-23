@@ -122,6 +122,11 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
     return kiosks.find(k => k.id === kioskId);
   }, [kioskId, kiosks]);
 
+  // *** INÍCIO DA CORREÇÃO ***
+  // Esta verificação é movida para o topo.
+  if (!dayData || !editingKiosk) return null;
+  // *** FIM DA CORREÇÃO ***
+
   const { kioskEmployees, otherEmployees } = useMemo(() => {
     if (!users || !kioskId) return { kioskEmployees: [], otherEmployees: [] };
     const kioskEmp = users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
@@ -247,8 +252,6 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
       performSave(values);
     }
   };
-
-  if (!dayData || !editingKiosk) return null;
 
   const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
 
