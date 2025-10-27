@@ -23,6 +23,8 @@ import { ScrollArea } from './ui/scroll-area';
 
 const batchEditSchema = z.object({
   target: z.enum(['selected', 'filtered']),
+  statusAction: z.enum(['keep', 'set']),
+  statusValue: z.enum(['active', 'archived']).optional(),
   lineAction: z.enum(['keep', 'set', 'clear']),
   lineId: z.string().optional(),
   categoryAction: z.enum(['keep', 'set', 'clear']),
@@ -43,12 +45,18 @@ const batchEditSchema = z.object({
            data.categoryAction !== 'keep' || 
            data.groupAction !== 'keep' || 
            data.priceAction !== 'keep' ||
+           data.statusAction !== 'keep' ||
            data.ncmAction !== 'keep' ||
            data.cestAction !== 'keep' ||
            data.cfopAction !== 'keep';
 }, {
     message: "Selecione pelo menos uma alteração para aplicar.",
     path: ["target"], // Generic path
+}).refine(data => {
+    return data.statusAction !== 'set' || !!data.statusValue;
+}, {
+    message: "Selecione um status.",
+    path: ["statusValue"],
 }).refine(data => {
     return data.lineAction !== 'set' || !!data.lineId;
 }, {
@@ -107,6 +115,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         resolver: zodResolver(batchEditSchema),
         defaultValues: {
             target: selectedSimulationIds.size > 0 ? 'selected' : 'filtered',
+            statusAction: 'keep',
             lineAction: 'keep',
             categoryAction: 'keep',
             groupAction: 'keep',
@@ -122,6 +131,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
 
+    const statusAction = form.watch('statusAction');
     const lineAction = form.watch('lineAction');
     const categoryAction = form.watch('categoryAction');
     const groupAction = form.watch('groupAction');
@@ -146,6 +156,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
         try {
             await bulkUpdateSimulations(targetSimulations, {
+                status: { action: values.statusAction, value: values.statusValue },
                 line: { action: values.lineAction, id: values.lineId },
                 category: { action: values.categoryAction, id: values.categoryId },
                 group: { action: values.groupAction, id: values.groupId },
@@ -206,6 +217,34 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
                                 <div className="space-y-4">
                                     <h3 className="font-medium">Alterações</h3>
+                                    {/* Status */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Status</FormLabel>
+                                        <FormField control={form.control} name="statusAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="set">Definir como:</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormControl></FormItem>
+                                        )}/>
+                                        {statusAction === 'set' && (
+                                            <FormField control={form.control} name="statusValue" render={({ field }) => (
+                                                <FormItem><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger><SelectValue placeholder="Selecione um status..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                          <SelectItem value="active">Ativo</SelectItem>
+                                                          <SelectItem value="archived">Inativo</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormControl><FormMessage /></FormItem>
+                                            )}/>
+                                        )}
+                                    </div>
                                     {/* Linha */}
                                     <div className="p-4 border rounded-lg space-y-4">
                                         <FormLabel>Linha</FormLabel>

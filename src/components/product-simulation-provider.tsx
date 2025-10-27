@@ -36,6 +36,7 @@ interface SimulationData {
 }
 
 interface BulkUpdatePayload {
+    status: { action: 'keep' | 'set', value?: 'active' | 'archived' };
     line: { action: 'keep' | 'set' | 'clear', id?: string };
     category: { action: 'keep' | 'set' | 'clear', id?: string };
     group: { action: 'keep' | 'add' | 'remove' | 'set', id?: string };
@@ -278,6 +279,11 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 updatedBy: { userId: user.id, username: user.username },
                 ppo: { ...ppo }
             };
+
+            // Handle Status
+            if (updates.status.action === 'set' && updates.status.value) {
+                updatePayload.status = updates.status.value;
+            }
             
             // Handle Line
             if (updates.line.action === 'set' && updates.line.id) {
