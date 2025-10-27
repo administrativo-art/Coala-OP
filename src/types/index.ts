@@ -770,5 +770,4 @@ export type PriceDecision = {
     origin: 'manual' | 'sugerido';
 };
 
-// Adicione esta exportação
-export { unitCategories };
+    
