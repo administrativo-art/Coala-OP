@@ -333,14 +333,18 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     
     const finalStatus = values.status ? 'active' : 'archived';
     
-    // We remove the fiscal fields from the main values object, as they are handled in a different modal.
-    const { sku, ncm, cest, cfop, ...restOfValues } = values as any;
-
     if (simulationToEdit) {
       const simulationData = { 
         ...simulationToEdit, 
-        ...restOfValues,
+        name: values.name,
         status: finalStatus,
+        categoryIds: values.categoryIds,
+        lineId: values.lineId,
+        groupIds: values.groupIds,
+        operationPercentage: values.operationPercentage,
+        salePrice: values.salePrice,
+        profitGoal: values.profitGoal,
+        notes: values.notes,
         totalCmv: cmv,
         grossCost,
         profitValue,
@@ -352,11 +356,16 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       await updateSimulation(simulationData, items);
     } else {
        const finalData = {
-        ...restOfValues,
+        name: values.name,
         status: finalStatus,
+        categoryIds: values.categoryIds || [],
         lineId: values.lineId || null,
         groupIds: values.groupIds || [],
-        categoryIds: values.categoryIds || [],
+        items: values.items,
+        operationPercentage: values.operationPercentage,
+        salePrice: values.salePrice,
+        profitGoal: values.profitGoal,
+        notes: values.notes,
         totalCmv: cmv,
         grossCost,
         profitValue,
@@ -364,7 +373,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         markup,
         ppo: ppoData
       };
-      await addSimulation(finalData);
+      await addSimulation(finalData as any);
     }
     onOpenChange(false);
   };
