@@ -149,7 +149,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                     overrideUnit: item.overrideUnit,
                 }));
             
-            const isActive = simulationToEdit.status === 'active' || simulationToEdit.status === undefined || simulationToEdit.status === null || simulationToEdit.status === '';
+            const isActive = simulationToEdit.status === 'active';
 
             form.reset({
                 name: simulationToEdit.name,
@@ -332,15 +332,13 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     };
     
     const finalStatus = values.status ? 'active' : 'archived';
+    const { status, ...restOfValues } = values;
     
     if (simulationToEdit) {
       const simulationData = { 
         ...simulationToEdit, 
-        name: values.name,
+        ...restOfValues,
         status: finalStatus,
-        categoryIds: values.categoryIds,
-        lineId: values.lineId,
-        groupIds: values.groupIds,
         operationPercentage: values.operationPercentage,
         salePrice: values.salePrice,
         profitGoal: values.profitGoal,
@@ -356,16 +354,9 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
       await updateSimulation(simulationData, items);
     } else {
        const finalData = {
-        name: values.name,
+        ...restOfValues,
         status: finalStatus,
-        categoryIds: values.categoryIds || [],
-        lineId: values.lineId || null,
-        groupIds: values.groupIds || [],
         items: values.items,
-        operationPercentage: values.operationPercentage,
-        salePrice: values.salePrice,
-        profitGoal: values.profitGoal,
-        notes: values.notes,
         totalCmv: cmv,
         grossCost,
         profitValue,
