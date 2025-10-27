@@ -260,7 +260,7 @@ export type ProductSimulation = {
   lineId: string | null;
   groupIds: string[];
   userId: string;
-  status: 'draft' | 'finalized' | 'archived';
+  status: 'active' | 'archived';
   salePrice: number;
   operationPercentage: number;
   profitGoal?: number | null;
@@ -769,3 +769,6 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
+// Adicione esta exportação
+export { unitCategories };

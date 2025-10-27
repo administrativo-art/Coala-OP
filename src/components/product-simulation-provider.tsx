@@ -32,6 +32,7 @@ interface SimulationData {
     profitPercentage: number;
     markup: number;
     ppo?: ProductSimulation['ppo'];
+    status?: 'active' | 'archived';
 }
 
 interface BulkUpdatePayload {
@@ -120,8 +121,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         const newSimulation: Omit<ProductSimulation, 'id'> = {
             ...simulationHeader,
+            status: 'active', // Default new simulations to active
             userId: user.id,
-            status: 'draft',
             createdAt: now,
             updatedAt: now,
             updatedBy: { userId: user.id, username: user.username },
@@ -171,7 +172,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         try {
             const batch = writeBatch(db);
             
-            const { createdAt, userId, status, ...restOfData } = simulationData;
+            const { createdAt, userId, ...restOfData } = simulationData;
             const updatePayload: Record<string, any> = {
               ...restOfData,
               updatedAt: now,
