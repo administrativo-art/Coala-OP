@@ -11,6 +11,7 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 
 interface SimulationData {
     name: string;
+    kioskIds?: string[];
     categoryIds: string[];
     lineId?: string | null;
     groupIds: string[];
@@ -122,12 +123,13 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         const newSimulation: Omit<ProductSimulation, 'id'> = {
             ...simulationHeader,
-            status: 'active', // Default new simulations to active
+            status: data.status === 'archived' ? 'archived' : 'active',
             userId: user.id,
             createdAt: now,
             updatedAt: now,
             updatedBy: { userId: user.id, username: user.username },
             ppo: data.ppo || {},
+            kioskIds: data.kioskIds || [],
         };
 
         try {

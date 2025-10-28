@@ -86,6 +86,8 @@ export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
 
+export { unitCategories };
+
 export type Kiosk = {
     id: string;
     name: string;
@@ -256,11 +258,12 @@ export type PPO = {
 export type ProductSimulation = {
   id: string;
   name: string;
+  status: 'active' | 'archived';
+  kioskIds?: string[];
   categoryIds: string[];
   lineId: string | null;
   groupIds: string[];
   userId: string;
-  status: 'active' | 'archived';
   salePrice: number;
   operationPercentage: number;
   profitGoal?: number | null;

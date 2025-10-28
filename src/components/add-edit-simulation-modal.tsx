@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown, Check, TrendingUp, Info } from 'lucide-react';
+import { PlusCircle, Trash2, Wand2, Bot, Sparkles, Loader2, AlertCircle, Copy, ChevronsUpDown, Check, TrendingUp, Info, Warehouse } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { usePurchase } from '@/hooks/use-purchase';
+import { useKiosks } from '@/hooks/use-kiosks';
 
 
 const simulationItemSchema = z.object({
@@ -45,6 +46,7 @@ const simulationItemSchema = z.object({
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
   status: z.boolean().default(true),
+  kioskIds: z.array(z.string()).optional(),
   sku: z.string().optional(),
   categoryIds: z.array(z.string()),
   lineId: z.string().nullable().optional(),
@@ -97,6 +99,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const { priceHistory } = usePurchase();
   const { categories } = useProductSimulationCategories();
   const { pricingParameters } = useCompanySettings();
+  const { kiosks } = useKiosks();
   
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
@@ -107,6 +110,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     defaultValues: { 
         name: '', 
         status: true,
+        kioskIds: [],
         sku: '',
         categoryIds: [], 
         lineId: null, 
@@ -164,6 +168,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         form.reset({
             name: simulationToEdit.name,
             status: isActive,
+            kioskIds: simulationToEdit.kioskIds || [],
             sku: simulationToEdit.ppo?.sku || '',
             categoryIds: simulationToEdit.categoryIds || [],
             lineId: simulationToEdit.lineId,
@@ -180,6 +185,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         form.reset({ 
             name: '', 
             status: true,
+            kioskIds: [],
             sku: '',
             categoryIds: [], 
             lineId: null, 
@@ -215,6 +221,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     form.reset({
         name: `${sourceSimulation.name} (cópia)`,
         status: true,
+        kioskIds: sourceSimulation.kioskIds || [],
         sku: '', // SKU is unique, should not be copied
         categoryIds: sourceSimulation.categoryIds || [],
         lineId: sourceSimulation.lineId,
@@ -503,6 +510,45 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
                 )}
                 
                 <div className="space-y-4">
+                    <FormField
+                        control={form.control}
+                        name="kioskIds"
+                        render={({ field }) => (
+                            <FormItem className="flex-1">
+                                <FormLabel>Vendido nos quiosques</FormLabel>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <FormControl>
+                                            <Button variant="outline" className="w-full justify-between font-normal">
+                                                {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione os quiosques"}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                        <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {kiosks.map((k) => (
+                                            <DropdownMenuCheckboxItem
+                                                key={k.id}
+                                                checked={field.value?.includes(k.id)}
+                                                onCheckedChange={(checked) => {
+                                                    const currentSelection = field.value || [];
+                                                    return checked
+                                                        ? field.onChange([...currentSelection, k.id])
+                                                        : field.onChange(currentSelection.filter((id) => id !== k.id));
+                                                }}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {k.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                       <FormField
                           control={form.control}
