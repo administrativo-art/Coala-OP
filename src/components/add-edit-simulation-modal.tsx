@@ -139,7 +139,7 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     }
   }, [open]);
   
-  useEffect(() => {
+useEffect(() => {
     if (!open) {
       lastInitKeyRef.current = null;
       return;

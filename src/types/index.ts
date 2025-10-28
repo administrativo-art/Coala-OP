@@ -86,7 +86,6 @@ export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
 
-export { unitCategories };
 
 export type Kiosk = {
     id: string;

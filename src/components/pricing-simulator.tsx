@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -25,7 +26,8 @@ import {
     FileText,
     Eye,
     MoreHorizontal,
-    Trash2
+    Trash2,
+    Warehouse
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
@@ -54,6 +56,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+import { useKiosks } from "@/hooks/use-kiosks";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -74,6 +78,7 @@ export function PricingSimulator() {
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
     const { permissions } = useAuth();
+    const { kiosks, loading: kiosksLoading } = useKiosks();
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -90,6 +95,7 @@ export function PricingSimulator() {
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+    const [kioskFilter, setKioskFilter] = useState<string>("all");
 
 
     const handleAddNew = () => {
@@ -139,7 +145,7 @@ export function PricingSimulator() {
 
         const statusFiltered = baseSimulations.filter(sim => {
             if (statusFilter === 'all') return true;
-            const isActive = sim.status === 'active' || sim.status === undefined || sim.status === null || sim.status === '';
+            const isActive = sim.status === 'active';
             return statusFilter === 'active' ? isActive : !isActive;
         });
 
@@ -147,8 +153,9 @@ export function PricingSimulator() {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
+            const kioskMatch = kioskFilter === 'all' || (sim.kioskIds || []).includes(kioskFilter);
             
-            return searchMatch && categoryMatch && lineMatch;
+            return searchMatch && categoryMatch && lineMatch && kioskMatch;
         });
         
         return textAndCategoryFiltered.sort((a, b) => {
@@ -176,7 +183,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig, statusFilter]);
+    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig, statusFilter, kioskFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -712,7 +719,7 @@ export function PricingSimulator() {
         XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
     
-    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams;
+    const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams || kiosksLoading;
     
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
@@ -735,6 +742,7 @@ export function PricingSimulator() {
         setCategoryFilters(new Set());
         setLineFilters(new Set());
         setSearchTerm('');
+        setKioskFilter('all');
     };
     
     const handleSelectionChange = (id: string, isSelected: boolean) => {
@@ -951,13 +959,19 @@ export function PricingSimulator() {
                             />
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
-                          <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="w-full">
-                                <TabsList className="grid w-full grid-cols-3">
-                                    <TabsTrigger value="active">Ativas</TabsTrigger>
-                                    <TabsTrigger value="inactive">Inativas</TabsTrigger>
-                                    <TabsTrigger value="all">Todas</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
+                            <Select value={kioskFilter} onValueChange={setKioskFilter}>
+                                <SelectTrigger className="w-full">
+                                <Warehouse className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <SelectValue placeholder="Filtrar por quiosque" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                <SelectItem value="all">Todos os quiosques</SelectItem>
+                                {kiosks.map(k => (
+                                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+
                            <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="w-full justify-between">
@@ -1029,6 +1043,13 @@ export function PricingSimulator() {
                         </div>
                     </div>
                 </div>
+                 <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+                    <TabsList>
+                        <TabsTrigger value="active">Ativas</TabsTrigger>
+                        <TabsTrigger value="inactive">Inativas</TabsTrigger>
+                        <TabsTrigger value="all">Todas</TabsTrigger>
+                    </TabsList>
+                </Tabs>
                 <div className="mt-4">
                     {renderTable()}
                 </div>
