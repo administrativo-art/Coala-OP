@@ -25,7 +25,7 @@ export function PurchaseSessionList() {
 
     return (
         <div className="space-y-4">
-            {permissions.purchasing.suggest && (
+            {permissions?.purchasing?.suggest && (
                 <Button onClick={() => setIsStartModalOpen(true)}>
                     <PlusCircle className="mr-2" /> Criar nova pesquisa manual
                 </Button>
