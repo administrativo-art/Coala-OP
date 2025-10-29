@@ -19,10 +19,10 @@ const formatCurrency = (value: number) => {
 };
 
 interface PriceComparisonTableProps {
-    selectedCompetitorIds: string[];
+    selectedCompetitorIds?: string[];
 }
 
-export function PriceComparisonTable({ selectedCompetitorIds }: PriceComparisonTableProps) {
+export function PriceComparisonTable({ selectedCompetitorIds = [] }: PriceComparisonTableProps) {
     const { simulations, loading: loadingSimulations } = useProductSimulation();
     const { competitors, competitorProducts, competitorPrices, loading: loadingCompetitors } = useCompetitors();
 
