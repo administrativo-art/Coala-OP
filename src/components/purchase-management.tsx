@@ -5,30 +5,15 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AutomaticPurchaseList } from "./automatic-purchase-list";
 import { PurchaseSessionList } from "./purchase-session-list";
 import { PurchaseHistoryDashboard } from "./purchase-history-dashboard";
-import { History, ShoppingCart, Wand2, ArrowRight, ArrowLeft } from "lucide-react";
+import { History, ShoppingCart, ArrowRight, ArrowLeft } from "lucide-react";
 
-type ActiveView = 'menu' | 'automatic' | 'sessions' | 'history';
+type ActiveView = 'menu' | 'sessions' | 'history';
 
 function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => void }) {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="flex flex-col text-center">
-                <CardHeader>
-                    <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
-                        <Wand2 className="h-8 w-8 text-primary" />
-                    </div>
-                    <CardTitle>Compra matriz</CardTitle>
-                    <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow flex items-end justify-center">
-                    <Button className="w-full" onClick={() => setActiveView('automatic')}>
-                        Acessar <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </CardContent>
-            </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="flex flex-col text-center">
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
@@ -67,8 +52,6 @@ export function PurchaseManagement() {
 
     const renderView = () => {
         switch (activeView) {
-            case 'automatic':
-                return <AutomaticPurchaseList />;
             case 'sessions':
                 return <PurchaseSessionList />;
             case 'history':
@@ -81,7 +64,6 @@ export function PurchaseManagement() {
 
     const getTitle = () => {
         switch (activeView) {
-            case 'automatic': return "Compra matriz";
             case 'sessions': return "Compra geral";
             case 'history': return "Histórico de compras";
             case 'menu':
@@ -91,7 +73,6 @@ export function PurchaseManagement() {
     
     const getDescription = () => {
         switch (activeView) {
-            case 'automatic': return "Crie uma sessão de compra com base no estoque mínimo da matriz.";
             case 'sessions': return "Crie pesquisas manuais ou veja as compras em andamento.";
             case 'history': return "Consulte ordens de compra finalizadas e o histórico de preços.";
             case 'menu':
