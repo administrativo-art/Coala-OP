@@ -224,13 +224,13 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
 
     const handleAdd = async () => {
         if (!newItemName.trim()) return;
-        await addCategory({ name: newItemName.trim(), type: type, color: newItemColor });
+        await addCategory({ name: newItemName.trim(), type: type, color: type === 'category' ? newItemColor : '' });
         setNewItemName('');
     };
     
     const handleSaveEdit = async () => {
         if (!editingItem || !newItemName.trim()) return;
-        await updateCategory({ ...editingItem, name: newItemName.trim(), color: newItemColor });
+        await updateCategory({ ...editingItem, name: newItemName.trim(), color: type === 'category' ? newItemColor : '' });
         setEditingItem(null);
         setNewItemName('');
         setNewItemColor(CATEGORY_COLORS[0]);
@@ -239,7 +239,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
     const handleStartEdit = (item: SimulationCategory) => {
         setEditingItem(item);
         setNewItemName(item.name);
-        if (type !== 'line') {
+        if (type === 'category') {
           setNewItemColor(item.color || CATEGORY_COLORS[0]);
         }
     };
@@ -262,7 +262,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
             <div className="p-4 border rounded-lg space-y-3">
                  <h3 className="font-semibold">{editingItem ? 'Editando...' : `Adicionar ${label}`}</h3>
                 <div className="flex gap-2">
-                    {type !== 'line' && (
+                    {type === 'category' && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button type="button" variant="outline" size="icon">
@@ -295,7 +295,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                 {items.map(item => (
                     <div key={item.id} className="flex items-center justify-between rounded-md border p-3">
                         <div className="font-medium flex items-center gap-2">
-                            {type !== 'line' && item.color && (
+                            {type === 'category' && item.color && (
                                 <div className="h-4 w-4 rounded-full" style={{backgroundColor: item.color}}/>
                             )}
                             {item.name}
