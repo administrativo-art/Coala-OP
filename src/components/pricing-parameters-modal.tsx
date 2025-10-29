@@ -211,7 +211,26 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   );
 }
 
-const CATEGORY_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#64748B'];
+const CATEGORY_COLORS = [
+    '#F43F5E', // Rose-500
+    '#F97316', // Orange-500
+    '#F59E0B', // Amber-500
+    '#84CC16', // Lime-500
+    '#10B981', // Emerald-500
+    '#06B6D4', // Cyan-500
+    '#3B82F6', // Blue-500
+    '#8B5CF6', // Violet-500
+    '#D946EF', // Fuchsia-500
+    '#64748B', // Slate-500
+    '#FFADAD', // Light Red
+    '#FFD6A5', // Light Orange
+    '#FDFFB6', // Light Yellow
+    '#CAFFBF', // Light Green
+    '#9BF6FF', // Light Cyan
+    '#A0C4FF', // Light Blue
+    '#BDB2FF', // Light Indigo
+    '#FFC6FF', // Light Pink
+];
 
 function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'category', label: string }) {
     const { categories, addCategory, updateCategory, deleteCategory } = useProductSimulationCategories();
@@ -269,7 +288,7 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                                     <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: newItemColor }} />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="grid grid-cols-4 gap-1 p-1">
+                            <DropdownMenuContent className="grid grid-cols-5 gap-1 p-1">
                                 {CATEGORY_COLORS.map(color => (
                                     <button key={color} className="h-8 w-8 rounded-md border" style={{ backgroundColor: color }} onClick={() => setNewItemColor(color)} />
                                 ))}
