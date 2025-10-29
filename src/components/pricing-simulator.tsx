@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -819,18 +820,16 @@ export function PricingSimulator() {
                                         <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        {simLine && (
-                                            <Badge variant="outline" style={{ borderColor: simLine.color, color: simLine.color }}>
-                                                {simLine.name}
+                                        {line && (
+                                            <Badge variant="outline" style={{ borderColor: line.color, color: line.color }}>
+                                                {line.name}
                                             </Badge>
                                         )}
                                         {simCategories.map(cat => (
                                             <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
                                         ))}
                                         {simGroups.map(group => (
-                                            <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>
-                                                {group.name}
-                                            </Badge>
+                                            <Badge key={group.id} variant="outline">{group.name}</Badge>
                                         ))}
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
