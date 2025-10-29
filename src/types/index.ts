@@ -103,9 +103,6 @@ export const units: ConversionUnits = {
     }
 };
 
-export { unitCategories };
-
-
 export type Kiosk = {
     id: string;
     name: string;
@@ -790,7 +787,6 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
-
     
 
     
