@@ -239,7 +239,9 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
     const handleStartEdit = (item: SimulationCategory) => {
         setEditingItem(item);
         setNewItemName(item.name);
-        setNewItemColor(item.color || CATEGORY_COLORS[0]);
+        if (type !== 'line') {
+          setNewItemColor(item.color || CATEGORY_COLORS[0]);
+        }
     };
 
     const handleCancelEdit = () => {
@@ -260,18 +262,20 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
             <div className="p-4 border rounded-lg space-y-3">
                  <h3 className="font-semibold">{editingItem ? 'Editando...' : `Adicionar ${label}`}</h3>
                 <div className="flex gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="outline" size="icon">
-                                <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: newItemColor }} />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="grid grid-cols-4 gap-1 p-1">
-                            {CATEGORY_COLORS.map(color => (
-                                <button key={color} className="h-8 w-8 rounded-md border" style={{ backgroundColor: color }} onClick={() => setNewItemColor(color)} />
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    {type !== 'line' && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button type="button" variant="outline" size="icon">
+                                    <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: newItemColor }} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="grid grid-cols-4 gap-1 p-1">
+                                {CATEGORY_COLORS.map(color => (
+                                    <button key={color} className="h-8 w-8 rounded-md border" style={{ backgroundColor: color }} onClick={() => setNewItemColor(color)} />
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                     <Input
                         placeholder={`Nome da nova ${label.toLowerCase()}`}
                         value={newItemName}
@@ -291,7 +295,9 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
                 {items.map(item => (
                     <div key={item.id} className="flex items-center justify-between rounded-md border p-3">
                         <div className="font-medium flex items-center gap-2">
-                            <div className="h-4 w-4 rounded-full" style={{backgroundColor: item.color}}/>
+                            {type !== 'line' && item.color && (
+                                <div className="h-4 w-4 rounded-full" style={{backgroundColor: item.color}}/>
+                            )}
                             {item.name}
                         </div>
                         <div className="flex gap-1">
