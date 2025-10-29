@@ -94,6 +94,7 @@ export function PricingSimulator() {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
+    const [groupFilters, setGroupFilters] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
     const [kioskFilter, setKioskFilter] = useState<string>("all");
 
@@ -153,9 +154,10 @@ export function PricingSimulator() {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
+            const groupMatch = groupFilters.size === 0 || (sim.groupIds || []).some(groupId => groupFilters.has(groupId));
             const kioskMatch = kioskFilter === 'all' || (sim.kioskIds || []).includes(kioskFilter);
             
-            return searchMatch && categoryMatch && lineMatch && kioskMatch;
+            return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch;
         });
         
         return textAndCategoryFiltered.sort((a, b) => {
@@ -183,7 +185,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, sortConfig, statusFilter, kioskFilter]);
+    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, statusFilter, kioskFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -723,10 +725,11 @@ export function PricingSimulator() {
     
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
-    const totalActiveFilters = categoryFilters.size + lineFilters.size;
+    const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
+    const totalActiveFilters = categoryFilters.size + lineFilters.size + groupFilters.size;
     
-    const handleFilterChange = (id: string, type: 'category' | 'line') => {
-        const setter = type === 'category' ? setCategoryFilters : setLineFilters;
+    const handleFilterChange = (id: string, type: 'category' | 'line' | 'group') => {
+        const setter = type === 'category' ? setCategoryFilters : type === 'line' ? setLineFilters : setGroupFilters;
         setter(prev => {
             const newSet = new Set(prev);
             if (newSet.has(id)) {
@@ -741,6 +744,7 @@ export function PricingSimulator() {
     const clearFilters = () => {
         setCategoryFilters(new Set());
         setLineFilters(new Set());
+        setGroupFilters(new Set());
         setSearchTerm('');
         setKioskFilter('all');
     };
@@ -820,7 +824,9 @@ export function PricingSimulator() {
                                         ))}
                                         {line && <Badge variant="outline">{line.name}</Badge>}
                                         {simGroups.map(group => (
-                                            <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>{group.name}</Badge>
+                                            <Badge key={group.id} variant="outline" style={{ borderColor: group.color, color: group.color }}>
+                                                {group.name}
+                                            </Badge>
                                         ))}
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
@@ -1005,6 +1011,19 @@ export function PricingSimulator() {
                                                 onSelect={(e) => e.preventDefault()}
                                             >
                                                 {line.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                         <DropdownMenuSeparator />
+                                        <DropdownMenuLabel>Grupos</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {groups.map(group => (
+                                            <DropdownMenuCheckboxItem
+                                                key={group.id}
+                                                checked={groupFilters.has(group.id)}
+                                                onCheckedChange={() => handleFilterChange(group.id, 'group')}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                {group.name}
                                             </DropdownMenuCheckboxItem>
                                         ))}
                                     </ScrollArea>
