@@ -16,15 +16,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from './ui/separator';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronsUpDown } from 'lucide-react';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { useKiosks } from '@/hooks/use-kiosks';
 
 
 const batchEditSchema = z.object({
   target: z.enum(['selected', 'filtered']),
   statusAction: z.enum(['keep', 'set']),
   statusValue: z.enum(['active', 'archived']).optional(),
+  kioskAction: z.enum(['keep', 'add', 'remove', 'set']),
+  kioskIds: z.array(z.string()).optional(),
   lineAction: z.enum(['keep', 'set', 'clear']),
   lineId: z.string().optional(),
   categoryAction: z.enum(['keep', 'set', 'clear']),
@@ -46,6 +50,7 @@ const batchEditSchema = z.object({
            data.groupAction !== 'keep' || 
            data.priceAction !== 'keep' ||
            data.statusAction !== 'keep' ||
+           data.kioskAction !== 'keep' ||
            data.ncmAction !== 'keep' ||
            data.cestAction !== 'keep' ||
            data.cfopAction !== 'keep';
@@ -57,6 +62,11 @@ const batchEditSchema = z.object({
 }, {
     message: "Selecione um status.",
     path: ["statusValue"],
+}).refine(data => {
+    return data.kioskAction === 'keep' || (data.kioskIds && data.kioskIds.length > 0);
+}, {
+    message: "Selecione pelo menos um quiosque.",
+    path: ["kioskIds"],
 }).refine(data => {
     return data.lineAction !== 'set' || !!data.lineId;
 }, {
@@ -108,6 +118,7 @@ interface BatchEditSimulationModalProps {
 export function BatchEditSimulationModal({ open, onOpenChange, simulations, filteredSimulations, selectedSimulationIds }: BatchEditSimulationModalProps) {
     const { categories } = useProductSimulationCategories();
     const { bulkUpdateSimulations } = useProductSimulation();
+    const { kiosks } = useKiosks();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -116,6 +127,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         defaultValues: {
             target: selectedSimulationIds.size > 0 ? 'selected' : 'filtered',
             statusAction: 'keep',
+            kioskAction: 'keep',
             lineAction: 'keep',
             categoryAction: 'keep',
             groupAction: 'keep',
@@ -124,6 +136,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
             ncmAction: 'keep',
             cestAction: 'keep',
             cfopAction: 'keep',
+            kioskIds: [],
         }
     });
     
@@ -132,6 +145,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
 
     const statusAction = form.watch('statusAction');
+    const kioskAction = form.watch('kioskAction');
     const lineAction = form.watch('lineAction');
     const categoryAction = form.watch('categoryAction');
     const groupAction = form.watch('groupAction');
@@ -157,6 +171,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         try {
             await bulkUpdateSimulations(targetSimulations, {
                 status: { action: values.statusAction, value: values.statusValue },
+                kiosk: { action: values.kioskAction, ids: values.kioskIds || [] },
                 line: { action: values.lineAction, id: values.lineId },
                 category: { action: values.categoryAction, id: values.categoryId },
                 group: { action: values.groupAction, id: values.groupId },
@@ -243,6 +258,63 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     </Select>
                                                 </FormControl><FormMessage /></FormItem>
                                             )}/>
+                                        )}
+                                    </div>
+                                    {/* Kiosks */}
+                                    <div className="p-4 border rounded-lg space-y-4">
+                                        <FormLabel>Quiosques</FormLabel>
+                                        <FormField control={form.control} name="kioskAction" render={({ field }) => (
+                                            <FormItem><FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="keep">Não alterar</SelectItem>
+                                                        <SelectItem value="add">Adicionar quiosques</SelectItem>
+                                                        <SelectItem value="remove">Remover quiosques</SelectItem>
+                                                        <SelectItem value="set">Substituir por:</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormControl></FormItem>
+                                        )}/>
+                                        {kioskAction !== 'keep' && (
+                                            <FormField
+                                                control={form.control}
+                                                name="kioskIds"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <FormControl>
+                                                                <Button variant="outline" className="w-full justify-between font-normal">
+                                                                    {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                </Button>
+                                                            </FormControl>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                                            <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                                                            <DropdownMenuSeparator />
+                                                            {kiosks.map((k) => (
+                                                                <DropdownMenuCheckboxItem
+                                                                    key={k.id}
+                                                                    checked={field.value?.includes(k.id)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const currentSelection = field.value || [];
+                                                                        return checked
+                                                                            ? field.onChange([...currentSelection, k.id])
+                                                                            : field.onChange(currentSelection.filter((id) => id !== k.id));
+                                                                    }}
+                                                                    onSelect={(e) => e.preventDefault()}
+                                                                >
+                                                                    {k.name}
+                                                                </DropdownMenuCheckboxItem>
+                                                            ))}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                    <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
                                         )}
                                     </div>
                                     {/* Linha */}
@@ -415,3 +487,5 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         </Dialog>
     );
 }
+
+    

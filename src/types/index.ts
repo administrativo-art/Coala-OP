@@ -87,6 +87,25 @@ export type ConversionUnits = {
 };
 
 
+export const units: ConversionUnits = {
+    Volume: {
+      'L': 1,
+      'mL': 0.001,
+    },
+    Massa: {
+      'kg': 1,
+      'g': 0.001,
+      'mg': 0.000001,
+    },
+    Unidade: {
+      'un': 1,
+      'pacote': 1,
+    }
+};
+
+export { unitCategories };
+
+
 export type Kiosk = {
     id: string;
     name: string;
@@ -771,5 +790,7 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
+    
 
     

@@ -38,6 +38,7 @@ interface SimulationData {
 
 interface BulkUpdatePayload {
     status: { action: 'keep' | 'set', value?: 'active' | 'archived' };
+    kiosk: { action: 'keep' | 'add' | 'remove' | 'set', ids: string[] };
     line: { action: 'keep' | 'set' | 'clear', id?: string };
     category: { action: 'keep' | 'set' | 'clear', id?: string };
     group: { action: 'keep' | 'add' | 'remove' | 'set', id?: string };
@@ -286,6 +287,16 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             if (updates.status.action === 'set' && updates.status.value) {
                 updatePayload.status = updates.status.value;
             }
+
+            // Handle Kiosk
+            if (updates.kiosk.action === 'set') {
+                updatePayload.kioskIds = updates.kiosk.ids;
+            } else if (updates.kiosk.action === 'add') {
+                updatePayload.kioskIds = Array.from(new Set([...(sim.kioskIds || []), ...updates.kiosk.ids]));
+            } else if (updates.kiosk.action === 'remove') {
+                const idsToRemove = new Set(updates.kiosk.ids);
+                updatePayload.kioskIds = (sim.kioskIds || []).filter(id => !idsToRemove.has(id));
+            }
             
             // Handle Line
             if (updates.line.action === 'set' && updates.line.id) {
@@ -374,3 +385,5 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
+
+    
