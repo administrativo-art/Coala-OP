@@ -42,7 +42,7 @@ export function PurchaseSessionList() {
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground border-2 border-dashed rounded-lg p-12">
                         <Inbox className="h-12 w-12 mb-4" />
                         <p className="font-semibold">Nenhuma pesquisa em andamento.</p>
-                        <p className="text-sm">Clique em "Criar nova pesquisa" para iniciar uma.</p>
+                        <p className="text-sm">Clique em "Criar nova pesquisa manual" para iniciar uma.</p>
                     </div>
                 )}
             </div>

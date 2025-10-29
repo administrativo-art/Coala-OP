@@ -20,7 +20,7 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                         <ShoppingCart className="h-8 w-8 text-primary" />
                     </div>
                     <CardTitle>Compra geral</CardTitle>
-                    <CardDescription>Realize pesquisa e/ou registre os preços dos produtos selecionados para compra</CardDescription>
+                    <CardDescription>Crie pesquisas manuais ou veja as compras em andamento.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center">
                      <Button className="w-full" onClick={() => setActiveView('sessions')}>
@@ -84,13 +84,13 @@ export function PurchaseManagement() {
         <div className="w-full max-w-7xl mx-auto space-y-6">
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-start">
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                         <div>
                             <CardTitle className="font-headline">{getTitle()}</CardTitle>
                             <CardDescription>{getDescription()}</CardDescription>
                         </div>
                         {activeView !== 'menu' && (
-                            <Button variant="outline" onClick={() => setActiveView('menu')}>
+                            <Button variant="outline" onClick={() => setActiveView('menu')} className="shrink-0">
                                 <ArrowLeft className="mr-2 h-4 w-4" />
                                 Voltar para o menu de compras
                             </Button>
