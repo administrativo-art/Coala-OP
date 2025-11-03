@@ -726,13 +726,14 @@ export function PricingSimulator() {
         const doc = new jsPDF();
         doc.setFontSize(18);
         doc.text('Lista de Preços', 14, 22);
-    
-        const head = [['Mercadoria', 'Preço de Venda']];
+
+        const head = [['Mercadoria', 'Preço de Venda', 'Lucro %']];
         const body = filteredSimulations.map(sim => [
             sim.name,
             formatCurrency(sim.salePrice),
+            `${sim.profitPercentage.toFixed(2)}%`,
         ]);
-    
+
         autoTable(doc, {
             startY: 30,
             head: head,
@@ -740,7 +741,7 @@ export function PricingSimulator() {
             theme: 'grid',
             headStyles: { fillColor: [39, 51, 68] },
         });
-    
+
         doc.save(`lista_de_precos_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
@@ -748,6 +749,7 @@ export function PricingSimulator() {
         const dataForCsv = filteredSimulations.map(sim => ({
             'Mercadoria': sim.name,
             'Preço de Venda': sim.salePrice,
+            'Lucro %': sim.profitPercentage.toFixed(2) + '%'
         }));
 
         const csv = Papa.unparse(dataForCsv, {
