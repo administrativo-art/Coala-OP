@@ -721,6 +721,50 @@ export function PricingSimulator() {
 
         XLSX.writeFile(workbook, `relatorio_gerencial_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
+
+    const handleExportPriceListPdf = () => {
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text('Lista de Preços', 14, 22);
+    
+        const head = [['Mercadoria', 'Preço de Venda']];
+        const body = filteredSimulations.map(sim => [
+            sim.name,
+            formatCurrency(sim.salePrice),
+        ]);
+    
+        autoTable(doc, {
+            startY: 30,
+            head: head,
+            body: body,
+            theme: 'grid',
+            headStyles: { fillColor: [39, 51, 68] },
+        });
+    
+        doc.save(`lista_de_precos_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+    const handleExportPriceListCsv = () => {
+        const dataForCsv = filteredSimulations.map(sim => ({
+            'Mercadoria': sim.name,
+            'Preço de Venda': sim.salePrice,
+        }));
+
+        const csv = Papa.unparse(dataForCsv, {
+            quotes: true,
+            delimiter: ';',
+            header: true,
+            newline: '\r\n'
+        });
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `lista_de_precos_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
     
     const isLoading = loadingSimulations || loadingBaseProducts || loadingCategories || loadingParams || kiosksLoading;
     
@@ -946,6 +990,9 @@ export function PricingSimulator() {
                                     <DropdownMenuItem onSelect={handleExportGerencialPdf}>Relatório Gerencial (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onSelect={() => handleExportFichaTecnicaCompletaPdf(filteredSimulations[0])} disabled={filteredSimulations.length !== 1}>
                                       Ficha Completa (PDF)
