@@ -8,6 +8,7 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, write
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import { convertValue } from '@/lib/conversion';
 
 interface SimulationData {
     name: string;
@@ -27,11 +28,6 @@ interface SimulationData {
     salePrice?: number;
     profitGoal?: number | null;
     notes?: string;
-    totalCmv: number;
-    grossCost: number;
-    profitValue: number;
-    profitPercentage: number;
-    markup: number;
     ppo?: ProductSimulation['ppo'];
     status?: 'active' | 'archived';
 }
@@ -54,7 +50,7 @@ export interface ProductSimulationContextType {
   priceHistory: SimulationPriceHistory[];
   loading: boolean;
   addSimulation: (data: SimulationData) => Promise<void>;
-  updateSimulation: (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
+  updateSimulation: (data: Partial<Omit<ProductSimulation, 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'>> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdateSimulations: (simulations: ProductSimulation[], updates: BulkUpdatePayload) => Promise<void>;
 }
@@ -70,8 +66,56 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     const [loading, setLoading] = useState(true);
 
     const simulations = useMemo(() => {
-        return rawSimulations;
-    }, [rawSimulations]);
+        if (loading || !baseProducts.length) return rawSimulations;
+
+        return rawSimulations.map(sim => {
+            const items = simulationItems.filter(item => item.simulationId === sim.id);
+            let totalCmv = 0;
+
+            items.forEach(item => {
+                const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+                if (!baseProduct || !item.quantity) return;
+
+                let partialCost = 0;
+                
+                const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+                
+                if (item.useDefault) {
+                    if(costSource > 0) {
+                        partialCost = item.quantity * costSource;
+                    }
+                } else if (item.overrideCostPerUnit && item.overrideUnit) {
+                    try {
+                        const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
+                        if (valueInBase > 0) {
+                            partialCost = item.quantity * (item.overrideCostPerUnit / valueInBase);
+                        }
+                    } catch (e) {
+                        console.error(`Error calculating cost for item ${item.id} in simulation ${sim.id}:`, e);
+                    }
+                }
+                totalCmv += partialCost;
+            });
+            
+            const operationPercentage = sim.operationPercentage || 0;
+            const salePrice = sim.salePrice || 0;
+
+            const grossCost = totalCmv + (totalCmv * (operationPercentage / 100));
+            const profitValue = salePrice - grossCost;
+            const profitPercentage = salePrice > 0 ? (profitValue / salePrice) * 100 : 0;
+            const markup = grossCost > 0 ? (salePrice / grossCost) - 1 : 0;
+            
+            return {
+                ...sim,
+                totalCmv,
+                grossCost,
+                profitValue,
+                profitPercentage,
+                markup,
+            };
+        });
+
+    }, [rawSimulations, simulationItems, baseProducts, loading]);
 
     useEffect(() => {
         const qSims = query(collection(db, "productSimulations"));
@@ -87,7 +131,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 return { id: doc.id, ...docData } as ProductSimulation;
             });
             setRawSimulations(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-            setLoading(false);
+            if(!loadingBases) setLoading(false);
         }, (error) => {
             console.error("Error fetching simulations:", error);
             setLoading(false);
@@ -109,6 +153,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error fetching price history:", error);
         });
 
+        const { loading: loadingBases } = useBaseProducts();
+
         return () => {
             unsubSims();
             unsubItems();
@@ -116,13 +162,13 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         };
     }, []);
 
-    const addSimulation = useCallback(async (data: SimulationData) => {
+    const addSimulation = useCallback(async (data: Omit<SimulationData, 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'>) => {
         if (!user) return;
         
         const now = new Date().toISOString();
         const {items, ...simulationHeader} = data;
 
-        const newSimulation: Omit<ProductSimulation, 'id'> = {
+        const newSimulation: Omit<ProductSimulation, 'id' | 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'> = {
             ...simulationHeader,
             status: data.status === 'archived' ? 'archived' : 'active',
             userId: user.id,
@@ -157,7 +203,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         }
     }, [user]);
     
-    const updateSimulation = useCallback(async (data: Partial<ProductSimulation> & { id: string, items?: SimulationData['items'] }) => {
+    const updateSimulation = useCallback(async (data: Partial<Omit<ProductSimulation, 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'>> & { id: string, items?: SimulationData['items'] }) => {
         if (!user) return;
         
         const now = new Date().toISOString();
@@ -204,7 +250,6 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 }
               });
             }
-
 
             batch.update(simulationRef, updatePayload);
             
@@ -340,9 +385,12 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                  newSalePrice = Math.max(0, newSalePrice); 
 
                  if (oldPrice !== newSalePrice) {
-                    const newProfitValue = newSalePrice - sim.grossCost;
+                    // Recalculate profit metrics based on the new price
+                    // The CMV and Gross Cost are already calculated in the main `simulations` memo
+                    const { grossCost } = sim;
+                    const newProfitValue = newSalePrice - grossCost;
                     const newProfitPercentage = newSalePrice > 0 ? (newProfitValue / newSalePrice) * 100 : 0;
-                    const newMarkup = sim.grossCost > 0 ? (newSalePrice / sim.grossCost) -1 : 0;
+                    const newMarkup = grossCost > 0 ? (newSalePrice / grossCost) - 1 : 0;
                     
                     updatePayload.salePrice = newSalePrice;
                     updatePayload.profitValue = newProfitValue;
@@ -367,7 +415,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error performing bulk simulation update:", error);
             throw error;
         }
-    }, [user]);
+    }, [user, simulations]);
 
 
     const value = useMemo(() => {
@@ -385,5 +433,3 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }
-
-    
