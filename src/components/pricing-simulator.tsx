@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -59,6 +58,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { convertValue } from "@/lib/conversion";
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -398,14 +398,21 @@ export function PricingSimulator() {
             .filter(item => item.simulationId === sim.id)
             .map(item => {
                 const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-                const costPerUnit = item.overrideCostPerUnit ?? 0;
+                if (!baseProduct) return null;
+                const costPerUnit = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
                 const qty = item.quantity;
-                const cost = costPerUnit * qty;
+                let cost = 0;
+                try {
+                    const valueInBase = convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+                    cost = qty * (costPerUnit * valueInBase);
+                } catch { /* ignore error */ }
+        
                 const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
-                return { name: baseProduct?.name || 'Insumo não encontrado', qtyStr: `${qty} ${item.overrideUnit || baseProduct?.unit || 'un'}`, cpuStr: formatCurrency(costPerUnit), impact, cost };
+                return { name: baseProduct.name, qtyStr: `${qty} ${item.overrideUnit || baseProduct.unit}`, cpuStr: formatCurrency(costPerUnit), impact, cost };
             })
-            .sort((a, b) => b.cost - a.cost)
-            .map(row => [row.name, row.qtyStr, row.cpuStr, `${row.impact.toFixed(1)}%`, formatCurrency(row.cost)]);
+            .filter(Boolean)
+            .sort((a, b) => b!.cost - a!.cost)
+            .map(row => [row!.name, row!.qtyStr, row!.cpuStr, `${row!.impact.toFixed(1)}%`, formatCurrency(row!.cost)]);
     
         if (ingredients.length > 0) {
             yPos = addSectionTitle('Composição (CMV)', yPos);
@@ -932,14 +939,24 @@ export function PricingSimulator() {
                                             </TableHeader>
                                             <TableBody>
                                                 {simulationItems.filter(item => item.simulationId === sim.id).map(item => {
-                                                    const baseProductInfo = baseProductMap.get(item.baseProductId);
-                                                    const cost = (item.overrideCostPerUnit || 0) * item.quantity;
+                                                    const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+                                                    if (!baseProduct) return null;
+                                                    
+                                                    const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+                                                    
+                                                    let cost = 0;
+                                                    try {
+                                                      const valueInBase = convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+                                                      cost = item.quantity * (costSource * valueInBase);
+                                                    } catch (e) { console.error(e) }
+                                                    
                                                     const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
+                                                    
                                                     return (
                                                         <TableRow key={item.id}>
-                                                            <TableCell>{baseProductInfo?.name || 'Insumo não encontrado'}</TableCell>
-                                                            <TableCell>{item.quantity} {item.overrideUnit || baseProductInfo?.unit}</TableCell>
-                                                            <TableCell className="text-right">{formatCurrency(item.overrideCostPerUnit || 0)}</TableCell>
+                                                            <TableCell>{baseProduct?.name || 'Insumo não encontrado'}</TableCell>
+                                                            <TableCell>{item.quantity} {item.overrideUnit || baseProduct?.unit}</TableCell>
+                                                            <TableCell className="text-right">{formatCurrency(costSource)}</TableCell>
                                                             <TableCell className="text-right">{impact.toFixed(1)}%</TableCell>
                                                             <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
                                                         </TableRow>
