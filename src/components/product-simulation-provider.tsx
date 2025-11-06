@@ -59,7 +59,7 @@ export const ProductSimulationContext = createContext<ProductSimulationContextTy
 
 export function ProductSimulationProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const { baseProducts } = useBaseProducts();
+    const { baseProducts, loading: loadingBases } = useBaseProducts();
     const [rawSimulations, setRawSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<SimulationPriceHistory[]>([]);
@@ -153,14 +153,12 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error fetching price history:", error);
         });
 
-        const { loading: loadingBases } = useBaseProducts();
-
         return () => {
             unsubSims();
             unsubItems();
             unsubHistory();
         };
-    }, []);
+    }, [loadingBases]);
 
     const addSimulation = useCallback(async (data: Omit<SimulationData, 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'>) => {
         if (!user) return;
