@@ -942,12 +942,17 @@ export function PricingSimulator() {
                                                     const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
                                                     if (!baseProduct) return null;
                                                     
-                                                    const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+                                                    const costPerUnit = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
                                                     
                                                     let cost = 0;
                                                     try {
-                                                      const valueInBase = convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
-                                                      cost = item.quantity * (costSource * valueInBase);
+                                                        const valueInBase = item.useDefault 
+                                                            ? 1 // Already in base units
+                                                            : convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+                                                        
+                                                        const effectiveCostPerUnit = item.useDefault ? costPerUnit : (item.overrideCostPerUnit || 0) / valueInBase;
+                                                        cost = item.quantity * effectiveCostPerUnit;
+
                                                     } catch (e) { console.error(e) }
                                                     
                                                     const impact = sim.totalCmv > 0 ? (cost / sim.totalCmv) * 100 : 0;
@@ -956,7 +961,7 @@ export function PricingSimulator() {
                                                         <TableRow key={item.id}>
                                                             <TableCell>{baseProduct?.name || 'Insumo não encontrado'}</TableCell>
                                                             <TableCell>{item.quantity} {item.overrideUnit || baseProduct?.unit}</TableCell>
-                                                            <TableCell className="text-right">{formatCurrency(costSource)}</TableCell>
+                                                            <TableCell className="text-right">{formatCurrency(costPerUnit)}</TableCell>
                                                             <TableCell className="text-right">{impact.toFixed(1)}%</TableCell>
                                                             <TableCell className="text-right font-semibold text-primary">{formatCurrency(cost)}</TableCell>
                                                         </TableRow>

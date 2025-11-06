@@ -253,11 +253,11 @@ useEffect(() => {
         try {
             let partialCost = 0;
             
-            const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+            const costPerUnit = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
             
             if (item.useDefault) {
-                if(costSource > 0) {
-                    partialCost = item.quantity * costSource;
+                if(costPerUnit > 0) {
+                    partialCost = item.quantity * costPerUnit;
                 }
             } else if (item.overrideCostPerUnit && item.overrideUnit) {
                 const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
