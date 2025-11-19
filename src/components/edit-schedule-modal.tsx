@@ -156,14 +156,14 @@ export function EditScheduleModal({ dayData, kioskId, onOpenChange, users }: Edi
 
   if (!dayData || !editingKiosk) return null;
   
-  const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
+  const isSunday = dayData.diaDaSemana?.toLowerCase().includes('domingo') || false;
   
   const performSave = async (values: FormValues) => {
     if (!dayData || !editingKiosk) return;
     setIsProcessing(true);
 
     const updates: Partial<DailySchedule> = {};
-    const isSunday = dayData.diaDaSemana.toLowerCase().includes('domingo');
+    const isSunday = dayData.diaDaSemana?.toLowerCase().includes('domingo');
 
     if (isSunday) {
         updates[`${editingKiosk.id} T1`] = values.shifts[0].value.join(' + ');
