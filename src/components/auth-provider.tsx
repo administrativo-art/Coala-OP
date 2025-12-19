@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -65,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: user.email!,
                 profileId: adminProfileId,
                 assignedKioskIds: [],
-                operacional: true,
             };
             await setDoc(userDocRef, firstAdminData);
             userDocSnap = await getDoc(userDocRef);

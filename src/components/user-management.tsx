@@ -36,7 +36,6 @@ const userSchema = z.object({
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   assignedKioskIds: z.array(z.string()).min(1, 'Selecione pelo menos um quiosque.'),
-  operacional: z.boolean(),
   avatarUrl: z.string().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
@@ -74,7 +73,6 @@ export function UserManagement() {
         password: '',
         profileId: '',
         assignedKioskIds: [],
-        operacional: true,
         avatarUrl: '',
     }
   });
@@ -97,7 +95,6 @@ export function UserManagement() {
       password: '',
       profileId: '',
       assignedKioskIds: [],
-      operacional: true,
       avatarUrl: '',
     });
     setShowForm(true);
@@ -111,7 +108,6 @@ export function UserManagement() {
       password: '',
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
-      operacional: user.operacional,
       avatarUrl: user.avatarUrl || '',
     });
     setShowForm(true);
@@ -165,7 +161,6 @@ export function UserManagement() {
           username: values.username, 
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
-          operacional: values.operacional,
           avatarUrl: values.avatarUrl,
       }, values.email, values.password);
     }
@@ -375,29 +370,6 @@ export function UserManagement() {
                         )}
                         />
                   </div>
-
-                  <Separator />
-
-                  <FormField
-                    control={form.control}
-                    name="operacional"
-                    render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5">
-                            <FormLabel>Colaborador operacional</FormLabel>
-                            <FormDescription>
-                                Ative se este colaborador deve ser incluído na geração da escala de trabalho.
-                            </FormDescription>
-                        </div>
-                        <FormControl>
-                            <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            />
-                        </FormControl>
-                        </FormItem>
-                    )}
-                    />
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">

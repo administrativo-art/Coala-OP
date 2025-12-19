@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -374,7 +375,6 @@ export type User = {
     email: string;
     profileId: string;
     assignedKioskIds: string[];
-    operacional: boolean;
     avatarUrl?: string;
 };
 
