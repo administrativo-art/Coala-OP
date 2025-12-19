@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';

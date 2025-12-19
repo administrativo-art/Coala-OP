@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { useProducts } from '@/hooks/use-products';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { type Product } from '@/types';

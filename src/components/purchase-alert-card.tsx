@@ -4,7 +4,7 @@
 import { useMemo, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';

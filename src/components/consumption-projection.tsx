@@ -695,5 +695,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
-    
