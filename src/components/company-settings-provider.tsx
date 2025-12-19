@@ -9,11 +9,13 @@ import { type PricingParameters } from '@/types';
 interface CompanySettings {
     labelSizeId?: string | null;
     pricingParameters?: PricingParameters;
+    logoUrl?: string;
 }
 
 export interface CompanySettingsContextType {
   labelSizeId: string | null;
   pricingParameters: PricingParameters | null;
+  logoUrl: string | null;
   loading: boolean;
   updateLabelSize: (sizeId: string | null) => Promise<void>;
   updatePricingParameters: (params: PricingParameters) => Promise<void>;
@@ -31,9 +33,12 @@ const defaultPricingParameters: PricingParameters = {
   ],
 };
 
+const defaultLogoUrl = "https://storage.googleapis.com/smart-converter-752gf.appspot.com/settings/company/01%20Logo%20-%20Coala%20Shakes.png";
+
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
   const [labelSizeId, setLabelSizeId] = useState<string | null>('6080');
   const [pricingParameters, setPricingParameters] = useState<PricingParameters | null>(defaultPricingParameters);
+  const [logoUrl, setLogoUrl] = useState<string | null>(defaultLogoUrl);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +47,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
         if (docSnap.exists()) {
             const data = docSnap.data() as CompanySettings;
             setLabelSizeId(data.labelSizeId || '6080');
+            setLogoUrl(data.logoUrl || defaultLogoUrl);
             
             const params = data.pricingParameters || {};
             // Ensure defaults for new fields if they don't exist
@@ -56,6 +62,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             setDoc(settingsRef, {
                 labelSizeId: '6080',
                 pricingParameters: defaultPricingParameters,
+                logoUrl: defaultLogoUrl,
             });
         }
         setLoading(false);
@@ -90,10 +97,11 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const value: CompanySettingsContextType = useMemo(() => ({
     labelSizeId,
     pricingParameters,
+    logoUrl,
     loading,
     updateLabelSize,
     updatePricingParameters,
-  }), [labelSizeId, pricingParameters, loading, updateLabelSize, updatePricingParameters]);
+  }), [labelSizeId, pricingParameters, logoUrl, loading, updateLabelSize, updatePricingParameters]);
 
   return <CompanySettingsContext.Provider value={value}>{children}</CompanySettingsContext.Provider>;
 }

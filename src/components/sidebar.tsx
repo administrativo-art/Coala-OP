@@ -4,6 +4,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from 'next/image';
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { 
@@ -23,6 +24,7 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useCompanySettings } from '@/hooks/use-company-settings';
 
 // Componente do Item de Menu (Estilo Glass com suporte a Badge e Next.js Link)
 function GlassNavItem({ 
@@ -71,6 +73,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
   const pathname = usePathname();
   const { user, permissions, logout } = useAuth();
   const { legacyTasks } = useAllTasks();
+  const { logoUrl } = useCompanySettings();
   const [searchTerm, setSearchTerm] = useState('');
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -116,10 +119,16 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         <div className="px-8 pt-10 pb-6">
             <div className="flex items-center justify-between mb-8">
                 <Link href="/dashboard" className="flex flex-col">
-                    <span className="text-2xl font-bold tracking-tighter text-slate-800 dark:text-white">
-                        coala<span className="text-primary">shakes</span>
-                    </span>
-                    <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/60">Management System</span>
+                    {logoUrl ? (
+                        <Image src={logoUrl} alt="Logo" width={150} height={50} priority className="object-contain" />
+                    ) : (
+                        <>
+                            <span className="text-2xl font-bold tracking-tighter text-slate-800 dark:text-white">
+                                coala<span className="text-primary">shakes</span>
+                            </span>
+                            <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/60">Management System</span>
+                        </>
+                    )}
                 </Link>
                 <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5">
                     <X className="h-4 w-4" />
