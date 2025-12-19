@@ -124,7 +124,20 @@ export type LotEntry = {
   locationCode?: string | null;
 };
 
-export type MovementType = 'ENTRADA' | 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO' | 'ENTRADA_CORRECAO' | 'TRANSFERENCIA_SAIDA' | 'TRANSFERENCIA_ENTRADA' | 'ENTRADA_ESTORNO' | 'SAIDA_ESTORNO';
+export type MovementType = 
+    | 'ENTRADA' 
+    | 'SAIDA_CONSUMO' 
+    | 'SAIDA_DESCARTE_VENCIMENTO'
+    | 'SAIDA_DESCARTE_AVARIA'
+    | 'SAIDA_DESCARTE_PERDA'
+    | 'SAIDA_DESCARTE_OUTROS'
+    | 'SAIDA_AJUSTE_CONTAGEM' 
+    | 'ENTRADA_AJUSTE_CONTAGEM'
+    | 'TRANSFERENCIA_SAIDA' 
+    | 'TRANSFERENCIA_ENTRADA' 
+    | 'ENTRADA_ESTORNO' 
+    | 'SAIDA_ESTORNO';
+
 
 export type MovementRecord = {
   id: string;
@@ -317,38 +330,12 @@ export type DailyLog = {
 
 
 export type PermissionSet = {
-  dashboard: {
-    view: boolean;
-    operational: boolean;
-    pricing: boolean;
-    audit: boolean;
-    technicalSheets: boolean;
-  };
-  registration: {
-    view: boolean;
-    items: { add: boolean; edit: boolean; delete: boolean; };
-    baseProducts: { add: boolean; edit: boolean; delete: boolean; };
-    entities: { add: boolean; edit: boolean; delete: boolean; };
-  };
-  stock: {
-    view: boolean;
-    inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
-    stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
-    audit: { view: boolean; start: boolean; approve: boolean; };
-    analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; };
-    purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; };
-    returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; };
-    conversions: { view: boolean; };
-  };
+  dashboard: { view: boolean; operational: boolean; pricing: boolean; audit: boolean; technicalSheets: boolean; };
+  registration: { view: boolean; items: { add: boolean; edit: boolean; delete: boolean; }; baseProducts: { add: boolean; edit: boolean; delete: boolean; }; entities: { add: boolean; edit: boolean; delete: boolean; }; };
+  stock: { view: boolean; inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; }; stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; audit: { view: boolean; start: boolean; approve: boolean; }; analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; }; purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; conversions: { view: boolean; }; };
   team: { view: boolean; manage: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
-  settings: {
-    view: boolean;
-    manageUsers: boolean;
-    manageKiosks: boolean;
-    manageProfiles: boolean;
-    manageLabels: boolean;
-  };
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
   // Legado - Will be removed
@@ -376,6 +363,7 @@ export type User = {
     profileId: string;
     assignedKioskIds: string[];
     avatarUrl?: string;
+    operacional?: boolean;
 };
 
 export type PredefinedConversionItem = {
@@ -435,7 +423,11 @@ export type StockAuditItem = {
     lotNumber: string;
     expiryDate: string; // ISO String
     systemQuantity: number;
-    countedQuantity: number;
+    adjustment?: {
+        type: 'positive' | 'negative';
+        quantity: number;
+        notes?: string;
+    };
     divergences: StockAuditDivergence[];
 };
 
@@ -677,16 +669,6 @@ export const defaultAdminPermissions: PermissionSet = {
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };
 
-
-export type StockAuditContextType = {
-  auditSessions: StockAuditSession[];
-  activeSession: StockAuditSession | null;
-  loading: boolean;
-  setActiveSession: (session: StockAuditSession | null) => void;
-  addAuditSession: (session: Omit<StockAuditSession, 'id'>) => Promise<string | null>;
-  updateAuditSession: (sessionId: string, updates: Partial<StockAuditSession>) => Promise<void>;
-  deleteAuditSession: (sessionId: string) => Promise<void>;
-}
 
 export type TaskOrigin = {
     type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary' | 'consumption-projection' | 'item_addition_request';
