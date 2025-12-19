@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProducts } from '@/hooks/use-products';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useAuth } from '@/hooks/use-auth';
 import { type Product, type LotEntry } from '@/types';
 

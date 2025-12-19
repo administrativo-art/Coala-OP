@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -9,7 +10,7 @@ import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useProducts } from '@/hooks/use-products';
 import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
@@ -127,8 +128,8 @@ function JustificationSection({ itemIndex, control, difference }: { itemIndex: n
   );
 }
 
-function ReconciliationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
-    const [showForm, setShowForm] = useState(false);
+function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number, control: any, form: any }) {
+    const [showForm, setShowForm] = useState(!!form.getValues(`items.${itemIndex}.adjustment`));
     const adjustment = useWatch({ control, name: `items.${itemIndex}.adjustment` });
 
     if (showForm) {
@@ -296,7 +297,7 @@ function AuditForm({
                                                 </div>
                                             </div>
                                             
-                                            <ReconciliationSection itemIndex={index} control={form.control} />
+                                            <ReconciliationSection itemIndex={index} control={form.control} form={form} />
 
                                             <JustificationSection itemIndex={index} control={form.control} difference={systemQty - finalQty} />
 

@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
@@ -49,7 +49,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
     const monthlyConsumption: Record<string, number> = {};
     networkConsumptionReports.forEach(report => {
-        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+        const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
         const totalForMonth = report.results
             .filter(res => res.baseProductId === baseProduct.id)
             .reduce((sum, res) => sum + res.consumedQuantity, 0);
