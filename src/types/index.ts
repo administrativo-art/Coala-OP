@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -411,7 +410,7 @@ export type StockCount = {
 
 export type StockAuditDivergence = {
     id: string;
-    reason: string;
+    reason: MovementType;
     quantity: number;
     notes?: string;
 };
@@ -423,6 +422,7 @@ export type StockAuditItem = {
     lotNumber: string;
     expiryDate: string; // ISO String
     systemQuantity: number;
+    finalQuantity: number;
     adjustment?: {
         type: 'positive' | 'negative';
         quantity: number;

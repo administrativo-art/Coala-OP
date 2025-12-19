@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,17 +18,32 @@ import { Inbox, ListOrdered, Save, Trash2, ArrowRight } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
+import { type MovementType } from '@/types';
+
+const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
+    { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
+    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
+    { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
+    { value: 'SAIDA_DESCARTE_PERDA', label: 'Descarte por Perda/Extravio' },
+    { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
+];
 
 const writeDownItemSchema = z.object({
   lotId: z.string(),
   quantity: z.coerce.number().min(0.01, "Deve ser > 0"),
-  type: z.enum(['SAIDA_CONSUMO', 'SAIDA_DESCARTE'], { required_error: 'Selecione o tipo.' }),
-  notes: z.string().min(1, 'A observação é obrigatória.'),
+  type: z.string().min(1, 'Selecione o tipo.'),
+  notes: z.string().optional(),
+}).refine(data => {
+    if (data.type === 'SAIDA_DESCARTE_OUTROS' && (!data.notes || data.notes.trim() === '')) {
+        return false;
+    }
+    return true;
+}, {
+    message: 'A observação é obrigatória para o tipo "Outros".',
+    path: ['notes'],
 });
 
 const writeDownFormSchema = z.object({
@@ -52,7 +67,7 @@ export function StockWriteDown() {
     defaultValues: { items: [] },
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -94,7 +109,7 @@ export function StockWriteDown() {
             await consumeFromLot({
                 lotId: item.lotId,
                 quantityToConsume: item.quantity,
-                type: item.type,
+                type: item.type as MovementType,
                 notes: item.notes,
             }, user);
         }
@@ -128,38 +143,37 @@ export function StockWriteDown() {
         {loading && selectedKioskId && <Skeleton className="h-64 w-full" />}
         
         {selectedKioskId && !loading && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Coluna da esquerda - Itens disponíveis */}
-              <div className="space-y-2">
-                <h3 className="font-semibold">Itens em estoque ({kioskLots.length})</h3>
-                <ScrollArea className="h-96 rounded-md border p-2">
-                  <div className="space-y-2">
-                    {kioskLots.length > 0 ? kioskLots.map(({lot, product}) => (
-                      <div key={lot.id} className="flex items-center justify-between p-2 border rounded-md">
-                        <div>
-                          <p className="font-medium">{getProductFullName(product!)}</p>
-                          <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Qtd: {lot.quantity}</p>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Coluna da esquerda - Itens disponíveis */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Itens em estoque ({kioskLots.length})</h3>
+                  <ScrollArea className="h-96 rounded-md border p-2">
+                    <div className="space-y-2">
+                      {kioskLots.length > 0 ? kioskLots.map(({lot, product}) => (
+                        <div key={lot.id} className="flex items-center justify-between p-2 border rounded-md">
+                          <div>
+                            <p className="font-medium">{getProductFullName(product!)}</p>
+                            <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Qtd: {lot.quantity}</p>
+                          </div>
+                          <Button size="icon" variant="outline" onClick={() => handleAddItem(lot.id)} disabled={fields.some(f => f.lotId === lot.id)}>
+                              <ArrowRight className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button size="icon" variant="outline" onClick={() => handleAddItem(lot.id)} disabled={fields.some(f => f.lotId === lot.id)}>
-                            <ArrowRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )) : (
-                      <div className="text-center text-muted-foreground p-8">
-                        <Inbox className="h-8 w-8 mx-auto mb-2" />
-                        <p>Nenhum lote em estoque.</p>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
+                      )) : (
+                        <div className="text-center text-muted-foreground p-8">
+                          <Inbox className="h-8 w-8 mx-auto mb-2" />
+                          <p>Nenhum lote em estoque.</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
 
-              {/* Coluna da direita - Itens para baixa */}
-              <div className="space-y-2">
-                <h3 className="font-semibold">Itens para baixa ({fields.length})</h3>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Coluna da direita - Itens para baixa */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Itens para baixa ({fields.length})</h3>
                     <ScrollArea className="h-96 rounded-md border p-2">
                         {fields.length > 0 ? (
                             <div className="space-y-2">
@@ -199,12 +213,11 @@ export function StockWriteDown() {
                                                   name={`items.${index}.type`}
                                                   render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel>Tipo</FormLabel>
+                                                        <FormLabel>Motivo</FormLabel>
                                                         <Select onValueChange={field.onChange} value={field.value}>
                                                             <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                <SelectItem value="SAIDA_CONSUMO">Consumo/Venda</SelectItem>
-                                                                <SelectItem value="SAIDA_DESCARTE">Descarte/Perda</SelectItem>
+                                                               {DIVERGENCE_REASONS.map(reason => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}
                                                             </SelectContent>
                                                         </Select>
                                                         <FormMessage/>
@@ -218,7 +231,7 @@ export function StockWriteDown() {
                                                   render={({ field }) => (
                                                     <FormItem>
                                                       <FormLabel>Observação</FormLabel>
-                                                      <FormControl><Textarea placeholder="Motivo da baixa..." {...field} /></FormControl>
+                                                      <FormControl><Textarea placeholder="Opcional, exceto para 'Outros'" {...field} /></FormControl>
                                                       <FormMessage />
                                                     </FormItem>
                                                   )}
@@ -229,21 +242,20 @@ export function StockWriteDown() {
                             </div>
                         ) : (
                              <div className="text-center text-muted-foreground p-8">
-                                <p>Adicione itens da lista à esquerda.</p>
+                                <p>Adicione itens da lista à esquerda para registrar uma baixa.</p>
                              </div>
                         )}
                     </ScrollArea>
-                    <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={isSubmitting || fields.length === 0}>
-                        <Save className="mr-2 h-4 w-4"/>
-                        {isSubmitting ? 'Processando...' : 'Confirmar Baixa'}
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
+                </div>
               </div>
-            </div>
-          </>
+              <CardFooter className="justify-end border-t pt-6 -mx-6 -mb-6 px-6">
+                <Button type="submit" disabled={isSubmitting || fields.length === 0}>
+                  <Save className="mr-2 h-4 w-4"/>
+                  {isSubmitting ? 'Processando...' : `Confirmar Baixa (${fields.length})`}
+                </Button>
+              </CardFooter>
+            </form>
+          </Form>
         )}
       </CardContent>
     </Card>

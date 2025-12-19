@@ -14,7 +14,7 @@ import { useReturnRequests } from '@/hooks/use-return-requests';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
